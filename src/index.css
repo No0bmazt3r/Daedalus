@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-daedalus-obsidian: #0f1115;
+  --color-daedalus-slate: #181b21;
+  --color-daedalus-copper: #c86b3c;
+  --color-daedalus-gold: #e2b34a;
+  --color-daedalus-border: #2a2e38;
+  --color-daedalus-text: #e2e8f0;
+  --color-daedalus-text-muted: #94a3b8;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-daedalus-obsidian);
+    color: var(--color-daedalus-text);
+  }
+}
