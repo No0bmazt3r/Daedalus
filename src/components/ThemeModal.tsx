@@ -60,24 +60,24 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 overflow-hidden">
         <div className="px-4 pt-3 border-b theme-border bg-black/10">
-          <TabsList className="bg-transparent p-0 h-auto relative flex w-full justify-start gap-4">
+          <TabsList className="bg-transparent p-0 h-auto relative flex w-full">
             <TabsTrigger 
               value="themes" 
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-2 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10 w-28"
+              className="flex-1 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-3 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
             >
               <SwatchBook size={14} className="mr-2" /> Themes
             </TabsTrigger>
             <TabsTrigger 
               value="customize" 
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-2 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10 w-28"
+              className="flex-1 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-3 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
             >
               <Paintbrush size={14} className="mr-2" /> Customize
             </TabsTrigger>
             
             {/* Animated Sliding Underline */}
             <div 
-              className="absolute bottom-0 h-0.5 theme-bg-primary transition-all duration-300 ease-out w-28"
-              style={{ transform: activeTab === 'themes' ? 'translateX(0)' : 'translateX(calc(100% + 1rem))' }}
+              className="absolute bottom-0 left-0 h-0.5 w-1/2 theme-bg-primary transition-transform duration-300 ease-in-out"
+              style={{ transform: activeTab === 'themes' ? 'translateX(0)' : 'translateX(100%)' }}
             />
           </TabsList>
         </div>
@@ -92,7 +92,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               <button
                 key={theme.id}
                 onClick={() => handleSelectTheme(theme.id)}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all hover:scale-105 ${currentTheme === theme.id ? 'theme-border bg-black/20 ring-1 ring-[var(--primary)] shadow-md' : 'border-black/20 hover:bg-black/10'}`}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200 hover:scale-105 ${currentTheme === theme.id ? 'border-[var(--primary)] bg-black/20 shadow-md' : 'border-transparent hover:bg-black/10'}`}
               >
                 <div className="flex -space-x-1.5 mb-2">
                   <div className="w-5 h-5 rounded-full border border-black/40 shadow-sm" style={{ backgroundColor: theme.colors.bg }} />
