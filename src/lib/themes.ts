@@ -27,16 +27,81 @@ export const THEMES: Theme[] = [
     }
   },
   {
-    id: 'anthropic',
-    name: 'Classic Gray',
+    id: 'dark',
+    name: 'Dark Matter',
     colors: {
-      bg: '#212121',
-      sidebar: '#18181a',
-      card: '#2f2f2f',
-      border: '#3f3f46',
-      primary: '#d4d4d8', 
-      text: '#e4e4e7',
-      textMuted: '#a1a1aa',
+      bg: '#282c34',
+      sidebar: '#111111',
+      card: '#161616',
+      border: '#355a66',
+      primary: '#9cdef2',
+      text: '#9cdef2',
+      textMuted: '#669dae',
+    }
+  },
+  {
+    id: 'light',
+    name: 'Daylight',
+    colors: {
+      bg: '#f0ebe3',
+      sidebar: '#faf6f0',
+      card: '#ffffff',
+      border: '#d4cdc2',
+      primary: '#c47d5a',
+      text: '#5a5248',
+      textMuted: '#8a8278',
+    }
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    colors: {
+      bg: '#0d1117',
+      sidebar: '#161b22',
+      card: '#21262d',
+      border: '#30363d',
+      primary: '#f85149',
+      text: '#c9d1d9',
+      textMuted: '#8b949e',
+    }
+  },
+  {
+    id: 'cyberpunk',
+    name: 'Cyberpunk',
+    colors: {
+      bg: '#0a0a0f',
+      sidebar: '#12101a',
+      card: '#181523',
+      border: '#9b30ff',
+      primary: '#0ff0fc',
+      text: '#0ff0fc',
+      textMuted: '#89b4b6',
+    }
+  },
+  {
+    id: 'retrowave',
+    name: 'Retrowave',
+    colors: {
+      bg: '#1a1a2e',
+      sidebar: '#16213e',
+      card: '#1a274c',
+      border: '#533483',
+      primary: '#e94560',
+      text: '#e94560',
+      textMuted: '#a93345',
+    }
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    colors: {
+      bg: '#1b2a1b',
+      sidebar: '#142414',
+      card: '#1c301c',
+      border: '#3d6b3d',
+      primary: '#7cb871',
+      text: '#a8d5a2',
+      textMuted: '#71946e',
     }
   },
   {
@@ -44,25 +109,77 @@ export const THEMES: Theme[] = [
     name: 'Deep Ocean',
     colors: {
       bg: '#0b1a2c',
-      sidebar: '#060d16',
+      sidebar: '#091422',
       card: '#132742',
       border: '#1e5074',
       primary: '#4facfe',
-      text: '#e0f2fe',
-      textMuted: '#7dd3fc',
+      text: '#64d2ff',
+      textMuted: '#4a9ac0',
     }
   },
   {
-    id: 'cyberpunk',
-    name: 'Cyberpunk',
+    id: 'ume',
+    name: 'Ume',
     colors: {
-      bg: '#120414',
-      sidebar: '#0a020b',
-      card: '#200b24',
-      border: '#ff00ff',
-      primary: '#00ffff',
-      text: '#ffffff',
-      textMuted: '#f0abfc',
+      bg: '#2b1b2e',
+      sidebar: '#1e1420',
+      card: '#271a2a',
+      border: '#6c4675',
+      primary: '#f5a0c0',
+      text: '#f5c2e7',
+      textMuted: '#b68fac',
+    }
+  },
+  {
+    id: 'copper',
+    name: 'Copper',
+    colors: {
+      bg: '#1c1410',
+      sidebar: '#140f0a',
+      card: '#1f1811',
+      border: '#7a5533',
+      primary: '#d4764e',
+      text: '#e8c39e',
+      textMuted: '#b09477',
+    }
+  },
+  {
+    id: 'terminal',
+    name: 'Terminal',
+    colors: {
+      bg: '#000000',
+      sidebar: '#0a0a0a',
+      card: '#111111',
+      border: '#003b00',
+      primary: '#00ff41',
+      text: '#00ff41',
+      textMuted: '#00a32a',
+    }
+  },
+  {
+    id: 'gpt',
+    name: 'Anthropic Clone',
+    colors: {
+      bg: '#212121',
+      sidebar: '#171717',
+      card: '#2f2f2f',
+      border: '#424242',
+      primary: '#ececec',
+      text: '#ececec',
+      textMuted: '#949494',
+    }
+  },
+  {
+    id: 'cute',
+    name: 'Cute',
+    colors: {
+      bg: '#fff0f5',
+      sidebar: '#fff8fa',
+      card: '#ffffff',
+      border: '#f0c0d0',
+      primary: '#ff6b9d',
+      text: '#d4608a',
+      textMuted: '#a84c6e',
     }
   }
 ];

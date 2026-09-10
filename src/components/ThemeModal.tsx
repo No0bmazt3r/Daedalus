@@ -46,7 +46,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
       <div 
         ref={handleRef}
         onMouseDown={onMouseDown}
-        className="flex items-center justify-between p-3 border-b border-zinc-800 theme-border bg-zinc-900/50 cursor-move"
+        className="flex items-center justify-between p-3 border-b border-zinc-800 theme-border bg-black/20 cursor-move"
       >
         <span className="text-sm font-medium select-none">Theme & Appearance</span>
         <button onMouseDown={(e) => e.stopPropagation()} onClick={onClose} className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200">
@@ -55,18 +55,18 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
       </div>
 
       {/* Content */}
-      <div className="p-4 flex flex-col gap-3">
+      <div className="p-4 flex flex-col gap-3 overflow-y-auto max-h-[60vh] scrollbar-thin scrollbar-thumb-zinc-700">
         {THEMES.map((theme: Theme) => (
           <button
             key={theme.id}
             onClick={() => handleSelectTheme(theme.id)}
-            className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${currentTheme === theme.id ? 'theme-border bg-zinc-800/50' : 'border-transparent hover:bg-zinc-800/30'}`}
+            className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${currentTheme === theme.id ? 'theme-border bg-black/20' : 'border-transparent hover:bg-black/10'}`}
           >
             <div className="flex items-center gap-3">
               <div className="flex -space-x-2">
-                <div className="w-5 h-5 rounded-full border border-zinc-800" style={{ backgroundColor: theme.colors.bg }} />
-                <div className="w-5 h-5 rounded-full border border-zinc-800" style={{ backgroundColor: theme.colors.sidebar }} />
-                <div className="w-5 h-5 rounded-full border border-zinc-800" style={{ backgroundColor: theme.colors.primary }} />
+                <div className="w-5 h-5 rounded-full border border-black/20 shadow-sm" style={{ backgroundColor: theme.colors.bg }} />
+                <div className="w-5 h-5 rounded-full border border-black/20 shadow-sm" style={{ backgroundColor: theme.colors.sidebar }} />
+                <div className="w-5 h-5 rounded-full border border-black/20 shadow-sm" style={{ backgroundColor: theme.colors.primary }} />
               </div>
               <span className="text-sm font-medium">{theme.name}</span>
             </div>
