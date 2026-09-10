@@ -140,3 +140,12 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+/* Dynamic Themes from themes.ts */
+.theme-bg { background-color: var(--bg) !important; }
+.theme-sidebar { background-color: var(--sidebar) !important; }
+.theme-card { background-color: var(--card) !important; }
+.theme-border { border-color: var(--border) !important; }
+.theme-text { color: var(--text-main) !important; }
+.theme-text-muted { color: var(--text-muted) !important; }
+.theme-primary { color: var(--primary) !important; }
+.theme-bg-primary { background-color: var(--primary) !important; }

@@ -1,6 +1,6 @@
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map, Palette } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,20 +11,21 @@ import {
 
 interface SidebarProps {
   onClose?: () => void;
+  onOpenTheme?: () => void;
 }
 
-export function Sidebar({ onClose }: SidebarProps) {
+export function Sidebar({ onClose, onOpenTheme }: SidebarProps) {
   return (
-    <div className="flex flex-col h-full bg-zinc-950 text-zinc-300 font-sans border-r border-zinc-800">
+    <div className="flex flex-col h-full theme-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
       {/* Header */}
       <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-zinc-800/50 p-1.5 rounded-md transition-colors">
-          <img src="/labyrinth.svg" alt="Daedalus" className="w-5 h-5 text-emerald-400" />
-          <span className="font-semibold text-[15px] tracking-wide text-zinc-100 font-serif">Daedalus</span>
+        <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-black/20 p-1.5 rounded-md transition-colors">
+          <img src="/labyrinth.svg" alt="Daedalus" className="w-5 h-5 theme-primary" />
+          <span className="font-semibold text-[15px] tracking-wide font-serif">Daedalus</span>
         </div>
         <div className="flex items-center gap-1">
           {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="w-8 h-8 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800">
+            <Button variant="ghost" size="icon" onClick={onClose} className="w-8 h-8 theme-text-muted hover:theme-text hover:bg-black/20">
               <PanelLeftClose size={16} />
             </Button>
           )}
@@ -33,7 +34,7 @@ export function Sidebar({ onClose }: SidebarProps) {
       
       {/* New Chat Button */}
       <div className="px-3 mb-4">
-        <Button className="w-full justify-start gap-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/50 shadow-none font-normal h-9">
+        <Button className="w-full justify-start gap-2 bg-black/20 hover:bg-black/40 theme-text theme-border shadow-none font-normal h-9">
           <Plus size={16} />
           New
         </Button>
@@ -43,12 +44,12 @@ export function Sidebar({ onClose }: SidebarProps) {
         {/* Core Modules (Top Navigation) */}
         <div className="flex flex-col gap-0.5 mb-6">
           {[
-            { title: "Ariadne's Thread", icon: Network, color: "text-emerald-500" },
-            { title: "The Forge", icon: Hammer, color: "text-amber-500" },
-            { title: "Labyrinth Blueprints", icon: Map, color: "text-blue-500" }
+            { title: "Ariadne's Thread", icon: Network },
+            { title: "The Forge", icon: Hammer },
+            { title: "Labyrinth Blueprints", icon: Map }
           ].map((item, i) => (
-            <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80">
-              <item.icon size={15} className={`mr-2 shrink-0 ${item.color}`} /> 
+            <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20">
+              <item.icon size={15} className="mr-2 shrink-0 theme-primary" /> 
               <span className="truncate">{item.title}</span>
             </Button>
           ))}
@@ -57,8 +58,8 @@ export function Sidebar({ onClose }: SidebarProps) {
         {/* Chats and tasks */}
         <div className="mb-6">
           <div className="flex items-center justify-between px-2 mb-1 group cursor-pointer">
-            <span className="text-[11px] font-medium text-zinc-500">Chats and tasks</span>
-            <Search size={12} className="text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="text-[11px] font-medium theme-text-muted">Chats and tasks</span>
+            <Search size={12} className="theme-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           
           <div className="flex flex-col gap-0.5">
@@ -68,8 +69,8 @@ export function Sidebar({ onClose }: SidebarProps) {
               "UI layout structuring",
               "Checking node connections"
             ].map((title, i) => (
-              <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80">
-                <Circle size={8} className="shrink-0 mr-2 text-zinc-600" /> 
+              <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20">
+                <Circle size={8} className="shrink-0 mr-2 opacity-60" /> 
                 <span className="truncate">{title}</span>
               </Button>
             ))}
@@ -78,27 +79,30 @@ export function Sidebar({ onClose }: SidebarProps) {
       </ScrollArea>
 
       {/* Bottom Section */}
-      <div className="p-3 border-t border-zinc-800 mt-auto flex flex-col gap-1">
+      <div className="p-3 border-t theme-border mt-auto flex flex-col gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="flex items-center justify-between p-2 rounded-md hover:bg-zinc-800/80 cursor-pointer transition-colors w-full">
+            <div className="flex items-center justify-between p-2 rounded-md hover:bg-black/20 cursor-pointer transition-colors w-full">
               <div className="flex items-center gap-3">
-                <img src="/avatar.png" alt="Sharvin" className="w-8 h-8 rounded-full object-cover" />
-                <span className="text-sm font-medium text-zinc-200">Sharvin</span>
+                <div className="w-8 h-8 rounded-full theme-bg-primary flex items-center justify-center font-bold text-black text-xs">S</div>
+                <span className="text-sm font-medium">Sharvin</span>
               </div>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 bg-zinc-900 border-zinc-800 text-zinc-200 p-2">
+          <DropdownMenuContent align="end" className="w-64 theme-card theme-border theme-text p-2">
             <div className="flex flex-col px-2 py-2 mb-1">
-              <span className="font-semibold text-base text-zinc-100">Sharvin</span>
+              <span className="font-semibold text-base">Sharvin</span>
             </div>
-            <DropdownMenuSeparator className="bg-zinc-800 my-1" />
-            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-zinc-100 rounded-md">
-              <Settings size={16} className="mr-3 text-zinc-400" /> <span className="font-medium text-sm">Settings</span>
+            <DropdownMenuSeparator className="theme-border my-1 border-b" />
+            <DropdownMenuItem onClick={onOpenTheme} className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+              <Palette size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Theme & Appearance</span>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-zinc-800 my-1" />
-            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-zinc-100 rounded-md">
-              <LogOut size={16} className="mr-3 text-zinc-400" /> <span className="font-medium text-sm">Sign out</span>
+            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+              <Settings size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="theme-border my-1 border-b" />
+            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+              <LogOut size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Sign out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { Sidebar } from '../components/Sidebar'
 import { Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import { ThemeModal } from '../components/ThemeModal'
+import { applyTheme } from '../lib/themes'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -10,20 +12,26 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [themeModalOpen, setThemeModalOpen] = useState(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('daedalus-theme') || 'oled'
+    applyTheme(savedTheme)
+  }, [])
 
   return (
-    <div className="flex h-screen bg-black text-zinc-100 relative overflow-hidden">
+    <div className="flex h-screen theme-bg theme-text relative overflow-hidden transition-colors duration-200">
       {/* Sidebar Container */}
       <div 
-        className={`transition-all duration-300 ease-in-out border-r border-zinc-800 flex flex-col ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'} overflow-hidden shrink-0`}
+        className={`transition-all duration-300 ease-in-out border-r theme-border flex flex-col ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'} overflow-hidden shrink-0 theme-sidebar`}
       >
         <div className="w-64 h-full flex flex-col shrink-0">
-          <Sidebar onClose={() => setSidebarOpen(false)} />
+          <Sidebar onClose={() => setSidebarOpen(false)} onOpenTheme={() => setThemeModalOpen(true)} />
         </div>
       </div>
       
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
+      <main className="flex-1 flex flex-col overflow-hidden relative theme-bg">
         {!sidebarOpen && (
           <Button 
             variant="ghost" 
@@ -36,6 +44,8 @@ function RootLayout() {
         )}
         <Outlet />
       </main>
+
+      <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
     </div>
   )
 }

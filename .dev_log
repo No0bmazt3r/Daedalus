@@ -1,0 +1,11 @@
+$ vite
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:16:25). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+Port 5173 is in use, trying another one...
+4:09:12 PM [vite] (client) Re-optimizing dependencies because vite config has changed
+
+  VITE v8.2.2  ready in 1611 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
