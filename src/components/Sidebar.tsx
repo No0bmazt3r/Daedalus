@@ -21,7 +21,7 @@ export function Sidebar({ onClose, onOpenTheme }: SidebarProps) {
       {/* Header */}
       <div className="flex items-center justify-between p-3">
         <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-black/20 p-1.5 rounded-md transition-colors">
-          <LabyrinthIcon className="w-5 h-5 theme-primary" />
+          <LabyrinthIcon className="w-5 h-5 text-[var(--text-main)]" />
           <span className="font-semibold text-[15px] tracking-wide font-serif">Daedalus</span>
         </div>
         <div className="flex items-center gap-1">
