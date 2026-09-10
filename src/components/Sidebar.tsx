@@ -12,7 +12,10 @@ export function Sidebar() {
 
   return (
     <div className="p-4 flex flex-col h-full bg-zinc-950 border-r border-zinc-800">
-      <h2 className="text-xl font-bold text-emerald-400 mb-6 px-2">DAEDALUS</h2>
+      <div className="flex items-center gap-3 mb-6 px-2">
+        <img src="/labyrinth.svg" alt="Daedalus Logo" className="w-8 h-8" />
+        <h2 className="text-xl font-bold text-emerald-400">DAEDALUS</h2>
+      </div>
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-2">
           {MOCK_DEVICES.map((device) => {
