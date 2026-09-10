@@ -1,6 +1,6 @@
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, PanelLeftClose, Inbox, Clock, Search, Circle, LayoutGrid, UserPlus, Settings, MessageSquare, LogOut } from 'lucide-react'
+import { Plus, PanelLeftClose, Inbox, Clock, Search, Circle, LayoutGrid, Settings, LogOut, Network, Hammer, Map } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,13 +97,13 @@ export function Sidebar({ onClose }: SidebarProps) {
           
           <div className="flex flex-col gap-0.5">
             {[
-              "Agentic Graph RAG",
-              "Tool Calling Engine",
-              "Hardware Control Config"
-            ].map((title, i) => (
+              { title: "Ariadne's Thread", icon: Network, color: "text-emerald-500" },
+              { title: "The Forge", icon: Hammer, color: "text-amber-500" },
+              { title: "Labyrinth Blueprints", icon: Map, color: "text-blue-500" }
+            ].map((item, i) => (
               <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80">
-                <Inbox size={14} className="mr-2 text-emerald-600 shrink-0" /> 
-                <span className="truncate">{title}</span>
+                <item.icon size={14} className={`mr-2 shrink-0 ${item.color}`} /> 
+                <span className="truncate">{item.title}</span>
               </Button>
             ))}
           </div>
