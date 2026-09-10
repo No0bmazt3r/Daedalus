@@ -81,12 +81,10 @@ export function Sidebar({ onClose, onOpenTheme }: SidebarProps) {
       {/* Bottom Section */}
       <div className="p-3 border-t theme-border mt-auto flex flex-col gap-1">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div className="flex items-center justify-between p-2 rounded-md hover:bg-black/20 cursor-pointer transition-colors w-full">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full theme-bg-primary flex items-center justify-center font-bold text-black text-xs">S</div>
-                <span className="text-sm font-medium">Sharvin</span>
-              </div>
+          <DropdownMenuTrigger className="flex items-center justify-between p-2 rounded-md hover:bg-black/20 cursor-pointer transition-colors w-full border-none outline-none">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full theme-bg-primary flex items-center justify-center font-bold text-black text-xs">S</div>
+              <span className="text-sm font-medium">Sharvin</span>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 theme-card theme-border theme-text p-2">
