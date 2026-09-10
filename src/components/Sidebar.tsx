@@ -1,6 +1,6 @@
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, PanelLeftClose, Inbox, Clock, Search, Circle, LayoutGrid, Settings, LogOut, Network, Hammer, Map } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,30 +40,18 @@ export function Sidebar({ onClose }: SidebarProps) {
       </div>
 
       <ScrollArea className="flex-1 px-3">
-        {/* Navigation */}
+        {/* Core Modules (Top Navigation) */}
         <div className="flex flex-col gap-0.5 mb-6">
-          <Button variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80">
-            <LayoutGrid size={15} className="mr-2" /> Projects
-          </Button>
-          <Button variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80">
-            <Inbox size={15} className="mr-2" /> Artifacts
-          </Button>
-          <Button variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80">
-            <Clock size={15} className="mr-2" /> Scheduled
-          </Button>
-        </div>
-
-        {/* Projects section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between px-2 mb-1 group cursor-pointer">
-            <span className="text-[11px] font-medium text-zinc-500">Projects</span>
-            <Plus size={14} className="text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <Button variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80">
-              <Inbox size={14} className="mr-2 text-zinc-400" /> FYP Defense Prep
+          {[
+            { title: "Ariadne's Thread", icon: Network, color: "text-emerald-500" },
+            { title: "The Forge", icon: Hammer, color: "text-amber-500" },
+            { title: "Labyrinth Blueprints", icon: Map, color: "text-blue-500" }
+          ].map((item, i) => (
+            <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80">
+              <item.icon size={15} className={`mr-2 shrink-0 ${item.color}`} /> 
+              <span className="truncate">{item.title}</span>
             </Button>
-          </div>
+          ))}
         </div>
 
         {/* Chats and tasks */}
@@ -83,27 +71,6 @@ export function Sidebar({ onClose }: SidebarProps) {
               <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80">
                 <Circle size={8} className="shrink-0 mr-2 text-zinc-600" /> 
                 <span className="truncate">{title}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* System Features */}
-        <div>
-          <div className="flex items-center justify-between px-2 mb-1 group cursor-pointer">
-            <span className="text-[11px] font-medium text-zinc-500">Core Modules</span>
-            <Plus size={14} className="text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          
-          <div className="flex flex-col gap-0.5">
-            {[
-              { title: "Ariadne's Thread", icon: Network, color: "text-emerald-500" },
-              { title: "The Forge", icon: Hammer, color: "text-amber-500" },
-              { title: "Labyrinth Blueprints", icon: Map, color: "text-blue-500" }
-            ].map((item, i) => (
-              <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80">
-                <item.icon size={14} className={`mr-2 shrink-0 ${item.color}`} /> 
-                <span className="truncate">{item.title}</span>
               </Button>
             ))}
           </div>
