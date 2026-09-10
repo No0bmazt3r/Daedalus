@@ -15,7 +15,7 @@ interface SidebarProps {
 
 export function Sidebar({ onClose }: SidebarProps) {
   return (
-    <div className="flex flex-col h-full bg-[#18181a] text-zinc-300 font-sans border-r border-zinc-800">
+    <div className="flex flex-col h-full bg-zinc-950 text-zinc-300 font-sans border-r border-zinc-800">
       {/* Header */}
       <div className="flex items-center justify-between p-3">
         <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-zinc-800/50 p-1.5 rounded-md transition-colors">
@@ -88,7 +88,7 @@ export function Sidebar({ onClose }: SidebarProps) {
               </div>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 bg-[#1e1e1e] border-zinc-800 text-zinc-200 p-2">
+          <DropdownMenuContent align="end" className="w-64 bg-zinc-900 border-zinc-800 text-zinc-200 p-2">
             <div className="flex flex-col px-2 py-2 mb-1">
               <span className="font-semibold text-base text-zinc-100">Sharvin</span>
             </div>

@@ -12,7 +12,7 @@ function RootLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   return (
-    <div className="flex h-screen bg-zinc-900 text-zinc-100 relative overflow-hidden">
+    <div className="flex h-screen bg-black text-zinc-100 relative overflow-hidden">
       {/* Sidebar Container */}
       <div 
         className={`transition-all duration-300 ease-in-out border-r border-zinc-800 flex flex-col ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'} overflow-hidden shrink-0`}

@@ -44,7 +44,7 @@ export function ChatInterface() {
 
   return (
     <TooltipProvider>
-      <div className="flex-1 flex flex-col bg-[#212121] text-zinc-200 relative w-full h-full">
+      <div className="flex-1 flex flex-col bg-black text-zinc-200 relative w-full h-full">
         {/* Top Header / Ghost Mode Toggle */}
         <div className="absolute top-4 right-6 z-50 flex items-center gap-3">
           <Tooltip>
@@ -72,7 +72,7 @@ export function ChatInterface() {
                 <h1 className="text-3xl font-serif tracking-tight text-zinc-100">Good afternoon, Operator</h1>
               </div>
               
-              <div className="w-full bg-[#2f2f2f] border border-zinc-700/50 rounded-2xl flex flex-col shadow-sm focus-within:ring-1 focus-within:ring-zinc-500/50 transition-all">
+              <div className="w-full bg-zinc-900 border border-zinc-700/50 rounded-2xl flex flex-col shadow-sm focus-within:ring-1 focus-within:ring-zinc-500/50 transition-all">
                 <Textarea 
                   ref={textareaRef}
                   value={input}
@@ -132,9 +132,9 @@ export function ChatInterface() {
               </div>
             </ScrollArea>
             
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent">
+            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black to-transparent">
               <div className="max-w-3xl mx-auto w-full">
-                <div className="w-full bg-[#2f2f2f] border border-zinc-700/50 rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-zinc-500/50 transition-all">
+                <div className="w-full bg-zinc-900 border border-zinc-700/50 rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-zinc-500/50 transition-all">
                   <Textarea 
                     ref={textareaRef}
                     value={input}
