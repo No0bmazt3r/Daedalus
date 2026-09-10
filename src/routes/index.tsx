@@ -1,9 +1,5 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, Navigate } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-  beforeLoad: () => {
-    throw redirect({
-      to: '/oracle',
-    })
-  },
+  component: () => <Navigate to="/device/$deviceId" params={{ deviceId: 'co2-reactor-01' }} />,
 })

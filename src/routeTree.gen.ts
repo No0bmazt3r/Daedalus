@@ -10,63 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ForgeRouteImport } from './routes/forge'
-import { Route as LabyrinthRouteImport } from './routes/labyrinth'
-import { Route as OracleRouteImport } from './routes/oracle'
+import { Route as DeviceDeviceIdRouteImport } from './routes/device.$deviceId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ForgeRoute = ForgeRouteImport.update({
-  id: '/forge',
-  path: '/forge',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LabyrinthRoute = LabyrinthRouteImport.update({
-  id: '/labyrinth',
-  path: '/labyrinth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OracleRoute = OracleRouteImport.update({
-  id: '/oracle',
-  path: '/oracle',
+const DeviceDeviceIdRoute = DeviceDeviceIdRouteImport.update({
+  id: '/device/$deviceId',
+  path: '/device/$deviceId',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/forge': typeof ForgeRoute
-  '/labyrinth': typeof LabyrinthRoute
-  '/oracle': typeof OracleRoute
+  '/device/$deviceId': typeof DeviceDeviceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/forge': typeof ForgeRoute
-  '/labyrinth': typeof LabyrinthRoute
-  '/oracle': typeof OracleRoute
+  '/device/$deviceId': typeof DeviceDeviceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/forge': typeof ForgeRoute
-  '/labyrinth': typeof LabyrinthRoute
-  '/oracle': typeof OracleRoute
+  '/device/$deviceId': typeof DeviceDeviceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/forge' | '/labyrinth' | '/oracle'
+  fullPaths: '/' | '/device/$deviceId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/forge' | '/labyrinth' | '/oracle'
-  id: '__root__' | '/' | '/forge' | '/labyrinth' | '/oracle'
+  to: '/' | '/device/$deviceId'
+  id: '__root__' | '/' | '/device/$deviceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ForgeRoute: typeof ForgeRoute
-  LabyrinthRoute: typeof LabyrinthRoute
-  OracleRoute: typeof OracleRoute
+  DeviceDeviceIdRoute: typeof DeviceDeviceIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -78,25 +58,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/forge': {
-      id: '/forge'
-      path: '/forge'
-      fullPath: '/forge'
-      preLoaderRoute: typeof ForgeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/labyrinth': {
-      id: '/labyrinth'
-      path: '/labyrinth'
-      fullPath: '/labyrinth'
-      preLoaderRoute: typeof LabyrinthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/oracle': {
-      id: '/oracle'
-      path: '/oracle'
-      fullPath: '/oracle'
-      preLoaderRoute: typeof OracleRouteImport
+    '/device/$deviceId': {
+      id: '/device/$deviceId'
+      path: '/device/$deviceId'
+      fullPath: '/device/$deviceId'
+      preLoaderRoute: typeof DeviceDeviceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -104,9 +70,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ForgeRoute: ForgeRoute,
-  LabyrinthRoute: LabyrinthRoute,
-  OracleRoute: OracleRoute,
+  DeviceDeviceIdRoute: DeviceDeviceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
