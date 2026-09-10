@@ -197,4 +197,5 @@ export function applyTheme(themeId: string) {
   root.style.setProperty('--text-muted', theme.colors.textMuted);
   
   localStorage.setItem('daedalus-theme', themeId);
+  window.dispatchEvent(new Event('daedalus-theme-change'));
 }

@@ -5,6 +5,7 @@ import { Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ThemeModal } from '../components/ThemeModal'
 import { applyTheme } from '../lib/themes'
+import { BackgroundEffects } from '../components/BackgroundEffects'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -42,7 +43,10 @@ function RootLayout() {
             <Menu size={20} />
           </Button>
         )}
-        <Outlet />
+        <BackgroundEffects />
+        <div className="z-10 relative flex-1 flex flex-col w-full h-full">
+          <Outlet />
+        </div>
       </main>
 
       <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />

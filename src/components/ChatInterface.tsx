@@ -1,3 +1,4 @@
+import { LabyrinthIcon } from "./LabyrinthIcon";
 import { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
@@ -38,7 +39,7 @@ export function ChatInterface() {
       {messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full">
           <div className="flex items-center gap-3 mb-8">
-            <img src="/labyrinth.svg" alt="Daedalus Logo" className="w-10 h-10 theme-primary" />
+            <LabyrinthIcon className="w-10 h-10 theme-primary" />
             <h1 className="text-3xl font-serif tracking-tight">Good afternoon, Operator</h1>
           </div>
           
@@ -90,7 +91,7 @@ export function ChatInterface() {
                 <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'bot' && (
                     <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card">
-                      <img src="/labyrinth.svg" alt="Daedalus" className="w-5 h-5 theme-primary" />
+                      <LabyrinthIcon className="w-5 h-5 theme-primary" />
                     </div>
                   )}
                   <div className={`text-[15px] leading-relaxed ${msg.role === 'user' ? 'theme-sidebar px-5 py-3 rounded-2xl max-w-[80%]' : 'max-w-[85%] pt-1'}`}>

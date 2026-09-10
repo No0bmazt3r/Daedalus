@@ -149,3 +149,18 @@
 .theme-text-muted { color: var(--text-muted) !important; }
 .theme-primary { color: var(--primary) !important; }
 .theme-bg-primary { background-color: var(--primary) !important; }
+
+@keyframes rain-fall {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes synapse-flow {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
