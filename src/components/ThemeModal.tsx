@@ -17,6 +17,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
     }
     return 'oled'
   })
+  const [activeTab, setActiveTab] = useState("themes")
 
   const { position, onMouseDown, handleRef, windowRef } = useDraggable()
 
@@ -57,21 +58,27 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
         </button>
       </div>
 
-      <Tabs defaultValue="themes" className="flex flex-col flex-1 overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 overflow-hidden">
         <div className="px-4 pt-3 border-b theme-border bg-black/10">
-          <TabsList className="bg-transparent p-0 gap-4 h-auto">
+          <TabsList className="bg-transparent p-0 h-auto relative flex w-full justify-start gap-4">
             <TabsTrigger 
               value="themes" 
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-[var(--primary)] data-[state=active]:text-[var(--primary)] rounded-none px-1 pb-2 theme-text-muted hover:theme-text transition-colors"
+              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-2 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10 w-28"
             >
               <SwatchBook size={14} className="mr-2" /> Themes
             </TabsTrigger>
             <TabsTrigger 
               value="customize" 
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-[var(--primary)] data-[state=active]:text-[var(--primary)] rounded-none px-1 pb-2 theme-text-muted hover:theme-text transition-colors"
+              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-2 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10 w-28"
             >
               <Paintbrush size={14} className="mr-2" /> Customize
             </TabsTrigger>
+            
+            {/* Animated Sliding Underline */}
+            <div 
+              className="absolute bottom-0 h-0.5 theme-bg-primary transition-all duration-300 ease-out w-28"
+              style={{ transform: activeTab === 'themes' ? 'translateX(0)' : 'translateX(calc(100% + 1rem))' }}
+            />
           </TabsList>
         </div>
 
