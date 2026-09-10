@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, Zap } from 'lucide-react'
+import { Plus, Mic, ArrowUp, Zap, Ghost } from 'lucide-react'
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<{role: string, content: string}[]>([])
@@ -36,6 +36,11 @@ export function ChatInterface() {
 
   return (
     <div className="flex-1 flex flex-col theme-bg theme-text relative w-full h-full transition-colors duration-200">
+    <div className="absolute top-4 right-6 flex items-center gap-3 z-50">
+      <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full theme-text-muted hover:theme-text hover:bg-black/20" title="Incognito Mode">
+        <Ghost size={18} />
+      </Button>
+    </div>
       {messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full">
           <div className="flex items-center gap-3 mb-8">
