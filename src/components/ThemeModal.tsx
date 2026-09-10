@@ -60,16 +60,16 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 overflow-hidden">
         <div className="px-4 pt-3 border-b theme-border bg-black/10">
-          <TabsList className="bg-transparent p-0 h-auto relative flex w-full">
+          <TabsList variant="line" className="bg-transparent p-0 h-auto relative flex w-full">
             <TabsTrigger 
               value="themes" 
-              className="flex-1 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-3 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
+              className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
             >
               <SwatchBook size={14} className="mr-2" /> Themes
             </TabsTrigger>
             <TabsTrigger 
               value="customize" 
-              className="flex-1 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 pb-3 theme-text-muted data-[state=active]:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
+              className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
             >
               <Paintbrush size={14} className="mr-2" /> Customize
             </TabsTrigger>
