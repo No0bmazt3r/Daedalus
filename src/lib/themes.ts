@@ -196,6 +196,31 @@ export function applyTheme(themeId: string) {
   root.style.setProperty('--text-main', theme.colors.text);
   root.style.setProperty('--text-muted', theme.colors.textMuted);
   
+  updateFavicon(theme.colors.primary);
+  
   localStorage.setItem('daedalus-theme', themeId);
   window.dispatchEvent(new Event('daedalus-theme-change'));
+}
+
+async function updateFavicon(color: string) {
+  try {
+    const response = await fetch('/labyrinth.svg');
+    let svgText = await response.text();
+    
+    // Make the entire SVG single-color based on the theme
+    svgText = svgText.replace(/fill="[^"]*"/g, `fill="${color}"`);
+    
+    const blob = new Blob([svgText], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = url;
+  } catch (e) {
+    console.error("Failed to update favicon", e);
+  }
 }
