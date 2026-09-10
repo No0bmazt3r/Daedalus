@@ -80,8 +80,8 @@ export function Sidebar({ onClose }: SidebarProps) {
               "UI layout structuring",
               "Checking node connections"
             ].map((title, i) => (
-              <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 overflow-hidden text-ellipsis whitespace-nowrap block">
-                <Circle size={8} className="inline-block mr-2 text-zinc-600" /> 
+              <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80">
+                <Circle size={8} className="shrink-0 mr-2 text-zinc-600" /> 
                 <span className="truncate">{title}</span>
               </Button>
             ))}
@@ -91,20 +91,16 @@ export function Sidebar({ onClose }: SidebarProps) {
 
       {/* Bottom Section */}
       <div className="p-3 border-t border-zinc-800 mt-auto flex flex-col gap-1">
-        <Button variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/80 mb-2">
-          <Settings size={15} className="mr-2" /> Customize
-        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="flex items-center justify-between p-2 rounded-md hover:bg-zinc-800/80 cursor-pointer transition-colors">
+            <div className="flex items-center justify-between p-2 rounded-md hover:bg-zinc-800/80 cursor-pointer transition-colors w-full">
               <div className="flex items-center gap-3">
-                <img src="/avatar.png" alt="Sharvin" className="w-7 h-7 rounded-full object-cover" />
-                <div className="flex flex-col">
+                <img src="/avatar.png" alt="Sharvin" className="w-8 h-8 rounded-full object-cover" />
+                <div className="flex flex-col text-left">
                   <span className="text-sm font-medium text-zinc-200 leading-none">Sharvin</span>
-                  <span className="text-[10px] text-zinc-500 mt-1">Free Plan</span>
+                  <span className="text-[11px] text-zinc-500 mt-1">Free Plan</span>
                 </div>
               </div>
-              <UserPlus size={16} className="text-zinc-400 hover:text-zinc-200" />
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 bg-[#1e1e1e] border-zinc-800 text-zinc-200 p-2">
