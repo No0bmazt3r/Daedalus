@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { THEMES, applyTheme, Theme } from '../lib/themes'
+import { THEMES, applyTheme } from "../lib/themes";
+import type { Theme } from '../lib/themes'
 import { X, Check } from 'lucide-react'
 import { useDraggable } from '../hooks/useDraggable'
 
