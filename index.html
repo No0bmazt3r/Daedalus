@@ -4,7 +4,37 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/labyrinth.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
     <title>Daedalus Chat</title>
+    <script>
+      // Paint the saved theme before first paint so the app never flashes the
+      // default palette. The full engine (src/lib/themes.ts) takes over on mount.
+      (function () {
+        try {
+          var raw = localStorage.getItem('daedalus-theme-state');
+          if (!raw) return;
+          var s = JSON.parse(raw);
+          var c = s && s.colors;
+          if (!c) return;
+          var r = document.documentElement.style;
+          r.setProperty('--bg', c.bg);
+          r.setProperty('--sidebar', c.sidebar);
+          r.setProperty('--card', c.card);
+          r.setProperty('--border', c.border);
+          r.setProperty('--primary', c.primary);
+          r.setProperty('--text-main', c.text);
+          r.setProperty('--text-muted', c.textMuted);
+          if (s.density && s.density !== 'comfortable') {
+            document.documentElement.classList.add('density-' + s.density);
+          }
+          if (localStorage.getItem('daedalus-ui-scale') === '125') {
+            document.documentElement.classList.add('ui-scale-125');
+          }
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', c.bg);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -11,18 +11,19 @@ import {
 } from "./ui/dropdown-menu"
 
 interface SidebarProps {
-  onClose?: () => void;
-  onOpenTheme?: () => void;
+  onClose: () => void;
+  onOpenTheme: () => void;
+  onOpenSettings: () => void;
 }
 
-export function Sidebar({ onClose, onOpenTheme }: SidebarProps) {
+export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) {
   return (
-    <div className="flex flex-col h-full theme-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
+    <div className="flex flex-col h-full theme-sidebar zone-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
       {/* Header */}
       <div className="flex items-center justify-between p-3">
         <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-black/20 p-1.5 rounded-md transition-colors">
-          <LabyrinthIcon className="w-5 h-5 theme-primary" />
-          <span className="font-semibold text-[15px] tracking-wide font-serif">Daedalus</span>
+          <LabyrinthIcon className="w-5 h-5 zone-brand" />
+          <span className="font-semibold text-[15px] tracking-wide font-serif zone-brand-text">Daedalus</span>
         </div>
         <div className="flex items-center gap-1">
           {onClose && (
@@ -84,7 +85,7 @@ export function Sidebar({ onClose, onOpenTheme }: SidebarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center justify-between p-2 rounded-md hover:bg-black/20 cursor-pointer transition-colors w-full border-none outline-none">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full theme-bg-primary flex items-center justify-center font-bold text-black text-xs">S</div>
+              <div className="w-8 h-8 rounded-full theme-bg-primary zone-toggle-active flex items-center justify-center font-bold text-black text-xs">S</div>
               <span className="text-sm font-medium">Sharvin</span>
             </div>
           </DropdownMenuTrigger>
@@ -96,7 +97,7 @@ export function Sidebar({ onClose, onOpenTheme }: SidebarProps) {
             <DropdownMenuItem onClick={onOpenTheme} className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
               <Palette size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Theme & Appearance</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+            <DropdownMenuItem onClick={onOpenSettings} className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
               <Settings size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="theme-border my-1 border-b" />

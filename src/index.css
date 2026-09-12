@@ -164,3 +164,237 @@
   0% { background-position: 0 0; }
   100% { background-position: 40px 40px; }
 }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Theme engine — typography, density, background effects and frosted glass.
+   The CSS variables these rules read are written by src/lib/themes.ts.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg-effect-intensity: 1;
+  --bg-effect-size: 1;
+}
+
+/* The Font selector writes --font-family; sitting outside @layer base keeps
+   it ahead of the `html { @apply font-sans }` default. */
+html {
+  font-family: var(--font-family, var(--font-sans));
+}
+
+/* ── Density ── */
+:root.density-compact {
+  font-size: 14px;
+}
+:root.density-spacious {
+  font-size: 17px;
+}
+
+/* ── UI text scale (accessibility) ── */
+:root.ui-scale-125 {
+  zoom: 1.25;
+}
+:root.ui-scale-125 body {
+  height: calc(100dvh / 1.25);
+  overflow: hidden;
+}
+:root.ui-scale-125 #root,
+:root.ui-scale-125 #root > * {
+  height: 100%;
+}
+
+/* ── Background patterns ── */
+.bg-pattern-dots {
+  background-image: radial-gradient(
+    color-mix(
+      in srgb,
+      var(--bg-effect-color, var(--primary)) calc(12% * var(--bg-effect-intensity, 1)),
+      transparent
+    )
+      1px,
+    transparent 1px
+  );
+  background-size: calc(20px * var(--bg-effect-size, 1)) calc(20px * var(--bg-effect-size, 1));
+  background-attachment: fixed;
+}
+
+.bg-pattern-synapse {
+  /* CSS grid as the base layer; the canvas overlays the travelling pulses. */
+  background-image: linear-gradient(
+      color-mix(
+        in srgb,
+        var(--bg-effect-color, var(--primary)) calc(8% * var(--bg-effect-intensity, 1)),
+        transparent
+      )
+        1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(
+        in srgb,
+        var(--bg-effect-color, var(--primary)) calc(8% * var(--bg-effect-intensity, 1)),
+        transparent
+      )
+        1px,
+      transparent 1px
+    );
+  background-size: 24px 24px;
+  background-attachment: fixed;
+}
+
+/* ── Frosted glass ──
+   Layers a translucent tint over every panel and blurs what sits behind it,
+   so the UI reads as sheets of glass. The .theme-* utilities above set their
+   background with !important, so these have to as well. */
+body.theme-frosted .theme-sidebar,
+body.theme-frosted .theme-card,
+body.theme-frosted [data-slot='dropdown-menu-content'],
+body.theme-frosted [data-slot='popover-content'],
+body.theme-frosted [data-slot='menu-popup'] {
+  background-color: color-mix(in srgb, var(--card, var(--bg)) 32%, transparent) !important;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text-main, #fff) 14%, transparent) 0%,
+    color-mix(in srgb, var(--text-main, #fff) 4%, transparent) 26%,
+    transparent 55%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border-color: color-mix(in srgb, var(--text-main) 22%, transparent) !important;
+}
+
+/* ── Sliders in the theme modal ── */
+input[type='range'].theme-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-main, #fff) 18%, transparent);
+  outline: none;
+  cursor: pointer;
+}
+input[type='range'].theme-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+input[type='range'].theme-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+/* Hide the native colour-input chrome — every picker is rendered as a
+   swatch with the real input laid over it at zero opacity. */
+input[type='color'] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: none;
+}
+input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type='color']::-webkit-color-swatch {
+  border: none;
+}
+
+/* ── Themed zones the advanced colour pickers drive ── */
+.zone-user-bubble {
+  background-color: var(--user-bubble-bg, var(--sidebar)) !important;
+  border-color: var(--bubble-border, var(--border));
+}
+.zone-ai-bubble {
+  background-color: var(--ai-bubble-bg, var(--card)) !important;
+  border-color: var(--bubble-border, var(--border));
+}
+.zone-bubble-border {
+  border-color: var(--bubble-border, var(--border)) !important;
+}
+.zone-sidebar {
+  background-color: var(--sidebar-bg, var(--sidebar)) !important;
+}
+.zone-brand {
+  color: var(--brand-color, var(--primary)) !important;
+}
+.zone-brand-text {
+  background: linear-gradient(
+    90deg,
+    var(--brand-color, var(--primary)),
+    var(--brand-mix-to, var(--text-main))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.zone-input {
+  background-color: var(--input-bg, var(--card)) !important;
+  border-color: var(--input-border, var(--border)) !important;
+}
+.zone-send-btn {
+  background-color: var(--send-btn-bg, var(--primary)) !important;
+}
+.zone-send-btn:hover:not(:disabled) {
+  background-color: var(--send-btn-hover, var(--primary)) !important;
+}
+.zone-code {
+  background-color: var(--code-bg, var(--card));
+  color: var(--code-fg, var(--text-main));
+}
+.zone-toggle-active {
+  background-color: var(--toggle-active, var(--primary)) !important;
+}
+
+/* Hovering a colour row in the theme modal outlines the part of the UI that
+   colour drives (see src/lib/zoneHighlight.ts). */
+.theme-zone-highlight {
+  position: fixed;
+  z-index: 99;
+  pointer-events: none;
+  border-radius: 6px;
+  border: 1.5px dashed var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  animation: zone-highlight-in 140ms ease-out;
+}
+
+@keyframes zone-highlight-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
