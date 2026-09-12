@@ -1,7 +1,8 @@
 // Owns the live appearance state: the active palette, the user's saved
 // themes, typography and background-effect settings. Everything the theme
 // modal does goes through here, and every change is applied to the document
-// and written to localStorage in one place.
+// and persisted to the FastAPI backend in one place — nothing is kept in
+// browser storage.
 
 import {
   createContext,
@@ -16,21 +17,17 @@ import {
 import {
   applyThemeState,
   applyUiScale,
+  coerceCustomThemes,
   coerceState,
+  coerceUiScale,
   computeAdvancedDefaults,
   customEntryFromState,
   defaultStateFor,
   DEFAULT_THEME_ID,
   getThemeById,
   isHex6,
-  loadCustomThemes,
-  loadThemeState,
-  loadUiScale,
   MAX_CUSTOM_THEMES,
   normalizeHex,
-  persistCustomThemes,
-  persistThemeState,
-  persistUiScale,
   slugify,
   stateFromCustom,
   THEMES,
@@ -45,6 +42,17 @@ import {
   type ThemeState,
   type UiScale,
 } from '../lib/themes';
+import {
+  flushPending,
+  loadAllPrefs,
+  migrateLegacyLocalStorage,
+  onWrite,
+  PREF_CUSTOM_THEMES,
+  PREF_THEME,
+  PREF_UI_SCALE,
+  savePref,
+  type SyncStatus,
+} from '../lib/prefsClient';
 
 export type SaveResult = { ok: true } | { ok: false; error: string };
 
@@ -55,6 +63,8 @@ interface ThemeContextType {
   /** Bumps on every autosave so the modal can flash an "Auto-saved" pill. */
   savedAt: number;
   savedLabel: string;
+  /** Whether preferences have loaded from the backend, and whether it is up. */
+  syncStatus: SyncStatus;
 
   selectTheme: (id: string) => void;
   setBaseColor: (key: BaseKey, value: string) => void;
@@ -73,6 +83,7 @@ interface ThemeContextType {
   setEffectIntensity: (v: number) => void;
   setEffectSize: (v: number) => void;
   setFrosted: (on: boolean) => void;
+  setReactive: (on: boolean) => void;
 
   saveCustomTheme: (name: string) => SaveResult;
   deleteCustomTheme: (name: string) => void;
@@ -89,32 +100,88 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ThemeState>(() => loadThemeState());
-  const [customThemes, setCustomThemes] = useState<CustomThemeMap>(() => loadCustomThemes());
-  const [uiScale, setUiScaleState] = useState<UiScale>(() => loadUiScale());
+  const defaultTheme = getThemeById(DEFAULT_THEME_ID) || THEMES[0];
+  const [state, setState] = useState<ThemeState>(() =>
+    defaultStateFor(defaultTheme.id, defaultTheme.colors, defaultTheme.advanced)
+  );
+  const [customThemes, setCustomThemes] = useState<CustomThemeMap>({});
+  const [uiScale, setUiScaleState] = useState<UiScale>('100');
   const [savedAt, setSavedAt] = useState(0);
   const [savedLabel, setSavedLabel] = useState('Auto-saved');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('loading');
 
-  // Apply + persist on every change. One effect keeps the document, storage
-  // and React state from ever drifting apart.
-  const first = useRef(true);
+  // Nothing is persisted until the backend has answered. Without this guard
+  // the defaults rendered during the initial fetch would be written straight
+  // back over the user's saved theme.
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const values = await loadAllPrefs();
+        // One-time hand-off from the browser storage an earlier build used.
+        const migrated = await migrateLegacyLocalStorage(values);
+        const merged = { ...values, ...migrated };
+        if (cancelled) return;
+
+        if (merged[PREF_THEME] !== undefined) {
+          setState(coerceState(merged[PREF_THEME]));
+        }
+        setCustomThemes(coerceCustomThemes(merged[PREF_CUSTOM_THEMES]));
+        setUiScaleState(coerceUiScale(merged[PREF_UI_SCALE]));
+        setSyncStatus('ready');
+      } catch {
+        // Backend down — run on defaults for this session rather than
+        // silently falling back to browser storage.
+        if (!cancelled) setSyncStatus('offline');
+      } finally {
+        if (!cancelled) hydrated.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A failed write demotes the badge; a later success restores it.
+  useEffect(
+    () =>
+      onWrite((status) =>
+        setSyncStatus((prev) =>
+          status === 'failed' ? 'offline' : prev === 'loading' ? prev : 'ready'
+        )
+      ),
+    []
+  );
+
+  // Don't lose an edit made in the moment before the tab goes away.
+  useEffect(() => {
+    const onHide = () => flushPending();
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
+
+  // Apply + persist on every change. One effect keeps the document, the
+  // backend and React state from ever drifting apart.
   useEffect(() => {
     applyThemeState(state);
-    persistThemeState(state);
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    if (!hydrated.current) return;
+    savePref(PREF_THEME, state);
     setSavedAt(Date.now());
   }, [state]);
 
   useEffect(() => {
     applyUiScale(uiScale);
-    persistUiScale(uiScale);
+    if (!hydrated.current) return;
+    savePref(PREF_UI_SCALE, uiScale);
   }, [uiScale]);
 
   useEffect(() => {
-    persistCustomThemes(customThemes);
+    if (!hydrated.current) return;
+    savePref(PREF_CUSTOM_THEMES, customThemes);
   }, [customThemes]);
 
   const flash = useCallback((label: string) => {
@@ -243,6 +310,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [commitEdit]
   );
   const setFrosted = useCallback((frosted: boolean) => commitEdit({ frosted }), [commitEdit]);
+  const setReactive = useCallback((reactive: boolean) => commitEdit({ reactive }), [commitEdit]);
 
   const setEffectColor = useCallback(
     (color: string) => {
@@ -349,6 +417,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       uiScale,
       savedAt,
       savedLabel,
+      syncStatus,
       selectTheme,
       setBaseColor,
       setAdvancedColor,
@@ -365,6 +434,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setEffectIntensity,
       setEffectSize,
       setFrosted,
+      setReactive,
       saveCustomTheme,
       deleteCustomTheme,
       exportTheme,
@@ -375,10 +445,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       isCustomTheme,
     }),
     [
-      state, customThemes, uiScale, savedAt, savedLabel, selectTheme, setBaseColor,
+      state, customThemes, uiScale, savedAt, savedLabel, syncStatus, selectTheme, setBaseColor,
       setAdvancedColor, clearAdvanced, resetBaseColor, resetAdvancedColor, applyPalette,
       setFont, setDensity, setUiScale, setPattern, setEffectColor, resetEffectColor,
-      setEffectIntensity, setEffectSize, setFrosted, saveCustomTheme, deleteCustomTheme,
+      setEffectIntensity, setEffectSize, setFrosted, setReactive, saveCustomTheme, deleteCustomTheme,
       exportTheme, importTheme, resetToDefault, referenceColors, advancedDefaults, isCustomTheme,
     ]
   );

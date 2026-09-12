@@ -1,5 +1,13 @@
 // @ts-nocheck
-// Extracted and adapted from Odysseus theme.js
+// Extracted and adapted from Odysseus theme.js.
+//
+// Beyond the original: every effect reads the shared pointer field, so the
+// background reacts to the cursor when the theme's "Reactive" toggle is on.
+// `pointerFor` returns an inert value when it is off, which is why the draw
+// loops can call it unconditionally.
+
+import { pointerFor, influence } from './pointerField';
+import { THEME_CHANGE_EVENT } from './themes';
 
 export function hexToRgb(hex: string) {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -27,22 +35,39 @@ function canvasBox(canvas: HTMLCanvasElement) {
   return { w, h };
 }
 
-/** The colour the user picked for effects, falling back to the accent. */
-function effectColor(fallback = "#9cdef2") {
+// getComputedStyle forces a style recalc, so the theme variables are read
+// once and reused until the theme actually changes rather than being sampled
+// every frame (and, in the ember loop, every particle).
+let _varCache: { color: string; scale: number } | null = null;
+
+function themeVars() {
+  if (_varCache) return _varCache;
   const s = getComputedStyle(document.documentElement);
-  return (
-    s.getPropertyValue("--bg-effect-color").trim() ||
-    s.getPropertyValue("--primary").trim() ||
-    fallback
-  );
+  const scale = parseFloat(s.getPropertyValue("--bg-effect-size"));
+  _varCache = {
+    color:
+      s.getPropertyValue("--bg-effect-color").trim() ||
+      s.getPropertyValue("--primary").trim() ||
+      "#9cdef2",
+    scale: isNaN(scale) ? 1 : Math.max(0.2, Math.min(3, scale)),
+  };
+  return _varCache;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(THEME_CHANGE_EVENT, () => {
+    _varCache = null;
+  });
+}
+
+/** The colour the user picked for effects, falling back to the accent. */
+function effectColor() {
+  return themeVars().color;
 }
 
 /** Effect size multiplier (0.3..2.5) from the theme's Size slider. */
 function effectScale() {
-  const v = parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--bg-effect-size")
-  );
-  return isNaN(v) ? 1 : Math.max(0.2, Math.min(3, v));
+  return themeVars().scale;
 }
 
 // ── Synapse background effect ──
@@ -100,6 +125,18 @@ export function initSynapse(canvas: HTMLCanvasElement, cancelToken: { cancelled:
     // Spawn
     if (pulses.length < MAX_PULSES && Math.random() < 0.12) spawnPulse();
 
+    const ptr = pointerFor(canvas);
+    // Moving the cursor fires extra pulses down the grid lines it is nearest,
+    // so the network looks like it is conducting from the pointer.
+    if (ptr.active && pulses.length < MAX_PULSES + 12 && Math.random() < 0.22 * ptr.energy) {
+      const speed = SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN);
+      if (Math.random() > 0.5) {
+        pulses.push({ x: ptr.x, y: Math.round(ptr.y / GRID) * GRID, dx: speed, dy: 0 });
+      } else {
+        pulses.push({ x: Math.round(ptr.x / GRID) * GRID, y: ptr.y, dx: 0, dy: speed });
+      }
+    }
+
     // Draw pulses as small bright dots with a short trail
     for (let i = pulses.length - 1; i >= 0; i--) {
       const p = pulses[i];
@@ -111,22 +148,24 @@ export function initSynapse(canvas: HTMLCanvasElement, cancelToken: { cancelled:
       // Trail (line gradient fading behind the dot)
       const tx = p.x - (p.dx > 0 ? TRAIL_LEN : 0);
       const ty = p.y - (p.dy > 0 ? TRAIL_LEN : 0);
+      const inf = influence(p.x, p.y, ptr, 200);
+
       const grad = ctx.createLinearGradient(tx, ty, p.x, p.y);
       grad.addColorStop(0, 'transparent');
       grad.addColorStop(1, c);
       ctx.strokeStyle = grad;
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.35 + inf * 0.45;
+      ctx.lineWidth = 1 + inf * 1.4;
       ctx.beginPath();
       ctx.moveTo(tx, ty);
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
 
-      // Bright dot at head
-      ctx.globalAlpha = 0.55;
+      // Bright dot at head — swells as it passes the cursor
+      ctx.globalAlpha = 0.55 + inf * 0.45;
       ctx.fillStyle = c;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 1.2 + inf * 2.2, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -181,10 +220,20 @@ export function initRain(canvas: HTMLCanvasElement, cancelToken: { cancelled: bo
 
     if (drops.length < MAX_DROPS * inten && Math.random() < 0.6 * inten) spawn();
 
+    const ptr = pointerFor(canvas);
+
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i];
       d.y += d.speed * speedMult;
       if (d.y > H + d.len * sizeMult) { drops.splice(i, 1); continue; }
+
+      // The cursor parts the rain — drops slide around it and slow as they go.
+      const inf = influence(d.x, d.y, ptr, 150);
+      if (inf > 0) {
+        const away = d.x >= ptr.x ? 1 : -1;
+        d.x += away * inf * 4.5 + ptr.vx * inf * 0.35;
+        d.y -= inf * d.speed * 0.45;
+      }
 
       const effLen = d.len * sizeMult;
       const grad = ctx.createLinearGradient(d.x, d.y - effLen, d.x, d.y);
@@ -254,9 +303,16 @@ export function initConstellations(canvas: HTMLCanvasElement, cancelToken: { can
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
 
-    // Move stars gently
+    const ptr = pointerFor(canvas);
+
+    // Move stars gently, drifting toward the cursor while it is moving
     for (const s of stars) {
       s.x += s.vx; s.y += s.vy;
+      if (ptr.active) {
+        const pull = influence(s.x, s.y, ptr, 260) * ptr.energy * 0.02;
+        s.x += (ptr.x - s.x) * pull;
+        s.y += (ptr.y - s.y) * pull;
+      }
       if (s.x < 0) s.x = W; if (s.x > W) s.x = 0;
       if (s.y < 0) s.y = H; if (s.y > H) s.y = 0;
     }
@@ -279,13 +335,30 @@ export function initConstellations(canvas: HTMLCanvasElement, cancelToken: { can
       }
     }
 
-    // Draw stars with subtle twinkle
+    // The cursor itself joins the constellation
+    if (ptr.active) {
+      for (const s of stars) {
+        const dx = s.x - ptr.x;
+        const dy = s.y - ptr.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < CONNECT_DIST * 1.6) {
+          ctx.globalAlpha = (1 - dist / (CONNECT_DIST * 1.6)) * 0.4;
+          ctx.beginPath();
+          ctx.moveTo(ptr.x, ptr.y);
+          ctx.lineTo(s.x, s.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw stars with subtle twinkle, brighter near the cursor
     ctx.fillStyle = c;
     for (const s of stars) {
       const twinkle = 0.5 + 0.5 * Math.sin(t * 2 + s.phase);
-      ctx.globalAlpha = 0.15 + twinkle * 0.25;
+      const inf = influence(s.x, s.y, ptr, 200);
+      ctx.globalAlpha = 0.15 + twinkle * 0.25 + inf * 0.4;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, s.r * (1 + inf * 1.6), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -344,14 +417,22 @@ export function initPerlinFlow(canvas: HTMLCanvasElement, cancelToken: { cancell
     ctx.fillStyle = getFade();
     ctx.fillRect(0, 0, W, H);
     const c = getColor();
+    const ptr = pointerFor(canvas);
     particles.forEach(p => {
       const n = _bgSmoothNoise(p.x * 0.004 + t * 0.0008, p.y * 0.004 + 100);
-      const angle = n * Math.PI * 6;
-      const speed = 1 + _bgSmoothNoise(p.x * 0.003, p.y * 0.003 + 50) * 1.5;
+      let angle = n * Math.PI * 6;
+      let speed = 1 + _bgSmoothNoise(p.x * 0.003, p.y * 0.003 + 50) * 1.5;
+      // The cursor bends the flow field into a vortex around itself.
+      const inf = influence(p.x, p.y, ptr, 240);
+      if (inf > 0) {
+        const toPtr = Math.atan2(ptr.y - p.y, ptr.x - p.x);
+        angle += (toPtr + Math.PI / 2 - angle) * inf * 0.8;
+        speed += inf * 2.4;
+      }
       p.x += Math.cos(angle) * speed; p.y += Math.sin(angle) * speed; p.life -= 0.001;
       if (p.life <= 0 || p.x < 0 || p.x > W || p.y < 0 || p.y > H) { p.x = Math.random() * W; p.y = Math.random() * H; p.life = 1; }
-      ctx.beginPath(); ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
-      ctx.fillStyle = c; ctx.globalAlpha = p.life * 0.15; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1 + inf * 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = c; ctx.globalAlpha = p.life * (0.15 + inf * 0.3); ctx.fill();
     });
     ctx.globalAlpha = 1;
     t++;
@@ -398,9 +479,20 @@ export function initPetals(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
     const sz = effectScale();
+    const ptr = pointerFor(canvas);
     petals.forEach(p => {
       p.y += p.vy; p.rot += p.vr; p.drift += p.driftSpeed;
       p.x += Math.sin(p.drift) * p.wobble;
+      // Sweeping the cursor through them acts like a gust.
+      const inf = influence(p.x, p.y, ptr, 170);
+      if (inf > 0) {
+        const dx = p.x - ptr.x;
+        const dy = p.y - ptr.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        p.x += (dx / d) * inf * 5 + ptr.vx * inf * 0.5;
+        p.y += (dy / d) * inf * 3 + ptr.vy * inf * 0.4;
+        p.rot += inf * 0.12;
+      }
       if (p.y > H + 15) Object.assign(p, makePetal());
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
       ctx.globalAlpha = 0.2;
@@ -460,14 +552,28 @@ export function initSparkles(canvas: HTMLCanvasElement, cancelToken: { cancelled
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
     const sizeMult = effectScale();
+    const ptr = pointerFor(canvas);
+    // A trail of sparkles follows a moving cursor.
+    if (ptr.active && Math.random() < 0.3 * ptr.energy) {
+      const s = makeSpark();
+      s.x = ptr.x + (Math.random() - 0.5) * 60;
+      s.y = ptr.y + (Math.random() - 0.5) * 60;
+      s.phase = 0;
+      if (sparkles.length < 60) sparkles.push(s);
+    }
     sparkles.forEach(s => {
       s.phase += s.speed;
       const twinkle = Math.sin(s.phase);
-      const alpha = Math.max(0, twinkle) * 0.25 * s.life;
-      const scale = 0.5 + Math.max(0, twinkle) * 0.5;
+      const inf = influence(s.x, s.y, ptr, 180);
+      const alpha = Math.max(0, twinkle) * (0.25 + inf * 0.5) * s.life;
+      const scale = (0.5 + Math.max(0, twinkle) * 0.5) * (1 + inf * 1.2);
       if (alpha > 0.01) drawStar(s.x, s.y, s.size * scale * sizeMult, c, alpha);
       // respawn when cycle completes
-      if (s.phase > Math.PI * 6) Object.assign(s, makeSpark());
+      if (s.phase > Math.PI * 6) {
+        // Keep the pool from growing without bound once cursor trails add to it.
+        if (sparkles.length > 35) { sparkles.splice(sparkles.indexOf(s), 1); return; }
+        Object.assign(s, makeSpark());
+      }
     });
     ctx.globalAlpha = 1;
   }
@@ -526,11 +632,23 @@ export function initEmbers(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
     ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'lighter';
     const color = getColor();
+    const ptr = pointerFor(canvas);
+    const sz = effectScale();
     for (let i = embers.length - 1; i >= 0; i--) {
       const e = embers[i];
       e.wobble += 0.03;
       e.x += e.vx + Math.sin(e.wobble) * 0.5;
       e.y += e.vy;
+      // Moving through them fans the embers outward like a draft.
+      const inf = influence(e.x, e.y, ptr, 190);
+      if (inf > 0) {
+        const dx = e.x - ptr.x;
+        const dy = e.y - ptr.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        e.x += (dx / d) * inf * 3.5 + ptr.vx * inf * 0.4;
+        e.y += (dy / d) * inf * 2.5 - inf * 1.2;
+        if (!e.spark && inf > 0.55 && Math.random() < 0.08) e.spark = true;
+      }
       e.life++;
       if (e.life > e.maxLife || e.y < -20) {
         embers.splice(i, 1);
@@ -540,7 +658,6 @@ export function initEmbers(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
       if (!e.spark && Math.random() < 0.003) e.spark = true;
       const lifeRatio = e.life / e.maxLife;
       const fade = Math.min(1, Math.min(lifeRatio * 4, (1 - lifeRatio) * 3));
-      const sz = effectScale();
       const r = e.r * (e.spark ? 2.4 : 1) * sz;
       const a = (e.spark ? 0.9 : 0.55) * fade;
       const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r * 4);

@@ -56,12 +56,9 @@ export interface ThemeState {
   /** 0.3..2.5 multiplier */
   effectSize: number;
   frosted: boolean;
+  /** Whether the background effect responds to the pointer. */
+  reactive: boolean;
 }
-
-export const LS_THEME_STATE = 'daedalus-theme-state';
-export const LS_THEME_ID = 'daedalus-theme';
-export const LS_CUSTOM_THEMES = 'daedalus-custom-themes';
-export const LS_UI_SCALE = 'daedalus-ui-scale';
 
 export const DEFAULT_THEME_ID = 'oled';
 export const DEFAULT_FONT: FontKey = 'sans';
@@ -362,6 +359,25 @@ export const THEME_DEFAULT_FROSTED: Record<string, boolean> = {
   lavender: true,
 };
 
+/**
+ * Themes whose background reacts to the pointer out of the box — every theme
+ * that ships with an animated effect, since a still background has nothing to
+ * react with.
+ */
+export const THEME_DEFAULT_REACTIVE: Record<string, boolean> = {
+  midnight: true,
+  cyberpunk: true,
+  retrowave: true,
+  forest: true,
+  ocean: true,
+  terminal: true,
+  organs: true,
+  ume: true,
+  lavender: true,
+  copper: true,
+  cute: true,
+};
+
 // ── Colour maths ──────────────────────────────────────────────────────────
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -631,6 +647,10 @@ export function applyFrostedGlass(on: boolean) {
   document.body.classList.toggle('theme-frosted', !!on);
 }
 
+export function applyReactive(on: boolean) {
+  document.documentElement.style.setProperty('--bg-effect-reactive', on ? '1' : '0');
+}
+
 export function applyThemeState(state: ThemeState) {
   applyColors(state.colors, state.advanced);
   applyFontDensity(state.font, state.density);
@@ -638,6 +658,7 @@ export function applyThemeState(state: ThemeState) {
   applyBgEffectIntensity(state.effectIntensity);
   applyBgEffectSize(state.effectSize);
   applyFrostedGlass(state.frosted);
+  applyReactive(state.reactive);
   window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: state }));
 }
 
@@ -687,6 +708,7 @@ export function defaultStateFor(
     effectIntensity: THEME_DEFAULT_INTENSITY[id] ?? 1,
     effectSize: 1,
     frosted: THEME_DEFAULT_FROSTED[id] === true,
+    reactive: THEME_DEFAULT_REACTIVE[id] === true,
   };
 }
 
@@ -700,62 +722,10 @@ export interface CustomThemeEntry {
   effectIntensity?: number;
   effectSize?: number;
   frosted?: boolean;
+  reactive?: boolean;
 }
 
 export type CustomThemeMap = Record<string, CustomThemeEntry>;
-
-function readJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJSON(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* private mode / quota — the look still applies for this session */
-  }
-}
-
-export function loadCustomThemes(): CustomThemeMap {
-  const raw = readJSON<CustomThemeMap>(LS_CUSTOM_THEMES, {});
-  return raw && typeof raw === 'object' ? raw : {};
-}
-
-export function persistCustomThemes(map: CustomThemeMap) {
-  writeJSON(LS_CUSTOM_THEMES, map);
-}
-
-export function loadUiScale(): UiScale {
-  try {
-    const v = localStorage.getItem(LS_UI_SCALE);
-    return v === '125' ? '125' : DEFAULT_UI_SCALE;
-  } catch {
-    return DEFAULT_UI_SCALE;
-  }
-}
-
-export function persistUiScale(scale: UiScale) {
-  try {
-    localStorage.setItem(LS_UI_SCALE, scale);
-  } catch {
-    /* ignore */
-  }
-}
-
-export function persistThemeState(state: ThemeState) {
-  writeJSON(LS_THEME_STATE, state);
-  try {
-    localStorage.setItem(LS_THEME_ID, state.id);
-  } catch {
-    /* ignore */
-  }
-}
 
 /** Fill in anything a stored / imported object is missing. */
 export function coerceState(raw: unknown, fallbackId = DEFAULT_THEME_ID): ThemeState {
@@ -808,25 +778,27 @@ export function coerceState(raw: unknown, fallbackId = DEFAULT_THEME_ID): ThemeS
         ? Math.max(0.3, Math.min(2.5, o.effectSize))
         : 1,
     frosted: typeof o.frosted === 'boolean' ? o.frosted : THEME_DEFAULT_FROSTED[id] === true,
+    reactive: typeof o.reactive === 'boolean' ? o.reactive : THEME_DEFAULT_REACTIVE[id] === true,
   };
 }
 
-/**
- * Restore the saved look, migrating the old `daedalus-theme` string key
- * (which only ever held a theme id) to the richer state object.
- */
-export function loadThemeState(): ThemeState {
-  const stored = readJSON<unknown>(LS_THEME_STATE, null);
-  if (stored) return coerceState(stored);
-
-  let legacyId = DEFAULT_THEME_ID;
-  try {
-    legacyId = localStorage.getItem(LS_THEME_ID) || DEFAULT_THEME_ID;
-  } catch {
-    /* ignore */
+export function coerceCustomThemes(raw: unknown): CustomThemeMap {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: CustomThemeMap = {};
+  for (const [name, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const e = entry as CustomThemeEntry;
+    if (!e.colors || typeof e.colors !== 'object') continue;
+    // Route it through coerceState so a hand-edited or stale server row can
+    // never put an invalid colour on the page.
+    const state = coerceState({ id: name, ...e });
+    out[name] = customEntryFromState(state);
   }
-  const theme = getThemeById(legacyId) || THEMES[0];
-  return defaultStateFor(theme.id, theme.colors, theme.advanced);
+  return out;
+}
+
+export function coerceUiScale(raw: unknown): UiScale {
+  return raw === '125' ? '125' : DEFAULT_UI_SCALE;
 }
 
 /** Turn a stored custom entry into a full state object. */
@@ -843,6 +815,7 @@ export function stateFromCustom(name: string, entry: CustomThemeEntry): ThemeSta
     effectIntensity: entry.effectIntensity,
     effectSize: entry.effectSize,
     frosted: entry.frosted,
+    reactive: entry.reactive,
   });
 }
 
@@ -857,6 +830,7 @@ export function customEntryFromState(state: ThemeState): CustomThemeEntry {
     effectIntensity: state.effectIntensity,
     effectSize: state.effectSize,
     frosted: state.frosted,
+    reactive: state.reactive,
   };
 }
 

@@ -71,8 +71,10 @@ export function ChatInterface() {
     }
   }
 
+  // No background of its own: <main> paints the theme colour beneath the
+  // background-effect canvas, so an opaque layer here would hide the effect.
   return (
-    <div className="flex-1 flex flex-col theme-bg theme-text relative w-full h-full transition-colors duration-200">
+    <div className="flex-1 flex flex-col theme-text relative w-full h-full transition-colors duration-200">
     <TooltipProvider delay={200}>
       <div className="absolute top-4 right-6 flex items-center gap-3 z-50">
         <Tooltip>

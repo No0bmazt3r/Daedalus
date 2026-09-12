@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 /context
+
+# Backend
+backend/.venv
+backend/data/
+__pycache__/
+*.py[cod]

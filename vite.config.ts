@@ -16,4 +16,14 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
+  server: {
+    // Keeps the UI same-origin with the FastAPI backend in development, so
+    // preference reads/writes need no CORS handling.
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
 })

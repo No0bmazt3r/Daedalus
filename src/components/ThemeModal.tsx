@@ -174,6 +174,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
     savedLabel,
     referenceColors,
     advancedDefaults,
+    syncStatus,
   } = theme
 
   const [activeTab, setActiveTab] = useState('themes')
@@ -673,6 +674,35 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between mt-3">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] theme-text-muted">Reactive</span>
+                    <span className="text-[10px] theme-text-muted opacity-60">
+                      {slidersDisabled
+                        ? 'Pick an animated effect to enable'
+                        : 'Background responds to your cursor'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={state.reactive && !slidersDisabled}
+                    disabled={slidersDisabled}
+                    onClick={() => theme.setReactive(!state.reactive)}
+                    className={`relative w-11 h-6 rounded-full border theme-border transition-colors shrink-0 ${
+                      state.reactive && !slidersDisabled
+                        ? 'bg-[var(--primary)]'
+                        : 'bg-black/30'
+                    } ${slidersDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full bg-white shadow transition-transform ${
+                        state.reactive && !slidersDisabled ? 'translate-x-5' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {!slidersDisabled && (
                   <div className="flex gap-4 mt-3">
                     <Slider
@@ -781,6 +811,23 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   </p>
                 )}
               </Card>
+
+              <p className="text-[10px] theme-text-muted leading-relaxed flex items-center gap-1.5">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    syncStatus === 'ready'
+                      ? 'theme-bg-primary'
+                      : syncStatus === 'loading'
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                  }`}
+                />
+                {syncStatus === 'ready'
+                  ? 'Saved to the Daedalus backend.'
+                  : syncStatus === 'loading'
+                    ? 'Loading preferences…'
+                    : 'Backend unreachable — changes apply now but will not persist.'}
+              </p>
 
               <button
                 type="button"
