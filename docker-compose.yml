@@ -25,12 +25,15 @@ services:
       # want the lab LAN to reach it.
       - "127.0.0.1:${DAEDALUS_PORT:-8000}:8000"
     environment:
+      # Every value here comes from .env (see .env.example), with the shipped
+      # default as a fallback. Hardcoding them would silently override the
+      # file that documents them as configurable.
       # host.docker.internal resolves to the host via the extra_hosts entry.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      CHROMA_URL: http://chromadb:8000
-      DAEDALUS_DATA_DIR: /data
-      DAEDALUS_LOG_DIR: /logs
-      DAEDALUS_PREFS_DB: /app/data/prefs.db
+      CHROMA_URL: ${CHROMA_URL:-http://chromadb:8000}
+      DAEDALUS_DATA_DIR: ${DAEDALUS_DATA_DIR:-/data}
+      DAEDALUS_LOG_DIR: ${DAEDALUS_LOG_DIR:-/logs}
+      DAEDALUS_PREFS_DB: ${DAEDALUS_PREFS_DB:-/app/data/prefs.db}
     volumes:
       # Sensor SQLite + documents. Mount the SCADA machine's real database
       # here (read-only at the driver level regardless).

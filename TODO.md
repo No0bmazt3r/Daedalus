@@ -173,7 +173,9 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] FastAPI skeleton — health endpoint, CORS, lifespan init
 - [x] SQLite preference store — server-side, nothing in browser storage
 - [x] Flash-free first paint via server-rendered `theme.css`
-- [x] Single-image Docker build + `./run.sh`
+- [x] Single-image Docker build + `./daedalus.sh` (setup · start · dev · stop · logs · rebuild · status)
+- [x] Repo split into `frontend/` · `backend/` · `docs/` with runtime state at the root
+- [x] `.env.example` as the single configuration surface — all four stores, ports and Ollama; compose and the script both read it
 - [x] `docs/PROJECT.md` — reconciled the two spec sets into one canonical document
 - [x] Consolidated `docs/` + `context/` into a single `docs/` folder with an index and an implementation reference
 - [x] Repo cleanup — dropped a stray screenshot, a duplicate image folder, an empty temp file, and the vendored `odysseus/` reference sample (168MB) now that the theme and settings ports are done
@@ -188,9 +190,9 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] Chat responses are mock data — no backend call yet
 - [ ] Incognito is cosmetic; it doesn't suppress any logging
 - [ ] Sidebar conversation list is hardcoded
-- [ ] `src/components/ChatInterface.tsx:21` — lint warning, `setState` in effect (pre-existing)
+- [ ] `frontend/src/components/ChatInterface.tsx:21` — lint warning, `setState` in effect (pre-existing)
 - [ ] No tests on the frontend; backend has none either
-- [ ] `run.sh` assumes Docker is running — it reports the failure but can't start it
+- [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
 - [ ] Settings panels other than AI Defaults, Databases and Shortcuts are still placeholders
 

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local configuration — .env.example is the tracked template
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -41,3 +44,6 @@ __pycache__/
 !/data/documents/.gitkeep
 /logs/*
 !/logs/.gitkeep
+
+# Vite cache
+.vite

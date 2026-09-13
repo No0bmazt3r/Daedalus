@@ -1,7 +1,7 @@
 # Build artefacts and deps — rebuilt inside the image
-node_modules
-dist
-dist-ssr
+frontend/node_modules
+frontend/dist
+frontend/dist-ssr
 backend/.venv
 __pycache__
 *.py[cod]
@@ -14,6 +14,9 @@ logs
 *.db
 *.db-wal
 *.db-shm
+
+# Local configuration — the image gets its values from compose
+.env
 
 # Repo/editor noise
 .git

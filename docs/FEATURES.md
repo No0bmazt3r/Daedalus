@@ -126,7 +126,7 @@ image never uses.
 
 ---
 
-## 4. Theme engine — `src/lib/themes.ts`
+## 4. Theme engine — `frontend/src/lib/themes.ts`
 
 The most complete subsystem: 16 presets, live editing, and everything derived
 rather than hand-listed.
@@ -175,7 +175,7 @@ rotate, so those fall back to violet. All 16 themes verified ≥4.5:1.
 Emits `daedalus-theme-change` on every apply; the effects layer listens to
 invalidate its cached variable reads.
 
-### CSS utility classes — `src/index.css`
+### CSS utility classes — `frontend/src/index.css`
 
 | Group | Classes |
 |---|---|
@@ -195,9 +195,9 @@ every dropdown and popover rendered white regardless of theme.
 
 ## 5. Background effects
 
-Nine options; seven canvas-animated. `src/lib/canvasEffects.ts` was ported from
+Nine options; seven canvas-animated. `frontend/src/lib/canvasEffects.ts` was ported from
 Odysseus (a reference app no longer vendored in this repo);
-`src/lib/pointerField.ts` is new.
+`frontend/src/lib/pointerField.ts` is new.
 
 | Effect | Pointer reaction |
 |---|---|
@@ -226,7 +226,7 @@ with a 250ms TTL, because `getBoundingClientRect()` forces layout.
 
 ## 6. Settings shell
 
-`src/lib/settingsRegistry.ts` is the single source of truth: every panel
+`frontend/src/lib/settingsRegistry.ts` is the single source of truth: every panel
 declares its id, label, group, icon, keywords, `adminOnly` and `implemented`
 flag once. Nav, groups and search all read from it, so they cannot drift apart.
 
@@ -245,6 +245,8 @@ placeholder.
 ---
 
 ## 7. Frontend structure
+
+Paths are relative to `frontend/src/`.
 
 | Path | Role |
 |---|---|
@@ -269,7 +271,10 @@ the backend, and **deletes** them.
 ## 8. Deployment
 
 One image serves the API and the SPA (multi-stage: pnpm builds the bundle,
-FastAPI serves it). `./run.sh` or `docker compose up`.
+FastAPI serves it). `./daedalus.sh start`, or `docker compose up` directly.
+
+Configuration is entirely in `.env` (template: `.env.example`), read by both
+compose and `daedalus.sh`.
 
 | Service | Notes |
 |---|---|

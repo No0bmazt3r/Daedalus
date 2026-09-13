@@ -550,8 +550,12 @@ report their health, but nothing reads or writes them in anger yet.
 **Target:** one command brings up frontend + backend together.
 
 ```bash
-./run.sh            # or: docker compose up
+./daedalus.sh setup   # one-time: deps, .env, runtime dirs
+./daedalus.sh start   # or: docker compose up
 ```
+
+Configuration lives in `.env` (template `.env.example`), read by both compose
+and the script, so the container stack and the dev servers share one source.
 
 A multi-stage build compiles the React app, then serves the static bundle *and*
 the API from a **single FastAPI container** — one image, one port, no CORS, no

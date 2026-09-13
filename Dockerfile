@@ -11,14 +11,15 @@ WORKDIR /build
 RUN corepack enable
 
 # Dependency manifests first, so a source-only change doesn't reinstall.
-COPY package.json pnpm-lock.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
 # Everything the Vite build touches.
-COPY tsconfig*.json vite.config.ts index.html components.json ./
-COPY src ./src
-COPY public ./public
+COPY frontend/tsconfig*.json frontend/vite.config.ts ./
+COPY frontend/index.html frontend/components.json ./
+COPY frontend/src ./src
+COPY frontend/public ./public
 
 # Produces /build/dist — the static bundle FastAPI will serve.
 RUN pnpm build

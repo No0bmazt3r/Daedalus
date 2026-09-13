@@ -1,4 +1,6 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-pnpm lint-staged
+# package.json (and lint-staged's config) live in frontend/ since the
+# frontend/backend split.
+cd frontend && pnpm lint-staged

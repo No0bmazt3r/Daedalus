@@ -13,8 +13,8 @@ No cloud. No hallucinated sensor values. No write path to the plant.
 
 ## What it is
 
-[CO2SorptionDT](#) is an existing PyQt5 SCADA application monitoring a lab-scale
-CO₂ sorption reactor, logging temperature, pressure, pH, level and NDIR CO₂
+CO2SorptionDT is an existing PyQt5 SCADA application monitoring a lab-scale CO₂
+sorption reactor, logging temperature, pressure, pH, level and NDIR CO₂
 concentration to SQLite every 5 seconds. Understanding what the reactor is doing
 today means reading raw graphs, knowing SCADA jargon, and manually
 cross-referencing SOP documents and anomaly logs.
@@ -39,10 +39,10 @@ All documentation lives in **[`docs/`](docs/)** — start at [`docs/README.md`](
 1. **Fully local.** No cloud APIs in the runtime. Cloud models appear only as
    offline evaluation baselines.
 2. **Read-only toward the plant.** The AI cannot write to SCADA, actuators or
-   sensors — enforced by the driver and the tool registry, not by prompting.
-   The automated ball valves are write-only from SCADA, so their true state
-   can't be verified downstream; a hallucinated write could move real hardware.
-   Removing the capability entirely eliminates the risk class.
+   sensors — enforced by the SQLite driver and the tool registry, not by
+   prompting. The automated ball valves are write-only from SCADA, so their true
+   state can't be verified downstream; a hallucinated write could move real
+   hardware. Removing the capability entirely eliminates the risk class.
 3. **The model never invents numbers.** Every value is fetched by a
    deterministic tool. The LLM only phrases what was retrieved — and says
    "I don't have that information" when nothing was.
@@ -53,81 +53,88 @@ All documentation lives in **[`docs/`](docs/)** — start at [`docs/README.md`](
 
 ```bash
 git clone <repo> && cd Daedalus
-./run.sh
+./daedalus.sh setup      # one-time: checks tools, installs deps, creates .env
+./daedalus.sh start      # build and run
 ```
 
-That's it — one container serving the dashboard and the API on
-**<http://localhost:8000>**.
+Open **<http://localhost:8000>**.
 
-<details>
-<summary>Other ways to run it</summary>
+`setup` is safe to re-run. It never overwrites your `.env` and never touches a
+database that already has data — re-running just tops up any settings added to
+`.env.example` since.
 
-```bash
-./run.sh --rebuild        # force a clean image rebuild
-./run.sh --with-ollama    # run Ollama in a container too
-./run.sh --logs           # follow logs
-./run.sh --down           # stop everything
+### Commands
 
-docker compose up         # equivalent to ./run.sh
-```
+| Command | Does |
+|---|---|
+| `./daedalus.sh setup` | One-time: verify prerequisites, install deps, create `.env`, make runtime dirs |
+| `./daedalus.sh start` | Build (if needed) and start the container stack |
+| `./daedalus.sh dev` | Hot-reload dev servers instead, no Docker. Ctrl-C stops both |
+| `./daedalus.sh stop` | Stop the stack |
+| `./daedalus.sh logs` | Follow logs |
+| `./daedalus.sh rebuild` | Force a clean image rebuild, then start |
+| `./daedalus.sh status` | What's running, plus health of all four databases |
 
-**Ollama runs on the host by default** — GPU passthrough is simpler and the
-model cache survives rebuilds. Install it from [ollama.com](https://ollama.com),
-then:
+Add `--with-ollama` to `start` to run Ollama as a container instead of on the host.
+
+### Prerequisites
+
+| Tool | Needed for |
+|---|---|
+| **Docker** | The container stack. `setup` checks the daemon is reachable |
+| **Node 20+** and **pnpm** | Frontend. `setup` enables pnpm via corepack if missing |
+| **Python 3.11+** | Backend virtualenv for `dev` mode |
+| **Ollama** *(optional)* | Model inference. The dashboard runs fine without it |
+
+Ollama runs on the **host** by default — GPU passthrough is far simpler there
+and the model cache survives container rebuilds:
 
 ```bash
 ollama serve
 ollama pull qwen3:1.7b
 ```
 
-</details>
+---
 
-<details>
-<summary>Local development (hot reload)</summary>
+## Configuration
 
-Two processes, Vite proxying <code>/api</code> to FastAPI:
+Everything lives in **`.env`**, created from [`.env.example`](.env.example) by
+`setup`. Both `docker compose` and `daedalus.sh` read it, so one edit reaches
+the container stack and the dev servers alike.
 
-```bash
-# Terminal 1 — backend
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+| Setting | Default | Controls |
+|---|---|---|
+| `DAEDALUS_PORT` | `8000` | Dashboard + API |
+| `CHROMA_PORT` | `8001` | ChromaDB on the host |
+| `BACKEND_PORT` / `FRONTEND_PORT` | `8000` / `5173` | `dev` mode only |
+| `DAEDALUS_DATA_DIR` | `/data` | Sensor DB, documents, embedded Chroma |
+| `DAEDALUS_LOG_DIR` | `/logs` | Audit logs |
+| `CHROMA_URL` | `http://chromadb:8000` | Vector store. Unset it for embedded mode |
+| `DAEDALUS_PREFS_DB` | `/app/data/prefs.db` | UI preferences |
+| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Model runtime |
 
-# Terminal 2 — frontend
-pnpm install
-pnpm dev          # → http://localhost:5173
+Paths are as seen **inside the container**. The host directories backing them
+are the volume mounts in `docker-compose.yml`:
+
+```
+./data          ->  /data       sensor DB, documents, embedded chroma
+./logs          ->  /logs       audit logs
+./backend/data  ->  /app/data   UI preferences
 ```
 
-</details>
+To point Daedalus at a **real reactor database**, change the `./data` mount to
+the directory holding it. It is opened read-only regardless.
+
+There are no secrets in `.env.example`, deliberately — Daedalus runs fully
+local with no cloud APIs. `.env` is gitignored if that ever changes.
 
 ---
 
-## Status
+## The four databases
 
-Zone 4 (the dashboard) and a thin Zone 3 shell exist. The AI layer — the actual
-research contribution — is the work ahead. Tracked in **[`TODO.md`](TODO.md)**.
-
-### Built
-
-| Area | What works |
-|---|---|
-| **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat interface** | Message list, auto-growing composer, model selector, incognito mode *(UI only — no backend wired yet)* |
-| **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · complementary-harmony generator · font/density/text-scale · frosted glass · import/export · 8 saved custom themes |
-| **Background effects** | 9 options, 7 canvas-animated, with colour/intensity/size and **pointer-reactive** behaviour |
-| **Settings** | Registry-driven navigation, keyword search (type "vram", get Hardware), drag-resizable + collapsible rail, layout persisted server-side |
-| **Backend** | FastAPI skeleton · health + system endpoints · flash-free first paint via a server-rendered `theme.css` |
-| **Data stores** | Four separate databases wired and containerised — see below |
-| **Deployment** | Single-image Docker build + ChromaDB service, one-command startup |
-
-Preferences are stored **server-side in SQLite — deliberately nothing in browser
-storage**, so the same account carries its setup across machines.
-
-### The four databases
-
-Separate on purpose — a fault in ingestion or logging physically cannot reach
-the sensor data of record. Settings → Databases shows all four live.
+Separate on purpose: a fault in ingestion or logging physically cannot reach the
+sensor data of record. **Settings → Databases** shows all four live, and
+`./daedalus.sh status` prints the same from the terminal.
 
 | Store | Engine | Access | Holds |
 |---|---|---|---|
@@ -136,11 +143,79 @@ the sensor data of record. Settings → Databases shows all four live.
 | **Vector** | ChromaDB | read/write | embedded SOP/manual/anomaly chunks for RAG |
 | **Prefs** | SQLite | read/write | UI state, kept out of the browser |
 
-The read-only boundary is enforced by the SQLite driver (`mode=ro`), not by
-convention: INSERT, UPDATE, DELETE and DROP all raise, while reads keep working.
+The read-only boundary is the SQLite driver's, not a convention:
 
-No telemetry yet? **Settings → Databases → Generate demo data** seeds a
-plausible run offline (it refuses if data already exists).
+```python
+conn = sqlite3.connect(f"file:{SENSOR_DB}?mode=ro", uri=True)
+```
+
+INSERT, UPDATE, DELETE and DROP all raise; reads keep working. A prompt
+injection cannot reach below that line.
+
+**No telemetry yet?** Settings → Databases → *Generate demo data* seeds a
+plausible run offline. It refuses if data already exists.
+
+---
+
+## Repository layout
+
+```
+├── frontend/            React dashboard (Zone 4)
+│   ├── src/
+│   │   ├── components/  Chat, theme modal, settings
+│   │   ├── contexts/    Theme + settings state
+│   │   ├── hooks/       Draggable, resizable sidebar
+│   │   └── lib/         Theme engine, canvas effects, API clients
+│   ├── public/
+│   └── package.json     …and the rest of the Vite/TS toolchain
+│
+├── backend/             FastAPI service (Zone 3)
+│   ├── app/
+│   │   ├── api/         Route handlers
+│   │   └── db/          The four stores
+│   └── requirements.txt
+│
+├── docs/                All documentation
+│   ├── README.md        Index — start here
+│   ├── PROJECT.md       Canonical specification
+│   ├── FEATURES.md      What's actually built
+│   ├── research/        FYP1 research specs    ─┐ historical,
+│   └── architecture/    11-layer design specs  ─┘ superseded by PROJECT.md
+│
+├── data/                Runtime: sensor DB, documents  (gitignored)
+├── logs/                Runtime: audit logs            (gitignored)
+│
+├── .env.example         Configuration template
+├── Dockerfile           Multi-stage: builds frontend, served by backend
+├── docker-compose.yml   App + ChromaDB (+ optional Ollama)
+├── daedalus.sh          Entry point
+└── TODO.md              Roadmap
+```
+
+Frontend and backend are fully separated: the frontend is a pure client of the
+API, and the backend has no knowledge of React. The container proves it —
+`Dockerfile` builds the bundle in one stage and serves it from the other.
+
+---
+
+## Status
+
+Zone 4 (the dashboard) and the data layer exist. The AI layer — the actual
+research contribution — is the work ahead. Tracked in [`TODO.md`](TODO.md),
+detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
+
+### Built
+
+| Area | What works |
+|---|---|
+| **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
+| **Chat interface** | Message list, composer, model selector, incognito mode *(UI only — no backend wired yet)* |
+| **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
+| **Background effects** | 9 options, 7 canvas-animated, **pointer-reactive** |
+| **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side |
+| **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
+| **Data stores** | All four wired, containerised and health-reported |
+| **Deployment** | Single-image build + ChromaDB, one-command startup |
 
 ### Not built yet
 
@@ -203,32 +278,44 @@ Zone 3  AI layer ─ FastAPI · tools · RAG · Ollama       ← this project
 Zone 4  Presentation ─ React dashboard                  ← this project
 ```
 
-Both containerised services keep their state on host volumes: `./data`
-(sensor DB, vector/graph stores, documents), `./logs` (audit logs),
-`backend/data` (UI preferences).
-
 ---
 
-## Repository layout
+## Development
 
+```bash
+./daedalus.sh dev
 ```
-├── src/                 React dashboard (Zone 4)
-│   ├── components/      Chat, theme modal, settings
-│   ├── contexts/        Theme + settings state
-│   └── lib/             Theme engine, canvas effects, API clients
-├── backend/             FastAPI service (Zone 3)
-│   └── app/
-│       ├── api/         Route handlers
-│       └── db/          SQLite stores
-├── docs/                ★ All documentation, one folder
-│   ├── README.md        Index — start here
-│   ├── PROJECT.md       Canonical specification
-│   ├── FEATURES.md      What's actually built
-│   ├── research/        FYP1 research specs    ─┐ historical,
-│   └── architecture/    11-layer design specs  ─┘ superseded by PROJECT.md
-├── TODO.md              Roadmap and progress
-└── run.sh               One-command startup
+
+Runs uvicorn with `--reload` on :8000 and Vite on :5173 proxying `/api` to it.
+Ctrl-C stops both.
+
+<details>
+<summary>Driving the two servers yourself</summary>
+
+```bash
+# Terminal 1 — backend
+backend/.venv/bin/uvicorn app.main:app --reload --port 8000 --app-dir backend
+
+# Terminal 2 — frontend
+cd frontend && pnpm dev
 ```
+
+</details>
+
+<details>
+<summary>Checks</summary>
+
+```bash
+cd frontend
+npx tsc -b          # typecheck
+npm run build       # production build
+npx oxlint src      # lint
+
+cd ../backend
+.venv/bin/python -m compileall -q app
+```
+
+</details>
 
 ---
 
