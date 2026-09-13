@@ -167,6 +167,9 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder={selected?.base_url || 'https://…/v1'}
               className={`${field} font-mono`}
+              autoComplete="off"
+              data-1p-ignore="true"
+              data-lpignore="true"
               spellCheck={false}
             />
           </div>
@@ -186,7 +189,9 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
             }}
             placeholder="API key, e.g. sk-proj-AbCdEf…"
             className={`${field} font-mono`}
-            autoComplete="off"
+            autoComplete="new-password"
+            data-1p-ignore="true"
+            data-lpignore="true"
             spellCheck={false}
           />
           <p className="text-[11px] theme-text-muted opacity-70 mt-0.5">

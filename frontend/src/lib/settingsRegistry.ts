@@ -75,10 +75,6 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: ['models', 'configured', 'installed', 'quantization'],
   }),
   panel({
-    id: 'ai', label: 'AI Defaults', group: 'models', icon: Cpu, implemented: true,
-    keywords: ['ai', 'defaults', 'model', 'chat', 'temperature', 'context'],
-  }),
-  panel({
     id: 'hardware', label: 'Hardware', group: 'models', icon: Cpu,
     keywords: ['hardware', 'ram', 'vram', 'gpu', 'cpu', 'profiler', 'benchmark', 'fit'],
   }),
@@ -133,7 +129,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   }),
 ]);
 
-export const DEFAULT_SETTINGS_PANEL_ID = 'ai';
+export const DEFAULT_SETTINGS_PANEL_ID = 'services';
 
 const byId = new Map(SETTINGS_PANELS.map((p) => [p.id, p]));
 

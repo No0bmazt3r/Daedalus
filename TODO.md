@@ -164,7 +164,7 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] Graph visualiser for GraphRAG traversal paths
 - [ ] Hardware/model panel in settings
 - [ ] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet
-- [ ] "Added Models" panel — list local Ollama models alongside the cloud baselines
+- [x] "Added Models" panel — list local Ollama models alongside the cloud baselines
 - [ ] Let the raw browser filter by `session_id` / `query_id`, so one conversation's rows can be isolated
 - [x] Sidebar driven by `GET /api/sessions` — select, inline rename, delete, filter
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
@@ -182,7 +182,7 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] Chat interface (mock) — composer, model selector, incognito, typewriter greeting
 - [x] Theme engine — 16 themes, 7 base + 14 per-zone colours, derived syntax ramps, harmony generator, font/density/scale, frosted glass, import/export, custom themes
 - [x] Background effects — 9 options, 7 canvas-animated, pointer-reactive
-- [x] Settings modal — sectioned nav, incognito toggle, model defaults
+- [x] Settings modal — sectioned nav, incognito toggle
 - [x] FastAPI skeleton — health endpoint, CORS, lifespan init
 - [x] SQLite preference store — server-side, nothing in browser storage
 - [x] Flash-free first paint via server-rendered `theme.css`
@@ -213,6 +213,8 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] `ACKNOWLEDGMENTS.md` — credits Odysseus (PewDiePie) for the theme/settings/prefs design, and records **why this is not a fork**: Odysseus is AGPL-3.0, Daedalus is MIT, and no Odysseus code is present
 - [x] **Host/container path mapping** — `.env` holds container paths, so `daedalus.sh dev` was pointing the dev server at `backend/data/` while Docker wrote to `data/` and `logs/`. Host-side commands now map them, so both see the same files
 - [x] Unknown `/api/*` paths return 404 instead of falling through to the SPA catch-all
+- [x] Unified model discovery via `/api/system/models` querying both Ollama REST API (`OLLAMA_BASE_URL`) and cloud benchmark endpoints.
+- [x] Dynamic model integration — Chat interface selector now adaptively loads models on-hand instead of hardcoded placeholders.
 
 ---
 
@@ -225,7 +227,7 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
-- [ ] Settings panels other than AI Defaults, Add Models, Databases and Shortcuts are still placeholders
+- [ ] Settings panels other than Add Models, Databases and Shortcuts are still placeholders
 - [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
 
 ---

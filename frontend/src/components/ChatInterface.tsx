@@ -41,13 +41,23 @@ function TypewriterText({ text }: { text: string }) {
 }
 
 export function ChatInterface() {
-  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel } = useSettings()
+  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel, models, modelsLoading, modelsError } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
   const { messages, sendMessage, sending, error } = useSessions()
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
-  const models = ['Daedalus 2.0', 'Daedalus Pro', 'Daedalus Flash', 'Daedalus Vision']
+
+  let modelOptions = [{ value: '', label: 'Loading...' }]
+  if (!modelsLoading) {
+    if (modelsError) {
+      modelOptions = [{ value: '', label: modelsError }]
+    } else if (models.length > 0) {
+      modelOptions = models.map(m => ({ value: m.name, label: m.name }))
+    } else {
+      modelOptions = [{ value: '', label: 'No models configured' }]
+    }
+  }
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -138,18 +148,19 @@ export function ChatInterface() {
                     {selectedModel}
                     <ChevronDown size={14} className="ml-1 opacity-50" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40 z-50 theme-card theme-border theme-text border">
-                    {models.map(model => (
+                  <DropdownMenuContent align="end" className="w-56 z-50 theme-card theme-border theme-text border">
+                    {modelOptions.map(opt => (
                       <DropdownMenuItem
-                        key={model}
-                        onClick={() => setSelectedModel(model)}
+                        key={opt.value}
+                        onClick={() => { if (opt.value) setSelectedModel(opt.value) }}
+                        disabled={!opt.value}
                         className={`cursor-pointer ${
-                          selectedModel === model
+                          selectedModel === opt.value
                             ? 'theme-primary bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
                             : 'theme-text-muted'
                         }`}
                       >
-                        {model}
+                        {opt.label}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>

@@ -160,3 +160,52 @@ def seed_demo() -> dict[str, Any]:
         "rows_inserted": inserted,
         "note": "already populated — nothing written" if inserted == 0 else "demo run generated",
     }
+
+
+@router.get("/models")
+def list_models() -> dict[str, Any]:
+    """Dynamically discover models on hand.
+    
+    Queries the local Ollama instance (fast fail if absent) and lists configured
+    cloud benchmark endpoints.
+    """
+    import os
+    import httpx
+    from ..services import model_endpoints
+    
+    models = []
+    
+    # 1. Fetch from Ollama
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    try:
+        # short timeout so the UI doesn't hang if Ollama is off
+        with httpx.Client(timeout=1.5) as client:
+            resp = client.get(f"{ollama_url}/api/tags")
+            if resp.status_code == 200:
+                data = resp.json()
+                for m in data.get("models", []):
+                    models.append({
+                        "id": f"ollama:{m['name']}",
+                        "name": m["name"],
+                        "provider": "ollama",
+                        "type": "local",
+                        "details": m.get("details", {})
+                    })
+    except Exception:
+        pass
+        
+    # 2. Fetch configured cloud endpoints
+    try:
+        endpoints = model_endpoints.list_endpoints()
+        for ep in endpoints:
+            models.append({
+                "id": f"cloud:{ep['id']}",
+                "name": ep["label"],
+                "provider": ep["provider"],
+                "type": "cloud",
+                "details": {"base_url": ep["base_url"]}
+            })
+    except Exception:
+        pass
+        
+    return {"models": models}

@@ -225,6 +225,12 @@ always insertion order, and same-second rows would otherwise be arbitrary.
 Cells over 4000 characters are truncated with a count, so one large transcript
 cannot push megabytes into the browser.
 
+### Dynamic Model Discovery — `/api/system/models`
+
+Daedalus fetches models dynamically rather than keeping hardcoded lists. The frontend components (Chat model selector) adaptively query the `/api/system/models` endpoint which aggregates:
+- **Local Models:** Probes the local Ollama instance (at `OLLAMA_BASE_URL`) for downloaded SLMs, failing fast if offline.
+- **Cloud Baselines:** Includes any external endpoints configured in the Added Models settings.
+
 ### Cloud model endpoints — `services/model_endpoints.py`
 
 Settings → **Add Models**. Configures OpenAI, Anthropic, DeepSeek, OpenRouter,
@@ -409,7 +415,7 @@ flag once. Nav, groups and search all read from it, so they cannot drift apart.
 - Unbuilt panels carry a dot, and search says "not built yet" rather than
   opening a dead page silently.
 
-**Built panels:** AI Defaults · Databases · Shortcuts. Everything else is a
+**Built panels:** Add Models · Databases · Shortcuts. Everything else is a
 placeholder.
 
 ---

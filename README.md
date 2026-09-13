@@ -265,8 +265,9 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
 | **Chat interface** | Message list, composer, model selector, incognito — wired to the session API. *Replies are still placeholders until the orchestrator lands* |
 | **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen |
+| **Dynamic Models**| Unified `/api/system/models` querying Ollama + cloud baselines. Chat interface auto-adapts |
 | **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
-| **Background effects** | 9 options, 7 canvas-animated, **pointer-reactive** |
+| **Background effects** | 9 options, 7 canvas-animated, **pointer-reactive**, including new 'Nexus' node network |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
 | **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |

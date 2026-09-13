@@ -16,7 +16,6 @@ import {
   visibleGroups,
   type SettingsPanel,
 } from '../lib/settingsRegistry'
-import { ThemeSelect } from './ui/theme-select'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
@@ -27,7 +26,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel } = useSettings()
+  const { isIncognito, setIsIncognito } = useSettings()
   const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
   const [isPeek, setIsPeek] = useState(false)
   // Where the window sits. Centring it with flexbox looked fine but broke
@@ -54,7 +53,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   // Admin panels are hidden until there's an auth layer to decide this.
   const isAdmin = true
 
-  const models = ['Daedalus 2.0', 'Daedalus Pro', 'Daedalus Flash', 'Daedalus Vision']
 
   const openPanel = useCallback(
     (id: string) => {
@@ -264,30 +262,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 harder to scan, not easier. Panels that genuinely benefit from
                 width (Databases) add columns via their own container queries. */}
             <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl">
-            {activeTab === 'ai' && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div>
-                  <h3 className="text-xl font-medium mb-1">AI Defaults</h3>
-                  <p className="text-sm theme-text-muted mb-6">
-                    Manage your default models and AI settings.
-                  </p>
-                </div>
-                <div className={cardClass}>
-                  <div className="flex flex-col gap-3">
-                    <span className="text-sm font-medium">Default Chat Model</span>
-                    <ThemeSelect
-                      value={selectedModel}
-                      onChange={setSelectedModel}
-                      ariaLabel="Default chat model"
-                      options={models.map((m) => ({ value: m, label: m }))}
-                    />
-                    <p className="text-xs theme-text-muted mt-1">
-                      This model will be selected by default for new conversations.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
 

@@ -171,3 +171,18 @@ export async function deleteEndpoint(id: string): Promise<boolean> {
   );
   return data.deleted;
 }
+
+// ── system models ────────────────────────────────────────────────────────────
+
+export interface SystemModel {
+  id: string;
+  name: string;
+  provider: string;
+  type: 'local' | 'cloud';
+  details?: Record<string, unknown>;
+}
+
+export async function listModels(): Promise<SystemModel[]> {
+  const data = await request<{ models: SystemModel[] }>('/api/system/models');
+  return data.models;
+}
