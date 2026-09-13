@@ -13,10 +13,13 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Iterator
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "prefs.db"
+from . import paths as _paths
+
+# Resolved centrally so every store's location is declared in one place and
+# can be overridden per-deployment. Same default path as before.
+DB_PATH = _paths.PREFS_DB
 
 # Single-user local deployment. Kept as a column so a future multi-user
 # build does not need a migration.

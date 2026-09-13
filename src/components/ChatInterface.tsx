@@ -85,7 +85,7 @@ export function ChatInterface() {
                 size="icon" 
                 className={`w-9 h-9 rounded-full transition-all duration-300 ${
                   isIncognito 
-                    ? 'theme-primary bg-primary/10 scale-110 shadow-[0_0_15px_rgba(var(--primary),0.3)]' 
+                    ? 'incognito-text incognito-bg-soft incognito-glow scale-110' 
                     : 'theme-text-muted hover:theme-text hover:bg-black/20'
                 }`}
                 onClick={() => setIsIncognito(!isIncognito)}
@@ -102,9 +102,11 @@ export function ChatInterface() {
       {messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full">
           <div className="flex items-center gap-3 mb-8">
-            <LabyrinthIcon className={`w-10 h-10 transition-colors duration-300 ${isIncognito ? 'text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.3)]' : 'theme-primary'}`} />
-            <h1 className={`text-3xl font-serif tracking-tight transition-colors duration-300 ${isIncognito ? 'text-indigo-400' : ''}`}>
-              <TypewriterText text="Good afternoon, Operator" />
+            <LabyrinthIcon className={`w-10 h-10 transition-colors duration-300 ${isIncognito ? 'incognito-text incognito-drop-glow' : 'theme-primary'}`} />
+            <h1 className={`text-3xl font-serif tracking-tight transition-colors duration-300 ${isIncognito ? 'incognito-text' : ''}`}>
+              <TypewriterText
+                text={isIncognito ? 'Off the record, Operator' : 'Good afternoon, Operator'}
+              />
             </h1>
           </div>
           
@@ -115,7 +117,7 @@ export function ChatInterface() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={isIncognito ? "Incognito mode active. How can I help?" : "How can I help you today?"}
-              className={`bg-transparent border-0 resize-none focus-visible:ring-0 px-4 py-4 min-h-[56px] max-h-[200px] overflow-y-auto text-base placeholder:opacity-50 transition-colors ${isIncognito ? 'placeholder:text-indigo-400/50' : ''}`}
+              className={`bg-transparent border-0 resize-none focus-visible:ring-0 px-4 py-4 min-h-[56px] max-h-[200px] overflow-y-auto text-base placeholder:opacity-50 transition-colors ${isIncognito ? 'incognito-placeholder' : ''}`}
               rows={1}
             />
             
@@ -124,8 +126,8 @@ export function ChatInterface() {
                 <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-black/20">
                   <Plus size={18} />
                 </Button>
-                <div className="flex items-center bg-black/20 rounded-lg p-0.5 border theme-border">
-                  <button className="px-3 py-1 text-xs font-medium bg-black/40 rounded-md shadow-sm">Chat</button>
+                <div className="flex items-center rounded-lg p-0.5 border theme-border bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)]">
+                  <button className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)]">Chat</button>
                   <button className="px-3 py-1 text-xs font-medium theme-text-muted hover:theme-text">System</button>
                 </div>
               </div>
@@ -137,12 +139,16 @@ export function ChatInterface() {
                     {selectedModel}
                     <ChevronDown size={14} className="ml-1 opacity-50" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40 z-50">
+                  <DropdownMenuContent align="end" className="w-40 z-50 theme-card theme-border theme-text border">
                     {models.map(model => (
-                      <DropdownMenuItem 
-                        key={model} 
+                      <DropdownMenuItem
+                        key={model}
                         onClick={() => setSelectedModel(model)}
-                        className={selectedModel === model ? "bg-accent text-accent-foreground" : ""}
+                        className={`cursor-pointer ${
+                          selectedModel === model
+                            ? 'theme-primary bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
+                            : 'theme-text-muted'
+                        }`}
                       >
                         {model}
                       </DropdownMenuItem>
@@ -191,7 +197,7 @@ export function ChatInterface() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={isIncognito ? "Incognito mode active. How can I help?" : "How can I help you today?"}
-                  className={`bg-transparent border-0 resize-none focus-visible:ring-0 px-4 py-3 min-h-[44px] max-h-[200px] overflow-y-auto text-base placeholder:opacity-50 transition-colors ${isIncognito ? 'placeholder:text-indigo-400/50' : ''}`}
+                  className={`bg-transparent border-0 resize-none focus-visible:ring-0 px-4 py-3 min-h-[44px] max-h-[200px] overflow-y-auto text-base placeholder:opacity-50 transition-colors ${isIncognito ? 'incognito-placeholder' : ''}`}
                   rows={1}
                 />
                 

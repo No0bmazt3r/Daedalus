@@ -401,18 +401,18 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
             <TabsList variant="line" className="bg-transparent p-0 h-auto relative flex w-full">
               <TabsTrigger
                 value="themes"
-                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
+                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10 after:hidden"
               >
                 <SwatchBook size={14} className="mr-2" /> Themes
               </TabsTrigger>
               <TabsTrigger
                 value="customize"
-                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10"
+                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10 after:hidden"
               >
                 <Paintbrush size={14} className="mr-2" /> Customize
               </TabsTrigger>
 
-              {/* Sliding underline */}
+              {/* The only underline — the primitive's own is hidden above */}
               <div
                 className="absolute bottom-0 left-0 h-0.5 w-1/2 theme-bg-primary transition-transform duration-300 ease-in-out"
                 style={{
@@ -423,7 +423,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           </div>
 
           {/* ── Themes ─────────────────────────────────────────────── */}
-          <TabsContent value="themes" className="flex-1 overflow-y-auto p-4 m-0 min-h-0">
+          <TabsContent value="themes" className="flex-1 overflow-y-auto no-scrollbar p-4 m-0 min-h-0">
             <h3 className="text-xs font-semibold theme-text-muted uppercase tracking-wider mb-4 flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full theme-bg-primary" />
               Default Themes
@@ -464,7 +464,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           </TabsContent>
 
           {/* ── Customize ──────────────────────────────────────────── */}
-          <TabsContent value="customize" className="flex-1 overflow-y-auto p-4 m-0 min-h-0 relative">
+          <TabsContent value="customize" className="flex-1 overflow-y-auto no-scrollbar p-4 m-0 min-h-0 relative">
             <div className="space-y-4">
               {/* Colors */}
               <Card title="Colors" icon={<Palette size={14} className="theme-primary" />}>

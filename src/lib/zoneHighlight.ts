@@ -35,6 +35,7 @@ export const ZONE_MAP: Partial<Record<BaseKey | AdvancedKey | 'effect', string>>
   sendBtnBg: '.zone-send-btn',
   sendBtnHover: '.zone-send-btn',
   toggleActive: '.zone-toggle-active',
+  incognitoAccent: '.incognito-text, .incognito-bg, .incognito-bg-soft',
 };
 
 export function clearZoneHighlight() {

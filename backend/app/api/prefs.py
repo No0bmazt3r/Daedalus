@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/prefs", tags=["prefs"])
 
 # Only keys the UI actually owns are writable — an unknown key is a bug or an
 # abuse, not something to persist.
-ALLOWED_KEYS = {"theme", "custom-themes", "ui-scale"}
+ALLOWED_KEYS = {"theme", "custom-themes", "ui-scale", "settings-ui"}
 
 
 class PrefBody(BaseModel):

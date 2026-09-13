@@ -1,0 +1,1 @@
+# Keeps this directory in the repo so Docker never creates it as root.

@@ -7,8 +7,13 @@
 export const PREF_THEME = 'theme';
 export const PREF_CUSTOM_THEMES = 'custom-themes';
 export const PREF_UI_SCALE = 'ui-scale';
+export const PREF_SETTINGS_UI = 'settings-ui';
 
-export type PrefKey = typeof PREF_THEME | typeof PREF_CUSTOM_THEMES | typeof PREF_UI_SCALE;
+export type PrefKey =
+  | typeof PREF_THEME
+  | typeof PREF_CUSTOM_THEMES
+  | typeof PREF_UI_SCALE
+  | typeof PREF_SETTINGS_UI;
 
 export type SyncStatus = 'loading' | 'ready' | 'offline';
 
@@ -37,6 +42,14 @@ export async function loadAllPrefs(): Promise<Record<string, unknown>> {
   if (!res.ok) throw new Error(`prefs load failed: ${res.status}`);
   const data = (await res.json()) as { values?: Record<string, unknown> };
   return data.values || {};
+}
+
+/** Read a single preference. Returns null when it has never been set. */
+export async function loadOnePref(key: PrefKey): Promise<unknown> {
+  const res = await request(`${BASE}/${key}`);
+  if (!res.ok) throw new Error(`pref load failed: ${res.status}`);
+  const data = (await res.json()) as { value?: unknown };
+  return data.value ?? null;
 }
 
 const pending = new Map<PrefKey, { value: unknown; timer: number }>();

@@ -1,0 +1,35 @@
+# Build artefacts and deps — rebuilt inside the image
+node_modules
+dist
+dist-ssr
+backend/.venv
+__pycache__
+*.py[cod]
+
+# Local state — provided at runtime via volumes, never baked in
+backend/data
+data
+logs
+*.log
+*.db
+*.db-wal
+*.db-shm
+
+# Reference material only — never shipped (see PROJECT.md §0)
+odysseus
+
+# Repo/editor noise
+.git
+.github
+.husky
+.vscode
+.idea
+.DS_Store
+*.local
+test
+images
+
+# Docs aren't needed to run the app
+docs
+*.md
+!README.md

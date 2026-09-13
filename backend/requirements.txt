@@ -1,2 +1,10 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
+
+# Thin HTTP client for the ChromaDB service (Layer 5). This is deliberately
+# `chromadb-client` and not the full `chromadb`: the container talks to the
+# chromadb compose service over HTTP, and the full package drags in
+# onnxruntime/tokenizers for embedded mode — hundreds of MB the image never
+# uses. For embedded mode (no CHROMA_URL), install `chromadb` instead.
+# Either package satisfies the lazy import in app/db/vector_store.py.
+chromadb-client>=0.5

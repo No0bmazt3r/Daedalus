@@ -467,6 +467,65 @@ export function deriveSyntaxColors(colors: ThemeColors): SyntaxColors {
   };
 }
 
+/** WCAG relative luminance. */
+export function relativeLuminance(hex: string): number {
+  const rgb = hexToRgb(hex) || { r: 0, g: 0, b: 0 };
+  const channel = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+}
+
+/** WCAG contrast ratio between two colours, 1..21. */
+export function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * The accent used for incognito mode.
+ *
+ * Incognito has to read as a *different* state from the normal accent, so a
+ * complementary rotation of the theme's own accent gives a colour that is both
+ * clearly distinct and still harmonious with the palette. Saturation gets a
+ * floor (a muted accent would otherwise produce a muted, easily-missed state)
+ * and lightness is walked away from the background until the result is
+ * genuinely legible — a fixed lightness fails on very light themes, where a
+ * mid-tone complement washes out to barely 2:1.
+ */
+export function deriveIncognitoColor(colors: ThemeColors): string {
+  const [h, s] = hexToHSL(colors.primary);
+  const [, , bgL] = hexToHSL(colors.bg);
+  const isDark = bgL < 50;
+  // A near-greyscale accent has no meaningful hue to rotate, so those themes
+  // fall back to the violet that incognito conventionally uses.
+  const hue = s < 12 ? 265 : (h + 150) % 360;
+  const sat = Math.min(Math.max(s, 55), 85);
+
+  const TARGET = 4.5;
+  let l = isDark ? 68 : 45;
+  const step = isDark ? 3 : -3;
+  let best = hslToHex(hue, sat, l);
+  let bestRatio = contrastRatio(best, colors.bg);
+
+  for (let i = 0; i < 30 && l >= 5 && l <= 95; i++) {
+    const candidate = hslToHex(hue, sat, l);
+    const ratio = contrastRatio(candidate, colors.bg);
+    if (ratio >= TARGET) return candidate;
+    if (ratio > bestRatio) {
+      best = candidate;
+      bestRatio = ratio;
+    }
+    l += step;
+  }
+  // Nothing hit the target (a mid-grey background leaves little room) — keep
+  // whichever step read best rather than returning an arbitrary one.
+  return best;
+}
+
 // ── Base palette rows (the "Colors" card) ────────────────────────────────
 
 export type BaseKey = keyof ThemeColors;
@@ -488,7 +547,7 @@ export type AdvancedKey =
   | 'sidebarBg' | 'brandColor' | 'brandMixTo'
   | 'inputBg' | 'inputBorder' | 'sendBtnBg' | 'sendBtnHover'
   | 'codeBg' | 'codeFg'
-  | 'toggleActive';
+  | 'toggleActive' | 'incognitoAccent';
 
 export const ADV_KEYS: { key: AdvancedKey; css: string; label: string; group: string }[] = [
   { key: 'userBubbleBg', css: '--user-bubble-bg', label: 'User Chat Bubble', group: 'Chat Bubbles' },
@@ -504,6 +563,7 @@ export const ADV_KEYS: { key: AdvancedKey; css: string; label: string; group: st
   { key: 'codeBg', css: '--code-bg', label: 'Code Bg', group: 'Code Blocks' },
   { key: 'codeFg', css: '--code-fg', label: 'Code Text', group: 'Code Blocks' },
   { key: 'toggleActive', css: '--toggle-active', label: 'Toggle On', group: 'Controls' },
+  { key: 'incognitoAccent', css: '--incognito', label: 'Incognito Mode', group: 'Controls' },
 ];
 
 export const ADV_GROUPS = ['Chat Bubbles', 'Sidebar', 'Chat Input / Prompt Area', 'Code Blocks', 'Controls'];
@@ -529,6 +589,7 @@ export function computeAdvancedDefaults(colors: ThemeColors): Record<AdvancedKey
     codeBg: syn.bg,
     codeFg: syn.fg,
     toggleActive: colors.primary,
+    incognitoAccent: deriveIncognitoColor(colors),
   };
 }
 

@@ -22,10 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-/context
 
 # Backend
 backend/.venv
 backend/data/
 __pycache__/
 *.py[cod]
+
+# Runtime state. The directories themselves are tracked via .gitkeep so a
+# fresh clone has them before Docker can create them as root-owned mounts.
+/data/*
+!/data/.gitkeep
+!/data/sqlite/
+/data/sqlite/*
+!/data/sqlite/.gitkeep
+!/data/documents/
+/data/documents/*
+!/data/documents/.gitkeep
+/logs/*
+!/logs/.gitkeep

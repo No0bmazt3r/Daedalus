@@ -398,3 +398,64 @@ input[type='color']::-webkit-color-swatch {
     opacity: 1;
   }
 }
+
+/* ── Incognito mode ──
+   Driven by --incognito, which the theme engine derives from the active
+   accent (see deriveIncognitoColor in src/lib/themes.ts) and the user can
+   override under Customize → More Colors → Controls. */
+.incognito-text {
+  color: var(--incognito, #818cf8) !important;
+}
+.incognito-bg {
+  background-color: var(--incognito, #818cf8) !important;
+}
+.incognito-bg-soft {
+  background-color: color-mix(in srgb, var(--incognito, #818cf8) 18%, transparent) !important;
+}
+.incognito-glow {
+  box-shadow: 0 0 15px color-mix(in srgb, var(--incognito, #818cf8) 35%, transparent);
+}
+.incognito-drop-glow {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--incognito, #818cf8) 45%, transparent));
+}
+.incognito-placeholder::placeholder {
+  color: color-mix(in srgb, var(--incognito, #818cf8) 55%, transparent);
+}
+
+/* ── Bind the shadcn design tokens to the active theme ──
+   The primitives (dropdown, popover, menu, card, tabs…) paint with
+   bg-popover / bg-accent / text-muted-foreground and friends. Those resolve
+   to the fixed oklch values in :root above — and since the app never sets the
+   `.dark` class, every one of them rendered light-mode white regardless of
+   the chosen theme. Re-pointing the tokens at the theme variables fixes all
+   of those components at once instead of per call site.
+   This block must stay after the :root defaults it overrides. */
+:root {
+  --background: var(--bg);
+  --foreground: var(--text-main);
+  --card-foreground: var(--text-main);
+  --popover: var(--card);
+  --popover-foreground: var(--text-main);
+  --muted-foreground: var(--text-muted);
+  --muted: color-mix(in srgb, var(--text-main) 10%, transparent);
+  --accent: color-mix(in srgb, var(--primary) 16%, transparent);
+  --accent-foreground: var(--text-main);
+  --secondary: color-mix(in srgb, var(--text-main) 8%, transparent);
+  --secondary-foreground: var(--text-main);
+  --input: var(--border);
+  --ring: var(--primary);
+}
+
+/* Scroll without a visible scrollbar — used by the modal panes, which are
+   small enough that a track eats noticeable width and reads as clutter.
+   Only the bar is hidden; wheel, trackpad, keyboard and touch all still
+   scroll normally. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}

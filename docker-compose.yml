@@ -1,0 +1,90 @@
+# Daedalus — one container for the app, plus the stores it depends on.
+#
+#   docker compose up                          # app + vector DB
+#   docker compose --profile with-ollama up    # also run Ollama in a container
+#
+# Four separate databases, on purpose (docs/PROJECT.md §6.3):
+#
+#   sensor  SQLite  /data/sqlite/sensor_readings.db  IoT telemetry   READ-ONLY to the AI
+#   audit   SQLite  /logs/ai_logs.db                 chat/tool/RAG/model/error/feedback/memory logs
+#   vector  Chroma  chromadb service                 RAG knowledge chunks
+#   prefs   SQLite  /app/data/prefs.db               UI state
+#
+# Keeping them apart is the safety argument: a bug in ingestion or logging
+# physically cannot reach the sensor data of record.
+
+services:
+  daedalus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: daedalus:latest
+    container_name: daedalus
+    ports:
+      # Bound to localhost. Drop the 127.0.0.1 prefix only if you deliberately
+      # want the lab LAN to reach it.
+      - "127.0.0.1:${DAEDALUS_PORT:-8000}:8000"
+    environment:
+      # host.docker.internal resolves to the host via the extra_hosts entry.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      CHROMA_URL: http://chromadb:8000
+      DAEDALUS_DATA_DIR: /data
+      DAEDALUS_LOG_DIR: /logs
+      DAEDALUS_PREFS_DB: /app/data/prefs.db
+    volumes:
+      # Sensor SQLite + documents. Mount the SCADA machine's real database
+      # here (read-only at the driver level regardless).
+      - ./data:/data
+      # Audit/evaluation logs — ai_logs.db.
+      - ./logs:/logs
+      # UI preferences.
+      - ./backend/data:/app/data
+    depends_on:
+      # service_started, not service_healthy: the dashboard and preference API
+      # must boot even when the vector store is down, and vector_store.py
+      # reports that as a status rather than failing. See the Databases panel.
+      - chromadb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # RAG vector store. Runs as a server so the index survives app rebuilds and
+  # the ingestion pipeline can write to it independently of the API.
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: daedalus-chromadb
+    ports:
+      # Exposed so the offline ingestion pipeline can reach it from the host.
+      - "127.0.0.1:${CHROMA_PORT:-8001}:8000"
+    volumes:
+      - chroma-data:/data
+    environment:
+      ANONYMIZED_TELEMETRY: "FALSE"   # local-first: no outbound telemetry
+      IS_PERSISTENT: "TRUE"
+    # No healthcheck: the chroma image is minimal (dash only — no curl, wget,
+    # python or bash), so nothing inside it can probe the port. Readiness is
+    # reported by the app instead, via /api/system/databases.
+    restart: unless-stopped
+
+  # Optional: only starts with `--profile with-ollama`.
+  ollama:
+    profiles: ["with-ollama"]
+    image: ollama/ollama:latest
+    container_name: daedalus-ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    # Uncomment for an NVIDIA GPU (needs the NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  chroma-data:
+  ollama-models:
