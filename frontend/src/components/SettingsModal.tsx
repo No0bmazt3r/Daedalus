@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { X, Ghost, CircleDashed, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { useDraggable } from '../hooks/useDraggable'
 import { useResizableSidebar, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '../hooks/useResizableSidebar'
@@ -22,6 +22,13 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { isIncognito, setIsIncognito, selectedModel, setSelectedModel } = useSettings()
   const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
   const [isPeek, setIsPeek] = useState(false)
+  // Where the window sits. Centring it with flexbox looked fine but broke
+  // resizing: an absolutely-positioned flex child is re-centred as it grows,
+  // so dragging the corner moved the window left/up at the same time and the
+  // corner only tracked the cursor at half speed. An explicit top-left pins
+  // it, so resizing grows right and down the way a window should.
+  // Derived, not state: it only ever depends on `open`, so an effect would
+  // just add a render pass and a frame where the window has no position.
   const { position, onMouseDown, handleRef, windowRef } = useDraggable()
   const sidebar = useResizableSidebar()
 
@@ -51,6 +58,19 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  // Recomputed each time the window opens, so it lands centred even if the
+  // browser has been resized since. Dragging or resizing afterwards is not
+  // affected: `position` takes over below, and native resize owns the size.
+  const anchor = useMemo(() => {
+    if (!open || typeof window === 'undefined') return { left: 0, top: 0 }
+    const width = Math.min(900, window.innerWidth * 0.95)
+    const height = Math.min(650, window.innerHeight * 0.9)
+    return {
+      left: Math.max(8, (window.innerWidth - width) / 2),
+      top: Math.max(8, (window.innerHeight - height) / 2),
+    }
+  }, [open])
+
   if (!open) return null
 
   const groups = visibleGroups(isAdmin)
@@ -58,7 +78,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const cardClass = `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+    <div className="fixed inset-0 z-[100] pointer-events-none">
       <div
         className="fixed inset-0 bg-black/40 pointer-events-auto transition-opacity duration-300"
         style={{ opacity: isPeek ? 0 : 1 }}
@@ -68,11 +88,20 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
       <div
         ref={windowRef}
         style={{
-          transform: `translate(${position.x}px, ${position.y}px)`,
-          backgroundColor: isPeek ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)' : undefined,
+          // useDraggable reports absolute viewport coordinates, so these are
+          // left/top — using them as a transform made the window jump on grab.
+          left: position.x || anchor.left,
+          top: position.y || anchor.top,
+          // Set inline rather than via `.theme-bg`: that utility is
+          // `!important`, which would beat an inline style and make Peek a no-op.
+          backgroundColor: isPeek
+            ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)'
+            : 'var(--bg)',
           backdropFilter: isPeek ? 'none' : undefined,
+          // Default size comes from CSS, not state: native `resize` writes to
+          // the inline width/height, and a React-controlled value would fight it.
         }}
-        className={`pointer-events-auto absolute w-[900px] h-[650px] max-w-[95vw] max-h-[90vh] flex flex-col theme-bg theme-text theme-border border rounded-xl shadow-2xl overflow-hidden transition-colors duration-300 ${isPeek ? 'border-white/20 shadow-none' : ''}`}
+        className={`pointer-events-auto absolute resize overflow-hidden w-[900px] h-[650px] min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh] flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${isPeek ? 'border-white/20 shadow-none' : ''}`}
       >
         {/* Header (drag handle) */}
         <div
@@ -118,7 +147,9 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Navigation rail */}
           <div
-            className="relative border-r theme-border bg-black/5 flex flex-col shrink-0"
+            className={`relative border-r theme-border flex flex-col shrink-0 ${
+              isPeek ? '' : 'bg-black/5'
+            }`}
             style={{
               width: sidebar.width,
               // Animate only when not dragging, or the rail lags the pointer.
@@ -126,7 +157,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               backgroundColor: isPeek ? 'transparent' : undefined,
             }}
           >
-            <div className="flex justify-end px-2 pt-2 pb-1 shrink-0">
+            <div
+              className={`flex px-2 pt-2 pb-1 shrink-0 ${
+                sidebar.collapsed ? 'justify-center' : 'justify-end'
+              }`}
+            >
               <button
                 onClick={sidebar.toggleCollapsed}
                 aria-expanded={!sidebar.collapsed}
@@ -185,9 +220,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
 
           {/* Panel area */}
-          <div className="flex-1 overflow-y-auto no-scrollbar p-8 bg-transparent min-w-0">
+          <div className="@container flex-1 overflow-y-auto no-scrollbar p-8 bg-transparent min-w-0">
+            {/* One measure for every panel. It grows with the window up to a
+                readable limit, then centres — stretching a settings form to
+                full width would just make a 1300px-wide select, which is
+                harder to scan, not easier. Panels that genuinely benefit from
+                width (Databases) add columns via their own container queries. */}
+            <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl">
             {activeTab === 'ai' && (
-              <div className="space-y-6 animate-in fade-in duration-200 max-w-2xl">
+              <div className="space-y-6 animate-in fade-in duration-200">
                 <div>
                   <h3 className="text-xl font-medium mb-1">AI Defaults</h3>
                   <p className="text-sm theme-text-muted mb-6">
@@ -224,7 +265,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 
             {activeTab === 'appearance' && (
-              <div className="space-y-6 animate-in fade-in duration-200 max-w-2xl">
+              <div className="space-y-6 animate-in fade-in duration-200">
                 <div>
                   <h3 className="text-xl font-medium mb-1">Appearance</h3>
                   <p className="text-sm theme-text-muted mb-6">
@@ -241,7 +282,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             )}
 
             {activeTab === 'shortcuts' && (
-              <div className="space-y-6 animate-in fade-in duration-200 max-w-2xl">
+              <div className="space-y-6 animate-in fade-in duration-200">
                 <div>
                   <h3 className="text-xl font-medium mb-1">Shortcuts &amp; Toggles</h3>
                   <p className="text-sm theme-text-muted mb-6">
@@ -302,6 +343,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

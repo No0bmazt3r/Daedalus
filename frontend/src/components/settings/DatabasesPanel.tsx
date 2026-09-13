@@ -82,7 +82,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200 max-w-3xl">
+    <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-xl font-medium mb-1">Databases</h3>
@@ -146,7 +146,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 pt-3 border-t theme-border">
+          <div className="grid grid-cols-1 @sm:grid-cols-2 @xl:grid-cols-3 gap-x-4 gap-y-2 pt-3 border-t theme-border">
             {Object.entries(db.metrics)
               .filter(([key]) => key !== 'error')
               .map(([key, value]) => (
