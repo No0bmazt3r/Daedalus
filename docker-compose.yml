@@ -33,6 +33,7 @@ services:
       CHROMA_URL: ${CHROMA_URL:-http://chromadb:8000}
       DAEDALUS_DATA_DIR: ${DAEDALUS_DATA_DIR:-/data}
       DAEDALUS_LOG_DIR: ${DAEDALUS_LOG_DIR:-/logs}
+      DAEDALUS_CHAT_DB: ${DAEDALUS_CHAT_DB:-/data/sqlite/chat.db}
       DAEDALUS_PREFS_DB: ${DAEDALUS_PREFS_DB:-/app/data/prefs.db}
     volumes:
       # Sensor SQLite + documents. Mount the SCADA machine's real database

@@ -1,8 +1,9 @@
 # Daedalus backend
 
-FastAPI service for the Daedalus UI. Currently exposes the user-preference
-store that replaces browser localStorage; the Layer 7 chat/tool routers mount
-into the same app as they land.
+FastAPI service for the Daedalus UI. Exposes the user-preference store that
+replaces browser localStorage, and the chat session store that gives the
+assistant memory within and across conversations. The Layer 7 answering
+endpoint and tool routers mount into the same app as they land.
 
 ## Run
 
@@ -16,14 +17,92 @@ uvicorn app.main:app --reload --port 8000
 Run it from this `backend/` directory. The Vite dev server proxies `/api` to
 `http://localhost:8000`, so the frontend needs no extra configuration.
 
+## Layout
+
+```
+app/
+  api/        HTTP only — routing, status codes, validation errors
+  services/   decisions: session policy, context-window assembly
+  models/     Pydantic wire contracts
+  db/         persistence
+    sqlite_util.py   connections, pragmas, transactions, retry, backup
+    migrations.py    the versioned-schema runner
+    migrate.py       its CLI
+    migrations/      the .sql files, one directory per store
+```
+
+The orchestrator calls `services/` directly. It never loops back through HTTP
+to reach conversation state — that would make an internal operation depend on
+the web layer being up.
+
 ## Storage
 
-SQLite at `backend/data/prefs.db`, table `user_prefs(user_id, key, value,
-updated_at)` with the value held as JSON.
+Five physically separate databases. The separation is the safety argument, not
+tidiness — see `app/db/paths.py` and `docs/PROJECT.md` §6.3.
 
-This is a **separate database file from the sensor DB on purpose**: Layer 3
-opens `sensor_readings` strictly read-only, and preferences are the one thing
-the UI must write. Keeping them apart preserves that contract.
+| Store | File | Access |
+| --- | --- | --- |
+| Sensor | `data/sqlite/sensor_readings.db` | **read-only** (`file:…?mode=ro`) |
+| Audit | `data/logs/ai_logs.db` | read/write — its own logs |
+| Chat | `data/sqlite/chat.db` | read/write — transcripts |
+| Vector | `data/chroma` or the Chroma service | read/write |
+| Prefs | `data/prefs.db` | read/write |
+
+**Chat and audit are separate on purpose**, though both hold conversation
+text. A user renames, archives and deletes their own chats; audit rows are
+append-only evidence that a response was grounded, and the evaluation chapter
+rests on them. Two files make *"deleting a chat cannot delete the evidence"* a
+property of the filesystem rather than a promise about our DELETE statements.
+`query_id` still links the two — `ATTACH` to join them.
+
+> **Keep the data directory on a native filesystem.** All five use WAL, which
+> coordinates through an mmapped `-shm` file. Network mounts and Windows-hosted
+> paths under WSL (`/mnt/c/...`) do not reliably provide that, and the failure
+> mode is silent corruption. Under WSL, keep `DAEDALUS_DATA_DIR` under `/home`.
+
+## Migrations
+
+Schema changes are numbered SQL files applied once, in order, inside a
+transaction, with the fact recorded in the database itself.
+
+```
+app/db/migrations/<store>/001_initial_schema.sql
+                         /002_add_pinned_flag.sql
+```
+
+The app migrates on startup, so normally there is nothing to run. The CLI is
+for applying a change without restarting, for inspection, and for CI:
+
+```bash
+./daedalus.sh migrate             # or: python -m app.db.migrate up
+./daedalus.sh migrate status      # what's applied, what's pending
+./daedalus.sh migrate check       # integrity-check every database
+./daedalus.sh migrate backup      # consistent snapshot (VACUUM INTO, not cp)
+./daedalus.sh migrate new chat add_pinned_flag
+```
+
+`status` exits `0` up to date, `2` pending, `1` broken — so CI can tell "needs
+migrating" from "is wrong".
+
+### The rules
+
+1. **Append-only.** Never edit a migration that has run anywhere; write a new
+   one. The runner stores a checksum and refuses to proceed if an applied file
+   changed, because at that point the code's idea of the schema and the
+   database's real shape have diverged silently. `migrate repair <store>`
+   exists for a knowingly cosmetic edit and asserts the SQL is unchanged in
+   meaning.
+2. **Numbers never fill gaps.** Adding `003` after `004` is applied is
+   rejected — anyone who already ran `004` would never get `003`.
+3. **Each file is one transaction.** A failure rolls its file back entirely;
+   earlier files stay applied. A database is never left half-migrated.
+4. **A migration failure at startup is fatal.** Serving requests against a
+   database whose shape the code disagrees with corrupts data in ways found
+   much later. Refusing to boot is the cheaper failure.
+
+`sensor` is deliberately not managed here: the SCADA ingestion subsystem owns
+that schema, and migrating a database we do not own would breach Rule 2 as
+surely as an INSERT would.
 
 ## Endpoints
 
@@ -34,7 +113,30 @@ the UI must write. Keeping them apart preserves that contract.
 | `GET` | `/api/prefs/{key}` | Read one |
 | `PUT` | `/api/prefs/{key}` | Write one, body `{"value": ...}` |
 | `DELETE` | `/api/prefs/{key}` | Clear one |
+| `GET` | `/api/prefs/theme.css` | Saved palette as a render-blocking stylesheet |
+| `POST` | `/api/sessions` | Open a chat. Body optional; `{}` is the normal call |
+| `GET` | `/api/sessions` | Sidebar list, most recently updated first |
+| `GET` | `/api/sessions/{id}` | One session, including its rolling summary |
+| `PATCH` | `/api/sessions/{id}` | Rename and/or archive |
+| `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages. Audit rows survive |
+| `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
+| `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
+| `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
+| `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
-Writable keys: `theme`, `custom-themes`, `ui-scale`.
+Writable preference keys: `theme`, `custom-themes`, `ui-scale`, `settings-ui`.
+
+### Only user messages are writable over HTTP
+
+`POST /api/sessions/{id}/messages` takes no `role` field, and that is load
+bearing. History is replayed into the model's context on the next turn, so a
+client able to post an *assistant* message could plant a fabricated sensor
+reading where the model reads it as its own previous answer, and narrate it
+back as fact. Assistant turns are written by the orchestrator through
+`chat_service.add_assistant_message()` once it has actually produced them.
+
+This is also why the transcript lives on the server rather than being posted
+back by the browser each turn: client-held history is a client-controlled
+input to the prompt.
 
 Interactive docs while running: <http://localhost:8000/docs>

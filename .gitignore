@@ -45,5 +45,8 @@ __pycache__/
 /logs/*
 !/logs/.gitkeep
 
+# Database snapshots from `./daedalus.sh migrate backup`
+backups/
+
 # Vite cache
 .vite

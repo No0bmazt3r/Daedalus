@@ -78,9 +78,15 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 - [ ] Tool executor
 - [ ] Evidence pack builder
 - [ ] Prompt builder — system instruction + safety rules + evidence + query + citation requirement
+- [x] Conversation memory — session store, transcripts, token-budgeted context assembly (`services/chat_service.py`, `docs/PROJECT.md` §7.4)
+- [ ] Wire `build_context()` into the prompt builder — summary + history before the evidence block
+- [ ] Follow-up condensation — rewrite "and the pressure?" into a standalone query **before** intent classification, and send the *same* rewritten query to both retrieval tracks
+- [ ] Background summariser — fold turns that fell out of the budget into `chat_sessions.summary` **after** responding, never on the request path
+- [ ] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values
 - [ ] Response validator — reject numbers absent from evidence, control language, empty, timeout
+- [ ] **Validate numbers against the current evidence pack only** — a figure that appears only in replayed history sets `hallucination_flag` (§7.4)
 - [ ] SSE streaming for token-by-token output
-- [ ] Tests: every unsafe phrasing is refused · a response containing an invented number is caught
+- [ ] Tests: every unsafe phrasing is refused · a response containing an invented number is caught · a stale number replayed from history is caught
 
 ## M6 — Retrieval tracks  ▸ Layer 5
 
@@ -157,8 +163,12 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] Collapsible tool-call trace (Thought → Action → Observation)
 - [ ] Graph visualiser for GraphRAG traversal paths
 - [ ] Hardware/model panel in settings
-- [ ] Real session history — persisted, not mock data
-- [ ] Make incognito actually suppress logging *(today it's UI-only)*
+- [x] Sidebar driven by `GET /api/sessions` — select, inline rename, delete, filter
+- [x] Reopen a chat via `GET /api/sessions/{id}/messages`
+- [x] User messages persisted through `POST /api/sessions/{id}/messages`
+- [x] Incognito passes `ephemeral: true`; those sessions are never listed and are swept on restart
+- [ ] Suppress `user_query`/`response_text` in `conversation_logs` for ephemeral sessions *(needs the orchestrator — nothing writes those rows yet)*
+- [ ] Archive from the sidebar *(the API supports it; no UI affordance yet)*
 - [ ] Error and loading states for a backend that's down or slow
 
 ---
@@ -175,23 +185,37 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] Flash-free first paint via server-rendered `theme.css`
 - [x] Single-image Docker build + `./daedalus.sh` (setup · start · dev · stop · logs · rebuild · status)
 - [x] Repo split into `frontend/` · `backend/` · `docs/` with runtime state at the root
-- [x] `.env.example` as the single configuration surface — all four stores, ports and Ollama; compose and the script both read it
+- [x] `.env.example` as the single configuration surface — all five stores, ports and Ollama; compose and the script both read it
 - [x] `docs/PROJECT.md` — reconciled the two spec sets into one canonical document
 - [x] Consolidated `docs/` + `context/` into a single `docs/` folder with an index and an implementation reference
 - [x] Repo cleanup — dropped a stray screenshot, a duplicate image folder, an empty temp file, and the vendored `odysseus/` reference sample (168MB) now that the theme and settings ports are done
 - [x] Settings shell parity with Odysseus — panel registry, keyword search with keyboard nav, drag-resizable + collapsible rail with ARIA, server-persisted layout
-- [x] Four separate stores wired and containerised — sensor (read-only), audit logs, Chroma vector DB, prefs
-- [x] `GET /api/system/databases` + the Settings → Databases panel surfacing all four
+- [x] Five separate stores wired and containerised — sensor (read-only), audit logs, chat transcripts, Chroma vector DB, prefs
+- [x] `GET /api/system/databases` + the Settings → Databases panel surfacing all five, with schema version
+- [x] Chat transcript store — `chat_sessions` + `chat_messages`, `seq`-ordered, cascade delete, auto-titling, archive, incognito sweep
+- [x] Session API — `POST`/`GET`/`PATCH`/`DELETE /api/sessions`, transcript read, user-message append (assistant turns are orchestrator-only, so a client cannot forge one into the model's context)
+- [x] Context-window assembly — `build_context()` with a token budget, rolling-summary cursor, and evidence deliberately excluded from replay (§7.4)
+- [x] Versioned schema migrations — numbered SQL per store, one transaction each, applied at startup; refuses on checksum drift, gap numbering and missing files; rolls back bad SQL
+- [x] `./daedalus.sh migrate` — `up` · `status` · `check` · `backup` · `repair` · `new`, with CI-friendly exit codes
+- [x] Shared SQLite layer — WAL, busy timeout, `foreign_keys=ON`, `BEGIN IMMEDIATE`, retry on lock, `VACUUM INTO` backups, `quick_check`
+- [x] Backend split into `api/` · `services/` · `models/` · `db/` so the orchestrator reaches conversation state without going through HTTP
+- [x] `sync.sh` — post-pull recovery: dependencies, `.env` backfill, migrations, integrity check, orphan detection, with `--check` dry run
+- [x] `reset.sh` — snapshot, wipe and rebuild the databases; sensor excluded by default and double-confirmed; refuses while the stack holds the files open
+- [x] `scripts/common.sh` — one copy of the output helpers, `.env` backfill, compose shim and path handling for all three scripts
+- [x] `docs/SCRIPTS.md` — every script, subcommand, flag and exit code, and the reasoning behind each safeguard
+- [x] `ACKNOWLEDGMENTS.md` — credits Odysseus (PewDiePie) for the theme/settings/prefs design, and records **why this is not a fork**: Odysseus is AGPL-3.0, Daedalus is MIT, and no Odysseus code is present
+- [x] **Host/container path mapping** — `.env` holds container paths, so `daedalus.sh dev` was pointing the dev server at `backend/data/` while Docker wrote to `data/` and `logs/`. Host-side commands now map them, so both see the same files
+- [x] Unknown `/api/*` paths return 404 instead of falling through to the SPA catch-all
 
 ---
 
 ## Known issues
 
-- [ ] Chat responses are mock data — no backend call yet
-- [ ] Incognito is cosmetic; it doesn't suppress any logging
-- [ ] Sidebar conversation list is hardcoded
-- [ ] `frontend/src/components/ChatInterface.tsx:21` — lint warning, `setState` in effect (pre-existing)
-- [ ] No tests on the frontend; backend has none either
+- [ ] Chat responses are placeholders — no `POST /api/chat` yet. User turns persist; assistant turns do not, and the UI says so
+- [ ] A reopened chat therefore shows only your own messages until the orchestrator lands
+- [ ] Three `setState`-in-effect lint warnings (`ChatInterface`, `ThemeModal`, `DatabasesPanel`) — pre-existing. `SessionsContext` has one too, but it is the legitimate kind: an effect synchronising with the backend on mount
+- [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
+- [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
 - [ ] Settings panels other than AI Defaults, Databases and Shortcuts are still placeholders

@@ -1,0 +1,13 @@
+{
+  "$comment": [
+    "Daedalus runs fully local — FastAPI + SQLite + Ollama in Docker, never deployed.",
+    "The Vercel plugin's hooks were matching on incidental words ('deploy', 'ppr',",
+    "'retry', 'student', even 'purpple') and injecting Next.js/Vercel guidance that",
+    "does not apply to a Vite + FastAPI project. Disabled here only: several other",
+    "projects on this machine are genuinely Next.js and still want it, so the",
+    "user-level setting in ~/.claude/settings.json is deliberately left alone."
+  ],
+  "enabledPlugins": {
+    "vercel-plugin@vercel-vercel-plugin": false
+  }
+}

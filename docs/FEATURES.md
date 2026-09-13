@@ -17,9 +17,10 @@ Everything below was read off the source, not from memory.
 | Theme engine | Built — the most complete subsystem |
 | Background effects | Built, pointer-reactive |
 | Settings shell | Built — registry, search, resizable rail |
-| Data stores (×4) | Built and containerised; nothing reads them in anger yet |
+| Data stores (×5) | Built and containerised, each with a versioned schema |
 | Preference API | Built |
-| Chat | **Mock only** — no backend call |
+| Chat session store | Built — sessions, transcripts, context-window assembly |
+| Chat UI | Wired to the session API — real sidebar, persisted user turns. **Replies still mock** (no orchestrator) |
 | Orchestration, tools, RAG, Ollama | **Not started** |
 
 ---
@@ -38,7 +39,14 @@ to it.
 | `PUT` | `/api/prefs/{key}` | Write one, body `{"value": …}` |
 | `DELETE` | `/api/prefs/{key}` | Clear one |
 | `GET` | `/api/prefs/theme.css` | The saved palette as a stylesheet — see §3 |
-| `GET` | `/api/system/databases` | Health, size and metrics for all four stores |
+| `POST` | `/api/sessions` | Open a chat. Body optional; `{}` is the normal call |
+| `GET` | `/api/sessions` | Sidebar list, most recently updated first |
+| `GET` | `/api/sessions/{id}` | One session, including its rolling summary |
+| `PATCH` | `/api/sessions/{id}` | Rename and/or archive |
+| `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages — audit rows survive |
+| `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
+| `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
+| `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
 Writable preference keys (anything else is rejected with 404):
@@ -51,6 +59,19 @@ Writable preference keys (anything else is rejected with 404):
 | `settings-ui` | `{ width: number, collapsed: boolean }` |
 
 Interactive docs while running: <http://localhost:8000/docs>
+
+### Why only user messages are writable
+
+`POST /api/sessions/{id}/messages` has no `role` field. History is replayed
+into the model's context on the following turn, so a client able to post an
+*assistant* message could plant a fabricated sensor reading where the model
+reads it as its own previous answer — and narrate it back as fact. Assistant
+turns are written by the orchestrator via `chat_service.add_assistant_message()`
+once it has actually produced them.
+
+Same reasoning puts the transcript on the server rather than having the browser
+post it back each turn: client-held history is a client-controlled input to the
+prompt, and a forged turn is indistinguishable from a real one.
 
 ### Why `theme.css` exists
 
@@ -68,18 +89,30 @@ matches and known enum values. Verified: a payload with
 
 ## 3. Data stores
 
-Four physically separate databases. The separation is the safety argument, not
+Five physically separate databases. The separation is the safety argument, not
 tidiness — see `PROJECT.md` §6.3.
 
 | Store | Module | Engine | Access |
 |---|---|---|---|
 | Sensor | `db/sensor_store.py` | SQLite | **read-only** (`file:…?mode=ro`) |
 | Audit | `db/audit_store.py` | SQLite | read/write |
+| Chat | `db/chat_store.py` | SQLite | read/write |
 | Vector | `db/vector_store.py` | ChromaDB | read/write |
 | Prefs | `db/prefs_store.py` | SQLite | read/write |
 
 Paths resolve centrally in `db/paths.py`, overridable by environment:
-`DAEDALUS_DATA_DIR`, `DAEDALUS_LOG_DIR`, `DAEDALUS_PREFS_DB`, `CHROMA_URL`.
+`DAEDALUS_DATA_DIR`, `DAEDALUS_LOG_DIR`, `DAEDALUS_PREFS_DB`,
+`DAEDALUS_CHAT_DB`, `CHROMA_URL`.
+
+Connection handling is shared in `db/sqlite_util.py` — WAL, a 5s busy timeout,
+`foreign_keys=ON` (per-connection, and off by default, so a schema with
+`ON DELETE CASCADE` silently does nothing without it), `BEGIN IMMEDIATE` write
+transactions, randomised retry on lock contention, `VACUUM INTO` backups and
+`quick_check` integrity checks.
+
+> **WAL needs real shared memory.** Keep the data directory on a native Linux
+> filesystem — network mounts and Windows-hosted paths under WSL (`/mnt/c/...`)
+> fail by corrupting rather than erroring.
 
 ### Sensor store — the read-only boundary
 
@@ -111,6 +144,90 @@ is what answers *"prove this response was grounded"*.
 response; logging is evidence, not control flow.
 
 > `memory_logs` is an addition — it appears in neither historical spec set.
+
+### Chat store — conversation memory
+
+Two tables. `chat_sessions` holds one row per conversation (title, rolling
+summary, `ephemeral` for incognito, `archived_at`); `chat_messages` holds the
+turns.
+
+Ollama is stateless, so "the assistant remembers" only ever means the
+orchestrator re-sent the transcript. This store is that transcript — and both
+halves of the problem reduce to it: within a session every turn rebuilds the
+prompt from these rows, and across sessions reopening a chat reads the same
+rows back. Only *how much* is replayed differs.
+
+**`seq`, not `created_at`, orders a transcript.** Two messages can share a
+timestamp and the conversation would silently scramble. It is allocated as
+`MAX(seq) + 1` inside the same `BEGIN IMMEDIATE` transaction that inserts, with
+a unique index on `(session_id, seq)` as the backstop.
+
+**Separate from the audit store on purpose**, though both hold conversation
+text. Opposite lifecycles: a user renames, archives and deletes their own
+chats; audit rows are append-only evidence the evaluation chapter rests on.
+Two files make *"deleting a chat cannot delete the evidence"* a filesystem
+property rather than a promise about our DELETE statements. `query_id` links
+them; `ATTACH` to join.
+
+**Failure contract is the inverse of `audit_store`.** That module swallows
+errors, because a failed log must not take down a response. This one raises: a
+transcript that silently fails to persist looks fine until the user reopens the
+chat and it is gone. Losing evidence of a turn is recoverable; losing the turn
+is not.
+
+#### Context assembly — `services/chat_service.py`
+
+`build_context()` turns a stored transcript into the messages that go into a
+prompt, inside a token budget (default 1200 — the SLM tier runs at num_ctx
+4096–8192 and the evidence pack plus SOP chunks already claim 1–2k). It
+accumulates newest-first, drops whole turns that do not fit, and trims a window
+that would open on an orphaned assistant message.
+
+Replayed history is a **Rule 3 hazard**: turn 3 said "CO₂ is 470.2 ppm", and at
+turn 9 the model has a number in context that it did not fetch. Three defences:
+
+1. `evidence_json` is stored for the UI but **never replayed** — only natural
+   language is.
+2. Every historical assistant turn is stamped with the time it was said, and a
+   `HISTORY_NOTICE` system line tells the model what that stamp means.
+3. Groundedness validation (Layer 7) checks the answer's numbers against the
+   *current* evidence pack only; a number appearing only in history sets
+   `hallucination_flag`.
+
+The third is what measures the problem — it feeds the <10% hallucination
+target directly. The first two reduce how often it arises.
+
+`ContextWindow.needs_summary` reports that turns fell out of the window, so the
+orchestrator can fold them into the rolling summary **after** responding.
+Summarisation is another inference call; doing it inline would spend the
+latency budget the <3s target is measured against.
+
+### Schema migrations — `db/migrations.py`
+
+Numbered SQL files under `db/migrations/<store>/`, applied once, in order,
+each inside its own transaction, recorded in a `schema_migrations` table and
+mirrored to `PRAGMA user_version`. Applied automatically at startup; the CLI
+(`./daedalus.sh migrate`, or `python -m app.db.migrate`) offers `status`, `up`,
+`check`, `backup`, `repair` and `new`.
+
+Four safety properties, all verified:
+
+| Situation | Behaviour |
+|---|---|
+| An applied file is edited | Refuses to run — checksum mismatch, names the file |
+| A number fills a gap below the applied version | Refuses — anyone already migrated would skip it |
+| An applied file is missing from disk | Refuses — the database can no longer be reasoned about |
+| A migration contains bad SQL | Rolls that file back entirely; version unchanged |
+
+`status` exits `0`/`2`/`1` for up-to-date/pending/broken, so CI can tell "needs
+migrating" from "is wrong". A migration failure at startup is deliberately
+fatal.
+
+`sensor` is deliberately unmanaged: the SCADA subsystem owns that schema, and
+migrating a database we do not own breaches Rule 2 as surely as an INSERT.
+
+> `IF NOT EXISTS` in each `001` is deliberate — it baselines the databases that
+> existed before the runner did, rather than erroring on them.
 
 ### Vector store
 
@@ -252,13 +369,34 @@ Paths are relative to `frontend/src/`.
 |---|---|
 | `contexts/ThemeContext.tsx` | Owns all appearance state; applies and persists in one effect |
 | `contexts/SettingsContext.tsx` | Incognito and model selection |
+| `contexts/SessionsContext.tsx` | Conversation state — list, active chat, transcript, send |
 | `hooks/useDraggable.ts` | Modal dragging |
 | `hooks/useResizableSidebar.ts` | Settings rail resize/collapse |
 | `lib/prefsClient.ts` | Preference API client — 350ms debounce, `keepalive` flush on `pagehide` |
+| `lib/sessionsClient.ts` | Chat session API client — typed, 5s timeout, `SessionApiError` |
 | `lib/zoneHighlight.ts` | Hover a colour row → outlines the UI that colour drives |
 | `components/ThemeModal.tsx` | Theme editor — presets, colours, harmony, effects, import/export |
 | `components/SettingsModal.tsx` | Settings shell |
+| `components/Sidebar.tsx` | Chat list from `GET /api/sessions` — select, inline rename, delete, filter |
+| `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
 | `components/settings/` | `SettingsSearch`, `DatabasesPanel` |
+
+### Conversation state is server-owned
+
+The transcript is not React state that happens to be saved — it is read from
+the API and written back to it. That is what makes it survive a reload, a
+second tab, and tomorrow; and it keeps history out of reach of the client,
+which matters because history is replayed into the model's context.
+
+A session is **not created until the first message is sent**, so clicking
+"New" cannot litter the sidebar with empty rows. Toggling incognito hides the
+open chat rather than destroying it — derived during render from the mode the
+session was created under, so toggling back brings it into view.
+
+> **Unknown `/api/*` paths 404 rather than falling through to the SPA.**
+> Without that, a container image predating an endpoint serves `index.html`
+> with a 200 and the client fails parsing HTML as JSON — a confusing symptom
+> for a simple cause. The client guards the parse as well.
 
 ### Nothing in browser storage
 
@@ -297,8 +435,13 @@ therefore tracked with `.gitkeep`.
 | Theme engine | 92 assertions — hex round-trips, harmony across 4×2 modes, incognito contrast on all 16 themes, state coercion and clamping |
 | Read-only boundary | INSERT/UPDATE/DELETE/DROP all verified to raise |
 | `theme.css` injection | Hostile `bg`, `font`, `density` payloads verified dropped |
-| Container | Built and run; all four stores healthy; SPA, assets, deep links and path-traversal guard checked |
+| Container | Built and run; all five stores healthy; SPA, assets, deep links and path-traversal guard checked |
 | Frontend | **No component tests.** Verified by headless-browser screenshots |
-| Backend | **No tests.** Verified by direct API calls |
+| Chat store | Seq allocation, cascade delete, auto-titling, incognito sweep, budget trimming and every error path exercised by direct calls |
+| Migrations | Edited-file, gap-numbering, missing-file and bad-SQL rollback all verified to refuse or roll back |
+| Session API | Every endpoint exercised, including 404/413/422 paths and a rejected forged `assistant` role |
+| Frontend build | `tsc -b` and `vite build` clean; session round-trip verified against a live dev server |
+| Scripts | `sync.sh --check`/apply, `reset.sh` refusal while the stack is up, WAL-sidecar deletion, host-path resolution |
+| Backend | **No automated tests.** Verified by direct API calls |
 
 The absence of an automated test suite on both sides is the biggest gap.

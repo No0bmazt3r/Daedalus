@@ -4,22 +4,26 @@ Deliberately a separate database file from the sensor DB: Layer 3 opens
 `sensor_readings` strictly read-only, so user preferences — the one thing the
 UI genuinely needs to write — live in their own store rather than weakening
 that contract.
+
+Connection handling and schema versioning are shared; see `sqlite_util` and
+`migrations`.
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
-from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import Any
 
+from . import migrations, sqlite_util
 from . import paths as _paths
 
 # Resolved centrally so every store's location is declared in one place and
-# can be overridden per-deployment. Same default path as before.
+# can be overridden per-deployment.
 DB_PATH = _paths.PREFS_DB
+
+STORE = "prefs"
 
 # Single-user local deployment. Kept as a column so a future multi-user
 # build does not need a migration.
@@ -28,43 +32,17 @@ DEFAULT_USER = "local"
 # Guards against a runaway client filling the disk with one pref.
 MAX_VALUE_BYTES = 256 * 1024
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS user_prefs (
-    user_id    TEXT NOT NULL,
-    key        TEXT NOT NULL,
-    value      TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (user_id, key)
-);
-"""
-
 _init_lock = threading.Lock()
 _initialised = False
 
 
-@contextmanager
-def _connect() -> Iterator[sqlite3.Connection]:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
-    try:
-        conn.row_factory = sqlite3.Row
-        # WAL keeps a read during a write from blocking, which matters once
-        # the chat endpoints share this process.
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def init_db() -> None:
+    """Bring the schema up to date. Cheap and safe to call repeatedly."""
     global _initialised
     with _init_lock:
         if _initialised:
             return
-        with _connect() as conn:
-            conn.executescript(_SCHEMA)
+        migrations.migrate(STORE)
         _initialised = True
 
 
@@ -78,7 +56,7 @@ class PrefTooLargeError(ValueError):
 
 def get_pref(key: str, user_id: str = DEFAULT_USER) -> Any | None:
     init_db()
-    with _connect() as conn:
+    with sqlite_util.connect(DB_PATH) as conn:
         row = conn.execute(
             "SELECT value FROM user_prefs WHERE user_id = ? AND key = ?",
             (user_id, key),
@@ -94,7 +72,7 @@ def get_pref(key: str, user_id: str = DEFAULT_USER) -> Any | None:
 
 def get_all_prefs(user_id: str = DEFAULT_USER) -> dict[str, Any]:
     init_db()
-    with _connect() as conn:
+    with sqlite_util.connect(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT key, value FROM user_prefs WHERE user_id = ?", (user_id,)
         ).fetchall()
@@ -111,27 +89,33 @@ def set_pref(key: str, value: Any, user_id: str = DEFAULT_USER) -> str:
     init_db()
     encoded = json.dumps(value, separators=(",", ":"))
     if len(encoded.encode("utf-8")) > MAX_VALUE_BYTES:
-        raise PrefTooLargeError(
-            f"preference '{key}' exceeds {MAX_VALUE_BYTES} bytes"
-        )
+        raise PrefTooLargeError(f"preference '{key}' exceeds {MAX_VALUE_BYTES} bytes")
     updated_at = _now()
-    with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO user_prefs (user_id, key, value, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id, key)
-            DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-            """,
-            (user_id, key, encoded, updated_at),
-        )
+
+    def _write() -> None:
+        with sqlite_util.transaction(DB_PATH) as conn:
+            conn.execute(
+                """
+                INSERT INTO user_prefs (user_id, key, value, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, key)
+                DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (user_id, key, encoded, updated_at),
+            )
+
+    sqlite_util.with_retry(_write, what="set_pref")
     return updated_at
 
 
 def delete_pref(key: str, user_id: str = DEFAULT_USER) -> bool:
     init_db()
-    with _connect() as conn:
-        cur = conn.execute(
-            "DELETE FROM user_prefs WHERE user_id = ? AND key = ?", (user_id, key)
-        )
-        return cur.rowcount > 0
+
+    def _write() -> bool:
+        with sqlite_util.transaction(DB_PATH) as conn:
+            cursor = conn.execute(
+                "DELETE FROM user_prefs WHERE user_id = ? AND key = ?", (user_id, key)
+            )
+            return cursor.rowcount > 0
+
+    return sqlite_util.with_retry(_write, what="delete_pref")

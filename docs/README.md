@@ -14,6 +14,8 @@ over anything else here.
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
 | Run it | [`../README.md`](../README.md) |
+| Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |
+| Know what this project borrowed, and from whom | [`../ACKNOWLEDGMENTS.md`](../ACKNOWLEDGMENTS.md) |
 
 ## Precedence — read this before trusting any file
 

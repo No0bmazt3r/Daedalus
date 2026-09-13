@@ -73,9 +73,35 @@ database that already has data — re-running just tops up any settings added to
 | `./daedalus.sh stop` | Stop the stack |
 | `./daedalus.sh logs` | Follow logs |
 | `./daedalus.sh rebuild` | Force a clean image rebuild, then start |
-| `./daedalus.sh status` | What's running, plus health of all four databases |
+| `./daedalus.sh status` | What's running, plus health of all five databases |
+| `./daedalus.sh migrate` | Apply pending schema migrations (`status`, `check`, `backup`, `new`) |
 
 Add `--with-ollama` to `start` to run Ollama as a container instead of on the host.
+
+Two more scripts sit alongside it:
+
+| Script | Does | Safe? |
+|---|---|---|
+| `./sync.sh` | After a `git pull`: dependencies, `.env` backfill, migrations, integrity check | Yes — re-runnable, destroys nothing |
+| `./sync.sh --check` | Reports what *would* change and touches nothing | Yes |
+| `./reset.sh` | Wipes the chat, audit and prefs databases and rebuilds them from the migrations | **No** — snapshots first, then deletes |
+| `./reset.sh --sensor` | Also wipes the sensor database and reseeds demo telemetry | **No** — asks twice |
+
+`reset.sh` leaves the sensor database alone by default: Daedalus does not own
+that file, and on a lab machine it may hold real reactor telemetry. It also
+refuses to run while the stack is up, because deleting a SQLite file out from
+under a live process leaves it writing to a deleted inode.
+
+Shared helpers live in `scripts/common.sh`, so a fix to the `.env` backfill or
+the path handling reaches all three scripts at once.
+
+**Every command, every flag, and why each safeguard is there:**
+[`docs/SCRIPTS.md`](docs/SCRIPTS.md).
+
+> **Host and container see the same data.** The paths in `.env` are as seen
+> *inside the container* (`/data`, `/logs`, `/app/data`). The scripts map them
+> back to `./data`, `./logs` and `./backend/data` when running the backend on
+> your machine, so `dev` and `start` are not quietly two different databases.
 
 ### Prerequisites
 
@@ -130,16 +156,17 @@ local with no cloud APIs. `.env` is gitignored if that ever changes.
 
 ---
 
-## The four databases
+## The five databases
 
 Separate on purpose: a fault in ingestion or logging physically cannot reach the
-sensor data of record. **Settings → Databases** shows all four live, and
+sensor data of record. **Settings → Databases** shows all five live, and
 `./daedalus.sh status` prints the same from the terminal.
 
 | Store | Engine | Access | Holds |
 |---|---|---|---|
 | **Sensor** | SQLite | **read-only** | IoT telemetry written by the SCADA subsystem |
 | **Audit** | SQLite | read/write | chat · tool-call · retrieval · model · error · feedback · memory logs |
+| **Chat** | SQLite | read/write | conversation sessions and messages — the assistant's memory |
 | **Vector** | ChromaDB | read/write | embedded SOP/manual/anomaly chunks for RAG |
 | **Prefs** | SQLite | read/write | UI state, kept out of the browser |
 
@@ -152,6 +179,23 @@ conn = sqlite3.connect(f"file:{SENSOR_DB}?mode=ro", uri=True)
 INSERT, UPDATE, DELETE and DROP all raise; reads keep working. A prompt
 injection cannot reach below that line.
 
+**Why SQLite, for all of it.** The workload is a few writes a minute — orders
+of magnitude below where SQLite starts to care. More importantly, the
+read-only boundary above *is* an SQLite property: in a client-server database
+the equivalent is a `GRANT`, enforced by a process a misconfiguration can
+undo, and not something you can show an examiner in one line. The sensor DB is
+also already SQLite and owned by the ingestion subsystem, so mixing engines on
+a file we do not control would add risk for nothing.
+
+**Why chat and audit are two files**, though both hold conversation text: a
+user owns their transcript and may delete it, while audit rows are append-only
+evidence that a response was grounded. Separate files make that a property of
+the filesystem rather than a promise about our DELETE statements.
+
+Each writable store has a **versioned schema** — numbered SQL files applied
+once, in order, inside a transaction, recorded in the database itself and
+applied automatically at startup. See `backend/README.md`.
+
 **No telemetry yet?** Settings → Databases → *Generate demo data* seeds a
 plausible run offline. It refuses if data already exists.
 
@@ -162,8 +206,8 @@ plausible run offline. It refuses if data already exists.
 ```
 ├── frontend/            React dashboard (Zone 4)
 │   ├── src/
-│   │   ├── components/  Chat, theme modal, settings
-│   │   ├── contexts/    Theme + settings state
+│   │   ├── components/  Chat, sidebar, theme modal, settings
+│   │   ├── contexts/    Theme, settings and conversation state
 │   │   ├── hooks/       Draggable, resizable sidebar
 │   │   └── lib/         Theme engine, canvas effects, API clients
 │   ├── public/
@@ -171,24 +215,34 @@ plausible run offline. It refuses if data already exists.
 │
 ├── backend/             FastAPI service (Zone 3)
 │   ├── app/
-│   │   ├── api/         Route handlers
-│   │   └── db/          The four stores
+│   │   ├── api/         Route handlers — HTTP only
+│   │   ├── services/    Session policy, context-window assembly
+│   │   ├── models/      Pydantic wire contracts
+│   │   └── db/          The five stores, and schema migrations
 │   └── requirements.txt
 │
 ├── docs/                All documentation
 │   ├── README.md        Index — start here
 │   ├── PROJECT.md       Canonical specification
 │   ├── FEATURES.md      What's actually built
+│   ├── SCRIPTS.md       Every script, command and flag
 │   ├── research/        FYP1 research specs    ─┐ historical,
 │   └── architecture/    11-layer design specs  ─┘ superseded by PROJECT.md
 │
-├── data/                Runtime: sensor DB, documents  (gitignored)
-├── logs/                Runtime: audit logs            (gitignored)
+├── scripts/
+│   └── common.sh        Shared shell helpers for the three scripts below
+│
+├── data/                Runtime: sensor DB, chat DB, documents  (gitignored)
+├── logs/                Runtime: audit logs                     (gitignored)
+├── backups/             Snapshots from `migrate backup`         (gitignored)
 │
 ├── .env.example         Configuration template
 ├── Dockerfile           Multi-stage: builds frontend, served by backend
 ├── docker-compose.yml   App + ChromaDB (+ optional Ollama)
-├── daedalus.sh          Entry point
+├── daedalus.sh          Entry point — setup, start, dev, migrate
+├── sync.sh              Get a checkout working after a pull (safe)
+├── reset.sh             Wipe and rebuild the databases (destructive)
+├── ACKNOWLEDGMENTS.md   What this project borrowed, and from whom
 └── TODO.md              Roadmap
 ```
 
@@ -209,19 +263,23 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | Area | What works |
 |---|---|
 | **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat interface** | Message list, composer, model selector, incognito mode *(UI only — no backend wired yet)* |
+| **Chat interface** | Message list, composer, model selector, incognito — wired to the session API. *Replies are still placeholders until the orchestrator lands* |
+| **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen |
 | **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
 | **Background effects** | 9 options, 7 canvas-animated, **pointer-reactive** |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
-| **Data stores** | All four wired, containerised and health-reported |
+| **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |
+| **Data stores** | All five wired, containerised, health-reported, each with a versioned schema |
+| **Migrations** | Numbered SQL files, applied in a transaction at startup, with drift and gap detection |
 | **Deployment** | Single-image build + ChromaDB, one-command startup |
 
 ### Not built yet
 
 Knowledge ingestion, both retrieval tracks, the deterministic tool layer, the
-orchestration flow, Ollama integration and the evaluation harness. The stores
-exist and report health; nothing reads or writes them in anger yet.
+orchestration flow, Ollama integration and the evaluation harness. Your
+messages are stored and your chats persist, but nothing answers them yet — the
+reply you see is a placeholder and says so.
 
 ---
 
@@ -336,6 +394,26 @@ covers it) · physical hardware changes · auth/multi-tenancy · fine-tuning.
 
 **Deferred to Phase 2:** the PyQt5 embedded tab · multi-device support · Kùzu
 backend · multi-lab LAN deployment.
+
+---
+
+## Credits
+
+The presentation layer was built with
+**[Odysseus](https://github.com/odysseus-dev/odysseus)** open in the next
+window — a self-hosted AI workspace created by **Felix Kjellberg (PewDiePie)**
+and its contributors. Daedalus's theme engine, settings shell and preference
+API were modelled on how Odysseus does those things, and the
+`GET`/`PUT /api/prefs/<key>` contract is deliberately the same shape.
+
+**Daedalus is not a fork of it.** Odysseus is a Python/Flask application with
+a vanilla-JavaScript frontend and contains no TypeScript; the React components
+here were written from scratch. No Odysseus source code is present in this
+repository. That distinction is also a licensing one — Odysseus is AGPL-3.0,
+and adapting its code would oblige this project to be AGPL-3.0 too.
+
+Full attribution, including the stack and the wider project team:
+[`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
 ---
 

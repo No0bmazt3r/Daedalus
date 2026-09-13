@@ -1,32 +1,63 @@
 """Daedalus FastAPI backend.
 
-Right now it serves the presentation layer's preference store; the chat and
-tool routers from Layer 7 mount alongside it as they land.
+Serves the presentation layer's preference store and chat session state; the
+answering endpoint and tool routers from Layer 7 mount alongside them as they
+land.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import health, prefs, system
-from .db import audit_store, paths, prefs_store
+from .api import health, prefs, sessions, system
+from .db import migrations, paths, sqlite_util
+from .services import chat_service
+
+log = logging.getLogger("daedalus.startup")
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Every store Daedalus owns is created up front, so a fresh deployment has
-    # its schema in place before the first request rather than on first write.
+    """Bring every store to a known-good state before serving a request.
+
+    Migrating on boot means a fresh deployment and an upgraded one reach the
+    same schema without anyone remembering to run a command. `migrate` is a
+    no-op when nothing is pending, so the cost is two queries per store.
+
+    A migration failure is deliberately fatal. Serving requests against a
+    database whose shape the code does not agree with produces corrupt data
+    that is discovered much later — refusing to start is the cheaper failure.
+    """
     paths.ensure_dirs()
-    prefs_store.init_db()
-    audit_store.init_db()
+
+    for store, applied in migrations.migrate_all().items():
+        for migration in applied:
+            log.info("migrated %s → %s", store, migration.label)
+
+    # Corruption is rare but silent; quick_check is cheap enough to pay for on
+    # every boot rather than discover mid-evaluation.
+    for store, path in migrations.STORES.items():
+        problem = sqlite_util.integrity_check(path)
+        if problem:
+            log.error("integrity check failed for %s (%s): %s", store, path, problem)
+
+    # A restart ends an incognito session by definition. Sweeping at boot also
+    # clears whatever a crash left behind.
+    swept = chat_service.purge_ephemeral()
+    if swept:
+        log.info("swept %d ephemeral session(s) left by a previous run", swept)
+
     yield
+
+    chat_service.purge_ephemeral()
 
 
 app = FastAPI(
@@ -47,12 +78,13 @@ app.add_middleware(
         "http://127.0.0.1:4173",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "PUT", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
 app.include_router(health.router)
 app.include_router(prefs.router)
+app.include_router(sessions.router)
 app.include_router(system.router)
 
 
@@ -81,6 +113,13 @@ if _static_dir.is_dir():
         file behind it and must still boot the app. Declared after every API
         router so it can only ever catch what they didn't.
         """
+        # …except under /api, where catching what the routers didn't is the
+        # wrong answer. A stale image that predates an endpoint would serve
+        # index.html with a 200, and the client would fail parsing HTML as
+        # JSON instead of seeing an honest 404.
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail=f"no such endpoint: /{full_path}")
+
         candidate = (_static_dir / full_path).resolve()
         # Guard against ../ escaping the static root.
         if (

@@ -13,6 +13,7 @@ import {
 } from './ui/dropdown-menu'
 
 import { useSettings } from '../contexts/SettingsContext'
+import { useSessions } from '../contexts/SessionsContext'
 
 function TypewriterText({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
@@ -41,7 +42,8 @@ function TypewriterText({ text }: { text: string }) {
 
 export function ChatInterface() {
   const { isIncognito, setIsIncognito, selectedModel, setSelectedModel } = useSettings()
-  const [messages, setMessages] = useState<{role: string, content: string}[]>([])
+  // The transcript lives on the server — see contexts/SessionsContext.
+  const { messages, sendMessage, sending, error } = useSessions()
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
@@ -55,13 +57,10 @@ export function ChatInterface() {
   }, [input])
 
   const handleSend = () => {
-    if (!input.trim()) return
-    setMessages([...messages, { role: 'user', content: input }])
+    if (!input.trim() || sending) return
+    const content = input
     setInput('')
-    
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: 'bot', content: `This is a mock response from Daedalus.` }])
-    }, 500)
+    void sendMessage(content)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -160,7 +159,7 @@ export function ChatInterface() {
                 </Button>
                 <Button 
                   onClick={handleSend} 
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || sending}
                   className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 text-black disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
                 >
                   <ArrowUp size={18} strokeWidth={2.5} />
@@ -173,18 +172,34 @@ export function ChatInterface() {
         <>
           <ScrollArea className="flex-1 w-full">
             <div className="flex flex-col max-w-3xl mx-auto py-8 px-4 gap-6 pb-32">
-              {messages.map((msg, i) => (
-                <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'bot' && (
+              {messages.map((msg) => (
+                <div key={msg.key} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
                     <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card zone-ai-bubble">
                       <LabyrinthIcon className="w-5 h-5 zone-brand" />
                     </div>
                   )}
                   <div className={`text-[15px] leading-relaxed ${msg.role === 'user' ? 'theme-sidebar zone-user-bubble border px-5 py-3 rounded-2xl max-w-[80%]' : 'max-w-[85%] pt-1'}`}>
                     {msg.content}
+                    {msg.role === 'assistant' && !msg.persisted && (
+                      <div className="mt-1.5 text-[11px] theme-text-muted opacity-60">
+                        Placeholder — not saved. Assistant replies persist once the orchestrator lands.
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
+              {sending && (
+                <div className="flex w-full justify-start">
+                  <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card zone-ai-bubble">
+                    <LabyrinthIcon className="w-5 h-5 zone-brand animate-pulse" />
+                  </div>
+                  <div className="text-[15px] pt-1 theme-text-muted opacity-70">Thinking…</div>
+                </div>
+              )}
+              {error && (
+                <div className="text-[13px] text-amber-400/90 px-1">{error}</div>
+              )}
             </div>
           </ScrollArea>
           
@@ -208,7 +223,7 @@ export function ChatInterface() {
                   
                   <Button 
                     onClick={handleSend} 
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || sending}
                     className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 text-black disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
                   >
                     <ArrowUp size={18} strokeWidth={2.5} />

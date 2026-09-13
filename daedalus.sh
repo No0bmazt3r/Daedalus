@@ -7,10 +7,15 @@
 #   ./daedalus.sh stop       stop the stack
 #   ./daedalus.sh logs       follow the stack's logs
 #   ./daedalus.sh rebuild    force a clean image rebuild, then start
-#   ./daedalus.sh status     what's running, and the health of all four stores
+#   ./daedalus.sh status     what's running, and the health of all five stores
+#   ./daedalus.sh migrate    apply pending schema migrations (see: migrate --help)
 #
 # Flags:
 #   --with-ollama            run Ollama as a container too (default: use the host)
+#
+# Related scripts:
+#   ./sync.sh                after a git pull: deps, .env, migrations  (safe)
+#   ./reset.sh               wipe and rebuild the local databases (destructive)
 #
 # The stack is one container serving both the API and the built dashboard,
 # plus ChromaDB for the vector store.
@@ -18,111 +23,41 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Output helpers, .env backfill, compose shim, migration CLI — see the file
+# for why each is shared rather than repeated in three scripts.
+# shellcheck source=scripts/common.sh
+. ./scripts/common.sh
+
 # docker compose reads .env by itself; the dev servers do not, so load it here
 # and let anything already exported win.
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
-fi
+load_env
 
 PORT="${DAEDALUS_PORT:-8000}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
-# ── output helpers ───────────────────────────────────────────────────────────
-if [ -t 1 ]; then
-  BOLD=$'\033[1m'; DIM=$'\033[2m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'
-  RED=$'\033[31m'; RESET=$'\033[0m'
-else
-  BOLD=''; DIM=''; GREEN=''; YELLOW=''; RED=''; RESET=''
-fi
-say()  { printf '%s\n' "$*"; }
-ok()   { printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$*"; }
-warn() { printf '  %s!%s %s\n' "$YELLOW" "$RESET" "$*"; }
-err()  { printf '  %s✗%s %s\n' "$RED" "$RESET" "$*" >&2; }
-head_() { printf '\n%s%s%s\n' "$BOLD" "$*" "$RESET"; }
-
- usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; }
-
-have() { command -v "$1" >/dev/null 2>&1; }
-
-# Support both `docker compose` (v2) and the legacy `docker-compose`.
-compose() {
-  if docker compose version >/dev/null 2>&1; then docker compose "$@"
-  elif have docker-compose; then docker-compose "$@"
-  else err "docker compose is not installed or not on PATH."; exit 1
-  fi
-}
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ── argument parsing ─────────────────────────────────────────────────────────
 CMD="${1:-start}"
 [ $# -gt 0 ] && shift || true
 
 PROFILE_ARGS=()
-for arg in "$@"; do
-  case "$arg" in
-    --with-ollama) PROFILE_ARGS+=(--profile with-ollama) ;;
-    -h|--help)     usage; exit 0 ;;
-    *) err "unknown option '$arg' (try --help)"; exit 1 ;;
-  esac
-done
+MIGRATE_ARGS=()
 
-# State lives on the host, so a rebuild never loses data. Creating these here
-# also stops Docker from creating them as root-owned bind-mount sources.
-ensure_dirs() { mkdir -p data/sqlite data/documents logs backend/data; }
-
-# Create .env on first run, then top it up on later runs.
-#
-# The backfill is deliberately generic. Adding a setting to .env.example is
-# easy to do and easy to forget to mirror into an existing .env, and the
-# failure mode is a confusing runtime error rather than an obvious one — so
-# every new key is appended automatically instead of being hand-patched here
-# one bug at a time. Existing values are never touched.
-ensure_env() {
-  if [ ! -f .env ]; then
-    cp .env.example .env
-    ok "created .env from .env.example"
-    return 0
-  fi
-
-  local added="" key
-  while IFS= read -r key; do
-    if ! grep -q "^${key}=" .env; then
-      grep -m1 "^${key}=" .env.example >> .env
-      added="${added} ${key}"
-    fi
-  done < <(grep -E '^[A-Z_][A-Z0-9_]*=' .env.example | cut -d= -f1)
-
-  if [ -n "$added" ]; then
-    ok "added missing settings to .env:$added"
-  else
-    ok ".env present and complete"
-  fi
-}
-
-wait_for_api() {
-  printf '  waiting for the API'
-  for _ in $(seq 1 60); do
-    if curl -fsS --max-time 2 "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-      printf '\n'; return 0
-    fi
-    printf '.'; sleep 1
+# `migrate` forwards its arguments to the Python CLI, which owns their meaning
+# (including its own --help). Every other command accepts only known flags.
+if [ "$CMD" = "migrate" ]; then
+  MIGRATE_ARGS=("$@")
+else
+  for arg in "$@"; do
+    case "$arg" in
+      --with-ollama) PROFILE_ARGS+=(--profile with-ollama) ;;
+      -h|--help)     usage; exit 0 ;;
+      *) err "unknown option '$arg' (try --help)"; exit 1 ;;
+    esac
   done
-  printf '\n'; return 1
-}
-
-check_ollama() {
-  local url="${OLLAMA_BASE_URL:-http://localhost:11434}"
-  if curl -fsS --max-time 2 "${url}/api/tags" >/dev/null 2>&1; then
-    ok "Ollama reachable at ${url}"
-  else
-    warn "no Ollama at ${url}"
-    say  "    Start it with 'ollama serve', or use --with-ollama."
-    say  "    The dashboard works without it — only model inference needs it."
-  fi
-}
+fi
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
@@ -156,11 +91,16 @@ cmd_setup() {
   fi
   backend/.venv/bin/pip install --quiet --upgrade pip
   backend/.venv/bin/pip install --quiet -r backend/requirements.txt
+  # Stamped so sync.sh can tell whether requirements.txt has changed since.
+  touch "$BACKEND_STAMP"
   ok "python packages installed"
 
   head_ "Runtime directories"
   ensure_dirs
   ok "data/ and logs/ ready"
+
+  head_ "Database schema"
+  migrate_cli up
 
   head_ "Optional"
   check_ollama
@@ -168,6 +108,7 @@ cmd_setup() {
   head_ "Done"
   say "  ${DIM}Containers:${RESET}  ./daedalus.sh start"
   say "  ${DIM}Hot reload:${RESET}  ./daedalus.sh dev"
+  say "  ${DIM}After a pull:${RESET} ./sync.sh"
   say ""
 }
 
@@ -192,14 +133,17 @@ cmd_start() {
 
 cmd_dev() {
   # Hot reload, no Docker. Two processes; Vite proxies /api to uvicorn.
-  [ -d backend/.venv ] || { err "backend/.venv missing — run './daedalus.sh setup' first"; exit 1; }
-  [ -d frontend/node_modules ] || { err "frontend/node_modules missing — run './daedalus.sh setup' first"; exit 1; }
+  require_venv
+  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run './daedalus.sh setup' first"
   ensure_env
   ensure_dirs
+  # Migrations normally run at app startup too; doing it here as well means a
+  # failure is reported before two dev servers start writing to the terminal.
+  migrate_cli up >/dev/null || fail "migrations failed — run './daedalus.sh migrate status'"
   check_ollama
 
   head_ "Starting dev servers"
-  backend/.venv/bin/uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend &
+  host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend &
   local api_pid=$!
   # Stop the backend when this script exits, however it exits.
   trap 'kill $api_pid 2>/dev/null || true' EXIT INT TERM
@@ -212,6 +156,24 @@ cmd_dev() {
 cmd_stop()    { compose "${PROFILE_ARGS[@]}" down; }
 cmd_logs()    { compose "${PROFILE_ARGS[@]}" logs -f; }
 cmd_rebuild() { ensure_dirs; cmd_start --build --force-recreate; }
+
+# Migrations normally run at startup; this is for applying a schema change
+# without a restart, for inspecting state, and for CI. Every subcommand of
+# `python -m app.db.migrate` is passed straight through:
+#
+#   ./daedalus.sh migrate            apply everything pending
+#   ./daedalus.sh migrate status     what's applied, what's pending
+#   ./daedalus.sh migrate check      integrity-check each database
+#   ./daedalus.sh migrate backup     consistent snapshot of each database
+cmd_migrate() {
+  require_venv
+  ensure_env
+  ensure_dirs
+  head_ "Migrations"
+  # Default to `up`; anything else is the user's own subcommand.
+  if [ ${#MIGRATE_ARGS[@]} -eq 0 ]; then MIGRATE_ARGS=(up); fi
+  migrate_cli "${MIGRATE_ARGS[@]}"
+}
 
 cmd_status() {
   head_ "Containers"
@@ -248,6 +210,7 @@ case "$CMD" in
   logs)         cmd_logs ;;
   rebuild)      cmd_rebuild ;;
   status)       cmd_status ;;
+  migrate)      cmd_migrate ;;
   -h|--help|help) usage ;;
   *) err "unknown command '$CMD'"; say ""; usage; exit 1 ;;
 esac

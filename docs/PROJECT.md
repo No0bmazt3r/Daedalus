@@ -333,9 +333,9 @@ PRAGMA synchronous=NORMAL;
 Live data is **pulled on demand**, not streamed. A Q&A interface needs no
 sub-second push, and polling keeps Zone 3 fully decoupled from Zone 2's cadence.
 
-### 6.3 The four stores
+### 6.3 The five stores
 
-Daedalus owns four physically separate databases. The separation is not
+Daedalus owns five physically separate databases. The separation is not
 tidiness — it is the safety argument, and it is worth stating explicitly in
 the report.
 
@@ -343,11 +343,25 @@ the report.
 |---|---|---|---|---|
 | **Sensor** | SQLite | `/data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
 | **Audit** | SQLite | `/logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
+| **Chat** | SQLite | `/data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
 | **Vector** | ChromaDB | `chromadb` service (or `data/chroma`) | read/write | embedded SOP/manual/anomaly/UAUC chunks |
 | **Prefs** | SQLite | `/app/data/prefs.db` | read/write | UI state, kept out of the browser |
 
 Verified: the read-only connection rejects INSERT, UPDATE, DELETE and DROP at
 the driver, while reads continue to work.
+
+**Chat and audit are deliberately two files**, though both hold conversation
+text, because they have opposite lifecycles. A user renames, archives and
+deletes their own chats; audit rows are append-only evidence that a response
+was grounded, and §9's evaluation rests on them. Two files make *"deleting a
+chat cannot delete the evidence"* a property of the filesystem rather than a
+promise about our DELETE statements. `query_id` links them when a trace needs
+both.
+
+Each writable store carries a versioned schema — numbered SQL files applied
+once, in order, inside a transaction, recorded in the database itself. The
+sensor store is deliberately excluded: SCADA owns that schema, and migrating a
+database we do not own would breach Rule 2 as surely as an INSERT would.
 
 ### 6.4 Store separation (state this explicitly in the report)
 
@@ -355,7 +369,7 @@ the driver, while reads continue to work.
 Jason's subsystem  → writes sensor_readings
 Anson's subsystem  → writes anomaly flags/records
 Daedalus           → READS both; writes ONLY to its own separate stores:
-                     ChromaDB dir, graph file, ai_logs.db, prefs.db
+                     ChromaDB dir, graph file, ai_logs.db, chat.db, prefs.db
 ```
 
 A bug in our indexing code physically **cannot** corrupt the sensor data of
@@ -414,6 +428,68 @@ answer: "At around 10:00 the CO₂ reading increased sharply from 420 ppm to 980
 
 It must **not** say "the valve failed" — that causal claim has no supporting
 evidence. Causal language requires retrieved backing.
+
+### 7.4 Conversation memory
+
+> Neither historical spec set covers multi-turn conversation. This section
+> fills that gap. Built: `db/chat_store.py`, `services/chat_service.py`.
+
+Ollama is stateless. "The assistant remembers" only ever means the orchestrator
+re-sent the transcript, so the transcript is the memory and it is stored in its
+own SQLite database (§6.3). Both halves reduce to that one store: within a
+session each turn rebuilds the prompt from those rows; across sessions,
+reopening a chat reads the same rows back. Only *how much* is replayed differs.
+
+**The prompt is assembled in four tiers**, rebuilt fresh every turn:
+
+```
+system prompt                    (fixed)
+rolling summary of folded turns  (regenerated in the background)
+recent turns, newest-first       (within a ~1200-token budget)
+EVIDENCE pack + current question (the only numbers the model may use)
+```
+
+The budget matters because the SLM tier runs at `num_ctx` 4096–8192 and the
+evidence pack plus retrieved SOP chunks already claim 1–2k of it. Turns that
+do not fit are folded into the rolling summary **after** the response is sent —
+summarisation is another inference call, and doing it inline would spend the
+latency budget the <3s target is measured against.
+
+#### Replayed history is a Rule 3 hazard
+
+Turn 3 said *"CO₂ is 470.2 ppm."* At turn 9 the model has a number in its
+context that it never fetched, that was true twenty minutes ago, and that it
+will happily reuse. This is precisely what the <10% hallucination target
+measures. Three defences:
+
+1. **Evidence is stored but never replayed.** Citations and tool output render
+   in the UI; only natural-language text re-enters the prompt.
+2. **Historical assistant turns are timestamped**, and a notice tells the model
+   that values in them were true only at the time shown.
+3. **Groundedness validation compares against the current evidence pack only.**
+   A number appearing only in history sets `hallucination_flag`.
+
+The third is what turns the risk into a measurement; the first two reduce how
+often it arises. History exists to resolve *referents* — "it", "that spike",
+"the same sensor" — not to supply facts.
+
+#### Follow-ups are condensed before Step 3
+
+*"And what about pressure?"* has no intent and nothing retrievable on its own.
+Before intent classification, the last two turns plus the raw query are
+rewritten into a standalone question, and everything downstream — classification,
+tool planning, both retrieval tracks — runs on the rewritten form.
+
+This is a documented technique (contextual query rewriting / condensation), so
+it cites cleanly. **The same rewritten query must go to both tracks**, or the
+comparison in §5 stops isolating retrieval architecture as the only variable.
+
+#### Incognito
+
+An `ephemeral` session lives in the same tables, so in-session memory behaves
+identically, and is swept at startup and shutdown. Its content is kept out of
+`conversation_logs` while latency and `grounded_flag` are still recorded — the
+evaluation data survives without storing what was said.
 
 ---
 
@@ -529,16 +605,19 @@ Trust comes from visible reasoning, not a black box:
 | **Background effects** | 9 options (7 canvas-animated) with colour/intensity/size, and pointer-reactive behaviour |
 | **Settings modal** | Sectioned nav, incognito toggle, model defaults |
 | **Settings** | Registry-driven nav, keyword search with keyboard navigation, drag-resizable + collapsible rail with full ARIA, layout persisted server-side |
-| **FastAPI backend** | App skeleton, health endpoint, preference store, CORS, `theme.css` endpoint for flash-free first paint, `GET /api/system/databases` |
-| **Data stores** | All four wired: read-only sensor accessor + dev seeder, 7-table audit log store with `query_id` tracing, Chroma client (server + embedded), prefs |
+| **FastAPI backend** | App skeleton, health endpoint, preference store, CORS, `theme.css` endpoint for flash-free first paint, `GET /api/system/databases`, chat session API |
+| **Data stores** | All five wired: read-only sensor accessor + dev seeder, 7-table audit log store with `query_id` tracing, chat transcript store, Chroma client (server + embedded), prefs |
+| **Conversation memory** | Sessions and transcripts with `seq`-ordered messages, auto-titling, archive, incognito; token-budgeted context assembly with a rolling summary (§7.4) |
+| **Schema migrations** | Numbered SQL files per store, applied once in a transaction at startup; checksum-drift, gap-numbering, missing-file and bad-SQL rollback all refuse or roll back |
 | **Persistence** | All UI preferences live server-side in SQLite — deliberately **nothing in browser storage** |
 
 ### Not started
 
 The *logic* on top of the stores: knowledge ingestion, both retrieval tracks,
 the deterministic tool layer, the orchestration flow, Ollama integration, the
-evaluation harness, and the admin console. The stores themselves now exist and
-report their health, but nothing reads or writes them in anger yet.
+evaluation harness, and the admin console. The stores exist, report their
+health and hold conversation state, but nothing answers a question yet — the
+chat UI still renders mock replies.
 
 > **Honest framing:** what exists today is a polished Zone 4 client plus a thin
 > Zone 3 shell. The AI layer — the actual FYP contribution — is still ahead.

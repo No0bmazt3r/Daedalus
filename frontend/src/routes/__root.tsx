@@ -7,6 +7,7 @@ import { ThemeModal } from '../components/ThemeModal'
 import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import { SettingsProvider } from '../contexts/SettingsContext'
+import { SessionsProvider } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 
 export const Route = createRootRoute({
@@ -21,6 +22,7 @@ function RootLayout() {
   return (
     <ThemeProvider>
       <SettingsProvider>
+        <SessionsProvider>
         <div className="flex h-screen theme-bg theme-text relative overflow-hidden transition-colors duration-200">
           {/* Sidebar Container */}
           <div 
@@ -56,6 +58,7 @@ function RootLayout() {
           <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
           <SettingsModal open={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
         </div>
+        </SessionsProvider>
       </SettingsProvider>
     </ThemeProvider>
   )
