@@ -8,6 +8,38 @@
 #
 # Callers must `cd` to the repo root before sourcing.
 
+# Running this file does nothing useful: it only defines functions, which are
+# lost the moment the child shell it ran in exits. `.` (source) runs it in the
+# *current* shell, which is what makes the definitions stick.
+#
+# Guarded rather than left to the missing execute bit, because "Permission
+# denied" tells you nothing about which of the two you wanted.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  cat >&2 <<'USAGE'
+scripts/common.sh is a library, not a command — there is nothing to run.
+
+It defines the helpers that daedalus.sh, sync.sh and reset.sh share. They
+pick it up with:
+
+    . ./scripts/common.sh
+
+To use the helpers yourself, source it into your own shell the same way:
+
+    cd "$(git rev-parse --show-toplevel)"
+    . ./scripts/common.sh
+    host_py -c "from app.db import chat_store; print(chat_store.stats())"
+
+You probably wanted one of:
+
+    ./daedalus.sh --help     run, develop, migrate
+    ./sync.sh --check        see what a pull changed
+    ./reset.sh --help        wipe and rebuild the databases
+
+Reference: docs/SCRIPTS.md
+USAGE
+  exit 1
+fi
+
 # ── output ───────────────────────────────────────────────────────────────────
 # Colour only when attached to a terminal, so piping to a file or CI log does
 # not fill it with escape codes.

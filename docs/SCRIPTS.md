@@ -256,8 +256,22 @@ Four rules, all enforced rather than documented:
 
 ## `scripts/common.sh`
 
-Sourced by all three scripts; not executable on its own. One copy means a fix
-to the `.env` backfill or the path handling reaches everything at once.
+A library, not a command. One copy means a fix to the `.env` backfill or the
+path handling reaches all three scripts at once.
+
+Running it does nothing useful — it only defines functions, and those are lost
+when the child shell it ran in exits. `.` (source) runs it in the *current*
+shell, which is what makes the definitions stick. Executing it directly prints
+that explanation and exits 1, rather than leaving you with a bare "Permission
+denied" or a shell that silently gained nothing.
+
+To use the helpers yourself:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+. ./scripts/common.sh
+host_py -c "from app.db import chat_store; print(chat_store.stats())"
+```
 
 | Function | Does |
 |---|---|

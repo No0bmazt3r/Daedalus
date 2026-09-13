@@ -27,8 +27,14 @@ for arg in "$@"; do
   esac
 done
 
+# Two lists, because they end differently: WOULD is what `./sync.sh` fixes
+# by itself, MANUAL is what it can only tell you about. Lumping them together
+# produced a summary that promised to rebuild a container image it never
+# touches.
 WOULD=()
-note() { WOULD+=("$1"); }
+MANUAL=()
+note()   { WOULD+=("$1"); }
+manual() { MANUAL+=("$1"); }
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   printf '\n%sCHECK MODE%s — reporting only, nothing will be changed.\n' "$YELLOW" "$RESET"
@@ -215,7 +221,7 @@ if [ "$DOCKER_UP" -eq 0 ]; then
 elif stack_running; then
   warn "the stack is running code from the image it was built with"
   info "pulled changes reach it only after: ./daedalus.sh rebuild"
-  [ "$CHECK_ONLY" -eq 1 ] && note "rebuild the container image (or use ./daedalus.sh dev)"
+  manual "./daedalus.sh rebuild   — the image predates your current code"
 else
   ok "stack is not running — it will pick up the new code when started"
 fi
@@ -223,18 +229,30 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 if [ "$CHECK_ONLY" -eq 1 ]; then
   head_ "Summary"
-  if [ ${#WOULD[@]} -eq 0 ]; then
+  if [ ${#WOULD[@]} -eq 0 ] && [ ${#MANUAL[@]} -eq 0 ]; then
     ok "nothing to do — your checkout is already in sync"
-  else
-    warn "${#WOULD[@]} thing(s) need doing:"
+  fi
+  if [ ${#WOULD[@]} -gt 0 ]; then
+    warn "${#WOULD[@]} thing(s) ./sync.sh will fix:"
     for w in "${WOULD[@]}"; do info "- $w"; done
     printf '\n    Run %s./sync.sh%s to apply them.\n' "$BOLD" "$RESET"
+  fi
+  if [ ${#MANUAL[@]} -gt 0 ]; then
+    # Separator only when a WOULD block precedes it.
+    [ ${#WOULD[@]} -gt 0 ] && printf '\n'
+    warn "${#MANUAL[@]} thing(s) only you can do — ./sync.sh will not:"
+    for m in "${MANUAL[@]}"; do info "- $m"; done
   fi
   printf '\n'
   exit 0
 fi
 
 head_ "Done — your checkout is in sync"
+if [ ${#MANUAL[@]} -gt 0 ]; then
+  warn "but ${#MANUAL[@]} thing(s) still need you:"
+  for m in "${MANUAL[@]}"; do info "- $m"; done
+  printf '\n'
+fi
 say "  ${DIM}Containers:${RESET}  ./daedalus.sh start"
 say "  ${DIM}Hot reload:${RESET}  ./daedalus.sh dev"
 say ""
