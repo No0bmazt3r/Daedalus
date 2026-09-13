@@ -19,6 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: daedalus:latest
+    pull_policy: build
     container_name: daedalus
     ports:
       # Bound to localhost. Drop the 127.0.0.1 prefix only if you deliberately
