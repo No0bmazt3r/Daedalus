@@ -226,16 +226,9 @@ Both containerised services keep their state on host volumes: `./data`
 │   ├── FEATURES.md      What's actually built
 │   ├── research/        FYP1 research specs    ─┐ historical,
 │   └── architecture/    11-layer design specs  ─┘ superseded by PROJECT.md
-├── odysseus/            Reference sample only — not a dependency
 ├── TODO.md              Roadmap and progress
 └── run.sh               One-command startup
 ```
-
-> **On `odysseus/`:** a third-party local-AI app vendored purely as a UI/UX and
-> containerisation reference while building the theme and settings systems.
-> Nothing imports it, nothing ships it, and `.dockerignore` excludes it from
-> every build. Trimmed to the parts with reference value — see
-> [`odysseus/VENDORED.md`](odysseus/VENDORED.md).
 
 ---
 

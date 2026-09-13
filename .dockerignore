@@ -15,9 +15,6 @@ logs
 *.db-wal
 *.db-shm
 
-# Reference material only — never shipped (see PROJECT.md §0)
-odysseus
-
 # Repo/editor noise
 .git
 .github

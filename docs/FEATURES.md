@@ -195,8 +195,9 @@ every dropdown and popover rendered white regardless of theme.
 
 ## 5. Background effects
 
-Nine options; seven canvas-animated. `src/lib/canvasEffects.ts` ported from
-Odysseus; `src/lib/pointerField.ts` is new.
+Nine options; seven canvas-animated. `src/lib/canvasEffects.ts` was ported from
+Odysseus (a reference app no longer vendored in this repo);
+`src/lib/pointerField.ts` is new.
 
 | Effect | Pointer reaction |
 |---|---|

@@ -176,7 +176,7 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] Single-image Docker build + `./run.sh`
 - [x] `docs/PROJECT.md` — reconciled the two spec sets into one canonical document
 - [x] Consolidated `docs/` + `context/` into a single `docs/` folder with an index and an implementation reference
-- [x] Repo cleanup — dropped a stray screenshot, a duplicate image folder and an empty temp file; trimmed the vendored `odysseus/` reference from 168MB to 38MB
+- [x] Repo cleanup — dropped a stray screenshot, a duplicate image folder, an empty temp file, and the vendored `odysseus/` reference sample (168MB) now that the theme and settings ports are done
 - [x] Settings shell parity with Odysseus — panel registry, keyword search with keyboard nav, drag-resizable + collapsible rail with ARIA, server-persisted layout
 - [x] Four separate stores wired and containerised — sensor (read-only), audit logs, Chroma vector DB, prefs
 - [x] `GET /api/system/databases` + the Settings → Databases panel surfacing all four

@@ -104,9 +104,7 @@ Context windows are finite; don't paste the whole folder.
 | Evaluation | `research/04` + `architecture/10` |
 | Report or viva prep | `research/00` + `architecture/14` |
 
-Three rules worth passing along with the files:
+Two rules worth passing along with the files:
 
 1. `PROJECT.md` wins over `architecture/` and `research/`.
 2. `architecture/00-design-rules.md` constrains every layer — no exceptions.
-3. `odysseus/` in the repo root is **reference sample code only**. Nothing
-   imports it and nothing ships it.

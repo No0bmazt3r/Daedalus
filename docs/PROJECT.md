@@ -15,7 +15,6 @@
 | [`FEATURES.md`](FEATURES.md) | What is actually built: API surface, store contracts, theme engine | **Authoritative for implementation detail** |
 | [`research/00–07`](research/) | FYP1 / interim-report-aligned specs. Strong on the *research* framing: dual-track RAG comparison, hardware-fit tooling, evaluation rigour | Historical + still-valid research design |
 | [`architecture/00–14`](architecture/) | "Project Daedalus v2" 11-layer implementation specs. Strong on *engineering* detail: tool I/O schemas, log tables, orchestration steps, examiner phrasings | Historical + still-valid implementation detail |
-| `../odysseus/` | **Reference material only.** A third-party local-AI app vendored purely as a UI/UX and containerisation example. **Not a dependency, not shipped, never imported.** | Sample code |
 
 All of the above live in this one `docs/` folder — see [`README.md`](README.md)
 for the navigation index and guidance on what to feed an AI for a given task.
