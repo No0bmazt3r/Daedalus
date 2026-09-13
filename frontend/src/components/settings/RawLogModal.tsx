@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
-import { X, RefreshCw, ChevronLeft, ChevronRight, Table2, EyeOff, ArrowDownUp } from 'lucide-react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
+import { X, RefreshCw, ChevronLeft, ChevronRight, Table2, EyeOff, ArrowDownUp, CircleDashed } from 'lucide-react'
 import {
   logCatalogue,
   readLogTable,
   type LogPage,
   type LogStore,
 } from '../../lib/systemClient'
+import { useDraggable } from '../../hooks/useDraggable'
 
 /**
  * Raw row viewer for the stores Daedalus owns.
@@ -49,6 +50,19 @@ export function RawLogModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Record<string, unknown> | null>(null)
+  const [isPeek, setIsPeek] = useState(false)
+
+  const { position, onMouseDown, handleRef, windowRef } = useDraggable()
+
+  const anchor = useMemo(() => {
+    if (!open || typeof window === 'undefined') return { left: 0, top: 0 }
+    const width = Math.min(1152, window.innerWidth * 0.95)
+    const height = Math.min(750, window.innerHeight * 0.85)
+    return {
+      left: Math.max(8, (window.innerWidth - width) / 2),
+      top: Math.max(8, (window.innerHeight - height) / 2),
+    }
+  }, [open])
 
   // Load the catalogue whenever the window opens, not once on mount — the
   // counts are the point, and they go stale the moment you use the app.
@@ -117,10 +131,31 @@ export function RawLogModal({
   const canNext = offset + PAGE_SIZE < total
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-6xl h-[85vh] flex flex-col theme-card theme-text theme-border border rounded-xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[100] pointer-events-none">
+      <div 
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"
+        style={{ opacity: isPeek ? 0 : 1 }}
+        onClick={onClose}
+      />
+      <div
+        ref={windowRef}
+        style={{
+          left: position.x || anchor.left,
+          top: position.y || anchor.top,
+          backgroundColor: isPeek
+            ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)'
+            : 'var(--bg)',
+          backdropFilter: isPeek ? 'none' : undefined,
+        }}
+        className={`pointer-events-auto absolute resize overflow-hidden w-[1152px] h-[750px] min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh] flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${isPeek ? 'border-white/20 shadow-none' : ''}`}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b theme-border bg-black/10 shrink-0">
+        <div
+          ref={handleRef}
+          onMouseDown={onMouseDown}
+          className="flex items-center justify-between px-4 py-3 border-b theme-border cursor-move bg-black/10 select-none shrink-0"
+          style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
+        >
           <div className="flex items-center gap-2 font-medium">
             <Table2 size={16} className="theme-primary" />
             Raw store contents
@@ -128,6 +163,20 @@ export function RawLogModal({
           </div>
           <div className="flex items-center gap-1">
             <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => setIsPeek(!isPeek)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border mr-2 ${
+                isPeek
+                  ? 'bg-primary/20 text-[var(--primary)] border-[var(--primary)]/30'
+                  : 'theme-text-muted hover:theme-text border-transparent hover:bg-black/20'
+              }`}
+              title="Fade this window to preview the page behind it"
+            >
+              <CircleDashed size={14} className={isPeek ? 'animate-[spin_4s_linear_infinite]' : ''} />
+              Peek
+            </button>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={() => void load()}
               disabled={busy}
               aria-label="Refresh"
@@ -136,6 +185,7 @@ export function RawLogModal({
               <RefreshCw size={15} className={busy ? 'animate-spin' : ''} />
             </button>
             <button
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={onClose}
               aria-label="Close"
               className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-black/20"
@@ -145,7 +195,7 @@ export function RawLogModal({
           </div>
         </div>
 
-        <div className="flex flex-1 min-h-0">
+        <div className={`flex flex-1 min-h-0 ${isPeek ? 'bg-transparent' : 'bg-black/5'}`}>
           {/* Table list */}
           <div className="w-56 shrink-0 border-r theme-border overflow-y-auto no-scrollbar p-2">
             {stores?.map((store) => (

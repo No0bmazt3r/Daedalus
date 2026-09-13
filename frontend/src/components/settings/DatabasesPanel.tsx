@@ -5,7 +5,7 @@ import { RawLogModal } from './RawLogModal'
 // Stores the raw-row viewer will serve — mirrors BROWSABLE in
 // backend/app/services/log_browser.py. `prefs` is absent there because it
 // holds arbitrary UI values, and the endpoint store because it holds API keys.
-const BROWSABLE_STORES = new Set(['chat', 'audit'])
+const BROWSABLE_STORES = new Set(['chat', 'audit', 'sensor', 'vector'])
 
 interface DatabaseInfo {
   id: string

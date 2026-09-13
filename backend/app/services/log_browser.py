@@ -29,6 +29,8 @@ from ..db import sqlite_util
 from ..db.audit_store import LOG_TABLES
 from ..db.paths import AUDIT_DB, CHAT_DB
 
+from ..db.sensor_store import SENSOR_DB
+
 # Store → (database file, tables that may be read).
 #
 # `prefs` is absent on purpose: it stores whatever the UI chooses to put there,
@@ -37,12 +39,14 @@ from ..db.paths import AUDIT_DB, CHAT_DB
 BROWSABLE: Final[dict[str, tuple[Path, tuple[str, ...]]]] = {
     "chat": (CHAT_DB, ("chat_sessions", "chat_messages")),
     "audit": (AUDIT_DB, LOG_TABLES),
+    "sensor": (SENSOR_DB, ("sensor_readings", "anomaly_records")),
 }
 
 # Human labels, so the UI does not have to carry a second copy of this map.
 STORE_LABELS: Final[dict[str, str]] = {
     "chat": "Chat Transcripts",
     "audit": "Audit & Evaluation Logs",
+    "sensor": "Sensor Telemetry",
 }
 
 # Any column whose name contains one of these is replaced with a marker.
@@ -89,11 +93,7 @@ def _cell(column: str, value: Any) -> Any:
 
 
 def catalogue() -> list[dict[str, Any]]:
-    """Every browsable table with its current row count.
-
-    A missing database is reported as zero rows rather than raised: the viewer
-    should open and say "nothing here yet" on a fresh install.
-    """
+    """Every browsable table with its current row count."""
     out: list[dict[str, Any]] = []
     for store, (db_path, tables) in BROWSABLE.items():
         entry: dict[str, Any] = {
@@ -120,6 +120,18 @@ def catalogue() -> list[dict[str, Any]]:
         if not entry["tables"]:
             entry["tables"] = [{"name": t, "rows": None} for t in tables]
         out.append(entry)
+        
+    # Add vector store
+    from ..db import vector_store
+    vs_stats = vector_store.stats()
+    out.append({
+        "store": "vector",
+        "label": "Vector Knowledge Base",
+        "path": vs_stats["target"],
+        "available": vs_stats["available"],
+        "tables": [{"name": "daedalus_knowledge", "rows": vs_stats.get("documents")}]
+    })
+
     return out
 
 
@@ -131,15 +143,51 @@ def read(
     offset: int = 0,
     newest_first: bool = True,
 ) -> dict[str, Any]:
-    """A page of raw rows, newest first by default.
-
-    Ordering is by `rowid`, not by a timestamp column: every table has one, it
-    is always insertion order, and two rows written in the same second would
-    otherwise come back in an arbitrary order.
-    """
-    db_path = _resolve(store, table)
+    """A page of raw rows, newest first by default."""
     limit = max(1, min(limit, MAX_LIMIT))
     offset = max(0, offset)
+
+    if store == "vector":
+        from ..db import vector_store
+        collection = vector_store.get_collection()
+        if not collection:
+            return {
+                "store": store,
+                "table": table,
+                "columns": [],
+                "rows": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "available": False,
+            }
+        
+        total = collection.count()
+        results = collection.get(limit=limit, offset=offset)
+        
+        # Format results into a table
+        rows = []
+        if results and results.get('ids'):
+            for i in range(len(results['ids'])):
+                rows.append({
+                    "id": results['ids'][i],
+                    "document": _cell("document", results['documents'][i] if results.get('documents') else None),
+                    "metadata": _cell("metadata", str(results['metadatas'][i]) if results.get('metadatas') else None)
+                })
+                
+        return {
+            "store": store,
+            "table": table,
+            "columns": ["id", "document", "metadata"],
+            "rows": rows,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "available": True,
+            "redacted_columns": [],
+        }
+
+    db_path = _resolve(store, table)
 
     if not db_path.exists():
         return {
@@ -178,3 +226,4 @@ def read(
             c for c in columns if any(m in c.lower() for m in REDACTED_COLUMNS)
         ],
     }
+

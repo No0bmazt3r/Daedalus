@@ -206,6 +206,7 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] `reset.sh` — snapshot, wipe and rebuild the databases; sensor excluded by default and double-confirmed; refuses while the stack holds the files open
 - [x] `scripts/common.sh` — one copy of the output helpers, `.env` backfill, compose shim and path handling for all three scripts
 - [x] Raw store browser — `GET /api/logs/...` + Settings → Databases → **Browse rows**; allowlisted, read-only, secrets unreachable
+- [x] Expanded raw store browser — added `sensor` telemetry (`sensor_readings`, `anomaly_records`) and `vector` store chunks (`daedalus_knowledge`). Upgraded `RawLogModal` to be draggable with the exact same 'Peek' (transparency) UI as the Settings and Theme windows.
 - [x] Cloud model endpoints — Settings → **Add Models**: provider catalogue, base URL + key, connection test, masked key hints. Rule 1 enforced by a `CHECK (purpose = 'benchmark')` constraint
 - [x] Settings shell responds to its **container** width — below 620px the rail goes horizontal and resize/collapse withdraw (Odysseus' `isDesktopSidebarMode`)
 - [x] `docs/SCRIPTS.md` — every script, subcommand, flag and exit code, and the reasoning behind each safeguard

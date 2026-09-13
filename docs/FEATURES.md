@@ -210,9 +210,7 @@ latency budget the <3s target is measured against.
 
 ### Raw store browser — `services/log_browser.py`
 
-Backs Settings → Databases → **Browse rows**: a popup showing what is actually
-in the stores right now. `trace(query_id)` proves one response was grounded;
-this shows everything that has been recorded.
+Backs Settings → Databases → **Browse rows**: a draggable popup with Peek (transparency) UI showing what is actually in the stores right now. `trace(query_id)` proves one response was grounded; this shows everything that has been recorded. It now spans across `chat`, `audit`, `sensor` (telemetry & anomalies), and `vector` (knowledge base embeddings).
 
 Three properties, all verified:
 
