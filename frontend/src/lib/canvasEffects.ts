@@ -687,3 +687,129 @@ export function initEmbers(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
   draw();
 }
 
+// ── Nexus background effect ──
+// A web of slow-moving nodes that draw connecting lines when close to each other.
+export function initNexus(canvas: HTMLCanvasElement, cancelToken: { cancelled: boolean }) {
+  const ctx = canvas.getContext("2d"); if (!ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  
+  let W: number, H: number;
+  const nodes: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
+  let numNodes = 0;
+
+  function resize() {
+    const _box = canvasBox(canvas); W = _box.w; H = _box.h;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Scale node count by screen area
+    numNodes = Math.floor((W * H) / 12000) * effectScale();
+    numNodes = Math.min(Math.max(numNodes, 30), 200);
+    
+    while (nodes.length < numNodes) {
+      nodes.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.8,
+        vy: (Math.random() - 0.5) * 0.8,
+        r: Math.random() * 1.5 + 0.5
+      });
+    }
+    nodes.length = numNodes; // trim if needed
+  }
+  
+  resize();
+  window.addEventListener('resize', resize);
+  
+  let frame: number;
+  
+  function animate() {
+    if (cancelToken.cancelled) {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(frame);
+      return;
+    }
+    
+    ctx!.clearRect(0, 0, W, H);
+    
+    const c = effectColor();
+    const ptr = pointerFor(canvas);
+    const scale = effectScale();
+    const connectionDistance = 100 * scale;
+    
+    // Update nodes
+    for (const node of nodes) {
+      node.x += node.vx;
+      node.y += node.vy;
+      
+      if (node.x < 0 || node.x > W) node.vx *= -1;
+      if (node.y < 0 || node.y > H) node.vy *= -1;
+      node.x = Math.max(0, Math.min(W, node.x));
+      node.y = Math.max(0, Math.min(H, node.y));
+      
+      // Pointer interaction (push away gently)
+      if (ptr.active) {
+        const dx = node.x - ptr.x;
+        const dy = node.y - ptr.y;
+        const inf = influence(node.x, node.y, ptr, 200 * scale);
+        if (inf > 0) {
+          const distSq = dx * dx + dy * dy;
+          if (distSq > 0) {
+            node.x += (dx / Math.sqrt(distSq)) * inf * 5;
+            node.y += (dy / Math.sqrt(distSq)) * inf * 5;
+          }
+        }
+      }
+    }
+    
+    // Draw connections
+    ctx!.lineWidth = 0.5;
+    for (let i = 0; i < nodes.length; i++) {
+      const n1 = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const n2 = nodes[j];
+        const dx = n1.x - n2.x;
+        const dy = n1.y - n2.y;
+        const distSq = dx * dx + dy * dy;
+        
+        if (distSq < connectionDistance * connectionDistance) {
+          const opacity = 1 - Math.sqrt(distSq) / connectionDistance;
+          ctx!.beginPath();
+          ctx!.moveTo(n1.x, n1.y);
+          ctx!.lineTo(n2.x, n2.y);
+          ctx!.strokeStyle = rgba(c, opacity * 0.4);
+          ctx!.stroke();
+        }
+      }
+    }
+    
+    // Draw nodes
+    ctx!.fillStyle = rgba(c, 0.8);
+    for (const node of nodes) {
+      ctx!.beginPath();
+      ctx!.arc(node.x, node.y, node.r * scale, 0, Math.PI * 2);
+      ctx!.fill();
+      
+      // Draw pointer connection
+      if (ptr.active) {
+        const dx = node.x - ptr.x;
+        const dy = node.y - ptr.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < connectionDistance * connectionDistance) {
+          const opacity = 1 - Math.sqrt(distSq) / connectionDistance;
+          ctx!.beginPath();
+          ctx!.moveTo(node.x, node.y);
+          ctx!.lineTo(ptr.x, ptr.y);
+          ctx!.strokeStyle = rgba(c, opacity * 0.6 * ptr.energy);
+          ctx!.stroke();
+        }
+      }
+    }
+    
+    frame = requestAnimationFrame(animate);
+  }
+  
+  if (!cancelToken.cancelled) animate();
+}
+

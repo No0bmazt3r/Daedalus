@@ -7,6 +7,7 @@ import {
   initPetals,
   initSparkles,
   initEmbers,
+  initNexus,
 } from '../lib/canvasEffects'
 import { useTheme } from '../contexts/ThemeContext'
 import type { PatternKey } from '../lib/themes'
@@ -21,6 +22,7 @@ const CANVAS_EFFECTS: Partial<Record<PatternKey, EffectInit>> = {
   petals: initPetals,
   sparkles: initSparkles,
   embers: initEmbers,
+  nexus: initNexus,
 }
 
 /**

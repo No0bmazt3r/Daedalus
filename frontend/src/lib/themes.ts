@@ -12,7 +12,7 @@ export type DensityKey = 'compact' | 'comfortable' | 'spacious';
 export type UiScale = '100' | '125';
 export type PatternKey =
   | 'none' | 'dots' | 'synapse' | 'rain' | 'constellations'
-  | 'perlin-flow' | 'petals' | 'sparkles' | 'embers';
+  | 'perlin-flow' | 'petals' | 'sparkles' | 'embers' | 'nexus';
 export type HarmonyKey = 'complementary' | 'analogous' | 'triadic' | 'monochromatic';
 
 export interface ThemeColors {
@@ -103,6 +103,7 @@ export const PATTERN_OPTIONS: { value: PatternKey; label: string }[] = [
   { value: 'petals', label: 'Petals' },
   { value: 'sparkles', label: 'Sparkles' },
   { value: 'embers', label: 'Embers' },
+  { value: 'nexus', label: 'Nexus' },
 ];
 
 /** Patterns where the intensity / size sliders have nothing to act on. */
@@ -321,10 +322,10 @@ export const THEMES: Theme[] = [
 
 /** Default background effect per built-in theme. */
 export const THEME_DEFAULT_PATTERN: Record<string, PatternKey> = {
-  oled: 'none',
-  dark: 'none',
-  light: 'dots',
-  paper: 'dots',
+  oled: 'nexus',
+  dark: 'nexus',
+  light: 'nexus',
+  paper: 'nexus',
   midnight: 'rain',
   cyberpunk: 'synapse',
   retrowave: 'embers',
@@ -335,7 +336,7 @@ export const THEME_DEFAULT_PATTERN: Record<string, PatternKey> = {
   ume: 'petals',
   lavender: 'sparkles',
   copper: 'embers',
-  gpt: 'none',
+  gpt: 'nexus',
   cute: 'sparkles',
 };
 
@@ -365,6 +366,10 @@ export const THEME_DEFAULT_FROSTED: Record<string, boolean> = {
  * react with.
  */
 export const THEME_DEFAULT_REACTIVE: Record<string, boolean> = {
+  oled: true,
+  dark: true,
+  light: true,
+  paper: true,
   midnight: true,
   cyberpunk: true,
   retrowave: true,
@@ -375,6 +380,7 @@ export const THEME_DEFAULT_REACTIVE: Record<string, boolean> = {
   ume: true,
   lavender: true,
   copper: true,
+  gpt: true,
   cute: true,
 };
 
