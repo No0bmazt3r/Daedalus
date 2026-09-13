@@ -10,6 +10,7 @@ import {
   visibleGroups,
   type SettingsPanel,
 } from '../lib/settingsRegistry'
+import { ThemeSelect } from './ui/theme-select'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 
@@ -237,23 +238,13 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </div>
                 <div className={cardClass}>
                   <div className="flex flex-col gap-3">
-                    <label className="text-sm font-medium" htmlFor="default-model">
-                      Default Chat Model
-                    </label>
-                    <select
-                      id="default-model"
+                    <span className="text-sm font-medium">Default Chat Model</span>
+                    <ThemeSelect
                       value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      className={`w-full p-2.5 rounded-lg border theme-border theme-text outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors ${
-                        isPeek ? 'bg-black/40' : 'bg-black/20'
-                      }`}
-                    >
-                      {models.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setSelectedModel}
+                      ariaLabel="Default chat model"
+                      options={models.map((m) => ({ value: m, label: m }))}
+                    />
                     <p className="text-xs theme-text-muted mt-1">
                       This model will be selected by default for new conversations.
                     </p>

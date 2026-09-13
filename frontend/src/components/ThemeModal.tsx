@@ -41,6 +41,7 @@ import {
 import { useDraggable } from '../hooks/useDraggable'
 import { clearZoneHighlight } from '../lib/zoneHighlight'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
+import { ThemeSelect } from './ui/theme-select'
 
 interface ThemeModalProps {
   open: boolean
@@ -78,6 +79,9 @@ function Card({
   )
 }
 
+// Thin wrapper so the theme editor's call sites stay unchanged while the
+// rendering moves to ThemeSelect. A native select's option list is drawn by
+// the OS and ignores the palette entirely.
 function Select<T extends string>({
   value,
   onChange,
@@ -92,21 +96,15 @@ function Select<T extends string>({
   ariaLabel?: string
 }) {
   return (
-    <div className="flex flex-col gap-1 flex-1 min-w-0">
-      {label && <span className="text-[11px] theme-text-muted">{label}</span>}
-      <select
-        value={value}
-        aria-label={ariaLabel || label}
-        onChange={(e) => onChange(e.target.value as T)}
-        className="w-full bg-black/30 border theme-border rounded px-2 py-1.5 text-xs theme-text focus:outline-none focus:ring-1 focus:ring-[var(--primary)] cursor-pointer"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value} style={{ backgroundColor: 'var(--card)', color: 'var(--text-main)' }}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
+    <ThemeSelect
+      value={value}
+      onChange={onChange}
+      options={options}
+      label={label}
+      ariaLabel={ariaLabel}
+      size="sm"
+      className="flex-1"
+    />
   )
 }
 

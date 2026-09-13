@@ -41,6 +41,11 @@ def databases() -> dict[str, Any]:
                 "id": "sensor",
                 "label": "Sensor Telemetry",
                 "engine": "SQLite",
+                # SQLite is embedded — a file this process opens directly, with
+                # no server and no container of its own. Worth stating: seeing
+                # one container for four databases otherwise looks like three
+                # are missing.
+                "deployment": "embedded file",
                 "access": "read-only",
                 "purpose": "IoT device readings written by the SCADA ingestion subsystem.",
                 "path": str(paths.SENSOR_DB),
@@ -57,6 +62,7 @@ def databases() -> dict[str, Any]:
                 "id": "audit",
                 "label": "Audit & Evaluation Logs",
                 "engine": "SQLite",
+                "deployment": "embedded file",
                 "access": "read-write",
                 "purpose": "Chat, tool-call, retrieval, model, error, feedback and memory logs.",
                 "path": str(paths.AUDIT_DB),
@@ -68,6 +74,8 @@ def databases() -> dict[str, Any]:
                 "id": "vector",
                 "label": "Knowledge Vector Store",
                 "engine": "ChromaDB",
+                # The only store that runs as a server, hence the one container.
+                "deployment": "service" if vector["mode"] == "server" else "embedded file",
                 "access": "read-write",
                 "purpose": "Embedded SOP, manual, anomaly and UAUC chunks for RAG retrieval.",
                 "path": vector["target"],
@@ -84,6 +92,7 @@ def databases() -> dict[str, Any]:
                 "id": "prefs",
                 "label": "UI Preferences",
                 "engine": "SQLite",
+                "deployment": "embedded file",
                 "access": "read-write",
                 "purpose": "Theme and interface state, kept server-side instead of in the browser.",
                 "path": str(prefs_store.DB_PATH),

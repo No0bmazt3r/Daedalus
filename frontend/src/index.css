@@ -459,3 +459,14 @@ input[type='color']::-webkit-color-swatch {
   height: 0;
   display: none;
 }
+
+/* ── Popups opened from inside a floating window ──
+   Base UI portals dropdowns/menus to the end of <body> and gives the
+   positioner `z-index: 50`. The theme and settings windows sit at z-index 100,
+   so a dropdown opened inside one paints *behind* its own window — visible in
+   the DOM, invisible on screen. Lift the portal above them.
+   Scoped to the positioner (never the inert backdrop, which would then swallow
+   clicks meant for the window underneath). */
+[data-base-ui-portal] .isolate {
+  z-index: 200;
+}

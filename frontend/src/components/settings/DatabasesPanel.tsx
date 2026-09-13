@@ -6,6 +6,7 @@ interface DatabaseInfo {
   label: string
   engine: string
   access: string
+  deployment: string
   purpose: string
   path: string
   size_bytes: number | null
@@ -90,6 +91,11 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             Daedalus keeps its stores physically separate — a fault in ingestion or
             logging cannot reach the sensor data of record.
           </p>
+          <p className="text-xs theme-text-muted mt-2 opacity-75">
+            Only the vector store runs as a container. The SQLite stores are
+            embedded files the backend opens directly, so there is no server to
+            run for them.
+          </p>
         </div>
         <button
           onClick={() => void load()}
@@ -123,6 +129,16 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                   <span className="font-medium">{db.label}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded border theme-border theme-text-muted uppercase tracking-wide">
                     {db.engine}
+                  </span>
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded border theme-border theme-text-muted uppercase tracking-wide"
+                    title={
+                      db.deployment === 'service'
+                        ? 'Runs as its own container'
+                        : 'A file opened directly by the backend — no server process'
+                    }
+                  >
+                    {db.deployment}
                   </span>
                   {db.access === 'read-only' && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--primary)]/40 theme-primary uppercase tracking-wide flex items-center gap-1">
