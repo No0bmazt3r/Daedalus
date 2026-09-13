@@ -118,6 +118,9 @@ cmd_start() {
   [ ${#PROFILE_ARGS[@]} -gt 0 ] || check_ollama
   head_ "Starting Daedalus"
   compose "${PROFILE_ARGS[@]}" up -d "$@"
+  # Record that a build happened, so the staleness check in sync.sh knows the
+  # source has been through a build even when Docker served it from cache.
+  mark_build
   if wait_for_api; then
     ok "dashboard   http://localhost:${PORT}"
     ok "API docs    http://localhost:${PORT}/docs"

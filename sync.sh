@@ -218,12 +218,20 @@ head_ "Containers"
 # not have this problem — they reload from disk.
 if [ "$DOCKER_UP" -eq 0 ]; then
   info "not checked"
-elif stack_running; then
-  warn "the stack is running code from the image it was built with"
-  info "pulled changes reach it only after: ./daedalus.sh rebuild"
+elif ! stack_running; then
+  if image_is_stale; then
+    ok "stack is not running — rebuild before starting, or use ./daedalus.sh dev"
+    manual "./daedalus.sh rebuild   — the image predates your current code"
+  else
+    ok "stack is not running — the image is current"
+  fi
+elif image_is_stale; then
+  warn "the running image predates your current source"
+  info "the image bakes in the backend source and the built frontend, so it"
+  info "keeps serving the old code until rebuilt"
   manual "./daedalus.sh rebuild   — the image predates your current code"
 else
-  ok "stack is not running — it will pick up the new code when started"
+  ok "running, and the image matches your source"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

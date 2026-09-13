@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Database, HardDrive, Lock, RefreshCw, Sprout, AlertTriangle, Check } from 'lucide-react'
+import { Database, HardDrive, Lock, RefreshCw, Sprout, AlertTriangle, Check, Table2 } from 'lucide-react'
+import { RawLogModal } from './RawLogModal'
+
+// Stores the raw-row viewer will serve — mirrors BROWSABLE in
+// backend/app/services/log_browser.py. `prefs` is absent there because it
+// holds arbitrary UI values, and the endpoint store because it holds API keys.
+const BROWSABLE_STORES = new Set(['chat', 'audit'])
 
 interface DatabaseInfo {
   id: string
@@ -45,6 +51,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [seedResult, setSeedResult] = useState<string | null>(null)
+  const [rawStore, setRawStore] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -97,14 +104,23 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             run for them.
           </p>
         </div>
-        <button
-          onClick={() => void load()}
-          disabled={busy}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            onClick={() => setRawStore('chat')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+          >
+            <Table2 size={12} />
+            Browse rows
+          </button>
+          <button
+            onClick={() => void load()}
+            disabled={busy}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -152,7 +168,17 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                 </code>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0 text-xs">
+            <div className="flex items-center gap-2 shrink-0 text-xs">
+              {BROWSABLE_STORES.has(db.id) && db.available && (
+                <button
+                  onClick={() => setRawStore(db.id)}
+                  title={`View the raw rows in ${db.label}`}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                >
+                  <Table2 size={11} />
+                  Rows
+                </button>
+              )}
               <span
                 className={`w-2 h-2 rounded-full ${db.available ? 'theme-bg-primary' : 'bg-red-500'}`}
               />
@@ -207,6 +233,12 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
       {!databases && !error && (
         <div className="text-sm theme-text-muted">Loading store status…</div>
       )}
+
+      <RawLogModal
+        open={rawStore !== null}
+        initialStore={rawStore ?? undefined}
+        onClose={() => setRawStore(null)}
+      />
     </div>
   )
 }

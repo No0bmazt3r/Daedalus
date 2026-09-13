@@ -63,8 +63,12 @@ function panel(p: Omit<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords'> 
 /** Order here is the order rendered in the sidebar. */
 export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   panel({
-    id: 'services', label: 'Add Models', group: 'models', icon: Plus,
-    keywords: ['models', 'provider', 'endpoint', 'ollama', 'pull', 'download'],
+    id: 'services', label: 'Add Models', group: 'models', icon: Plus, implemented: true,
+    keywords: [
+      'models', 'provider', 'endpoint', 'api', 'key', 'cloud', 'openai',
+      'anthropic', 'deepseek', 'openrouter', 'groq', 'mistral', 'gemini',
+      'baseline', 'benchmark', 'ollama',
+    ],
   }),
   panel({
     id: 'added-models', label: 'Added Models', group: 'models', icon: List,
@@ -81,7 +85,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
 
   panel({
     id: 'databases', label: 'Databases', group: 'data', icon: Database, implemented: true,
-    keywords: ['database', 'db', 'sqlite', 'chroma', 'vector', 'sensor', 'audit', 'logs', 'storage', 'health'],
+    keywords: ['database', 'db', 'sqlite', 'chroma', 'vector', 'sensor', 'audit', 'logs', 'storage', 'health', 'rows', 'raw', 'browse', 'table', 'inspect'],
   }),
   panel({
     id: 'knowledge', label: 'Knowledge Base', group: 'data', icon: Search,

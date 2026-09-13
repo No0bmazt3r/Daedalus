@@ -163,6 +163,9 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] Collapsible tool-call trace (Thought → Action → Observation)
 - [ ] Graph visualiser for GraphRAG traversal paths
 - [ ] Hardware/model panel in settings
+- [ ] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet
+- [ ] "Added Models" panel — list local Ollama models alongside the cloud baselines
+- [ ] Let the raw browser filter by `session_id` / `query_id`, so one conversation's rows can be isolated
 - [x] Sidebar driven by `GET /api/sessions` — select, inline rename, delete, filter
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
 - [x] User messages persisted through `POST /api/sessions/{id}/messages`
@@ -202,6 +205,9 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] `sync.sh` — post-pull recovery: dependencies, `.env` backfill, migrations, integrity check, orphan detection, with `--check` dry run
 - [x] `reset.sh` — snapshot, wipe and rebuild the databases; sensor excluded by default and double-confirmed; refuses while the stack holds the files open
 - [x] `scripts/common.sh` — one copy of the output helpers, `.env` backfill, compose shim and path handling for all three scripts
+- [x] Raw store browser — `GET /api/logs/...` + Settings → Databases → **Browse rows**; allowlisted, read-only, secrets unreachable
+- [x] Cloud model endpoints — Settings → **Add Models**: provider catalogue, base URL + key, connection test, masked key hints. Rule 1 enforced by a `CHECK (purpose = 'benchmark')` constraint
+- [x] Settings shell responds to its **container** width — below 620px the rail goes horizontal and resize/collapse withdraw (Odysseus' `isDesktopSidebarMode`)
 - [x] `docs/SCRIPTS.md` — every script, subcommand, flag and exit code, and the reasoning behind each safeguard
 - [x] `ACKNOWLEDGMENTS.md` — credits Odysseus (PewDiePie) for the theme/settings/prefs design, and records **why this is not a fork**: Odysseus is AGPL-3.0, Daedalus is MIT, and no Odysseus code is present
 - [x] **Host/container path mapping** — `.env` holds container paths, so `daedalus.sh dev` was pointing the dev server at `backend/data/` while Docker wrote to `data/` and `logs/`. Host-side commands now map them, so both see the same files
@@ -218,7 +224,8 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
-- [ ] Settings panels other than AI Defaults, Databases and Shortcuts are still placeholders
+- [ ] Settings panels other than AI Defaults, Add Models, Databases and Shortcuts are still placeholders
+- [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
 
 ---
 

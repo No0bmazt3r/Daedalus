@@ -134,7 +134,7 @@ It runs eight checks in order:
 | 5 | **Database schema** | A pulled migration has not been applied |
 | 6 | **Database integrity** | `PRAGMA quick_check` on every store |
 | 7 | **Orphaned databases** | Stale copies under `backend/data/` from before the host-path fix |
-| 8 | **Containers** | A running stack is serving pre-pull code |
+| 8 | **Containers** | The built image is older than your source |
 
 **Section 2 is the one that earns its keep.** `.env` is git-ignored, so a pull
 never updates it. When someone adds a setting, your app silently falls back to
@@ -146,6 +146,15 @@ machine.
 **Section 5 is the one that matters most after a pull.** A teammate's
 migration arrives as a file, and until it runs, the code and the database
 disagree about the shape of the data.
+
+**Section 8** compares source mtimes under `backend/app`, `frontend/src` and
+the dependency manifests against the *later* of the image's creation date and
+`.daedalus-build-stamp`. The stamp is what makes it correct: Docker keys its
+COPY layers on file **content**, so rebuilding after a whitespace-only edit is
+a full cache hit that returns the existing image with its original date — an
+mtime comparison alone would then say "stale" forever. `daedalus.sh start` and
+`rebuild` touch the stamp on success. A check that cannot tell (no image, no
+Docker) stays quiet rather than guessing.
 
 **Section 7** is a one-off: before `scripts/common.sh` mapped host paths,
 `daedalus.sh dev` inherited the container paths from `.env` and `paths.py`
@@ -291,6 +300,8 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 | `wait_for_api [port]` | Poll `/api/health` for 60s |
 | `check_ollama` | Warn, never fail — only inference needs it |
 | `stack_running` | Is the app container up? |
+| `image_is_stale` | Is any source file newer than the last successful build? |
+| `mark_build` | Touch `.daedalus-build-stamp` after a successful build |
 
 ---
 

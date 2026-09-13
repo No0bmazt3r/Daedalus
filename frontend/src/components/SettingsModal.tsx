@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Ghost, CircleDashed, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { useDraggable } from '../hooks/useDraggable'
-import { useResizableSidebar, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '../hooks/useResizableSidebar'
+import {
+  useResizableSidebar,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_DESKTOP_MIN_CONTAINER,
+} from '../hooks/useResizableSidebar'
+import { useElementWidth } from '../hooks/useElementWidth'
 import { useSettings } from '../contexts/SettingsContext'
 import {
   DEFAULT_SETTINGS_PANEL_ID,
@@ -13,6 +19,7 @@ import {
 import { ThemeSelect } from './ui/theme-select'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
+import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
 
 interface SettingsModalProps {
   open: boolean
@@ -31,7 +38,18 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   // Derived, not state: it only ever depends on `open`, so an effect would
   // just add a render pass and a frame where the window has no position.
   const { position, onMouseDown, handleRef, windowRef } = useDraggable()
-  const sidebar = useResizableSidebar()
+
+  // The window is draggable and resizable, so its content can be narrow on a
+  // wide screen — a viewport media query would be measuring the wrong thing.
+  // Below the breakpoint the vertical rail becomes a horizontal strip, and
+  // dragging and collapsing stop being offered because they no longer mean
+  // anything. This is Odysseus' `isDesktopSidebarMode`, same 620px threshold.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const bodyWidth = useElementWidth(bodyRef)
+  // `0` means "not measured yet"; assume desktop so the compact layout never
+  // flashes on the first frame.
+  const isCompact = bodyWidth > 0 && bodyWidth < SIDEBAR_DESKTOP_MIN_CONTAINER
+  const sidebar = useResizableSidebar({ enabled: !isCompact })
 
   // Admin panels are hidden until there's an auth layer to decide this.
   const isAdmin = true
@@ -145,19 +163,21 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden min-h-0">
-          {/* Navigation rail */}
+        <div ref={bodyRef} className={`flex flex-1 overflow-hidden min-h-0 ${isCompact ? 'flex-col' : ''}`}>
+          {/* Navigation rail. Vertical and resizable when there is room;
+              a horizontal scrolling strip when there is not. */}
           <div
-            className={`relative border-r theme-border flex flex-col shrink-0 ${
-              isPeek ? '' : 'bg-black/5'
-            }`}
+            className={`relative theme-border flex shrink-0 ${
+              isCompact ? 'flex-row items-center border-b overflow-x-auto no-scrollbar' : 'flex-col border-r'
+            } ${isPeek ? '' : 'bg-black/5'}`}
             style={{
-              width: sidebar.width,
+              width: isCompact ? '100%' : sidebar.width,
               // Animate only when not dragging, or the rail lags the pointer.
               transition: sidebar.isResizing ? 'none' : 'width 200ms ease',
               backgroundColor: isPeek ? 'transparent' : undefined,
             }}
           >
+            {!isCompact && (
             <div
               className={`flex px-2 pt-2 pb-1 shrink-0 ${
                 sidebar.collapsed ? 'justify-center' : 'justify-end'
@@ -173,28 +193,41 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {sidebar.collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
               </button>
             </div>
+            )}
 
-            <SettingsSearch
-              isAdmin={isAdmin}
-              onOpenPanel={openPanel}
-              collapsed={sidebar.collapsed}
-            />
+            {!isCompact && (
+              <SettingsSearch
+                isAdmin={isAdmin}
+                onOpenPanel={openPanel}
+                collapsed={sidebar.collapsed}
+              />
+            )}
 
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-2">
+            <div
+              className={
+                isCompact
+                  ? 'flex flex-row items-center gap-1 px-2 py-1.5'
+                  : 'flex-1 overflow-y-auto no-scrollbar pb-2'
+              }
+            >
               {groups.map((group) => (
-                <div key={group.id}>
-                  {!sidebar.collapsed && (
+                <div key={group.id} className={isCompact ? 'flex flex-row items-center gap-1' : ''}>
+                  {!sidebar.collapsed && !isCompact && (
                     <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider theme-text-muted opacity-70">
                       {group.label}
                     </div>
                   )}
-                  {sidebar.collapsed && <div className="mx-3 my-2 border-t theme-border" />}
+                  {sidebar.collapsed && !isCompact && <div className="mx-3 my-2 border-t theme-border" />}
+                  {/* Groups keep their identity in the strip as a divider —
+                      a flat run of 15 buttons is unreadable. */}
+                  {isCompact && <div className="h-5 w-px shrink-0 theme-border border-l mx-1 first:hidden" />}
                   {panelsForGroup(group.id, isAdmin).map((panel) => (
                     <NavButton
                       key={panel.id}
                       panel={panel}
                       active={activeTab === panel.id}
-                      collapsed={sidebar.collapsed}
+                      collapsed={sidebar.collapsed && !isCompact}
+                      horizontal={isCompact}
                       onSelect={() => setActiveTab(panel.id)}
                     />
                   ))}
@@ -203,25 +236,28 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
 
             {/* Drag-to-resize separator. Keyboard accessible: Enter/Space
-                toggles collapse, arrows resize in 16px steps. */}
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize settings navigation"
-              aria-valuemin={SIDEBAR_MIN_WIDTH}
-              aria-valuemax={SIDEBAR_MAX_WIDTH}
-              aria-valuenow={Math.round(sidebar.width)}
-              tabIndex={0}
-              onPointerDown={sidebar.onResizeStart}
-              onKeyDown={sidebar.onResizeKeyDown}
-              className={`absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-10 transition-colors focus:outline-none focus-visible:bg-[var(--primary)] hover:bg-[color-mix(in_srgb,var(--primary)_50%,transparent)] ${
-                sidebar.isResizing ? 'bg-[var(--primary)]' : 'bg-transparent'
-              }`}
-            />
+                toggles collapse, arrows resize in 16px steps. Absent in the
+                horizontal layout, where there is no width to drag. */}
+            {!isCompact && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize settings navigation"
+                aria-valuemin={SIDEBAR_MIN_WIDTH}
+                aria-valuemax={SIDEBAR_MAX_WIDTH}
+                aria-valuenow={Math.round(sidebar.width ?? SIDEBAR_MIN_WIDTH)}
+                tabIndex={0}
+                onPointerDown={sidebar.onResizeStart}
+                onKeyDown={sidebar.onResizeKeyDown}
+                className={`absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-10 transition-colors focus:outline-none focus-visible:bg-[var(--primary)] hover:bg-[color-mix(in_srgb,var(--primary)_50%,transparent)] ${
+                  sidebar.isResizing ? 'bg-[var(--primary)]' : 'bg-transparent'
+                }`}
+              />
+            )}
           </div>
 
           {/* Panel area */}
-          <div className="@container flex-1 overflow-y-auto no-scrollbar p-8 bg-transparent min-w-0">
+          <div className={`@container flex-1 overflow-y-auto no-scrollbar bg-transparent min-w-0 ${isCompact ? 'p-5' : 'p-8'}`}>
             {/* One measure for every panel. It grows with the window up to a
                 readable limit, then centres — stretching a settings form to
                 full width would just make a 1300px-wide select, which is
@@ -252,6 +288,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </div>
               </div>
             )}
+
+            {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
 
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 
@@ -346,14 +384,39 @@ function NavButton({
   panel,
   active,
   collapsed,
+  horizontal = false,
   onSelect,
 }: {
   panel: SettingsPanel
   active: boolean
   collapsed: boolean
+  /** Compact layout: a chip in a scrolling strip rather than a list row. */
+  horizontal?: boolean
   onSelect: () => void
 }) {
   const Icon = panel.icon
+
+  if (horizontal) {
+    return (
+      <button
+        onClick={onSelect}
+        aria-current={active ? 'page' : undefined}
+        title={panel.label}
+        className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+          active
+            ? 'bg-black/25 theme-text font-medium'
+            : 'theme-text-muted hover:bg-black/10 hover:theme-text'
+        }`}
+      >
+        <Icon size={14} className="shrink-0" />
+        <span className="whitespace-nowrap">{panel.label}</span>
+        {!panel.implemented && (
+          <span className="w-1 h-1 rounded-full bg-current opacity-30" title="Not built yet" />
+        )}
+      </button>
+    )
+  }
+
   return (
     <button
       onClick={onSelect}

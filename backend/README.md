@@ -121,6 +121,14 @@ surely as an INSERT would.
 | `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages. Audit rows survive |
 | `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
 | `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
+| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts |
+| `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
+| `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
+| `GET` | `/api/providers` | Configured benchmark endpoints (keys masked) |
+| `POST` | `/api/providers` | Add one |
+| `PATCH` | `/api/providers/{id}` | Rename, re-key, enable/disable |
+| `POST` | `/api/providers/{id}/test` | Connection test against `{base_url}/models` |
+| `DELETE` | `/api/providers/{id}` | Remove one |
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
@@ -138,5 +146,27 @@ back as fact. Assistant turns are written by the orchestrator through
 This is also why the transcript lives on the server rather than being posted
 back by the browser each turn: client-held history is a client-controlled
 input to the prompt.
+
+### Cloud endpoints are benchmark-only, and the schema says so
+
+`/api/providers` configures cloud models for the **offline evaluation
+baseline** — Rule 1 keeps them out of the live query path. That is not a
+convention this router happens to follow; `model_endpoints.purpose` carries
+`CHECK (purpose = 'benchmark')`, so a runtime-purposed row cannot be written
+even by a future handler that tried. Nothing in the chat path imports
+`services/model_endpoints.py`.
+
+API keys are write-only over HTTP. They go in through `POST`/`PATCH` and come
+back only as a masked hint; `EndpointOut` has no `api_key` field, and the raw
+log browser does not list that table.
+
+### The raw log browser cannot reach everything
+
+`/api/logs` serves an allowlist (`chat`, `audit`), opens every connection
+`mode=ro`, and caps a page at 1000 rows. `prefs` is excluded because it holds
+arbitrary UI values, `model_endpoints` because it holds credentials, and
+`sqlite_master` because it is not on the list at all. Unknown names 404 rather
+than 403 — whether some other table exists is not something this should
+confirm.
 
 Interactive docs while running: <http://localhost:8000/docs>

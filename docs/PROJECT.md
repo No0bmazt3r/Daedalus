@@ -136,6 +136,13 @@ No cloud APIs in the live runtime.
 hosted embedding APIs, Hugging Face inference, cloud logging/dashboards.
 **Allowed:** cloud LLMs strictly as offline evaluation baselines.
 
+**How the boundary is held in code:** cloud credentials *are* configurable —
+the evaluation chapter needs reference models — but only as benchmark
+endpoints. `model_endpoints.purpose` carries `CHECK (purpose = 'benchmark')`,
+so a row describing a cloud model for runtime use cannot be stored, and no
+module on the chat path imports the service that reads them. The rule is
+structural rather than remembered, exactly like Rule 2's `mode=ro`.
+
 ### Rule 2 — The AI layer is read-only toward the plant
 It may read the sensor SQLite DB and its own knowledge stores. It may **never**
 write to SCADA, actuators, ABVs, sensor hardware, or a teammate's subsystem.

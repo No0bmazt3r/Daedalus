@@ -46,6 +46,12 @@ to it.
 | `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages — audit rows survive |
 | `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
 | `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
+| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts |
+| `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
+| `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
+| `GET`/`POST` | `/api/providers` | List / add a benchmark endpoint |
+| `PATCH`/`DELETE` | `/api/providers/{id}` | Edit or remove one |
+| `POST` | `/api/providers/{id}/test` | Connection test — the only outbound call |
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
@@ -201,6 +207,55 @@ target directly. The first two reduce how often it arises.
 orchestrator can fold them into the rolling summary **after** responding.
 Summarisation is another inference call; doing it inline would spend the
 latency budget the <3s target is measured against.
+
+### Raw store browser — `services/log_browser.py`
+
+Backs Settings → Databases → **Browse rows**: a popup showing what is actually
+in the stores right now. `trace(query_id)` proves one response was grounded;
+this shows everything that has been recorded.
+
+Three properties, all verified:
+
+| Property | How |
+|---|---|
+| Allowlist, not reflection | A store and table are checked against `BROWSABLE` before any SQL is built, so no caller string reaches a query. `sqlite_master` and `prefs` return 404 |
+| Read-only | Every connection is opened `mode=ro`; the driver refuses writes |
+| Secrets unreachable | `model_endpoints` is absent from `BROWSABLE` entirely, and `REDACTED_COLUMNS` masks credential-shaped columns as a second line |
+
+Rows are ordered by `rowid`, not a timestamp column — every table has one, it is
+always insertion order, and same-second rows would otherwise be arbitrary.
+Cells over 4000 characters are truncated with a count, so one large transcript
+cannot push megabytes into the browser.
+
+### Cloud model endpoints — `services/model_endpoints.py`
+
+Settings → **Add Models**. Configures OpenAI, Anthropic, DeepSeek, OpenRouter,
+Groq, Mistral, Together, Gemini or any OpenAI-compatible URL.
+
+**These are benchmark baselines, not runtime models.** Rule 1 forbids cloud
+APIs in the live query path and permits them as offline evaluation references
+(§5's comparison needs a ceiling; §2.2 #7 adds LLM-as-a-judge over exported
+logs). The rule is enforced by the schema, not by intent:
+
+```sql
+purpose TEXT NOT NULL DEFAULT 'benchmark' CHECK (purpose = 'benchmark')
+```
+
+**Verified:** inserting a row with `purpose='runtime'` raises
+`CHECK constraint failed: purpose = 'benchmark'`.
+
+The key is write-only over HTTP. It goes in through `POST`/`PATCH` and comes
+back only as `key_hint` (`sk-…9f4a`); `EndpointOut` has no `api_key` field at
+all, so a future handler cannot leak it by returning the wrong dict.
+`store.secret_for()` is the single named accessor that returns the real value.
+
+`test_endpoint()` calls `GET {base_url}/models` — the OpenAI-compatible
+convention, costs nothing, and answers both questions a user has (is the URL
+right, is the key accepted) without spending tokens. **A failed test is a 200
+with `last_test_ok: false`**, not an HTTP error: the request succeeded, and
+"your key was rejected" is its finding. Every failure mode maps to a sentence
+that says what to fix — a rejected key and an unreachable host must not read
+the same.
 
 ### Schema migrations — `db/migrations.py`
 
@@ -379,7 +434,22 @@ Paths are relative to `frontend/src/`.
 | `components/SettingsModal.tsx` | Settings shell |
 | `components/Sidebar.tsx` | Chat list from `GET /api/sessions` — select, inline rename, delete, filter |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
-| `components/settings/` | `SettingsSearch`, `DatabasesPanel` |
+| `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
+| `lib/systemClient.ts` | Log-browser and provider API client |
+| `components/settings/` | `SettingsSearch`, `DatabasesPanel`, `RawLogModal`, `ModelEndpointsPanel` |
+
+### The settings shell resizes on its *container*, not the viewport
+
+The Settings window is draggable and resizable, so its content can be narrow on
+a wide screen — a viewport media query measures the wrong thing. `useElementWidth`
+observes the shell body, and below **620px** the vertical rail becomes a
+horizontal scrolling strip of chips, with drag-resize and collapse withdrawn
+because neither means anything in that layout.
+
+That threshold and that behaviour are Odysseus' `isDesktopSidebarMode`, which
+gates the same thing at the same width. The stored width and collapsed flag are
+left untouched while compact, so widening the window restores exactly what the
+user had set.
 
 ### Conversation state is server-owned
 
@@ -442,6 +512,8 @@ therefore tracked with `.gitkeep`.
 | Session API | Every endpoint exercised, including 404/413/422 paths and a rejected forged `assistant` role |
 | Frontend build | `tsc -b` and `vite build` clean; session round-trip verified against a live dev server |
 | Scripts | `sync.sh --check`/apply, `reset.sh` refusal while the stack is up, WAL-sidecar deletion, host-path resolution |
+| Log browser | Allowlist verified: `sqlite_master`, `prefs` and `model_endpoints` all 404. Paging, ordering and the 1000-row cap exercised |
+| Model endpoints | Key absent from every response; duplicate URL 409; bad URL 422; unreachable-host and rejected-key paths produce distinct messages; a new key clears the cached verdict; `purpose='runtime'` refused by the schema |
 | Backend | **No automated tests.** Verified by direct API calls |
 
 The absence of an automated test suite on both sides is the biggest gap.

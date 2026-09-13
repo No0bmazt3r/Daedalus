@@ -216,3 +216,46 @@ check_ollama() {
 stack_running() {
   compose ps --status running 2>/dev/null | grep -q daedalus
 }
+
+# Touched after every successful build, and compared against source mtimes.
+BUILD_STAMP=".daedalus-build-stamp"
+
+mark_build() { touch "$BUILD_STAMP" 2>/dev/null || true; }
+
+# image_is_stale — true when source files are newer than the last build.
+#
+# The image bakes in the backend source and the built frontend, so a running
+# stack serves whatever it was built with. This answers "would rebuilding
+# actually change anything?" — far more useful than warning on every run just
+# because the stack happens to be up.
+#
+# The reference time is the *later* of the image's creation date and our own
+# build stamp, and the stamp is what makes this correct. Docker keys its COPY
+# layers on file **content**, so a rebuild after a whitespace-only change is a
+# full cache hit: it returns the existing image, with its original Created
+# date, and an mtime comparison alone would then report "stale" forever.
+# Touching the stamp on a successful build records "you have rebuilt since
+# these edits", which is the question actually being asked.
+#
+# Unknown (no image, no docker, unparseable date) is reported as *not* stale:
+# a check that cannot tell should stay quiet rather than cry wolf.
+image_is_stale() {
+  have docker || return 1
+
+  local created epoch stamp newest
+  created=$(docker image inspect daedalus:latest --format '{{.Created}}' 2>/dev/null) || return 1
+  [ -n "$created" ] || return 1
+
+  epoch=$(date -d "$created" +%s 2>/dev/null) || return 1
+
+  if [ -f "$BUILD_STAMP" ]; then
+    stamp=$(stat -c %Y "$BUILD_STAMP" 2>/dev/null || echo 0)
+    [ "$stamp" -gt "$epoch" ] && epoch="$stamp"
+  fi
+
+  # Newest mtime across everything the Dockerfile copies in.
+  newest=$(find backend/app frontend/src frontend/package.json frontend/index.html \
+             backend/requirements.txt -type f -newermt "@$epoch" -print -quit 2>/dev/null)
+
+  [ -n "$newest" ]
+}

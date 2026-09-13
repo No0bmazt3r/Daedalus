@@ -8,3 +8,9 @@ uvicorn[standard]>=0.30
 # uses. For embedded mode (no CHROMA_URL), install `chromadb` instead.
 # Either package satisfies the lazy import in app/db/vector_store.py.
 chromadb-client>=0.5
+
+# HTTP client for the connection test in app/services/model_endpoints.py.
+# It arrives transitively via chromadb-client, but this module imports it
+# directly and a transitive dependency is not a contract — a Chroma release
+# that dropped it would break the Settings panel with a confusing error.
+httpx>=0.27

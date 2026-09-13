@@ -14,6 +14,14 @@ export const SIDEBAR_MAX_WIDTH = 340;
 export const SIDEBAR_COLLAPSE_THRESHOLD = 110;
 export const SIDEBAR_COLLAPSED_WIDTH = 60;
 
+/**
+ * Below this container width the rail stops being a vertical sidebar and
+ * becomes a horizontal strip, so dragging and collapsing no longer mean
+ * anything. Ported from Odysseus' `isDesktopSidebarMode`, which gates the same
+ * behaviour on the same 620px content width.
+ */
+export const SIDEBAR_DESKTOP_MIN_CONTAINER = 620;
+
 interface SidebarState {
   width: number;
   collapsed: boolean;
@@ -25,7 +33,11 @@ function clampWidth(value: unknown): number {
   return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, width));
 }
 
-export function useResizableSidebar() {
+export function useResizableSidebar(options: { enabled?: boolean } = {}) {
+  // `enabled` is false when the shell has collapsed to its horizontal layout.
+  // Defaults to true so a caller that never measures keeps the old behaviour.
+  const enabled = options.enabled ?? true;
+
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [collapsed, setCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -82,10 +94,10 @@ export function useResizableSidebar() {
     [persist, width]
   );
 
-  const toggleCollapsed = useCallback(
-    () => applyCollapsed(!collapsed),
-    [applyCollapsed, collapsed]
-  );
+  const toggleCollapsed = useCallback(() => {
+    if (!enabled) return;
+    applyCollapsed(!collapsed);
+  }, [applyCollapsed, collapsed, enabled]);
 
   // Pointer drag. Listeners live on the window so the pointer can leave the
   // handle mid-drag without the resize sticking.
@@ -131,6 +143,7 @@ export function useResizableSidebar() {
 
   const onResizeStart = useCallback(
     (e: React.PointerEvent) => {
+      if (!enabled) return;
       e.preventDefault();
       drag.current = { startX: e.clientX, startWidth: width };
       setIsResizing(true);
@@ -138,12 +151,13 @@ export function useResizableSidebar() {
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
     },
-    [width]
+    [enabled, width]
   );
 
   /** Keyboard access on the separator: Enter/Space toggles, arrows resize. */
   const onResizeKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (!enabled) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         toggleCollapsed();
@@ -165,14 +179,18 @@ export function useResizableSidebar() {
       }
       applyWidth(width + (e.key === 'ArrowLeft' ? -16 : 16));
     },
-    [applyCollapsed, applyWidth, collapsed, toggleCollapsed, width]
+    [applyCollapsed, applyWidth, collapsed, enabled, toggleCollapsed, width]
   );
 
   return {
-    width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : width,
+    enabled,
+    // Reported collapsed only in the layout where collapsing exists. The
+    // stored value is untouched, so switching back to a wide window restores
+    // whatever the user had set.
+    width: !enabled ? undefined : collapsed ? SIDEBAR_COLLAPSED_WIDTH : width,
     rawWidth: width,
-    collapsed,
-    isResizing,
+    collapsed: enabled ? collapsed : false,
+    isResizing: enabled && isResizing,
     toggleCollapsed,
     onResizeStart,
     onResizeKeyDown,

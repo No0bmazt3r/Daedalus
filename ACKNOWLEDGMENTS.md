@@ -25,6 +25,8 @@ presentation layer. Two subsystems were modelled on it:
 | Theme engine (`frontend/src/lib/themes.ts`) | The *idea* and UX of live, per-zone colour customisation with derived ramps and import/export; a handful of CSS custom-property names (`--bg`, `--border`, `--sidebar`) |
 | Settings shell (`components/SettingsModal.tsx`, `lib/settingsRegistry.ts`) | The interaction design — a panel registry, keyword search with keyboard navigation, and a drag-resizable collapsible rail |
 | Preference API (`backend/app/api/prefs.py`, `lib/prefsClient.ts`) | The route contract: `GET`/`PUT /api/prefs/<key>` with a `{"value": …}` envelope |
+| Settings responsiveness (`hooks/useResizableSidebar.ts`) | `isDesktopSidebarMode` — the 620px container threshold below which the rail goes horizontal and resize/collapse are withdrawn |
+| Cloud endpoints (`services/model_endpoints.py`) | The shape of the feature — provider catalogue, base URL + key, a Test action against `/models`. Odysseus' own implementation (`src/llm_core.py`, `core/database.py:ModelEndpoint`) is far broader; Daedalus stores benchmark credentials only |
 
 ### This is not a fork, and the distinction is deliberate
 

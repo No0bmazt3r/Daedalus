@@ -48,5 +48,8 @@ __pycache__/
 # Database snapshots from `./daedalus.sh migrate backup`
 backups/
 
+# Records when the container image was last built — see scripts/common.sh
+.daedalus-build-stamp
+
 # Vite cache
 .vite
