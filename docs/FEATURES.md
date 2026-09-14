@@ -89,7 +89,10 @@ This endpoint emits the saved palette as a render-blocking stylesheet that
 It interpolates stored values into CSS, so it **only** emits exact `#rrggbb`
 matches and known enum values. Verified: a payload with
 `"bg": "red; } body { display:none } :root{ "` and
-`"font": "</style><script>…"` has all hostile fields dropped.
+`"font": "</style><script>…"` has all hostile fields dropped. `font` is never
+interpolated at all — the stored value only ever selects a row of
+`_FONT_STACKS`, and anything that isn't a key falls through to the default
+face, so the emitted stylesheet is bounded by that table.
 
 ---
 

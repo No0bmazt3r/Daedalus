@@ -72,6 +72,8 @@ The stack itself, each under its own permissive licence:
 | [React](https://react.dev/) · [Vite](https://vite.dev/) · [TanStack Router](https://tanstack.com/router) | Dashboard (Layer 9B) | MIT |
 | [Tailwind CSS](https://tailwindcss.com/) · [shadcn/ui](https://ui.shadcn.com/) · [Base UI](https://base-ui.com/) | Styling and primitives | MIT |
 | [Lucide](https://lucide.dev/) | Icons | ISC |
+| [Monocraft](https://github.com/IdreesInc/Monocraft) | The Minecraft typeface — the UI's default face, bundled at `frontend/src/assets/fonts/` | SIL OFL 1.1 |
+| [Geist](https://vercel.com/font) · [OpenDyslexic](https://opendyslexic.org/) | Alternative faces in the Font selector | SIL OFL 1.1 |
 
 The CO₂ sorption reactor, its SCADA layer and the ingestion and anomaly
 subsystems are the work of the wider project team; Daedalus reads from them

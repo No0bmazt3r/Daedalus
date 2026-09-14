@@ -56,11 +56,22 @@ _COLOR_VARS = {
 }
 
 _FONT_STACKS = {
+    # Monocraft — the Minecraft face, bundled with the UI. Kept in step with
+    # FONT_MAP in frontend/src/lib/themes.ts; both render the same selector.
+    "minecraft": "'Monocraft', ui-monospace, SFMono-Regular, Menlo, monospace",
     "sans": "'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif",
     "mono": "'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace",
     "serif": "Georgia, 'Times New Roman', serif",
     "opendyslexic": "'OpenDyslexic', 'Comic Sans MS', sans-serif",
 }
+
+# What a machine with no saved theme paints on its first frame — matches
+# DEFAULT_FONT in themes.ts, so the boot does not flash a different face.
+_DEFAULT_FONT = "minecraft"
+
+# Monocraft is a bitmap face and wants antialiasing off. themes.ts applies the
+# same rule through .font-pixel once React boots; this is the first-frame copy.
+_PIXEL_FONTS = {"minecraft"}
 
 _DENSITY_FONT_SIZE = {"compact": "14px", "spacious": "17px"}
 
@@ -88,10 +99,14 @@ def theme_css() -> Response:
             if isinstance(value, str) and _HEX.match(value):
                 lines.append(f"  {var}: {value};")
 
-    if isinstance(theme, dict):
-        font = _FONT_STACKS.get(theme.get("font"))
-        if font:
-            lines.append(f"  --font-family: {font};")
+    font_key = theme.get("font") if isinstance(theme, dict) else None
+    # Only ever an exact key from the table below — never interpolated raw.
+    if not isinstance(font_key, str) or font_key not in _FONT_STACKS:
+        font_key = _DEFAULT_FONT
+    lines.append(f"  --font-family: {_FONT_STACKS[font_key]};")
+    if font_key in _PIXEL_FONTS:
+        lines.append("  -webkit-font-smoothing: none;")
+        lines.append("  font-smooth: never;")
 
     root = ":root {\n" + "\n".join(lines) + "\n}" if lines else ""
 

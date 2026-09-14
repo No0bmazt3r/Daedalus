@@ -3,6 +3,39 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* ── Monocraft — the Minecraft typeface, and the app's default face ─────────
+   Self-hosted rather than pulled from a font CDN: rule 1 of the project is
+   that the runtime never reaches the network, and that has to hold for
+   typography too, or the UI degrades to a fallback face when the machine is
+   offline. Vite fingerprints these into /assets, which the backend caches hard.
+
+   Monocraft by Idrees Hassan — SIL OFL 1.1.
+   Full text: ./assets/fonts/Monocraft-LICENSE.txt
+   ────────────────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Monocraft';
+  src: url('./assets/fonts/Monocraft-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+/* Declared as ranges so Tailwind's font-medium (500) and font-extrabold (800)
+   land on a real cut instead of a synthesised one. */
+@font-face {
+  font-family: 'Monocraft';
+  src: url('./assets/fonts/Monocraft-SemiBold.woff2') format('woff2');
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Monocraft';
+  src: url('./assets/fonts/Monocraft-Bold.woff2') format('woff2');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme {
@@ -30,8 +63,13 @@
 }
 
 @theme inline {
+  /* All three chain through --font-family, the variable the Font selector
+     writes, so a font-sans/font-mono/font-heading utility follows the user's
+     choice instead of pinning one face over it. With nothing selected they
+     fall back to --font-base, which is Monocraft. */
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: var(--font-family, var(--font-base));
+  --font-mono: var(--font-family, var(--font-base));
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -197,12 +235,27 @@
 :root {
   --bg-effect-intensity: 1;
   --bg-effect-size: 1;
+
+  /* The face everything falls back to before the saved theme lands. */
+  --font-base: 'Monocraft', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* The Font selector writes --font-family; sitting outside @layer base keeps
    it ahead of the `html { @apply font-sans }` default. */
 html {
-  font-family: var(--font-family, var(--font-sans));
+  font-family: var(--font-family, var(--font-base));
+}
+
+/* Monocraft is a bitmap face: its glyphs are drawn on a whole-pixel grid, so
+   greyscale antialiasing only blurs edges that are already aligned. Turning it
+   off is what makes the text read as pixels rather than as a blurry small
+   font. Scoped to a class themes.ts toggles, because the alternative faces —
+   OpenDyslexic in particular — very much do want smoothing. */
+:root.font-pixel,
+:root.font-pixel body {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
 }
 
 /* ── Density ── */

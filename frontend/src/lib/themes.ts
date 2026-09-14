@@ -7,7 +7,7 @@
 // border / primary / text / textMuted) because the React components already
 // bind to those CSS variables.
 
-export type FontKey = 'sans' | 'mono' | 'serif' | 'opendyslexic';
+export type FontKey = 'minecraft' | 'sans' | 'mono' | 'serif' | 'opendyslexic';
 export type DensityKey = 'compact' | 'comfortable' | 'spacious';
 export type UiScale = '100' | '125';
 export type PatternKey =
@@ -61,7 +61,7 @@ export interface ThemeState {
 }
 
 export const DEFAULT_THEME_ID = 'oled';
-export const DEFAULT_FONT: FontKey = 'sans';
+export const DEFAULT_FONT: FontKey = 'minecraft';
 export const DEFAULT_DENSITY: DensityKey = 'comfortable';
 export const DEFAULT_UI_SCALE: UiScale = '100';
 export const MAX_CUSTOM_THEMES = 8;
@@ -69,6 +69,10 @@ export const MAX_CUSTOM_THEMES = 8;
 export const THEME_CHANGE_EVENT = 'daedalus-theme-change';
 
 export const FONT_MAP: Record<FontKey, string> = {
+  // Monocraft, bundled at src/assets/fonts and declared in index.css. It is
+  // monospaced, so the fallbacks are too — a proportional fallback would
+  // re-flow every table and log view if the woff2 ever failed to load.
+  minecraft: "'Monocraft', ui-monospace, SFMono-Regular, Menlo, monospace",
   sans: "'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif",
   mono: "'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace",
   serif: "Georgia, 'Times New Roman', serif",
@@ -76,6 +80,7 @@ export const FONT_MAP: Record<FontKey, string> = {
 };
 
 export const FONT_OPTIONS: { value: FontKey; label: string }[] = [
+  { value: 'minecraft', label: 'Minecraft (Monocraft)' },
   { value: 'sans', label: 'Sans-serif (Geist)' },
   { value: 'mono', label: 'Monospace' },
   { value: 'serif', label: 'Serif' },
@@ -686,6 +691,9 @@ export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
 export function applyFontDensity(font: FontKey, density: DensityKey) {
   const family = FONT_MAP[font] || FONT_MAP[DEFAULT_FONT];
   document.documentElement.style.setProperty('--font-family', family);
+  // Monocraft is a bitmap face and wants antialiasing off to stay crisp; every
+  // other option wants it on. index.css keys that off .font-pixel.
+  document.documentElement.classList.toggle('font-pixel', font === 'minecraft');
   document.documentElement.classList.remove('density-compact', 'density-spacious');
   if (density !== 'comfortable') document.documentElement.classList.add('density-' + density);
 }
@@ -821,7 +829,7 @@ export function coerceState(raw: unknown, fallbackId = DEFAULT_THEME_ID): ThemeS
     if (Object.keys(clean).length) advanced = clean;
   }
 
-  const fonts: FontKey[] = ['sans', 'mono', 'serif', 'opendyslexic'];
+  const fonts: FontKey[] = ['minecraft', 'sans', 'mono', 'serif', 'opendyslexic'];
   const densities: DensityKey[] = ['compact', 'comfortable', 'spacious'];
   const patterns = PATTERN_OPTIONS.map((p) => p.value);
 
