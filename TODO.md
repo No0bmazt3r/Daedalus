@@ -127,6 +127,13 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 - [ ] Async logging via `BackgroundTasks` — must never block a response
 - [ ] Never log secrets or personal identifiers
 - [ ] Streamlit log viewer: history, filters, per-query trace, error dashboard, evaluation view
+- [ ] Metrics + container logs on their own port — Prometheus scraping the app,
+      Grafana over it, and the compose logs for each service in one place. The
+      dashboard says *whether* a store is healthy; this is where you go to find
+      out *why* it isn't, without dropping to `docker compose logs`
+- [ ] Wire it to the Databases panel — the standing link described in M10, plus
+      per-store deep links so an unhealthy row lands on *that* service's logs
+      rather than on the Grafana home page
 
 ## M8 — Evaluation
 
@@ -165,6 +172,19 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] Hardware/model panel in settings
 - [ ] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet
 - [x] "Added Models" panel — list local Ollama models alongside the cloud baselines
+- [x] **Split the Databases feature in two, by how often you reach for each half.**
+      Settings is the refined, occasional surface; the sidebar is the one-click,
+      everyday one. Nothing lives in both:
+  - [x] Settings → Databases is health-only — per store: Healthy or Not healthy,
+        schema version, size, last error. No row browsing, no tables, no modal
+  - [x] A permanent link out of that panel to the metrics/logs service (below),
+        present whether or not anything is failing. Reads
+        `DAEDALUS_OBSERVABILITY_URL` via `GET /api/system/observability`; says
+        the stack is not configured rather than offering a dead link
+  - [x] The store browser is in the sidebar under the chat history — expand a
+        store, click a table, rows render in the main pane at
+        `/stores/$store/$table`. A route, not a modal: deep-linkable, Back
+        works, full pane width. `RawLogModal` is gone
 - [ ] Let the raw browser filter by `session_id` / `query_id`, so one conversation's rows can be isolated
 - [x] Sidebar driven by `GET /api/sessions` — select, inline rename, delete, filter
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
@@ -181,7 +201,11 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] React dashboard shell — Vite · TanStack Router · Tailwind v4 · shadcn/base-ui
 - [x] Chat interface (mock) — composer, model selector, incognito, typewriter greeting
 - [x] Theme engine — 16 themes, 7 base + 14 per-zone colours, derived syntax ramps, harmony generator, font/density/scale, frosted glass, import/export, custom themes
-- [x] Background effects — 9 options, 7 canvas-animated, pointer-reactive
+- [x] Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted — every font path in the UI resolves through one variable
+- [x] Attention dimming — the sidebar and the chat surfaces go translucent while the pointer and focus are elsewhere
+- [x] Data stores in the sidebar — the five stores next to the chats, tables and rows one click away on their own route
+- [x] Settings → Databases reduced to a health page, with a standing link out to the (not yet built) metrics stack
+- [x] Background effects — 13 options, 11 canvas-animated, pointer-reactive
 - [x] Settings modal — sectioned nav, incognito toggle
 - [x] FastAPI skeleton — health endpoint, CORS, lifespan init
 - [x] SQLite preference store — server-side, nothing in browser storage
@@ -228,6 +252,11 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
 - [ ] Settings panels other than Add Models, Databases and Shortcuts are still placeholders
+- [ ] Two Font selector options are not actually bundled — `mono` names Fira Code
+      and `opendyslexic` names OpenDyslexic, but only Monocraft and Geist ship
+      with the app, so both silently fall back (to the system monospace and to
+      Comic Sans respectively). Pre-existing; the OpenDyslexic one matters most,
+      since it is offered as an accessibility affordance and currently isn't one
 - [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
 
 ---

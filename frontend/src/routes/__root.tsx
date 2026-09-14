@@ -26,7 +26,10 @@ function RootLayout() {
         <div className="flex h-screen theme-bg theme-text relative overflow-hidden transition-colors duration-200">
           {/* Sidebar Container */}
           <div 
-            className={`transition-all duration-300 ease-in-out border-r theme-border flex flex-col ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'} overflow-hidden shrink-0 theme-sidebar`}
+            /* attention-zone, and deliberately no theme-sidebar: the Sidebar
+               inside paints the surface, and an opaque colour out here would
+               sit behind it and cancel the idle transparency. */
+            className={`transition-all duration-300 ease-in-out border-r theme-border flex flex-col ${sidebarOpen ? 'w-64' : 'w-0 border-r-0'} overflow-hidden shrink-0 attention-zone`}
           >
             <div className="w-64 h-full flex flex-col shrink-0">
               <Sidebar 
@@ -50,7 +53,7 @@ function RootLayout() {
               </Button>
             )}
             <BackgroundEffects />
-            <div className="z-10 relative flex-1 flex flex-col w-full h-full">
+            <div className="z-10 relative flex-1 flex flex-col w-full h-full attention-zone">
               <Outlet />
             </div>
           </main>

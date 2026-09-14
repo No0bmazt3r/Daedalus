@@ -12,7 +12,8 @@ export type DensityKey = 'compact' | 'comfortable' | 'spacious';
 export type UiScale = '100' | '125';
 export type PatternKey =
   | 'none' | 'dots' | 'synapse' | 'rain' | 'constellations'
-  | 'perlin-flow' | 'petals' | 'sparkles' | 'embers' | 'nexus';
+  | 'perlin-flow' | 'petals' | 'sparkles' | 'embers' | 'nexus'
+  | 'aurora' | 'bubbles' | 'voxels';
 export type HarmonyKey = 'complementary' | 'analogous' | 'triadic' | 'monochromatic';
 
 export interface ThemeColors {
@@ -109,6 +110,9 @@ export const PATTERN_OPTIONS: { value: PatternKey; label: string }[] = [
   { value: 'sparkles', label: 'Sparkles' },
   { value: 'embers', label: 'Embers' },
   { value: 'nexus', label: 'Nexus' },
+  { value: 'aurora', label: 'Aurora' },
+  { value: 'bubbles', label: 'Bubbles' },
+  { value: 'voxels', label: 'Voxels' },
 ];
 
 /** Patterns where the intensity / size sliders have nothing to act on. */

@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Database, HardDrive, Lock, RefreshCw, Sprout, AlertTriangle, Check, Table2 } from 'lucide-react'
-import { RawLogModal } from './RawLogModal'
+import { Database, HardDrive, Lock, RefreshCw, Sprout, AlertTriangle, Check, ExternalLink, Activity } from 'lucide-react'
+import { observability, type Observability } from '../../lib/systemClient'
 
-// Stores the raw-row viewer will serve — mirrors BROWSABLE in
-// backend/app/services/log_browser.py. `prefs` is absent there because it
-// holds arbitrary UI values, and the endpoint store because it holds API keys.
-const BROWSABLE_STORES = new Set(['chat', 'audit', 'sensor', 'vector'])
+/**
+ * Store health, and nothing else.
+ *
+ * This panel used to browse raw rows too. It doesn't any more: that moved to
+ * the sidebar, next to the chat history, because looking at rows is something
+ * you do constantly and Settings is somewhere you go occasionally. What is
+ * left here is the question this panel is actually for — is every store
+ * healthy — plus the way out to the metrics stack when one isn't.
+ */
 
 interface DatabaseInfo {
   id: string
@@ -51,7 +56,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [seedResult, setSeedResult] = useState<string | null>(null)
-  const [rawStore, setRawStore] = useState<string | null>(null)
+  const [obs, setObs] = useState<Observability | null>(null)
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -71,6 +76,24 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Independent of the store health call: whether the metrics stack is
+  // configured has nothing to do with whether the databases are up, and a
+  // failure to answer should not blank the panel.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const found = await observability()
+        if (!cancelled) setObs(found)
+      } catch {
+        if (!cancelled) setObs({ url: '', configured: false })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const seed = useCallback(async () => {
     setBusy(true)
@@ -103,15 +126,12 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             embedded files the backend opens directly, so there is no server to
             run for them.
           </p>
+          <p className="text-xs theme-text-muted mt-2 opacity-75">
+            This panel reports health. To read the rows, use{' '}
+            <span className="theme-text">Data stores</span> in the sidebar.
+          </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
-          <button
-            onClick={() => setRawStore('chat')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
-          >
-            <Table2 size={12} />
-            Browse rows
-          </button>
           <button
             onClick={() => void load()}
             disabled={busy}
@@ -169,21 +189,23 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0 text-xs">
-              {BROWSABLE_STORES.has(db.id) && db.available && (
-                <button
-                  onClick={() => setRawStore(db.id)}
-                  title={`View the raw rows in ${db.label}`}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
-                >
-                  <Table2 size={11} />
-                  Rows
-                </button>
-              )}
+              {/* Spelled out rather than left as a coloured dot — "is this
+                  healthy" is the one question this panel exists to answer, and
+                  a dot makes the reader infer it. */}
               <span
-                className={`w-2 h-2 rounded-full ${db.available ? 'theme-bg-primary' : 'bg-red-500'}`}
-              />
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md border ${
+                  db.available
+                    ? 'border-[var(--primary)]/40 theme-primary'
+                    : 'border-red-500/40 text-red-400'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${db.available ? 'theme-bg-primary' : 'bg-red-500'}`}
+                />
+                {db.available ? 'Healthy' : 'Not healthy'}
+              </span>
               <span className="theme-text-muted">
-                {db.available ? formatBytes(db.size_bytes) : 'unavailable'}
+                {db.available ? formatBytes(db.size_bytes) : '—'}
               </span>
             </div>
           </div>
@@ -234,11 +256,40 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
         <div className="text-sm theme-text-muted">Loading store status…</div>
       )}
 
-      <RawLogModal
-        open={rawStore !== null}
-        initialStore={rawStore ?? undefined}
-        onClose={() => setRawStore(null)}
-      />
+      {/* Always present, whether or not anything is failing. A link that only
+          appears during an outage is a link nobody knows exists. */}
+      <div className={card}>
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-lg shrink-0 bg-black/20 theme-text-muted">
+            <Activity size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium">Metrics &amp; container logs</div>
+            <p className="text-xs theme-text-muted mt-1">
+              This panel says <em>whether</em> a store is healthy. The metrics
+              stack — Prometheus, Grafana, and the container logs — is where you
+              find out <em>why</em> it isn't.
+            </p>
+            {obs?.configured ? (
+              <a
+                href={obs.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+              >
+                <ExternalLink size={12} />
+                Open metrics &amp; logs
+              </a>
+            ) : (
+              <p className="text-xs theme-text-muted mt-3 opacity-75">
+                Not configured. Set <code className="theme-text">DAEDALUS_OBSERVABILITY_URL</code>{' '}
+                in <code className="theme-text">.env</code> once the stack is running — see
+                M7 in <code className="theme-text">TODO.md</code>.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

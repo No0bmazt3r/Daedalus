@@ -1,8 +1,10 @@
 // Clients for the diagnostic and configuration APIs:
 //   /api/logs       — read-only browser over the stores (backend/app/api/logs.py)
 //   /api/providers  — cloud endpoints for the evaluation baseline
+//   /api/system     — store health, and where the metrics stack lives
 //
-// Both are Settings-only surfaces. Neither is on the chat path.
+// None of these is on the chat path. The log browser backs the sidebar's Data
+// stores section; the rest are Settings-only.
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -92,6 +94,18 @@ export function readLogTable(
   return request<LogPage>(
     `/api/logs/${encodeURIComponent(store)}/${encodeURIComponent(table)}?${params}`,
   );
+}
+
+// ── observability ────────────────────────────────────────────────────────────
+
+export interface Observability {
+  url: string;
+  configured: boolean;
+}
+
+/** Where the metrics/logs stack lives, if one is configured. See TODO.md, M7. */
+export function observability(): Promise<Observability> {
+  return request<Observability>('/api/system/observability');
 }
 
 // ── cloud model endpoints ────────────────────────────────────────────────────

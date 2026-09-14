@@ -70,6 +70,10 @@
   --font-heading: var(--font-sans);
   --font-sans: var(--font-family, var(--font-base));
   --font-mono: var(--font-family, var(--font-base));
+  /* Serif is folded in too. The brand wordmark and the greeting headline wear
+     font-serif, and leaving Tailwind's Georgia default in place was the one
+     hole through which a non-Minecraft face still reached the screen. */
+  --font-serif: var(--font-family, var(--font-base));
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -256,6 +260,40 @@ html {
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
   font-smooth: never;
+}
+
+/* ── Attention dimming ──────────────────────────────────────────────────────
+   A panel you are not pointing at sits back a little, so the background effect
+   reads through it; the one under the cursor — or holding keyboard focus —
+   comes forward solid.
+
+   Opacity rather than a background-colour mix, deliberately: it composes with
+   frosted glass and with the !important on .theme-sidebar instead of fighting
+   either, and it settles the whole panel back rather than just its fill, which
+   is what "not the thing you are working in" should look like.
+
+   Only descendants are dimmed, never the zone element itself — an opaque
+   ancestor behind a translucent panel would cancel the whole effect, which is
+   why the sidebar's outer container in __root.tsx carries no surface colour. */
+:root {
+  --panel-idle-opacity: 0.82;
+}
+
+.attention-zone .theme-sidebar,
+.attention-zone .theme-card {
+  transition: opacity 220ms ease;
+}
+
+.attention-zone:not(:hover):not(:focus-within) .theme-sidebar,
+.attention-zone:not(:hover):not(:focus-within) .theme-card {
+  opacity: var(--panel-idle-opacity, 0.82);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention-zone .theme-sidebar,
+  .attention-zone .theme-card {
+    transition: none;
+  }
 }
 
 /* ── Density ── */

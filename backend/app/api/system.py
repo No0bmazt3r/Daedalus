@@ -7,6 +7,7 @@ as a confusing query failure.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -43,6 +44,23 @@ def _schema(store: str) -> dict[str, Any]:
         "pending": state["pending"],
         "error": state["error"],
     }
+
+
+@router.get("/observability")
+def observability() -> dict[str, Any]:
+    """Where to go when a store is reported unhealthy.
+
+    The dashboard answers *whether* something is wrong; the metrics stack —
+    Prometheus scraping this app, Grafana over it, container logs alongside —
+    answers *why*. That runs as its own service on its own port, so the only
+    thing this app can usefully say is where it is.
+
+    Unset is a normal state, not an error: the stack is optional and is not
+    running in most development setups. The UI says so rather than offering a
+    link into nothing. See TODO.md, M7.
+    """
+    url = (os.environ.get("DAEDALUS_OBSERVABILITY_URL") or "").strip()
+    return {"url": url, "configured": bool(url)}
 
 
 @router.get("/databases")

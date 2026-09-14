@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,8 @@ import {
 import { useSessions } from '../contexts/SessionsContext'
 import { useSettings } from '../contexts/SettingsContext'
 import { sessionLabel, type ChatSession } from '../lib/sessionsClient'
+import { logCatalogue, type LogStore } from '../lib/systemClient'
+import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 
 interface SidebarProps {
   onClose: () => void;
@@ -97,11 +99,143 @@ function SessionRow({
   )
 }
 
+/**
+ * The five stores, browsable from the sidebar.
+ *
+ * This lives next to the chat history rather than inside Settings → Databases
+ * on purpose. Settings answers "is everything healthy"; that is a question you
+ * ask occasionally. "What is actually in this table right now" is a question
+ * you ask constantly while building, so it belongs one click away, in the same
+ * list you already navigate with.
+ */
+function DataStores() {
+  const [stores, setStores] = useState<LogStore[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const matchRoute = useMatchRoute()
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const loaded = await logCatalogue()
+        if (cancelled) return
+        setStores(loaded)
+        // Open a store that actually has rows in it, so the section is useful
+        // on arrival instead of a row of closed folders. Falls back to the
+        // first readable store on a fresh install, where everything is empty.
+        const withRows = loaded.find(
+          (s) => s.available && s.tables.some((t) => (t.rows ?? 0) > 0),
+        )
+        const first = withRows ?? loaded.find((s) => s.available && s.tables.length)
+        if (first) setOpen({ [first.store]: true })
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'unavailable')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between px-2 mb-1">
+        <span className="text-[11px] font-medium theme-text-muted">Data stores</span>
+      </div>
+
+      {error && (
+        <span className="px-2 py-1 text-xs text-amber-400/80 block">
+          Backend unreachable — stores can't be listed
+        </span>
+      )}
+      {!stores && !error && (
+        <span className="px-2 py-1 text-xs theme-text-muted opacity-60 block">Loading…</span>
+      )}
+
+      <div className="flex flex-col gap-0.5">
+        {stores?.map((store) => {
+          const isOpen = !!open[store.store]
+          return (
+            <div key={store.store}>
+              <button
+                onClick={() => setOpen((o) => ({ ...o, [store.store]: !o[store.store] }))}
+                className="w-full flex items-center h-8 px-2 rounded-md text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+              >
+                <ChevronRight
+                  size={13}
+                  className={`shrink-0 mr-1 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                />
+                {store.store === 'sensor' ? (
+                  <HardDrive size={14} className="mr-2 shrink-0 theme-primary" />
+                ) : (
+                  <Database size={14} className="mr-2 shrink-0 theme-primary" />
+                )}
+                <span className="truncate flex-1 text-left">{store.label}</span>
+                {/* Health is Settings' job; the dot here is only so a store
+                    that cannot be read does not look like an empty one. */}
+                {!store.available && (
+                  <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-red-500" title={store.error || 'unavailable'} />
+                )}
+              </button>
+
+              {isOpen && (
+                <div className="flex flex-col gap-0.5 ml-[22px] mt-0.5 mb-1 pl-2 border-l theme-border">
+                  {store.available && store.tables.length === 0 && (
+                    <span className="px-2 py-1 text-xs theme-text-muted opacity-60">No tables</span>
+                  )}
+                  {!store.available && (
+                    <span className="px-2 py-1 text-xs theme-text-muted opacity-60">
+                      {store.error || 'Unavailable'}
+                    </span>
+                  )}
+                  {store.tables.map((table) => {
+                    const active = !!matchRoute({
+                      to: '/stores/$store/$table',
+                      params: { store: store.store, table: table.name },
+                    })
+                    return (
+                      <Link
+                        key={table.name}
+                        to="/stores/$store/$table"
+                        params={{ store: store.store, table: table.name }}
+                        className={`flex items-center h-7 px-2 rounded-md text-xs transition-colors ${
+                          active
+                            ? 'bg-black/30 theme-text'
+                            : 'theme-text-muted hover:theme-text hover:bg-black/20'
+                        }`}
+                      >
+                        <Table2 size={11} className="shrink-0 mr-2 opacity-60" />
+                        <span className="truncate flex-1 font-mono">{table.name}</span>
+                        <span className="shrink-0 ml-2 tabular-nums opacity-60">
+                          {table.rows ?? '—'}
+                        </span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) {
   const { sessions, activeSessionId, status, newChat, selectSession, rename, remove } = useSessions()
   const { isIncognito } = useSettings()
   const [filter, setFilter] = useState('')
   const [searching, setSearching] = useState(false)
+  const navigate = useNavigate()
+
+  // The chat lives at '/', and a store table replaces it. Picking a chat has
+  // to come back, or the selection changes underneath a table nobody left.
+  const openChat = (run: () => void) => {
+    run()
+    void navigate({ to: '/' })
+  }
 
   const needle = filter.trim().toLowerCase()
   const visible = needle
@@ -128,7 +262,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) 
       {/* New Chat Button */}
       <div className="px-3 mb-4">
         <Button
-          onClick={newChat}
+          onClick={() => openChat(newChat)}
           className="w-full justify-start gap-2 bg-black/20 hover:bg-black/40 theme-text theme-border shadow-none font-normal h-9"
         >
           <Plus size={16} />
@@ -204,13 +338,15 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) 
                 key={session.session_id}
                 session={session}
                 active={session.session_id === activeSessionId}
-                onSelect={() => selectSession(session.session_id)}
+                onSelect={() => openChat(() => selectSession(session.session_id))}
                 onRename={(title) => void rename(session.session_id, title)}
                 onDelete={() => void remove(session.session_id)}
               />
             ))}
           </div>
         </div>
+
+        <DataStores />
       </ScrollArea>
 
       {/* Bottom Section */}

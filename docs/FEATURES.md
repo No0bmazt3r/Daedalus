@@ -15,8 +15,10 @@ Everything below was read off the source, not from memory.
 |---|---|
 | React dashboard shell | Built |
 | Theme engine | Built — the most complete subsystem |
-| Background effects | Built, pointer-reactive |
+| Background effects | Built, pointer-reactive — 13 options |
+| Typography | Built — Monocraft (the Minecraft typeface) as the default face, self-hosted |
 | Settings shell | Built — registry, search, resizable rail |
+| Store browser | Built — in the sidebar, on its own route |
 | Data stores (×5) | Built and containerised, each with a versioned schema |
 | Preference API | Built |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
@@ -46,13 +48,14 @@ to it.
 | `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages — audit rows survive |
 | `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
 | `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
-| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts |
+| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts — backs the sidebar's Data stores section |
 | `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
 | `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
 | `GET`/`POST` | `/api/providers` | List / add a benchmark endpoint |
 | `PATCH`/`DELETE` | `/api/providers/{id}` | Edit or remove one |
 | `POST` | `/api/providers/{id}/test` | Connection test — the only outbound call |
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
+| `GET` | `/api/system/observability` | Where the metrics/logs stack lives, or that none is configured |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
 Writable preference keys (anything else is rejected with 404):
@@ -213,7 +216,14 @@ latency budget the <3s target is measured against.
 
 ### Raw store browser — `services/log_browser.py`
 
-Backs Settings → Databases → **Browse rows**: a draggable popup with Peek (transparency) UI showing what is actually in the stores right now. `trace(query_id)` proves one response was grounded; this shows everything that has been recorded. It now spans across `chat`, `audit`, `sensor` (telemetry & anomalies), and `vector` (knowledge base embeddings).
+Backs the sidebar's **Data stores** section: what is actually in the stores
+right now. `trace(query_id)` proves one response was grounded; this shows
+everything that has been recorded. It spans `chat`, `audit`, `sensor`
+(telemetry & anomalies) and `vector` (knowledge base embeddings).
+
+**It used to be a draggable popup behind Settings → Databases → Browse rows.**
+It is now a route, `/stores/$store/$table`, reached in one click from the
+sidebar — see §7.1 for why.
 
 Three properties, all verified:
 
@@ -349,7 +359,7 @@ rotate, so those fall back to violet. All 16 themes verified ≥4.5:1.
 **Syntax (10):** `--hl-bg` `--hl-fg` `--hl-keyword` `--hl-string` `--hl-comment` `--hl-function` `--hl-number` `--hl-builtin` `--hl-variable` `--hl-params`
 **Zones (14):** `--user-bubble-bg` `--ai-bubble-bg` `--bubble-border` `--sidebar-bg` `--brand-color` `--brand-mix-to` `--input-bg` `--input-border` `--send-btn-bg` `--send-btn-hover` `--code-bg` `--code-fg` `--toggle-active` `--incognito`
 **Effects (4):** `--bg-effect-color` `--bg-effect-intensity` `--bg-effect-size` `--bg-effect-reactive`
-**Typography (1):** `--font-family`
+**Typography (2):** `--font-family` (written by the Font selector) `--font-base` (the face everything falls back to — see §4.1)
 
 Emits `daedalus-theme-change` on every apply; the effects layer listens to
 invalidate its cached variable reads.
@@ -363,6 +373,8 @@ invalidate its cached variable reads.
 | Incognito | `.incognito-text` `.incognito-bg` `.incognito-bg-soft` `.incognito-glow` `.incognito-drop-glow` `.incognito-placeholder` |
 | Patterns | `.bg-pattern-dots` `.bg-pattern-synapse` |
 | Layout | `.no-scrollbar` `.density-compact` `.density-spacious` `.ui-scale-125` `.theme-frosted` `.theme-range` |
+| Typography | `.font-pixel` — set on `:root` while a bitmap face is active |
+| Attention | `.attention-zone` — marks a region whose panels dim while the pointer and focus are elsewhere |
 | Tooling | `.theme-zone-highlight` |
 
 The shadcn design tokens (`--popover`, `--accent`, `--muted-foreground`, …) are
@@ -372,9 +384,52 @@ every dropdown and popover rendered white regardless of theme.
 
 ---
 
+### 4.1 Typography
+
+The default face is **Monocraft** — Idrees Hassan's Minecraft-derived
+typeface, SIL OFL 1.1. Three weights (400, 500–600, 700–900) ship as woff2
+from `frontend/src/assets/fonts/`, which Vite fingerprints into `/assets` and
+the backend caches hard. Roughly 167KB across all three.
+
+**Self-hosted, not CDN-loaded.** Rule 1 of the project is that the runtime
+never reaches the network. A `fonts.googleapis.com` link would break that and
+would silently fall back to a system face on an air-gapped SCADA machine — the
+exact environment this is built for.
+
+**One variable, no escape hatches.** Every font path in the UI resolves through
+`--font-family`, with `--font-base` (Monocraft) as the fallback:
+
+| Path | Resolves via |
+|---|---|
+| `html`, and everything inheriting from it | `--default-font-family` → `--font-sans` |
+| `.font-sans` `.font-mono` `.font-serif` `.font-heading` | all four re-pointed at the chain in `@theme inline` |
+| `code` `pre` `kbd` `samp` | `--default-mono-font-family` → `--font-mono` |
+| `button` `input` `select` `textarea` | Tailwind preflight's `font: inherit` |
+
+That last column is the point: `--font-serif` and `--font-mono` are folded into
+the same chain rather than left at Tailwind's Georgia and ui-monospace
+defaults. The brand wordmark and the greeting headline wear `font-serif`, and
+before that change they were the one hole through which a non-Minecraft face
+still reached the screen.
+
+**Bitmap rendering.** Monocraft's glyphs are drawn on a whole-pixel grid, so
+greyscale antialiasing only blurs edges that are already aligned.
+`applyFontDensity()` sets `.font-pixel` on `:root` whenever the active face is
+Monocraft, and `index.css` keys `-webkit-font-smoothing: none` off it. Scoped
+to a class rather than applied globally, because the alternative faces —
+OpenDyslexic in particular — very much do want smoothing. `theme.css` emits the
+same two declarations for the first painted frame.
+
+**The other four faces** (Geist, Fira Code, Georgia, OpenDyslexic) remain in
+the Font selector. `FONT_MAP` in `themes.ts` and `_FONT_STACKS` in
+`backend/app/api/prefs.py` are parallel tables and must be kept in step — both
+render the same selector, one for the live UI and one for the first frame.
+
+---
+
 ## 5. Background effects
 
-Nine options; seven canvas-animated. `frontend/src/lib/canvasEffects.ts` was ported from
+Thirteen options; eleven canvas-animated. `frontend/src/lib/canvasEffects.ts` was ported from
 Odysseus (a reference app no longer vendored in this repo);
 `frontend/src/lib/pointerField.ts` is new.
 
@@ -387,6 +442,10 @@ Odysseus (a reference app no longer vendored in this repo);
 | Petals | Sweeping acts as a gust, pushing and spinning petals away |
 | Sparkles | A sparkle trail follows the cursor; nearby ones brighten |
 | Embers | Acts as a draft, fanning embers outward and up |
+| Nexus | Nodes are pushed gently aside and link to the cursor itself |
+| Aurora | The curtains bend toward the cursor, like a draught through them |
+| Bubbles | An updraft — bubbles are pushed aside and hurried along, then settle |
+| Voxels | Blocks lift and swell near the cursor, as if a hand passed under the field |
 | Dots, Solid | Static — the Reactive toggle disables itself |
 
 > Odysseus's effects are **not** reactive — all `pointer-events: none` with no
@@ -400,6 +459,30 @@ staying deformed around a parked cursor.
 invalidated on `daedalus-theme-change` — `effectScale()` was originally called
 once *per ember per frame* (~60 style recalcs/frame). The canvas rect is cached
 with a 250ms TTL, because `getBoundingClientRect()` forces layout.
+
+### 5.1 Attention dimming
+
+Two regions in `__root.tsx` carry `.attention-zone`: the sidebar container and
+the main content wrapper. Panels inside a zone drop to
+`--panel-idle-opacity` (0.82) while that zone holds neither the pointer nor
+focus, and return to solid when it does — so the background effect reads
+through whichever half of the screen you are not working in.
+
+Three decisions worth keeping:
+
+- **`opacity`, not a `background-color` mix.** `.theme-sidebar` and
+  `.theme-card` set their fills with `!important`, and frosted glass overrides
+  those again with its own `color-mix`. Opacity composes with both instead of
+  entering a specificity fight with either.
+- **Descendants only** — `.attention-zone:not(:hover):not(:focus-within) .theme-card`,
+  never the zone element itself. An opaque ancestor behind a translucent panel
+  cancels the effect, which is why the sidebar's outer container carries
+  `attention-zone` but no `theme-sidebar`; the `Sidebar` inside paints the
+  surface.
+- **`:focus-within`, not just `:hover`** — a keyboard user tabbing into the
+  sidebar must not be left reading a dimmed panel.
+
+The transition is suppressed under `prefers-reduced-motion: reduce`.
 
 ---
 
@@ -439,11 +522,45 @@ Paths are relative to `frontend/src/`.
 | `lib/zoneHighlight.ts` | Hover a colour row → outlines the UI that colour drives |
 | `components/ThemeModal.tsx` | Theme editor — presets, colours, harmony, effects, import/export |
 | `components/SettingsModal.tsx` | Settings shell |
-| `components/Sidebar.tsx` | Chat list from `GET /api/sessions` — select, inline rename, delete, filter |
+| `components/Sidebar.tsx` | Chat list from `GET /api/sessions`, plus the Data stores section |
+| `components/stores/StoreBrowser.tsx` | The row grid — paging, sort, row detail. Pane body only, no window chrome |
+| `routes/stores.$store.$table.tsx` | Renders it in the main pane |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
 | `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
-| `lib/systemClient.ts` | Log-browser and provider API client |
-| `components/settings/` | `SettingsSearch`, `DatabasesPanel`, `RawLogModal`, `ModelEndpointsPanel` |
+| `lib/systemClient.ts` | Log-browser, observability and provider API client |
+| `components/settings/` | `SettingsSearch`, `DatabasesPanel` (health only), `ModelEndpointsPanel` |
+
+### 7.1 Where a thing lives is decided by how often you reach for it
+
+The Databases feature used to be one panel doing two jobs: reporting store
+health, and browsing raw rows. Both sat behind Settings → Databases, and the
+browser behind a further click into a modal. They are now split, on the axis of
+how often each is actually used:
+
+| Surface | Answers | Reached |
+|---|---|---|
+| **Sidebar → Data stores** | "What is in this table right now?" | One click, next to the chats |
+| **Settings → Databases** | "Is every store healthy?" | Settings, occasionally |
+| **Metrics stack** (own port) | "*Why* is this store unhealthy?" | A standing link out of that panel |
+
+Browsing rows is something you do constantly while building, so it belongs in
+the list you already navigate with. Health is something you check when
+something feels wrong. Putting the frequent thing behind the occasional one had
+it backwards.
+
+Three consequences worth keeping:
+
+- **The browser is a route, not a modal.** `/stores/$store/$table` is
+  deep-linkable, Back works, and it gets the full width of the pane rather than
+  a floating window over it. Picking a store behaves exactly like picking a
+  chat, because it *is* the same kind of action.
+- **Picking a chat navigates back to `/`.** Otherwise the sidebar selection
+  would change underneath a table nobody had left.
+- **The metrics link is always present**, not conditional on a failure. A link
+  that only appears during an outage is a link nobody knows exists. When
+  `DAEDALUS_OBSERVABILITY_URL` is unset the panel says the stack is not
+  configured rather than offering a dead link — the stack itself is still
+  unbuilt (TODO.md, M7).
 
 ### The settings shell resizes on its *container*, not the viewport
 

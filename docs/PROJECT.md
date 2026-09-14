@@ -609,7 +609,8 @@ Trust comes from visible reasoning, not a black box:
 | **React frontend shell** | Vite 8 · React 19 · TanStack Router · Tailwind v4 · shadcn/base-ui |
 | **Chat UI (mock)** | Message list, auto-growing composer, model selector, incognito mode, typewriter greeting — **no backend wired yet** |
 | **Theme system** | 16 themes; live customisation of 7 base + 14 per-zone colours; derived syntax ramps; complementary-harmony generator; font/density/text-scale; frosted glass; import/export; up to 8 saved custom themes |
-| **Background effects** | 9 options (7 canvas-animated) with colour/intensity/size, and pointer-reactive behaviour |
+| **Typography** | Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted so the UI never reaches a font CDN; every font path in the app resolves through one CSS variable |
+| **Background effects** | 13 options (11 canvas-animated) with colour/intensity/size, and pointer-reactive behaviour |
 | **Settings modal** | Sectioned nav, incognito toggle, model defaults |
 | **Settings** | Registry-driven nav, keyword search with keyboard navigation, drag-resizable + collapsible rail with full ARIA, layout persisted server-side |
 | **FastAPI backend** | App skeleton, health endpoint, preference store, CORS, `theme.css` endpoint for flash-free first paint, `GET /api/system/databases`, chat session API |

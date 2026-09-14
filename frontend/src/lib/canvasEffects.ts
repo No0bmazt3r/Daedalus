@@ -813,3 +813,262 @@ export function initNexus(canvas: HTMLCanvasElement, cancelToken: { cancelled: b
   if (!cancelToken.cancelled) animate();
 }
 
+
+// ── Aurora — slow ribbons of light drifting across the pane ──────────────────
+// Each band is a sine curve filled with a vertical gradient and composited
+// additively, so overlaps brighten the way real aurora curtains do. Cheap:
+// five filled paths a frame, no per-particle work.
+export function initAurora(canvas: HTMLCanvasElement, cancelToken: { cancelled: boolean }) {
+  const ctx = canvas.getContext("2d"); if (!ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W: number, H: number;
+
+  const BANDS = 5;
+  const bands = Array.from({ length: BANDS }, (_, i) => ({
+    // Spread the curtains down the pane rather than stacking them all at the top.
+    offset: 0.18 + (i / BANDS) * 0.55,
+    amp: 0.05 + Math.random() * 0.07,
+    freq: 1.1 + Math.random() * 1.6,
+    speed: 0.00012 + Math.random() * 0.00022,
+    phase: Math.random() * Math.PI * 2,
+    thickness: 0.12 + Math.random() * 0.16,
+    alpha: 0.10 + Math.random() * 0.10,
+  }));
+
+  function resize() {
+    const _box = canvasBox(canvas); W = _box.w; H = _box.h;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  const _onResize = () => resize();
+  window.addEventListener("resize", _onResize);
+
+  function draw(now: number) {
+    if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
+    requestAnimationFrame(draw);
+    ctx!.clearRect(0, 0, W, H);
+
+    const c = effectColor();
+    const scale = effectScale();
+    const ptr = pointerFor(canvas);
+    // Step coarsely — the curve is smooth enough that sampling every 24px is
+    // indistinguishable from every pixel, and 40x cheaper on a wide pane.
+    const step = Math.max(12, W / 48);
+
+    ctx!.globalCompositeOperation = "lighter";
+    for (const b of bands) {
+      const mid = H * b.offset;
+      const amp = H * b.amp * scale;
+      const half = H * b.thickness * scale * 0.5;
+      const t = now * b.speed + b.phase;
+
+      ctx!.beginPath();
+      ctx!.moveTo(0, mid);
+      for (let x = 0; x <= W + step; x += step) {
+        const u = x / Math.max(1, W);
+        let y = mid + Math.sin(u * Math.PI * 2 * b.freq + t) * amp;
+        // The cursor drags the curtain toward itself, like a draught.
+        const inf = influence(x, y, ptr, 260 * scale);
+        if (inf > 0) y += (ptr.y - y) * inf * 0.35;
+        ctx!.lineTo(x, y);
+      }
+      for (let x = W + step; x >= 0; x -= step) {
+        const u = x / Math.max(1, W);
+        let y = mid + Math.sin(u * Math.PI * 2 * b.freq + t) * amp;
+        const inf = influence(x, y, ptr, 260 * scale);
+        if (inf > 0) y += (ptr.y - y) * inf * 0.35;
+        ctx!.lineTo(x, y + half * 2);
+      }
+      ctx!.closePath();
+
+      const g = ctx!.createLinearGradient(0, mid - half, 0, mid + half * 2);
+      g.addColorStop(0, rgba(c, 0));
+      g.addColorStop(0.5, rgba(c, b.alpha * (1 + ptr.energy * 0.5)));
+      g.addColorStop(1, rgba(c, 0));
+      ctx!.fillStyle = g;
+      ctx!.fill();
+    }
+    ctx!.globalCompositeOperation = "source-over";
+  }
+  requestAnimationFrame(draw);
+}
+
+// ── Bubbles — gas rising through a column ───────────────────────────────────
+// On the nose for a CO2 sorption reactor: the background is the process. Each
+// bubble wobbles on its own sine so the column never looks like it is on rails.
+export function initBubbles(canvas: HTMLCanvasElement, cancelToken: { cancelled: boolean }) {
+  const ctx = canvas.getContext("2d"); if (!ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W: number, H: number;
+  const bubbles: any[] = [];
+  let target = 0;
+
+  function makeBubble(seeded = false) {
+    const r = 2 + Math.random() * 9;
+    return {
+      x: Math.random() * W,
+      // Seeded bubbles start mid-column so the pane is populated on frame one.
+      y: seeded ? Math.random() * H : H + r + Math.random() * 60,
+      r,
+      // Bigger bubbles rise faster, as they do in a real column.
+      vy: 0.25 + r * 0.055 + Math.random() * 0.2,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.01 + Math.random() * 0.025,
+      wobbleAmp: 0.3 + Math.random() * 1.1,
+      alpha: 0.18 + Math.random() * 0.3,
+    };
+  }
+
+  function resize() {
+    const _box = canvasBox(canvas); W = _box.w; H = _box.h;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    target = Math.min(90, Math.max(24, Math.floor((W * H) / 22000)));
+    // Seeded: a fill or a resize should leave the column already populated.
+    while (bubbles.length < target) bubbles.push(makeBubble(true));
+    bubbles.length = target;
+  }
+  resize();
+  const _onResize = () => resize();
+  window.addEventListener("resize", _onResize);
+
+  function draw() {
+    if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
+    requestAnimationFrame(draw);
+    ctx!.clearRect(0, 0, W, H);
+
+    const c = effectColor();
+    const scale = effectScale();
+    const ptr = pointerFor(canvas);
+
+    for (const b of bubbles) {
+      b.wobble += b.wobbleSpeed;
+      b.y -= b.vy * scale;
+      b.x += Math.sin(b.wobble) * b.wobbleAmp;
+
+      // The cursor is an updraft: bubbles near it are pushed aside and hurried
+      // along, then settle back once it moves on.
+      const inf = influence(b.x, b.y, ptr, 200 * scale);
+      if (inf > 0) {
+        const dx = b.x - ptr.x;
+        b.x += Math.sign(dx || 1) * inf * 2.2;
+        b.y -= inf * 2.4 * ptr.energy;
+      }
+
+      if (b.y < -b.r * 2) Object.assign(b, makeBubble());
+      if (b.x < -20) b.x = W + 20;
+      if (b.x > W + 20) b.x = -20;
+
+      const r = b.r * scale;
+      const a = b.alpha * (1 + inf * 1.4);
+
+      ctx!.beginPath();
+      ctx!.arc(b.x, b.y, r, 0, Math.PI * 2);
+      ctx!.strokeStyle = rgba(c, Math.min(1, a));
+      ctx!.lineWidth = 1;
+      ctx!.stroke();
+      ctx!.fillStyle = rgba(c, Math.min(1, a * 0.22));
+      ctx!.fill();
+
+      // The specular dot that makes a circle read as a bubble.
+      if (r > 3) {
+        ctx!.beginPath();
+        ctx!.arc(b.x - r * 0.32, b.y - r * 0.32, r * 0.18, 0, Math.PI * 2);
+        ctx!.fillStyle = rgba(c, Math.min(1, a * 1.5));
+        ctx!.fill();
+      }
+    }
+  }
+  draw();
+}
+
+// ── Voxels — isometric blocks drifting through the pane ─────────────────────
+// Three parallelograms per cube — top, left, right — at descending alpha, which
+// is all an isometric block needs to read as solid.
+export function initVoxels(canvas: HTMLCanvasElement, cancelToken: { cancelled: boolean }) {
+  const ctx = canvas.getContext("2d"); if (!ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W: number, H: number;
+  const cubes: any[] = [];
+  let target = 0;
+
+  function makeCube() {
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      size: 8 + Math.random() * 18,
+      vx: (Math.random() - 0.5) * 0.28,
+      vy: (Math.random() - 0.5) * 0.28,
+      bob: Math.random() * Math.PI * 2,
+      bobSpeed: 0.006 + Math.random() * 0.012,
+      alpha: 0.14 + Math.random() * 0.22,
+    };
+  }
+
+  function resize() {
+    const _box = canvasBox(canvas); W = _box.w; H = _box.h;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    target = Math.min(70, Math.max(16, Math.floor((W * H) / 30000)));
+    while (cubes.length < target) cubes.push(makeCube());
+    cubes.length = target;
+  }
+  resize();
+  const _onResize = () => resize();
+  window.addEventListener("resize", _onResize);
+
+  function face(pts: number[][], fill: string) {
+    ctx!.beginPath();
+    ctx!.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx!.lineTo(pts[i][0], pts[i][1]);
+    ctx!.closePath();
+    ctx!.fillStyle = fill;
+    ctx!.fill();
+  }
+
+  function drawCube(x: number, y: number, s: number, c: string, a: number) {
+    // Half-width and half-height of the isometric diamond that forms the top.
+    const w = s, h = s * 0.5;
+    face([[x, y - h], [x + w, y], [x, y + h], [x - w, y]], rgba(c, a));            // top
+    face([[x - w, y], [x, y + h], [x, y + h + s], [x - w, y + s]], rgba(c, a * 0.55)); // left
+    face([[x + w, y], [x, y + h], [x, y + h + s], [x + w, y + s]], rgba(c, a * 0.3));  // right
+  }
+
+  function draw() {
+    if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
+    requestAnimationFrame(draw);
+    ctx!.clearRect(0, 0, W, H);
+
+    const c = effectColor();
+    const scale = effectScale();
+    const ptr = pointerFor(canvas);
+
+    for (const cube of cubes) {
+      cube.bob += cube.bobSpeed;
+      cube.x += cube.vx;
+      cube.y += cube.vy;
+
+      // Wrap rather than bounce — blocks should drift through, not rattle
+      // around inside a box.
+      const m = cube.size * 3;
+      if (cube.x < -m) cube.x = W + m;
+      if (cube.x > W + m) cube.x = -m;
+      if (cube.y < -m) cube.y = H + m;
+      if (cube.y > H + m) cube.y = -m;
+
+      const inf = influence(cube.x, cube.y, ptr, 220 * scale);
+      // Near the cursor a block lifts and swells, so the pointer reads as a
+      // hand passing under the field rather than as a repulsor.
+      const lift = inf * 18 * (0.4 + ptr.energy * 0.6);
+      const s = cube.size * scale * (1 + inf * 0.45);
+      const y = cube.y + Math.sin(cube.bob) * 4 - lift;
+
+      drawCube(cube.x, y, s, c, Math.min(1, cube.alpha * (1 + inf * 1.6)));
+    }
+  }
+  draw();
+}

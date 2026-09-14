@@ -267,8 +267,11 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen |
 | **Dynamic Models**| Unified `/api/system/models` querying Ollama + cloud baselines. Chat interface auto-adapts |
 | **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
-| **Background effects** | 9 options, 7 canvas-animated, **pointer-reactive**, including new 'Nexus' node network |
-| **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side |
+| **Typography** | **Monocraft** — the Minecraft typeface — as the default face, bundled and self-hosted; four alternatives in the Font selector |
+| **Background effects** | 13 options, 11 canvas-animated, **pointer-reactive** — including Nexus, Aurora, Bubbles and Voxels |
+| **Attention dimming** | The sidebar and the chat surfaces sit back translucent while the pointer and focus are elsewhere |
+| **Data stores** | The five stores in the sidebar under the chats — expand one, click a table, read its rows at `/stores/{store}/{table}` |
+| **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Databases panel reports health only |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
 | **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |
 | **Data stores** | All five wired, containerised, health-reported, each with a versioned schema |
