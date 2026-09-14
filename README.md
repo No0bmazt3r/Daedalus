@@ -270,7 +270,8 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Typography** | **Monocraft** — the Minecraft typeface — as the default face, bundled and self-hosted; four alternatives in the Font selector |
 | **Background effects** | 13 options, 11 canvas-animated, **pointer-reactive** — including Nexus, Aurora, Bubbles and Voxels |
 | **Attention dimming** | The sidebar and the chat surfaces sit back translucent while the pointer and focus are elsewhere |
-| **Data stores** | The five stores in the sidebar under the chats — expand one, click a table, read its rows at `/stores/{store}/{table}` |
+| **Data stores** | The five stores in the sidebar under the chats — expand one, click a table, read its rows in a floating window |
+| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama, detected live. Settings → Hardware, and **The Forge** in the sidebar |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Databases panel reports health only |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
 | **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |

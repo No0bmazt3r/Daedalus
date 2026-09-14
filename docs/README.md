@@ -13,6 +13,7 @@ over anything else here.
 | Understand the whole project | [`PROJECT.md`](PROJECT.md) |
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
+| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — design only, none built |
 | Run it | [`../README.md`](../README.md) |
 | Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |
 | Know what this project borrowed, and from whom | [`../ACKNOWLEDGMENTS.md`](../ACKNOWLEDGMENTS.md) |
@@ -27,7 +28,10 @@ two disagree, resolve in this order:
 2. **[`FEATURES.md`](FEATURES.md)** — canonical for *implementation detail*:
    the API surface, data-store contracts, theme engine, CSS utilities.
    Describes what exists; `PROJECT.md` describes what is intended.
-3. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
+3. **[`MODULES.md`](MODULES.md)** — design for Ariadne's Thread, The Forge and
+   Labyrinth Blueprints. Subordinate to `PROJECT.md`: it elaborates §10.2 and
+   never overrides it. **Nothing in it is built.**
+4. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
    historical. Still useful for depth, but **superseded wherever they conflict
    with `PROJECT.md`**.
 

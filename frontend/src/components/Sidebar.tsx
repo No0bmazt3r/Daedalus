@@ -14,12 +14,16 @@ import { useSessions } from '../contexts/SessionsContext'
 import { useSettings } from '../contexts/SettingsContext'
 import { sessionLabel, type ChatSession } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
-import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 
 interface SidebarProps {
   onClose: () => void;
   onOpenTheme: () => void;
   onOpenSettings: () => void;
+  onOpenForge: () => void;
+  /** Opens the raw-row window on one table. */
+  onOpenStore: (store: string, table: string) => void;
+  /** The table currently open in that window, so the row can be highlighted. */
+  activeStore?: { store: string; table: string } | null;
 }
 
 /** One chat row: click to open, hover for rename/delete, double-click to rename. */
@@ -108,11 +112,16 @@ function SessionRow({
  * you ask constantly while building, so it belongs one click away, in the same
  * list you already navigate with.
  */
-function DataStores() {
+function DataStores({
+  onOpenStore,
+  activeStore,
+}: {
+  onOpenStore: (store: string, table: string) => void
+  activeStore?: { store: string; table: string } | null
+}) {
   const [stores, setStores] = useState<LogStore[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<Record<string, boolean>>({})
-  const matchRoute = useMatchRoute()
 
   useEffect(() => {
     let cancelled = false
@@ -190,27 +199,24 @@ function DataStores() {
                     </span>
                   )}
                   {store.tables.map((table) => {
-                    const active = !!matchRoute({
-                      to: '/stores/$store/$table',
-                      params: { store: store.store, table: table.name },
-                    })
+                    const active =
+                      activeStore?.store === store.store && activeStore?.table === table.name
                     return (
-                      <Link
+                      <button
                         key={table.name}
-                        to="/stores/$store/$table"
-                        params={{ store: store.store, table: table.name }}
-                        className={`flex items-center h-7 px-2 rounded-md text-xs transition-colors ${
+                        onClick={() => onOpenStore(store.store, table.name)}
+                        className={`w-full flex items-center h-7 px-2 rounded-md text-xs transition-colors ${
                           active
                             ? 'bg-black/30 theme-text'
                             : 'theme-text-muted hover:theme-text hover:bg-black/20'
                         }`}
                       >
                         <Table2 size={11} className="shrink-0 mr-2 opacity-60" />
-                        <span className="truncate flex-1 font-mono">{table.name}</span>
+                        <span className="truncate flex-1 text-left font-mono">{table.name}</span>
                         <span className="shrink-0 ml-2 tabular-nums opacity-60">
                           {table.rows ?? '—'}
                         </span>
-                      </Link>
+                      </button>
                     )
                   })}
                 </div>
@@ -223,19 +229,11 @@ function DataStores() {
   )
 }
 
-export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) {
+export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenStore, activeStore }: SidebarProps) {
   const { sessions, activeSessionId, status, newChat, selectSession, rename, remove } = useSessions()
   const { isIncognito } = useSettings()
   const [filter, setFilter] = useState('')
   const [searching, setSearching] = useState(false)
-  const navigate = useNavigate()
-
-  // The chat lives at '/', and a store table replaces it. Picking a chat has
-  // to come back, or the selection changes underneath a table nobody left.
-  const openChat = (run: () => void) => {
-    run()
-    void navigate({ to: '/' })
-  }
 
   const needle = filter.trim().toLowerCase()
   const visible = needle
@@ -262,7 +260,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) 
       {/* New Chat Button */}
       <div className="px-3 mb-4">
         <Button
-          onClick={() => openChat(newChat)}
+          onClick={newChat}
           className="w-full justify-start gap-2 bg-black/20 hover:bg-black/40 theme-text theme-border shadow-none font-normal h-9"
         >
           <Plus size={16} />
@@ -273,14 +271,27 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) 
       <ScrollArea className="flex-1 px-3">
         {/* Core Modules (Top Navigation) */}
         <div className="flex flex-col gap-0.5 mb-6">
+          {/* The three core modules — designed in docs/MODULES.md. Only the
+              Forge is built; the other two carry a dot and say so rather than
+              being buttons that silently do nothing. */}
           {[
-            { title: "Ariadne's Thread", icon: Network },
-            { title: "The Forge", icon: Hammer },
-            { title: "Labyrinth Blueprints", icon: Map }
-          ].map((item, i) => (
-            <Button key={i} variant="ghost" className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20">
-              <item.icon size={15} className="mr-2 shrink-0 theme-primary" /> 
-              <span className="truncate">{item.title}</span>
+            { title: "Ariadne's Thread", icon: Network, onClick: undefined },
+            { title: 'The Forge', icon: Hammer, onClick: onOpenForge },
+            { title: 'Labyrinth Blueprints', icon: Map, onClick: undefined },
+          ].map((item) => (
+            <Button
+              key={item.title}
+              variant="ghost"
+              onClick={item.onClick}
+              disabled={!item.onClick}
+              title={item.onClick ? undefined : 'Not built yet — see docs/MODULES.md'}
+              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20 disabled:opacity-45 disabled:hover:bg-transparent disabled:cursor-default"
+            >
+              <item.icon size={15} className="mr-2 shrink-0 theme-primary" />
+              <span className="truncate flex-1 text-left">{item.title}</span>
+              {!item.onClick && (
+                <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] opacity-50" />
+              )}
             </Button>
           ))}
         </div>
@@ -338,7 +349,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) 
                 key={session.session_id}
                 session={session}
                 active={session.session_id === activeSessionId}
-                onSelect={() => openChat(() => selectSession(session.session_id))}
+                onSelect={() => selectSession(session.session_id)}
                 onRename={(title) => void rename(session.session_id, title)}
                 onDelete={() => void remove(session.session_id)}
               />
@@ -346,7 +357,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings }: SidebarProps) 
           </div>
         </div>
 
-        <DataStores />
+        <DataStores onOpenStore={onOpenStore} activeStore={activeStore} />
       </ScrollArea>
 
       {/* Bottom Section */}

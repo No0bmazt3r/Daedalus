@@ -18,7 +18,9 @@ Everything below was read off the source, not from memory.
 | Background effects | Built, pointer-reactive — 13 options |
 | Typography | Built — Monocraft (the Minecraft typeface) as the default face, self-hosted |
 | Settings shell | Built — registry, search, resizable rail |
-| Store browser | Built — in the sidebar, on its own route |
+| Store browser | Built — in the sidebar, opens in a floating window |
+| Hardware detection | Built — Settings → Hardware, and the Forge window |
+| The Forge | Step 1 of 6 (detect). Estimate/score/manage/benchmark/commit not built |
 | Data stores (×5) | Built and containerised, each with a versioned schema |
 | Preference API | Built |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
@@ -56,6 +58,7 @@ to it.
 | `POST` | `/api/providers/{id}/test` | Connection test — the only outbound call |
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
 | `GET` | `/api/system/observability` | Where the metrics/logs stack lives, or that none is configured |
+| `GET` | `/api/forge/hardware` | RAM, CPU, GPU/VRAM, disk and Ollama. Always 200; unknowns come back null |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
 Writable preference keys (anything else is rejected with 404):
@@ -523,8 +526,11 @@ Paths are relative to `frontend/src/`.
 | `components/ThemeModal.tsx` | Theme editor — presets, colours, harmony, effects, import/export |
 | `components/SettingsModal.tsx` | Settings shell |
 | `components/Sidebar.tsx` | Chat list from `GET /api/sessions`, plus the Data stores section |
-| `components/stores/StoreBrowser.tsx` | The row grid — paging, sort, row detail. Pane body only, no window chrome |
-| `routes/stores.$store.$table.tsx` | Renders it in the main pane |
+| `components/stores/StoreBrowser.tsx` | The row grid — paging, sort, row detail. Body only, no window chrome |
+| `components/stores/StoreWindow.tsx` | Puts it in a `FloatingWindow` |
+| `components/ui/floating-window.tsx` | The shared window shell — drag, resize, Peek, Escape |
+| `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |
+| `components/forge/ForgeWindow.tsx` | The Forge (Layer 11) — step 1 of §8.2 |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
 | `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
 | `lib/systemClient.ts` | Log-browser, observability and provider API client |
@@ -550,12 +556,13 @@ it backwards.
 
 Three consequences worth keeping:
 
-- **The browser is a route, not a modal.** `/stores/$store/$table` is
-  deep-linkable, Back works, and it gets the full width of the pane rather than
-  a floating window over it. Picking a store behaves exactly like picking a
-  chat, because it *is* the same kind of action.
-- **Picking a chat navigates back to `/`.** Otherwise the sidebar selection
-  would change underneath a table nobody had left.
+- **The browser is a floating window.** It was briefly a route
+  (`/stores/$store/$table`) that replaced the whole pane, and that was the wrong
+  call: reading rows is something you do *while* looking at something else — a
+  chat, a trace — and a full-screen takeover makes you leave the thing you were
+  checking against. A window also gets Peek, which a route cannot offer. The
+  route is gone; the deep-linkability it bought was not worth the workflow it
+  cost.
 - **The metrics link is always present**, not conditional on a failure. A link
   that only appears during an outage is a link nobody knows exists. When
   `DAEDALUS_OBSERVABILITY_URL` is unset the panel says the stack is not

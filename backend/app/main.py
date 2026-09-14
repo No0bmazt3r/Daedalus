@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import health, logs, prefs, providers, sessions, system
+from .api import forge, health, logs, prefs, providers, sessions, system
 from .db import migrations, paths, sqlite_util
 from .services import chat_service
 
@@ -88,6 +88,7 @@ app.include_router(sessions.router)
 app.include_router(logs.router)
 app.include_router(providers.router)
 app.include_router(system.router)
+app.include_router(forge.router)
 
 
 # ── Serve the built dashboard ────────────────────────────────────────────────

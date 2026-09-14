@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Ghost, CircleDashed, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
-import { useDraggable } from '../hooks/useDraggable'
+import { useCallback, useRef, useState } from 'react'
+import { Ghost, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
+import { FloatingWindow } from './ui/floating-window'
 import {
   useResizableSidebar,
   SIDEBAR_MIN_WIDTH,
@@ -18,6 +18,7 @@ import {
 } from '../lib/settingsRegistry'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
+import { HardwarePanel } from './settings/HardwarePanel'
 import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
 
 interface SettingsModalProps {
@@ -28,15 +29,6 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { isIncognito, setIsIncognito } = useSettings()
   const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
-  const [isPeek, setIsPeek] = useState(false)
-  // Where the window sits. Centring it with flexbox looked fine but broke
-  // resizing: an absolutely-positioned flex child is re-centred as it grows,
-  // so dragging the corner moved the window left/up at the same time and the
-  // corner only tracked the cursor at half speed. An explicit top-left pins
-  // it, so resizing grows right and down the way a window should.
-  // Derived, not state: it only ever depends on `open`, so an effect would
-  // just add a render pass and a frame where the window has no position.
-  const { position, onMouseDown, handleRef, windowRef } = useDraggable()
 
   // The window is draggable and resizable, so its content can be narrow on a
   // wide screen — a viewport media query would be measuring the wrong thing.
@@ -66,101 +58,26 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     [sidebar]
   )
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
-  // Recomputed each time the window opens, so it lands centred even if the
-  // browser has been resized since. Dragging or resizing afterwards is not
-  // affected: `position` takes over below, and native resize owns the size.
-  const anchor = useMemo(() => {
-    if (!open || typeof window === 'undefined') return { left: 0, top: 0 }
-    const width = Math.min(900, window.innerWidth * 0.95)
-    const height = Math.min(650, window.innerHeight * 0.9)
-    return {
-      left: Math.max(8, (window.innerWidth - width) / 2),
-      top: Math.max(8, (window.innerHeight - height) / 2),
-    }
-  }, [open])
-
   if (!open) return null
 
   const groups = visibleGroups(isAdmin)
   const activePanel = getSettingsPanel(activeTab)
-  const cardClass = `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
+  // Peek now comes from the window shell, so the card treatment is derived
+  // inside the render prop rather than from component state.
+  const cardFor = (isPeek: boolean) =>
+    `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
 
   return (
-    <div className="fixed inset-0 z-[100] pointer-events-none">
-      <div
-        className="fixed inset-0 bg-black/40 pointer-events-auto transition-opacity duration-300"
-        style={{ opacity: isPeek ? 0 : 1 }}
-        onClick={onClose}
-      />
-
-      <div
-        ref={windowRef}
-        style={{
-          // useDraggable reports absolute viewport coordinates, so these are
-          // left/top — using them as a transform made the window jump on grab.
-          left: position.x || anchor.left,
-          top: position.y || anchor.top,
-          // Set inline rather than via `.theme-bg`: that utility is
-          // `!important`, which would beat an inline style and make Peek a no-op.
-          backgroundColor: isPeek
-            ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)'
-            : 'var(--bg)',
-          backdropFilter: isPeek ? 'none' : undefined,
-          // Default size comes from CSS, not state: native `resize` writes to
-          // the inline width/height, and a React-controlled value would fight it.
-        }}
-        className={`pointer-events-auto absolute resize overflow-hidden w-[900px] h-[650px] min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh] flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${isPeek ? 'border-white/20 shadow-none' : ''}`}
-      >
-        {/* Header (drag handle) */}
-        <div
-          ref={handleRef}
-          onMouseDown={onMouseDown}
-          className="flex items-center justify-between px-4 py-3 border-b theme-border cursor-move bg-black/10 select-none shrink-0"
-          style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
-        >
-          <div className="flex items-center gap-2 font-medium">
-            <Settings2 size={16} className="theme-primary" />
-            <span>Settings</span>
-            {activePanel && (
-              <span className="theme-text-muted font-normal text-sm">
-                · {activePanel.label}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setIsPeek(!isPeek)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border ${
-                isPeek
-                  ? 'bg-primary/20 text-[var(--primary)] border-[var(--primary)]/30'
-                  : 'theme-text-muted hover:theme-text border-transparent hover:bg-black/20'
-              }`}
-              title="Fade this window to preview the page behind it"
-            >
-              <CircleDashed size={14} className={isPeek ? 'animate-[spin_4s_linear_infinite]' : ''} />
-              Peek
-            </button>
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={onClose}
-              aria-label="Close settings"
-              className="p-1 rounded-md hover:bg-black/20 theme-text-muted hover:theme-text transition-colors ml-1"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
+    <FloatingWindow
+      open={open}
+      onClose={onClose}
+      title="Settings"
+      subtitle={activePanel?.label}
+      icon={<Settings2 size={16} className="theme-primary" />}
+      width={900}
+      height={650}
+    >
+      {({ isPeek }) => (
         <div ref={bodyRef} className={`flex flex-1 overflow-hidden min-h-0 ${isCompact ? 'flex-col' : ''}`}>
           {/* Navigation rail. Vertical and resizable when there is room;
               a horizontal scrolling strip when there is not. */}
@@ -267,6 +184,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 
+            {activeTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
+
             {activeTab === 'appearance' && (
               <div className="space-y-6 animate-in fade-in duration-200">
                 <div>
@@ -275,7 +194,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                     Themes, colours, typography and background effects.
                   </p>
                 </div>
-                <div className={cardClass}>
+                <div className={cardFor(isPeek)}>
                   <p className="text-sm theme-text-muted">
                     Appearance lives in its own window so you can see changes against
                     the live app. Open it from the sidebar menu → <strong>Theme &amp; Appearance</strong>.
@@ -349,8 +268,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </FloatingWindow>
   )
 }
 

@@ -75,7 +75,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: ['models', 'configured', 'installed', 'quantization'],
   }),
   panel({
-    id: 'hardware', label: 'Hardware', group: 'models', icon: Cpu,
+    id: 'hardware', label: 'Hardware', group: 'models', icon: Cpu, implemented: true,
     keywords: ['hardware', 'ram', 'vram', 'gpu', 'cpu', 'profiler', 'benchmark', 'fit'],
   }),
 

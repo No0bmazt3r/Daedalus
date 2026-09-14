@@ -14,3 +14,8 @@ chromadb-client>=0.5
 # directly and a transitive dependency is not a contract — a Chroma release
 # that dropped it would break the Settings panel with a confusing error.
 httpx>=0.27
+
+# Hardware detection for the Forge (app/services/hardware.py). RAM, CPU cores
+# and disk; GPU comes from pynvml or nvidia-smi when either is present, and
+# neither is required — a CPU-only machine is a supported configuration.
+psutil>=5.9

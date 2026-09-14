@@ -6,6 +6,8 @@ import { Button } from '../components/ui/button'
 import { ThemeModal } from '../components/ThemeModal'
 import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
+import { ForgeWindow } from '../components/forge/ForgeWindow'
+import { StoreWindow } from '../components/stores/StoreWindow'
 import { SettingsProvider } from '../contexts/SettingsContext'
 import { SessionsProvider } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
@@ -18,6 +20,11 @@ function RootLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
+  const [forgeOpen, setForgeOpen] = useState(false)
+  // Every floating window is owned here rather than by the Sidebar. Rendered
+  // inside it they would sit under `.attention-zone`, and inherit the sidebar's
+  // idle opacity the moment the pointer moved onto the window itself.
+  const [storeTarget, setStoreTarget] = useState<{ store: string; table: string } | null>(null)
 
   return (
     <ThemeProvider>
@@ -36,6 +43,9 @@ function RootLayout() {
                 onClose={() => setSidebarOpen(false)} 
                 onOpenTheme={() => setThemeModalOpen(true)} 
                 onOpenSettings={() => setSettingsModalOpen(true)}
+                onOpenForge={() => setForgeOpen(true)}
+                onOpenStore={(store, table) => setStoreTarget({ store, table })}
+                activeStore={storeTarget}
               />
             </div>
           </div>
@@ -60,6 +70,13 @@ function RootLayout() {
 
           <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
           <SettingsModal open={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
+          <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
+          <StoreWindow
+            open={storeTarget !== null}
+            store={storeTarget?.store ?? null}
+            table={storeTarget?.table ?? null}
+            onClose={() => setStoreTarget(null)}
+          />
         </div>
         </SessionsProvider>
       </SettingsProvider>

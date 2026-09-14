@@ -167,9 +167,34 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [ ] Wire the chat UI to `POST /api/chat` *(currently mocked)*
 - [ ] SSE streaming rendering
 - [ ] Source badges — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]`
-- [ ] Collapsible tool-call trace (Thought → Action → Observation)
-- [ ] Graph visualiser for GraphRAG traversal paths
-- [ ] Hardware/model panel in settings
+- [ ] Collapsible tool-call trace (Thought → Action → Observation) — the inline
+      half of Ariadne's Thread, below
+- [ ] Graph visualiser for GraphRAG traversal paths — traversal replay, the
+      centrepiece of Labyrinth Blueprints, below
+- [ ] The three sidebar modules — **designed, none built.** Full spec in
+      [`docs/MODULES.md`](docs/MODULES.md); each is a `PROJECT.md` §10.2
+      "glass box" promise given a home:
+  - [ ] **Ariadne's Thread** — provenance. Joins the seven audit tables on
+        `query_id` into one causal trace, with a number-by-number
+        groundedness verdict over the answer. Build first: the schema
+        already exists, so the viewer can go in now against a trace seeder
+  - [ ] **The Forge** — hardware & model console (§8.2, Layer 11). **Step 1 of
+        6 built:** detection lands in Settings → Hardware and the Forge window,
+        sharing one `HardwareView`. Remaining:
+    - [x] Detect — RAM, CPU, GPU/VRAM, disk, Ollama (`GET /api/forge/hardware`)
+    - [ ] Estimate memory per model × quantization
+    - [ ] Score fit → `safe` | `marginal` | `will_not_fit`
+    - [ ] Manage Ollama models — list / pull (SSE progress) / delete
+    - [ ] Benchmark on a RAG-context-sized prompt; write to `model_logs`
+    - [ ] Commit the choice to `config/model_config.json`
+    - [ ] Absorb the Added Models panel, cloud tier clearly marked benchmark-only
+  - [ ] **Labyrinth Blueprints** — the corpus and the knowledge graph, with
+        traversal replay for a graph-track `query_id`. Most blocked (M2 +
+        Track 2); storage is an open decision — see MODULES.md §3.4
+- [ ] Add a traversal-path column to `rag_logs` **now** — one cheap migration
+      today, unreplayable traces forever if it lands after rows exist
+- [x] Mark the unbuilt modules in the sidebar — Ariadne's Thread and Labyrinth
+      Blueprints are disabled with a dot and a tooltip; The Forge opens
 - [ ] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet
 - [x] "Added Models" panel — list local Ollama models alongside the cloud baselines
 - [x] **Split the Databases feature in two, by how often you reach for each half.**
@@ -203,7 +228,9 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] Theme engine — 16 themes, 7 base + 14 per-zone colours, derived syntax ramps, harmony generator, font/density/scale, frosted glass, import/export, custom themes
 - [x] Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted — every font path in the UI resolves through one variable
 - [x] Attention dimming — the sidebar and the chat surfaces go translucent while the pointer and focus are elsewhere
-- [x] Data stores in the sidebar — the five stores next to the chats, tables and rows one click away on their own route
+- [x] Data stores in the sidebar — the five stores next to the chats, tables and rows one click away in a floating window
+- [x] Shared `FloatingWindow` shell — drag, resize, Peek, Escape. Settings, Data stores and the Forge use it; ThemeModal stays non-modal by design
+- [x] Hardware detection — CPU/RAM/GPU/VRAM/disk/Ollama, in Settings → Hardware and The Forge
 - [x] Settings → Databases reduced to a health page, with a standing link out to the (not yet built) metrics stack
 - [x] Background effects — 13 options, 11 canvas-animated, pointer-reactive
 - [x] Settings modal — sectioned nav, incognito toggle

@@ -108,6 +108,47 @@ export function observability(): Promise<Observability> {
   return request<Observability>('/api/system/observability');
 }
 
+// ── the Forge — hardware detection ───────────────────────────────────────────
+
+export interface GpuDevice {
+  name: string;
+  vram_total_bytes: number | null;
+  vram_used_bytes: number | null;
+  driver_version: string | null;
+}
+
+export interface HardwareProfile {
+  host: { platform: string | null; release: string | null; python: string; wsl: boolean };
+  cpu: {
+    model: string | null;
+    arch: string | null;
+    cores_physical: number | null;
+    cores_logical: number | null;
+    frequency_mhz: number | null;
+    load_percent: number | null;
+  };
+  memory: {
+    total_bytes: number | null;
+    available_bytes: number | null;
+    used_percent: number | null;
+    swap_total_bytes: number | null;
+  };
+  disk: { path: string; total_bytes: number | null; free_bytes: number | null };
+  gpu: { available: boolean; source: string | null; devices: GpuDevice[]; error: string | null };
+  ollama: {
+    base_url: string;
+    reachable: boolean;
+    version: string | null;
+    resolved_url: string | null;
+  };
+  detector: string;
+}
+
+/** What this machine is. Always answers; unknowns come back null. */
+export function hardwareProfile(): Promise<HardwareProfile> {
+  return request<HardwareProfile>('/api/forge/hardware');
+}
+
 // ── cloud model endpoints ────────────────────────────────────────────────────
 
 export interface Provider {
