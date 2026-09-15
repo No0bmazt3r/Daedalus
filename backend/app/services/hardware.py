@@ -29,12 +29,19 @@ import shutil
 import subprocess
 from typing import Any
 
+_psutil_error: str | None = None
+
 try:  # psutil is the only hard dependency, but treat it as optional anyway —
     # a detection module that cannot be imported is worse than one that reports
     # "unknown", and this way the endpoint degrades instead of 500ing.
     import psutil
-except Exception:  # pragma: no cover - defensive
+except Exception as exc:  # pragma: no cover - defensive
     psutil = None  # type: ignore[assignment]
+    # Kept, because "no RAM figure" and "no RAM figure *because psutil did not
+    # install on this distro*" are different problems and only one of them is
+    # actionable. A wheel-less Python on an immutable distro (Bluefin, Silverblue)
+    # is the common way to land here.
+    _psutil_error = f"{exc.__class__.__name__}: {exc}"
 
 GB = 1024**3
 
@@ -65,6 +72,9 @@ def _cpu() -> dict[str, Any]:
             pass
 
     if psutil is None:
+        # os.cpu_count() knows the logical count without psutil; nothing in the
+        # stdlib knows the physical one, so it stays None.
+        info["cores_logical"] = os.cpu_count()
         return info
 
     try:
@@ -93,29 +103,105 @@ def _cpu() -> dict[str, Any]:
     return info
 
 
+def _meminfo() -> dict[str, int]:
+    """`/proc/meminfo` as bytes, keyed without the trailing colon.
+
+    Values carrying a `kB` unit are converted; bare counts (`HugePages_Total`)
+    are left alone. Empty when there is no procfs — every caller treats a
+    missing key as "unknown" rather than zero.
+    """
+    out: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                key, sep, rest = line.partition(":")
+                if not sep:
+                    continue
+                parts = rest.split()
+                if not parts:
+                    continue
+                try:
+                    value = int(parts[0])
+                except ValueError:
+                    continue
+                out[key.strip()] = value * 1024 if len(parts) > 1 else value
+    except OSError:
+        pass
+    return out
+
+
 def _memory() -> dict[str, Any]:
-    """Total/available RAM and swap, in bytes."""
+    """Total/available RAM and swap, in bytes.
+
+    Three probes, in descending order of detail: psutil, then `/proc/meminfo`,
+    then `sysconf`. The fallbacks exist because RAM was the one figure with no
+    answer of its own — psutil owned it outright, so a machine where psutil is
+    missing or raising reported "—" for memory while CPU and disk, which have
+    non-psutil paths, kept working. `source` says which probe answered and
+    `error` why a richer one did not, so the panel can explain the gap instead
+    of leaving a dash.
+    """
     out: dict[str, Any] = {
         "total_bytes": None,
         "available_bytes": None,
         "used_percent": None,
         "swap_total_bytes": None,
+        "source": None,
+        "error": None,
     }
+
     if psutil is None:
-        return out
-    try:
-        vm = psutil.virtual_memory()
-        out["total_bytes"] = vm.total
-        # `available`, not `total - used`: it accounts for reclaimable cache,
-        # which is what actually determines whether a model will load.
-        out["available_bytes"] = vm.available
-        out["used_percent"] = vm.percent
-    except Exception:
-        pass
-    try:
-        out["swap_total_bytes"] = psutil.swap_memory().total
-    except Exception:
-        pass
+        out["error"] = f"psutil unavailable ({_psutil_error})" if _psutil_error else "psutil unavailable"
+    else:
+        try:
+            vm = psutil.virtual_memory()
+            out["total_bytes"] = vm.total
+            # `available`, not `total - used`: it accounts for reclaimable cache,
+            # which is what actually determines whether a model will load.
+            out["available_bytes"] = vm.available
+            out["used_percent"] = vm.percent
+            out["source"] = "psutil"
+        except Exception as exc:
+            # Includes the RuntimeWarning psutil raises for a partial
+            # /proc/meminfo when warnings are configured as errors.
+            out["error"] = f"psutil.virtual_memory() failed ({exc.__class__.__name__}: {exc})"
+        try:
+            out["swap_total_bytes"] = psutil.swap_memory().total
+        except Exception:
+            pass
+
+    if out["total_bytes"] is None or out["swap_total_bytes"] is None:
+        mem = _meminfo()
+        if out["total_bytes"] is None and mem.get("MemTotal"):
+            total = mem["MemTotal"]
+            # MemAvailable is kernel 3.14+; the older estimate is what `free`
+            # itself falls back to.
+            avail = mem.get("MemAvailable")
+            if avail is None:
+                avail = mem.get("MemFree", 0) + mem.get("Buffers", 0) + mem.get("Cached", 0)
+            out["total_bytes"] = total
+            out["available_bytes"] = min(avail, total)
+            out["used_percent"] = round((total - out["available_bytes"]) / total * 100, 1)
+            out["source"] = "/proc/meminfo"
+        if out["swap_total_bytes"] is None and "SwapTotal" in mem:
+            out["swap_total_bytes"] = mem["SwapTotal"]
+
+    if out["total_bytes"] is None:
+        # No procfs at all (macOS, a sandbox that hides it). sysconf knows the
+        # page count and nothing else, so this answers total and stops there.
+        try:
+            pages = os.sysconf("SC_PHYS_PAGES")
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            if pages > 0 and page_size > 0:
+                out["total_bytes"] = pages * page_size
+                out["source"] = "sysconf"
+        except (AttributeError, ValueError, OSError):
+            # sysconf does not exist on Windows and these names are not
+            # defined everywhere it does.
+            pass
+
+    if out["total_bytes"] is None and not out["error"]:
+        out["error"] = "no memory probe answered (psutil, /proc/meminfo and sysconf all silent)"
     return out
 
 

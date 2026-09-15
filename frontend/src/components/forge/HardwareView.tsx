@@ -131,8 +131,8 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
           <Stat label="Physical cores" value={hw.cpu.cores_physical?.toString() ?? '—'} />
           <Stat label="Logical cores" value={hw.cpu.cores_logical?.toString() ?? '—'} />
           <Stat
-            label="Max frequency"
-            value={hw.cpu.frequency_mhz ? `${(hw.cpu.frequency_mhz / 1000).toFixed(2)} GHz` : '—'}
+            label="Base clock"
+            value={hw.cpu.base_clock_mhz ? `${(hw.cpu.base_clock_mhz / 1000).toFixed(2)} GHz` : '—'}
           />
           <Stat label="Architecture" value={hw.cpu.arch ?? '—'} />
         </div>
@@ -159,6 +159,22 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
           Model fit is judged against <span className="theme-text">available</span> memory,
           not total — the rest is already spoken for.
         </p>
+        {/* A dash here used to be unexplained. The probe now says which reader
+            answered and what stopped the better one, because "no RAM figure"
+            and "psutil did not install on this distro" need different fixes. */}
+        {mem.total_bytes === null ? (
+          <p className="text-xs text-amber-400/90 mt-2 break-words">
+            RAM could not be read. {mem.error ?? 'No probe answered.'}
+          </p>
+        ) : (
+          mem.source &&
+          mem.source !== 'psutil' && (
+            <p className="text-xs theme-text-muted opacity-75 mt-2 break-words">
+              Read from <code className="theme-text">{mem.source}</code>
+              {mem.error ? ` — ${mem.error}` : ''}
+            </p>
+          )
+        )}
       </div>
 
       {/* ── GPU ── */}

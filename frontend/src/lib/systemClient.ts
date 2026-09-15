@@ -124,7 +124,8 @@ export interface HardwareProfile {
     arch: string | null;
     cores_physical: number | null;
     cores_logical: number | null;
-    frequency_mhz: number | null;
+    /** Base clock, not the turbo ceiling — named for what the backend reads. */
+    base_clock_mhz: number | null;
     load_percent: number | null;
   };
   memory: {
@@ -132,6 +133,10 @@ export interface HardwareProfile {
     available_bytes: number | null;
     used_percent: number | null;
     swap_total_bytes: number | null;
+    /** Which probe answered: 'psutil', '/proc/meminfo' or 'sysconf'. */
+    source: string | null;
+    /** Why a richer probe did not — set even when a fallback succeeded. */
+    error: string | null;
   };
   disk: { path: string; total_bytes: number | null; free_bytes: number | null };
   gpu: { available: boolean; source: string | null; devices: GpuDevice[]; error: string | null };
