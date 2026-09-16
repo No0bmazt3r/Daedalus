@@ -8,6 +8,7 @@ import {
   modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark,
   type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type ModelSource,
 } from '../../lib/forgeClient'
+import { Skeleton, SkeletonList } from '../ui/skeleton'
 
 /**
  * Steps 2–5 of the Forge: estimate · score · manage · benchmark.
@@ -610,7 +611,29 @@ export function ModelsView() {
     )
   }
 
-  if (!table) return <div className="text-sm theme-text-muted">Scoring models…</div>
+  if (!table) {
+    return (
+      <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">
+        <span className="sr-only">Scoring models against this machine</span>
+        <div className="flex items-start justify-between gap-4">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-7 w-24 rounded-lg shrink-0" />
+        </div>
+        <Skeleton className="h-3 w-3/4" />
+        <div className="flex gap-2 pb-2 border-b theme-border">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-20 rounded-lg" />
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-7 flex-1 rounded-lg" />
+          <Skeleton className="h-7 w-20 rounded-lg" />
+          <Skeleton className="h-7 w-14 rounded-lg" />
+        </div>
+        <SkeletonList rows={5} label="Scoring models" />
+      </div>
+    )
+  }
 
   const budget = table.budget
   const chip = (active: boolean) =>
@@ -839,10 +862,13 @@ export function ModelsView() {
           instead of swapping rows in place. */}
       <div key={source} className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out">
         {hfLoading && source === 'huggingface' && (
-          <div className="flex items-center gap-2 text-xs theme-text-muted py-2">
-            <Loader2 size={13} className="animate-spin" />
-            Searching Hugging Face…
-          </div>
+          <>
+            <div className="flex items-center gap-2 text-xs theme-text-muted py-2">
+              <Loader2 size={13} className="animate-spin" />
+              Searching Hugging Face…
+            </div>
+            <SkeletonList rows={4} label="Searching Hugging Face" />
+          </>
         )}
         {visible.map((row) => (
           <Row
@@ -854,6 +880,7 @@ export function ModelsView() {
             onBenchmark={handleBenchmark}
           />
         ))}
+        {customLoading && source === 'custom' && <SkeletonList rows={1} label="Checking the tag" />}
         {!visible.length && !hfLoading && !customLoading && (
           <p className="text-xs theme-text-muted py-6 text-center">
             {source === 'custom'

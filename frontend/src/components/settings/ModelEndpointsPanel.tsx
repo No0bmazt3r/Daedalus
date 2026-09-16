@@ -3,6 +3,7 @@ import {
   Plus, Trash2, Check, X, Loader2, ExternalLink, KeyRound, AlertTriangle, CloudOff,
 } from 'lucide-react'
 import { ThemeSelect } from '../ui/theme-select'
+import { Skeleton } from '../ui/skeleton'
 import {
   addEndpoint,
   deleteEndpoint,
@@ -40,6 +41,9 @@ function relativeTime(iso: string | null): string {
 export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   const [providers, setProviders] = useState<Provider[]>([])
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([])
+  // `endpoints` starts as [], so "still fetching" and "none configured"
+  // rendered the same empty-state copy. This is what separates them.
+  const [loaded, setLoaded] = useState(false)
   const [providerId, setProviderId] = useState('deepseek')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -55,6 +59,8 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'could not load endpoints')
+    } finally {
+      setLoaded(true)
     }
   }, [])
 
@@ -239,8 +245,14 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
           )}
         </h4>
 
-        {endpoints.length === 0 ? (
-          <div className={`${card} text-sm theme-text-muted opacity-70`}>
+        {!loaded ? (
+          <div className="space-y-2" role="status" aria-busy="true" aria-live="polite">
+            <span className="sr-only">Loading endpoints</span>
+            <Skeleton className="h-16 w-full rounded-xl" />
+            <Skeleton className="h-16 w-full rounded-xl" />
+          </div>
+        ) : endpoints.length === 0 ? (
+          <div className={`${card} text-sm theme-text-muted`}>
             Nothing connected yet. Add a provider above to use it as an evaluation baseline.
           </div>
         ) : (

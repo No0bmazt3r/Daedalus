@@ -5,6 +5,7 @@ import {
 import {
   hardwareProfile, redetectHardware, type HardwareProfile,
 } from '../../lib/systemClient'
+import { Skeleton, SkeletonCard } from '../ui/skeleton'
 
 /**
  * What this machine is — step 1 of the six in PROJECT.md §8.2.
@@ -287,7 +288,24 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
     )
   }
 
-  if (!hw) return <div className="text-sm theme-text-muted">Detecting hardware…</div>
+  // Five cards, because that is what lands: processor, memory, graphics, disk,
+  // runtime. Matching the real shape means the panel settles rather than jumps.
+  if (!hw) {
+    return (
+      <div className="space-y-4" role="status" aria-busy="true" aria-live="polite">
+        <span className="sr-only">Detecting hardware</span>
+        <div className="flex items-start justify-between gap-4">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-7 w-24 rounded-lg shrink-0" />
+        </div>
+        <SkeletonCard stats={4} />
+        <SkeletonCard stats={3} />
+        <SkeletonCard stats={2} />
+        <SkeletonCard stats={2} />
+        <SkeletonCard stats={4} />
+      </div>
+    )
+  }
 
   const meta = hw.refresh
   // The ticking value when there is one; the backend's own figure covers the

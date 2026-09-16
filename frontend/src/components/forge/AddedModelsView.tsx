@@ -8,6 +8,7 @@ import {
   type ModelRow, type BenchmarkResult, type ModelUsage,
 } from '../../lib/forgeClient'
 import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
+import { SkeletonList } from '../ui/skeleton'
 
 /**
  * The model manager: what this machine has, and what it has been doing.
@@ -385,7 +386,7 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
       <div key={pane} className="animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out space-y-3">
         {pane === 'local' ? (
           rows === null ? (
-            <div className="text-sm theme-text-muted">Reading what's installed…</div>
+            <SkeletonList rows={2} label="Reading what is installed" />
           ) : (
             <>
               <div className="flex items-center gap-2 flex-wrap">

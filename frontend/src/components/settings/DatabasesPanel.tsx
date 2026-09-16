@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Database, HardDrive, Lock, RefreshCw, Sprout, AlertTriangle, Check, ExternalLink, Activity } from 'lucide-react'
 import { observability, type Observability } from '../../lib/systemClient'
+import { SkeletonCard } from '../ui/skeleton'
 
 /**
  * Store health, and nothing else.
@@ -253,7 +254,13 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
       ))}
 
       {!databases && !error && (
-        <div className="text-sm theme-text-muted">Loading store status…</div>
+        <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">
+          <span className="sr-only">Loading store status</span>
+          {/* Five, because there are always exactly five stores. */}
+          {Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonCard key={i} stats={3} />
+          ))}
+        </div>
       )}
 
       {/* Always present, whether or not anything is failing. A link that only

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, RefreshCw, X, EyeOff, ArrowDownUp, Table2 } from 'lucide-react'
+import { Skeleton } from '../ui/skeleton'
 import { readLogTable, type LogPage } from '../../lib/systemClient'
 
 /**
@@ -141,6 +142,18 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
       {/* Rows */}
       <div className="flex-1 overflow-auto min-h-0">
         {error && <div className="p-4 text-sm status-warn">{error}</div>}
+
+        {/* A null page rendered nothing, so opening a table looked like an
+            empty table until the rows arrived. */}
+        {!error && !page && (
+          <div className="p-4 space-y-2" role="status" aria-busy="true" aria-live="polite">
+            <span className="sr-only">Loading rows</span>
+            <Skeleton className="h-6 w-full" />
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-4 w-full" />
+            ))}
+          </div>
+        )}
 
         {!error && page && page.rows.length === 0 && (
           <div className="p-8 text-center text-sm theme-text-muted opacity-70">

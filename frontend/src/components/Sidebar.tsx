@@ -3,6 +3,7 @@ import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
+import { Skeleton } from './ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -159,7 +160,12 @@ function DataStores({
         </span>
       )}
       {!stores && !error && (
-        <span className="px-2 py-1 text-xs theme-text-muted opacity-60 block">Loading…</span>
+        <div className="px-2 py-1 space-y-1.5" role="status" aria-busy="true" aria-live="polite">
+          <span className="sr-only">Loading data stores</span>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-4 w-full" />
+          ))}
+        </div>
       )}
 
       <div className="flex flex-col gap-0.5">
@@ -329,7 +335,14 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             )}
 
             {status === 'loading' && sessions.length === 0 && (
-              <span className="px-2 py-1 text-xs theme-text-muted opacity-60">Loading…</span>
+              <div className="px-2 py-1 space-y-1.5" role="status" aria-busy="true" aria-live="polite">
+                <span className="sr-only">Loading chats</span>
+                {/* Varying widths, because a stack of identical bars reads as a
+                    table rather than a list of differently-titled chats. */}
+                {['w-4/5', 'w-full', 'w-3/5', 'w-11/12', 'w-2/3'].map((w, i) => (
+                  <Skeleton key={i} className={`h-4 ${w}`} />
+                ))}
+              </div>
             )}
 
             {status === 'offline' && (

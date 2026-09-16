@@ -48,7 +48,7 @@ export function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
 
-  let modelOptions = [{ value: '', label: 'Loading...' }]
+  let modelOptions = [{ value: '', label: 'Loading models…' }]
   if (!modelsLoading) {
     if (modelsError) {
       modelOptions = [{ value: '', label: modelsError }]
