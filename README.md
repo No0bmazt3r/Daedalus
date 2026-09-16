@@ -271,7 +271,12 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Background effects** | 13 options, 11 canvas-animated, **pointer-reactive** — including Nexus, Aurora, Bubbles and Voxels |
 | **Attention dimming** | The sidebar and the chat surfaces sit back translucent while the pointer and focus are elsewhere |
 | **Data stores** | The five stores in the sidebar under the chats — expand one, click a table, read its rows in a floating window |
-| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama, detected live. Settings → Hardware, and **The Forge** in the sidebar |
+| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. Settings → Hardware, and **The Forge** |
+| **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` |
+| **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
+| **Model manager** | What is installed, badged SLM or LLM, with per-model usage: runs split by chat and benchmark, token totals, and latency as mean / p50 / p95 |
+| **Chat** | `POST /api/chat` resolves the committed model, replays conversation history, answers from Ollama and logs the call. The composer's picker offers local installed models only — a cloud endpoint can never answer a live query |
+| **Accessible theming** | Every colour derives from the selected theme and is floored to WCAG AA: body, muted, accent-as-text, on-accent labels and the three status colours. All 16 shipped themes pass on every role, and custom themes run through the same derivation |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Databases panel reports health only |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
 | **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |
@@ -282,9 +287,13 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 ### Not built yet
 
 Knowledge ingestion, both retrieval tracks, the deterministic tool layer, the
-orchestration flow, Ollama integration and the evaluation harness. Your
-messages are stored and your chats persist, but nothing answers them yet — the
-reply you see is a placeholder and says so.
+full orchestration flow and the evaluation harness.
+
+Chat answers now: the serving path is wired, so a message goes to a real local
+model and the transcript persists. What it does *not* do yet is retrieve —
+there is no evidence pack and no tool-calling, so it answers from the
+conversation alone. Responses are also synchronous rather than streamed, which
+is tolerable at 300–400ms to first token and will not be on a larger model.
 
 ---
 

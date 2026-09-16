@@ -60,10 +60,28 @@ The anti-hallucination mechanism. **Highest-value milestone.**
 
 ## M4 — Model provider  ▸ Layer 6
 
-- [ ] Ollama client wrapper with timeout and retry
-- [ ] `config/model_config.json` — model never hardcoded in FastAPI
+- [x] Ollama client wrapper with timeout and retry — `services/ollama_client.py`.
+      Resolves the daemon across `OLLAMA_BASE_URL`, `localhost` and `127.0.0.1`
+      (the last because `localhost` resolves to `::1` first and Ollama binds
+      IPv4), caches whichever answered, and refuses to fall back locally when
+      the configured host is a real remote: answering from the wrong machine
+      would attribute a benchmark to hardware that never ran it
+- [x] `config/model_config.json` — model never hardcoded in FastAPI.
+      `services/model_config.py`, read on every `POST /api/chat`. Two modes:
+      `pinned` names a model, `auto` stores the *policy* "best-scoring installed
+      model on whatever machine reads this" and resolves per request. Auto is
+      the default, because a pinned name is a claim about one machine's hardware
+      that goes quietly stale on any other
+- [x] The serving path — `POST /api/chat` (`services/inference.py`). Resolves
+      the model, replays conversation history, streams from Ollama and writes a
+      `model_logs` row tagged `source='chat'`. `evidence` is threaded through
+      unused so retrieval can mount without rearranging the prompt
+- [x] Measure time-to-first-token and tok/s on a **RAG-context-sized** prompt,
+      not a bare question — `services/benchmark.py`, ~2k tokens, from `rag_logs`
+      when a real retrieval exists and a labelled fixture otherwise
 - [ ] Pull and smoke-test the SLM tier: Qwen3 1.7B · Phi-3 Mini 3.8B · Gemma 3 1B (Q4_K_M)
-- [ ] Measure time-to-first-token and tok/s on a **RAG-context-sized** prompt, not a bare question
+- [ ] Streaming responses on the chat path — currently synchronous, which is
+      tolerable at 300–400ms TTFT and will not be on a larger model
 - [ ] Verify inference works with networking fully disabled
 
 ## M5 — Orchestration  ▸ Layer 7
@@ -150,17 +168,30 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 
 ## M9 — Hardware & model console  ▸ Layer 11
 
-CLI first — it's the safe MVP. Web UI only if time allows.
+Planned CLI-first as the safe MVP. It went the other way: the web console was
+built directly, because the detection and scoring services are the substance and
+a UI over them was cheaper than a second CLI surface. See **The Forge** under
+Layer 9 below for the per-step detail.
 
-- [ ] Detect RAM/CPU/GPU/VRAM/disk/Ollama version
-- [ ] Hand-curated model catalog with quantization variants
-- [ ] Memory estimator (`docs/PROJECT.md` §8.2)
-- [ ] Scorer → `safe` / `marginal` / `will_not_fit` + ranking
-- [ ] Ollama management: list, pull, delete
-- [ ] Benchmark runner — 5 runs, averaged
-- [ ] Write the selection to `config/model_config.json`
-- [ ] Cross-check estimates against LLM Checker for the methodology chapter
-- [ ] *Optional:* Streamlit UI
+- [x] Detect RAM/CPU/GPU/VRAM/disk/Ollama version — on a background schedule,
+      not per panel open (`services/hardware.py`)
+- [x] Hand-curated model catalog with quantization variants — 37 entries in
+      `backend/app/data/model_catalogue.json`, every Ollama tag verified against
+      the registry, plus live Hugging Face GGUF search for anything not declared
+- [x] Memory estimator (`docs/PROJECT.md` §8.2) — `services/model_fit.py`
+- [x] Scorer → `safe` / `marginal` / `will_not_fit` + ranking, judged against
+      **two** memory pools so a model too large for VRAM is offloaded rather
+      than disqualified
+- [x] Ollama management: list, pull (SSE, cancellable), delete
+- [x] Benchmark runner on a RAG-sized prompt, with a warm-up pass
+- [x] Write the selection to `config/model_config.json`
+- [ ] Average the benchmark over several runs — currently one run per click.
+      `GET /api/forge/usage` already aggregates every logged run into
+      mean/p50/p95, so this is about the *per-click* figure, not the report's
+- [ ] Cross-check estimates against LLM Checker for the methodology chapter.
+      Worth doing now that there is something to check: on the development
+      machine the estimator predicted 28.9 tok/s against 27.9 measured
+- [ ] *Optional:* Streamlit UI — unlikely; the web console covers it
 
 ## M10 — Dashboard completion  ▸ Layer 9B
 
@@ -179,8 +210,10 @@ CLI first — it's the safe MVP. Web UI only if time allows.
         groundedness verdict over the answer. Build first: the schema
         already exists, so the viewer can go in now against a trace seeder
   - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
-        steps built,** as four tabs: Hardware · Models · Deployment · Cloud.
-        `HardwareView` is still shared with Settings → Hardware:
+        steps built,** as three tabs: Hardware · Models · Added Models.
+        `HardwareView` is still shared with Settings → Hardware. The two model
+        tabs split by *question*, not by kind: Models is discovery (what could
+        run here, ranked), Added Models is inventory (what is here, managed):
     - [x] Detect — RAM, CPU, GPU/VRAM, disk, Ollama (`GET /api/forge/hardware`).
           Runs on a background schedule rather than per panel open — three
           tiers, dormant when nobody is looking (`services/hardware.py`)
@@ -197,9 +230,23 @@ CLI first — it's the safe MVP. Web UI only if time allows.
           writes `model_logs` under a `bench_` query id
     - [x] Commit the choice to `config/model_config.json` — **`auto` or
           `pinned`.** Auto stores a policy, not a name, and re-resolves to the
-          best-fitting *installed* model on whatever machine reads it
-    - [x] Absorb the Added Models panel — the Cloud tab renders the same
-          `ModelEndpointsPanel`, behind its own benchmark-only warning
+          best-fitting *installed* model on whatever machine reads it.
+          **No tab:** a Deployment panel existed and was removed, because it set
+          a value the composer's own model picker already sets and two controls
+          for one decision drift apart. The file is still read on every request,
+          still answers when no browser is choosing (a scripted run, the M8
+          harness, the first request after a restart), and is hand-editable to
+          pin a model for a reproducible experiment
+    - [x] Absorb the Added Models panel — it is now the inventory tab, with
+          Local and Cloud panes. Local lists installed models badged **SLM** or
+          **LLM** with a size filter; both tiers answer chat, and only the cloud
+          tier never does (§8.1 marks only *it* "never deployed"). Cloud renders
+          the same `ModelEndpointsPanel` Settings does, behind its own warning
+    - [x] **Usage and stats per model** — `GET /api/forge/usage` aggregates
+          `model_logs` into run counts split by `source`, token totals, and
+          latency as **mean, p50 and p95**, which is what §9.2 asks for by name.
+          A mean alone hides the tail: on test data mean TTFT ran at roughly
+          twice p50 because of a handful of cold loads
     - [x] **Discovery beyond the six.** 37 catalogue entries (6 shortlisted +
           31 verified Ollama library), plus live Hugging Face GGUF search and a
           Custom tab that scores any tag — `hf.co/{repo}:{quant}` included
@@ -210,7 +257,15 @@ CLI first — it's the safe MVP. Web UI only if time allows.
     - [x] Verify the Ollama tags — `services/ollama_registry.py` reads each
           tag's OCI manifest, which both confirms it exists and reports the real
           weight size, so estimates use published bytes rather than
-          `params × bytes_per_param` before anything is downloaded
+          `params × bytes_per_param` before anything is downloaded. 46 of 48
+          rows now estimate from real byte counts; it caught one broken tag the
+          catalogue had shipped
+    - [x] **Measure the engine, not the wall clock.** Migration `002` adds
+          `prefill_ms`, `generation_ms`, `load_ms` and `source` to `model_logs`.
+          The first benchmark derived tok/s as `completion ÷ (total − TTFT)`,
+          which charges the model for any client-side delay and reported
+          llama3.2 at 11 tok/s where the engine said 23.9 — and made the
+          estimator look 0.38x optimistic when it was actually within 3%
     - [ ] **Verify the catalogue's quality figures.** Six MMLU scores in
           `backend/app/data/model_catalogue.json` ship `verified: false` with a
           source URL each; the UI marks them unverified. Check them against the
@@ -266,6 +321,29 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 - [x] Data stores in the sidebar — the five stores next to the chats, tables and rows one click away in a floating window
 - [x] Shared `FloatingWindow` shell — drag, resize, Peek, Escape. Settings, Data stores and the Forge use it; ThemeModal stays non-modal by design
 - [x] Hardware detection — CPU/RAM/GPU/VRAM/disk/Ollama, in Settings → Hardware and The Forge
+- [x] **Every colour derives from the selected theme.** A theme here is an
+      arbitrary accent over an arbitrary background, light or dark, so a
+      hardcoded `text-amber-400` is legible on one and invisible on the next.
+      `lib/themes.ts` now derives and floors, holding each colour's hue and
+      saturation and moving only lightness until it clears WCAG AA:
+  - [x] `deriveReadableText` / `deriveReadableMuted` — body text failed AA on
+        2 of 16 themes (Cute 3.26:1, Retrowave 4.46:1) and muted text on 5
+        (Retrowave 2.64:1, Daylight 3.19:1). Both are floored now
+  - [x] `deriveReadableAccent` — `--primary` is tuned as a *fill*; as small text
+        it failed on 6 themes (Paper 2.11:1). `--primary-readable` is the text
+        variant, used by `.theme-accent`
+  - [x] `derivePrimaryContrast` — eight accent-filled buttons hardcoded a black
+        label, which fails on Organs (3.99:1) and on any dark custom accent
+  - [x] `--status-ok/warn/bad/info` — green/amber/red pitched against the
+        background's lightness, so a verdict reads on a cream theme and a black one
+  - [x] `.theme-surface` / `.theme-track` — replaced 71 `bg-black/N` usages that
+        always darkened, which is a different effect on a light theme than a dark one
+  - [x] **All 16 shipped themes now pass AA on every text role** (body, muted,
+        accent, on-accent, and all three status colours). Custom themes route
+        through the same `applyColors`, so the derivation runs on them too
+  - [x] Tab and panel animations — a one-shot spin-in on the selected icon, and
+        a fade-and-rise on pane switches, across the Forge, Settings and the
+        theme modal. Honours `prefers-reduced-motion`
 - [x] Settings → Databases reduced to a health page, with a standing link out to the (not yet built) metrics stack
 - [x] Background effects — 13 options, 11 canvas-animated, pointer-reactive
 - [x] Settings modal — sectioned nav, incognito toggle
@@ -306,9 +384,15 @@ CLI first — it's the safe MVP. Web UI only if time allows.
 
 ## Known issues
 
-- [ ] Chat responses are placeholders — no `POST /api/chat` yet. User turns persist; assistant turns do not, and the UI says so
-- [ ] A reopened chat therefore shows only your own messages until the orchestrator lands
-- [ ] Three `setState`-in-effect lint warnings (`ChatInterface`, `ThemeModal`, `DatabasesPanel`) — pre-existing. `SessionsContext` has one too, but it is the legitimate kind: an effect synchronising with the backend on mount
+- [ ] Chat responses are synchronous — `POST /api/chat` answers in one shot with
+      no streaming. Fine at 300–400ms to first token on a 3B model, and not fine
+      on anything larger
+- [ ] The chat path has no retrieval or tool-calling yet: it replays conversation
+      history and answers. `evidence` is threaded through `inference.answer()`
+      unused, so the prompt is already in its final shape for M5/M6
+- [ ] Four `setState`-in-effect lint warnings (`SessionsContext`, `ModelsView` ×2,
+      `AddedModelsView`) — all the legitimate kind: an effect synchronising with
+      the backend on mount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
@@ -319,6 +403,12 @@ CLI first — it's the safe MVP. Web UI only if time allows.
       with the app, so both silently fall back (to the system monospace and to
       Comic Sans respectively). Pre-existing; the OpenDyslexic one matters most,
       since it is offered as an accessibility affordance and currently isn't one
+- [ ] Hugging Face gated repositories cannot be pulled. Public GGUF publishers
+      (bartowski, unsloth, mradermacher, lmstudio-community) need no token, but
+      `meta-llama` and friends do, and Ollama's `hf.co/` pull does not reliably
+      honour one (ollama#7240). The route for those is `huggingface-cli download`
+      then `ollama create`. No token field is offered, because it would be a box
+      that often does not work
 - [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
 
 ---

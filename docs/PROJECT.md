@@ -210,13 +210,13 @@ evaluation harness are administrative. They never sit in the live query path.
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
 | 4 | Knowledge ingestion (offline) | Setup | **Not started** |
 | 5 | Retrieval — vector + graph | 3 | **Store running** (Chroma); retrieval not started |
-| 6 | Model provider (Ollama) | 3 | **Not started** |
-| 7 | FastAPI orchestration | 3 | **Skeleton only** |
+| 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
+| 7 | FastAPI orchestration | 3 | **Answering, not orchestrating** — history replay and a model call; no retrieval or tool-calling yet |
 | 8 | Deterministic tool layer | 3 | **Not started** |
 | 9A | PyQt5 chat tab | 4 | Deferred / optional |
 | 9B | React web dashboard | 4 | **Partially built** — see §11 |
 | 10 | Observability & evaluation | Support | **Store built** — 7 log tables + query_id tracing |
-| 11 | Admin utilities | Setup | **Not started** |
+| 11 | Admin utilities | Setup | **Built** — The Forge: all six §8.2 steps, plus model discovery and per-model usage |
 
 ---
 
@@ -621,14 +621,20 @@ Trust comes from visible reasoning, not a black box:
 
 ### Not started
 
-The *logic* on top of the stores: knowledge ingestion, both retrieval tracks,
-the deterministic tool layer, the orchestration flow, Ollama integration, the
-evaluation harness, and the admin console. The stores exist, report their
-health and hold conversation state, but nothing answers a question yet — the
-chat UI still renders mock replies.
+Knowledge ingestion, both retrieval tracks, the deterministic tool layer, and
+the evaluation harness.
 
-> **Honest framing:** what exists today is a polished Zone 4 client plus a thin
-> Zone 3 shell. The AI layer — the actual FYP contribution — is still ahead.
+Chat answers now. The serving path resolves the committed model, replays
+conversation history and returns a real local completion, logging what the call
+cost. What is missing is everything that makes the answer *grounded*: there is
+no evidence pack, no tool-calling, and therefore nothing yet to be grounded
+against. The §9.2 targets that depend on retrieval — precision@5, hallucination
+rate — have nothing to measure.
+
+> **Honest framing:** what exists today is a polished Zone 4 client, a Zone 3
+> shell that can now hold a conversation with a local model, and the admin
+> console that chose it. The retrieval layer — the actual FYP contribution — is
+> still ahead.
 
 ---
 

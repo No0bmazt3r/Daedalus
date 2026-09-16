@@ -219,16 +219,18 @@ Where the model is shaped to fit the machine. This is `PROJECT.md` §8.2 in full
 which is itself the merge of `research/05` (llmfit-inspired fit tool) and
 `architecture/11` (Model Selector Console) into one deliverable.
 
-§8.2 specifies six functions. The Forge is those six with a face:
+§8.2 specifies six functions. The Forge is those six with a face, in three tabs:
+**Hardware** (step 1), **Models** (2–5, discovery and ranking) and **Added
+Models** (inventory and management). **All six are built.**
 
 | # | Function | Detail |
 |---|---|---|
-| 1 | **Detect** ✅ **built** | RAM, CPU, GPU/VRAM, disk, Ollama version. `psutil` + `pynvml`/`nvidia-smi`, every probe independently guarded — `services/hardware.py`, `GET /api/forge/hardware` |
-| 2 | **Estimate** | `≈ (params_B × bytes_per_param) + kv_cache + ~0.5–1GB runtime`. Q4_K_M ≈ 0.5–0.6 B/param · Q8_0 ≈ 1.0 · FP16 ≈ 2.0 |
-| 3 | **Score** | fit / speed / quality / context → `safe` \| `marginal` \| `will_not_fit` |
-| 4 | **Manage** | Ollama list / pull / delete. A local API call, so Rule 1 permits it |
-| 5 | **Benchmark** | Time-to-first-token, tok/s, end-to-end latency on a **RAG-context-sized** prompt |
-| 6 | **Commit** | Write the choice to `config/model_config.json` for FastAPI to consume — never hardcoded |
+| 1 | **Detect** ✅ | RAM, CPU, GPU/VRAM, disk, Ollama version. `psutil` + `pynvml`/`nvidia-smi`, every probe independently guarded — `services/hardware.py`, `GET /api/forge/hardware`. Runs on a background schedule in three tiers rather than per panel open, and goes dormant when nobody is watching |
+| 2 | **Estimate** ✅ | `≈ (params_B × bytes_per_param) + kv_cache + runtime`. Prefers a *measured* weight size wherever one exists: the real bytes on disk for a pulled model, or the size published in the model's Ollama manifest for one that is not. Only the KV cache and the ~0.8GB runtime stay arithmetic — `services/model_fit.py` |
+| 3 | **Score** ✅ | fit / speed / quality / context → `safe` \| `marginal` \| `will_not_fit`, judged against **two** memory pools. A model too large for VRAM is *offloaded*, not disqualified: an early single-pool version marked Mistral 7B unrunnable on a machine that runs it fine, which is a recommendation engine refusing to recommend the answer |
+| 4 | **Manage** ✅ | Ollama list / pull (SSE, cancellable) / delete. A local API call, so Rule 1 permits it |
+| 5 | **Benchmark** ✅ | Time-to-first-token and end-to-end latency from the wall clock; prefill and generation from Ollama's own counters. The two are recorded separately and neither is derived from the other — see §2.3 |
+| 6 | **Commit** ✅ | `config/model_config.json`, read on every `POST /api/chat`. `pinned` names a model; `auto` stores the policy "best-scoring installed model on whatever machine reads this". No UI writes it — see §2.7 |
 
 ### 2.2 The design decision that matters: estimates are placeholders
 
@@ -263,13 +265,33 @@ The benchmark must therefore run against a **representative evidence pack**, not
 a canned sentence. Build one from real `rag_logs` rows if any exist, from a
 fixture if not, and record which was used alongside the result.
 
-Every benchmark run writes to `model_logs` with a synthetic `query_id`, so the
-latency chapter of the report draws from the same table as live traffic and the
-two are comparable.
+Every benchmark run writes to `model_logs` with a synthetic `query_id` prefixed
+`bench_`, so the latency chapter of the report draws from the same table as live
+traffic and the two are comparable. `source` (`'benchmark'` or `'chat'`) is what
+lets an analysis separate them again.
 
-### 2.4 What already exists
+**Two clocks, and they must not be mixed.** The first version of this benchmark
+derived the generation rate as `completion ÷ (total − TTFT)`, which looks
+equivalent to asking the engine and is not: it silently charges the model for
+any client-side delay. On a busy machine it reported llama3.2 at 11 tok/s where
+Ollama's own counters said 23.9, and made the estimator look 0.38× optimistic
+when it was in fact within 3%. Migration `002` therefore adds `prefill_ms`,
+`generation_ms` and `load_ms` alongside the wall-clock columns:
 
-**Step 1 is built.** `backend/app/services/hardware.py` detects CPU model and
+| recorded | measured by | answers |
+|---|---|---|
+| `time_to_first_token_ms`, `total_inference_ms` | the caller's wall clock | what an operator waits through — what §9.2's target is about |
+| `prefill_ms`, `generation_ms`, `load_ms` | Ollama's own counters | what the model costs, independent of what else the machine was doing |
+
+A warm-up pass runs before the timed one. Without it the first benchmark of a
+model measures disk: cold, llama3.2 reported 22.0s TTFT against 1.2s warm, and
+nearly all of that gap was reading 1.9GB of weights off an SSD rather than the
+model being slow. `warmed_up` travels with the result so nobody has to guess
+which was measured.
+
+### 2.4 Detection, and the three decisions worth keeping
+
+`backend/app/services/hardware.py` detects CPU model and
 core counts, total/available RAM, swap, GPU and VRAM, free disk where models
 land, and the Ollama version. It is rendered by `HardwareView`, which is shared
 between Settings → Hardware and the Forge window — one component, so the two
@@ -284,11 +306,16 @@ Three decisions in that module worth keeping:
   card is worse than useless.
 - **Disk is measured where models land**, not at `/`. On a small root with a
   large home, the root figure answers the wrong question.
-- **The Ollama probe falls back to localhost.** `OLLAMA_BASE_URL` is
-  `host.docker.internal` so the container can reach the host, and that does not
-  resolve when `./daedalus.sh dev` runs the backend on the host itself. Without
-  the fallback the panel reports a false "not reachable" in the mode most
-  development happens in. The response says which URL actually answered.
+- **The Ollama probe falls back, but only across local aliases.**
+  `OLLAMA_BASE_URL` is `host.docker.internal` so a container can reach the host,
+  and that does not resolve when `./daedalus.sh dev` runs the backend on the
+  host itself. `127.0.0.1` is tried too, because `localhost` resolves to `::1`
+  first on a dual-stack machine and Ollama binds IPv4 only — a refused
+  connection on a machine where the daemon is running perfectly well. The
+  fallbacks are deliberately *not* applied when the configured host is a real
+  remote: answering from a local daemon instead would attribute a benchmark to
+  hardware that never ran it. Whichever URL answered is cached for the process
+  and reported in the response.
 
 **Also already built, and absorbed by the Forge rather than duplicated:**
 
@@ -298,31 +325,91 @@ Three decisions in that module worth keeping:
 | Cloud endpoint store — provider catalogue, base URL + key, connection test | `services/model_endpoints.py` |
 | "Added Models" settings panel | `components/settings/ModelEndpointsPanel.tsx` |
 
-The Forge absorbs the "Added Models" panel rather than duplicating it. Cloud
-endpoints belong here too — as the **offline benchmark reference tier** they
-are, clearly separated from the deployable local tiers, so nobody can read the
-console as offering a cloud model for production.
+The Forge absorbs the "Added Models" panel rather than duplicating it, as the
+Cloud pane of the inventory tab. Cloud endpoints belong here — as the **offline
+benchmark reference tier** they are, behind their own warning and apart from the
+local tiers, so nobody can read the console as offering a cloud model for
+production.
 
-### 2.5 API
+### 2.5 The catalogue is a seed, not a closed list
+
+`research/05` scopes the shortlist to six candidates, and that shortlist is what
+the report argues about. The console answers a broader question too — *what else
+could this machine run?* — from four sources, all scored by the same code
+against the same hardware so rows from different sources are comparable:
+
+| source | what it is |
+|---|---|
+| **Shortlist** | the six from §8.1 |
+| **Library** | 31 further Ollama models, every tag verified against the registry |
+| **Installed** | whatever is on this disk, scored from the parameter count and quantization Ollama reports for it, declared or not |
+| **Hugging Face** | a live GGUF search (`?filter=gguf&expand[]=gguf`), pullable because Ollama takes `hf.co/{repo}:{quant}` directly |
+
+Plus **Custom**: type any tag and get a verdict. Ollama tags resolve through the
+registry, `hf.co/...` tags through the Hugging Face API.
+
+This matters for deployment, not just browsing: `model_config`'s `auto` mode
+resolves against this table, so pulling a better model moves the system to it
+with no edit anywhere.
+
+### 2.6 Three provenances, never blurred
+
+§2.2 asks that an estimate and a measurement never look alike. There turned out
+to be three states, not two, and every figure carries which one it is:
+
+| provenance | meaning |
+|---|---|
+| `declared` | `params × bytes_per_param`, from the catalogue. Nothing has been run |
+| `registry` | the real weight size from the model's Ollama manifest — known *before* downloading |
+| `measured` | real bytes on this disk plus the real architecture from `/api/show` |
+
+The registry tier was not in the original design. It arrived with tag
+verification: the OCI manifest endpoint answers per tag, which both confirms a
+tag exists (closing an open caveat — the catalogue had shipped one broken tag)
+and reports its size. 46 of 48 rows now estimate from real byte counts.
+
+### 2.7 Step 6 has no panel
+
+A Deployment tab existed and was removed. It set a value the chat composer's own
+model picker already sets, and two controls for one decision drift apart.
+
+§8.1 still holds: the model is selected via `config/model_config.json` and never
+hardcoded. What went away was the UI, not the mechanism. The file is read on
+every `POST /api/chat`, defaults to `auto`, and answers whenever no browser is
+choosing — a scripted run, the M8 harness, the first request after a restart.
+Pinning is a hand edit, which is the right weight for it: pinning is what makes
+an experiment reproducible, and that belongs in a file under version control.
+
+### 2.8 API
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/forge/hardware` | RAM, CPU, GPU/VRAM, disk, Ollama version |
-| `GET` | `/api/forge/models` | Catalogue with estimate, fit score and last measurement |
+| `POST` | `/api/forge/hardware/refresh` | Force a full re-probe, ignoring the schedule |
+| `GET` | `/api/forge/models` | The ranked table: catalogue, library and installed |
+| `GET` | `/api/forge/huggingface` | Live GGUF search, scored against this machine |
+| `GET` | `/api/forge/inspect` | Score one arbitrary tag, Ollama or `hf.co/...` |
+| `GET` | `/api/forge/usage` | Per-model runs, tokens and latency (mean/p50/p95) from `model_logs` |
 | `POST` | `/api/forge/models/pull` | Pull via Ollama. SSE progress — a 5GB pull needs a progress bar |
-| `DELETE` | `/api/forge/models/{name}` | Remove a local model |
+| `DELETE` | `/api/forge/models/{tag:path}` | Remove a local model (`:path`, because a tag may contain slashes) |
 | `POST` | `/api/forge/benchmark` | Run a benchmark; writes `model_logs` |
-| `PUT` | `/api/forge/active-model` | Commit the choice to `model_config.json` |
 
-### 2.6 Dependencies and risks
+`PUT /api/forge/active-model` is gone with the Deployment tab. The serving path
+reads `model_config` directly, and `GET /api/chat/model` reports what it
+resolved to.
+
+### 2.9 Dependencies and risks
 
 | | |
 |---|---|
-| **Blocked by** | M4 (Ollama wired). Detection, estimation and scoring are buildable now — they need no model to run |
+| **Was blocked by** | M4 (Ollama wired). Detection, estimation and scoring needed no model to run and went first; the serving path landed after, and `POST /api/chat` now reads what this console commits |
 | **Unblocks** | Objective 3 with measured evidence; the model-tier table in §8.1 stops being a projection |
+| **Open** | The six MMLU figures in `model_catalogue.json` ship `verified: false` with a source URL each, and the UI marks them. Library and discovered models carry none at all: they score from a neutral baseline with the quantization penalty applied, which orders them correctly without claiming a figure nobody measured |
 | **Risk — Rule 5** | This surface writes config and pulls models. It must be unreachable from `/api/chat`, and the orchestrator must never call a `/api/forge/*` endpoint. State this in the report; it is exactly the setup-vs-runtime distinction Rule 5 exists to draw |
 | **Risk** | `pynvml` is absent on machines with no NVIDIA GPU. Detection must degrade to "no GPU detected" rather than failing the whole endpoint — the same optional-import discipline `vector_store.py` already uses for Chroma |
-| **Risk** | A pull is long and cancellable. Do not block a worker on it |
+| **Risk** | A pull is long and cancellable. Do not block a worker on it — it streams as SSE and abandoning the generator closes the upstream read |
+| **Risk — measurement** | Deriving one timing from another is how the first benchmark understated a model by half. Wall clock and engine counters are recorded separately and neither is computed from the other (§2.3) |
+| **Risk — gated models** | Ollama's `hf.co/` pull does not reliably honour a Hugging Face token, so gated repositories (`meta-llama` and friends) cannot be pulled from here. Public GGUF publishers need no token; the route for gated ones is `huggingface-cli download` then `ollama create` |
 
 ---
 

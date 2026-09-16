@@ -19,13 +19,17 @@ Everything below was read off the source, not from memory.
 | Typography | Built — Monocraft (the Minecraft typeface) as the default face, self-hosted |
 | Settings shell | Built — registry, search, resizable rail |
 | Store browser | Built — in the sidebar, opens in a floating window |
-| Hardware detection | Built — Settings → Hardware, and the Forge window |
-| The Forge | Step 1 of 6 (detect). Estimate/score/manage/benchmark/commit not built |
+| Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge |
+| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Three tabs: Hardware, Models, Added Models |
+| Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
+| Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
+| Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
 | Data stores (×5) | Built and containerised, each with a versioned schema |
 | Preference API | Built |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
-| Chat UI | Wired to the session API — real sidebar, persisted user turns. **Replies still mock** (no orchestrator) |
-| Orchestration, tools, RAG, Ollama | **Not started** |
+| Chat UI | Wired end to end — `POST /api/chat` answers from a local model, both turns persist, the picker offers installed local models only |
+| Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
+| Orchestration, tools, RAG | **Not started.** Chat answers from conversation history alone; there is no evidence pack and no tool-calling yet |
 
 ---
 
@@ -59,6 +63,16 @@ to it.
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
 | `GET` | `/api/system/observability` | Where the metrics/logs stack lives, or that none is configured |
 | `GET` | `/api/forge/hardware` | RAM, CPU, GPU/VRAM, disk and Ollama. Always 200; unknowns come back null |
+| `POST` | `/api/forge/hardware/refresh` | Force a full re-probe, ignoring the schedule |
+| `GET` | `/api/forge/models` | The ranked table: catalogue, library and installed, estimated and scored |
+| `GET` | `/api/forge/huggingface` | Live GGUF search, scored against this machine |
+| `GET` | `/api/forge/inspect` | Score one arbitrary tag — an Ollama tag or `hf.co/{repo}:{quant}` |
+| `GET` | `/api/forge/usage` | Per-model runs, tokens and latency from `model_logs` |
+| `POST` | `/api/forge/models/pull` | Pull via Ollama, streaming progress as SSE |
+| `DELETE` | `/api/forge/models/{tag}` | Remove a local model |
+| `POST` | `/api/forge/benchmark` | Benchmark on a RAG-sized prompt; writes `model_logs` |
+| `POST` | `/api/chat` | Answer a message. Resolves the model, replays history, logs the call |
+| `GET` | `/api/chat/model` | Which model would answer right now, and why |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
 Writable preference keys (anything else is rejected with 404):
@@ -359,6 +373,29 @@ rotate, so those fall back to violet. All 16 themes verified ≥4.5:1.
 ### CSS variables written
 
 **Base (7):** `--bg` `--sidebar` `--card` `--border` `--primary` `--text-main` `--text-muted`
+**Derived for contrast (6):** `--primary-readable` `--primary-contrast` `--status-ok` `--status-warn` `--status-bad` `--status-info`
+
+Those six exist because a theme is an arbitrary accent over an arbitrary
+background, light or dark, and several roles failed WCAG AA on the shipped
+themes:
+
+| variable | what it fixes | worst case before |
+|---|---|---|
+| `--text-main` (floored in place) | body text | Cute 3.26:1 |
+| `--text-muted` (floored in place) | secondary text | Retrowave 2.64:1 |
+| `--primary-readable` | the accent used as *text*, not as a fill | Paper 2.11:1 |
+| `--primary-contrast` | the label on an accent-filled button | Organs 3.99:1 |
+| `--status-ok/warn/bad` | verdicts, pitched against the background's lightness | amber on a cream theme |
+
+Each holds the colour's hue and saturation and moves only lightness, stopping
+the moment it clears 4.5:1 — so a theme that already passed is untouched, which
+is 10 of the 16. Custom themes run through the same `applyColors`, so the
+derivation applies to whatever accent somebody picks.
+
+Consumed through utility classes rather than inline: `.theme-accent`,
+`.theme-text-on-primary`, `.status-ok|warn|bad` (plus `-bg`, `-border`, `-fill`
+variants), and `.theme-surface` / `.theme-surface-strong` / `.theme-track`,
+which replaced 71 `bg-black/N` usages that darkened regardless of theme.
 **Syntax (10):** `--hl-bg` `--hl-fg` `--hl-keyword` `--hl-string` `--hl-comment` `--hl-function` `--hl-number` `--hl-builtin` `--hl-variable` `--hl-params`
 **Zones (14):** `--user-bubble-bg` `--ai-bubble-bg` `--bubble-border` `--sidebar-bg` `--brand-color` `--brand-mix-to` `--input-bg` `--input-border` `--send-btn-bg` `--send-btn-hover` `--code-bg` `--code-fg` `--toggle-active` `--incognito`
 **Effects (4):** `--bg-effect-color` `--bg-effect-intensity` `--bg-effect-size` `--bg-effect-reactive`
