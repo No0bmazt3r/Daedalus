@@ -267,6 +267,46 @@
   .skeleton { animation: none; }
 }
 
+/* Pixel skeletons.
+   The app's default face is Monocraft, so a smoothly-sweeping rounded bar is
+   the one loading state that does not look like it belongs. This variant drops
+   the radius, lays a block grid over the fill and steps the sweep in discrete
+   jumps instead of gliding, which reads as chunky rather than blurry.
+   The grid layers are pinned in the keyframe so only the highlight travels. */
+@keyframes skeleton-sweep-pixel {
+  0%   { background-position: 200% 0, 0 0, 0 0; }
+  100% { background-position: -200% 0, 0 0, 0 0; }
+}
+
+:root[data-skeleton='pixel'] .skeleton {
+  border-radius: 0;
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--text-main) 10%, transparent) 50%,
+      transparent 100%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-main) 5%, transparent) 0 1px,
+      transparent 1px 6px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--text-main) 5%, transparent) 0 1px,
+      transparent 1px 6px
+    );
+  background-size: 200% 100%, 6px 6px, 6px 6px;
+  /* 20 steps over the sweep: coarse enough to read as jumping, fine enough
+     not to look broken. */
+  animation: skeleton-sweep-pixel 1.6s steps(20, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skeleton='pixel'] .skeleton { animation: none; }
+}
+
 /* Accent as *text*. --primary is tuned to look right as a fill; a pale accent
    is a fine bar and an illegible label. See deriveReadableAccent in themes.ts. */
 .theme-accent { color: var(--primary-readable) !important; }

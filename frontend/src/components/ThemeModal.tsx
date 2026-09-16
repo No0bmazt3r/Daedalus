@@ -42,6 +42,8 @@ import {
 import { useDraggable } from '../hooks/useDraggable'
 import { clearZoneHighlight } from '../lib/zoneHighlight'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
+import { Switch } from './ui/switch'
+import { Skeleton } from './ui/skeleton'
 import { ThemeSelect } from './ui/theme-select'
 
 interface ThemeModalProps {
@@ -615,22 +617,38 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   />
                   <div className="flex flex-col gap-1 flex-1">
                     <span className="text-[11px] theme-text-muted">Frosted glass</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={state.frosted}
-                      onClick={() => theme.setFrosted(!state.frosted)}
-                      className={`relative w-11 h-6 rounded-full border theme-border transition-colors ${
-                        state.frosted ? 'bg-[var(--primary)]' : 'theme-track'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full bg-white shadow transition-transform ${
-                          state.frosted ? 'translate-x-5' : ''
-                        }`}
-                      />
-                    </button>
+                    <Switch
+                      checked={state.frosted}
+                      onChange={theme.setFrosted}
+                      label="Frosted glass"
+                    />
                   </div>
+                  <div className="flex flex-col gap-1 flex-1">
+                    <span
+                      className="text-[11px] theme-text-muted"
+                      title="Loading placeholders: blocky with a stepped shimmer, or rounded with a smooth one."
+                    >
+                      Pixel skeletons
+                    </span>
+                    <Switch
+                      checked={state.skeleton === 'pixel'}
+                      onChange={(on) => theme.setSkeletonStyle(on ? 'pixel' : 'smooth')}
+                      label="Pixel loading skeletons"
+                    />
+                  </div>
+                </div>
+
+                {/* A live sample, because the difference is a texture and a
+                    cadence — neither of which a label conveys. */}
+                <div className="flex items-center gap-3 mt-3">
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-4/5" />
+                    <Skeleton className="h-3 w-2/5" />
+                  </div>
+                  <span className="text-[10px] theme-text-muted shrink-0">
+                    {state.skeleton === 'pixel' ? 'blocky, stepped' : 'rounded, smooth'}
+                  </span>
                 </div>
               </Card>
 
@@ -687,24 +705,13 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                         : 'Background responds to your cursor'}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={state.reactive && !slidersDisabled}
+                  <Switch
+                    checked={state.reactive && !slidersDisabled}
+                    onChange={theme.setReactive}
                     disabled={slidersDisabled}
-                    onClick={() => theme.setReactive(!state.reactive)}
-                    className={`relative w-11 h-6 rounded-full border theme-border transition-colors shrink-0 ${
-                      state.reactive && !slidersDisabled
-                        ? 'bg-[var(--primary)]'
-                        : 'theme-track'
-                    } ${slidersDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full bg-white shadow transition-transform ${
-                        state.reactive && !slidersDisabled ? 'translate-x-5' : ''
-                      }`}
-                    />
-                  </button>
+                    label="Background responds to the pointer"
+                    className={slidersDisabled ? 'cursor-not-allowed' : ''}
+                  />
                 </div>
 
                 {!slidersDisabled && (

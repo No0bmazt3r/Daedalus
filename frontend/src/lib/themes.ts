@@ -59,7 +59,17 @@ export interface ThemeState {
   frosted: boolean;
   /** Whether the background effect responds to the pointer. */
   reactive: boolean;
+  /**
+   * How loading skeletons are drawn. `pixel` squares the corners, lays a block
+   * grid over them and steps the shimmer, to sit with Monocraft; `smooth` is
+   * the rounded, gliding default.
+   */
+  skeleton: SkeletonStyle;
 }
+
+export type SkeletonStyle = 'smooth' | 'pixel';
+
+export const DEFAULT_SKELETON: SkeletonStyle = 'pixel';
 
 export const DEFAULT_THEME_ID = 'oled';
 export const DEFAULT_FONT: FontKey = 'minecraft';
@@ -928,6 +938,17 @@ export function applyBgEffectSize(v: number) {
 }
 
 /** Translucent + blurred treatment on every panel, modal and dropdown. */
+/**
+ * Skeleton style, as a data attribute on <html>.
+ *
+ * An attribute rather than a variable because the difference is structural —
+ * border radius, a background grid, a stepped animation — and CSS can express
+ * all of that from one selector without every skeleton having to read state.
+ */
+export function applySkeletonStyle(style: SkeletonStyle) {
+  document.documentElement.dataset.skeleton = style;
+}
+
 export function applyFrostedGlass(on: boolean) {
   document.body.classList.toggle('theme-frosted', !!on);
 }
@@ -944,6 +965,7 @@ export function applyThemeState(state: ThemeState) {
   applyBgEffectSize(state.effectSize);
   applyFrostedGlass(state.frosted);
   applyReactive(state.reactive);
+  applySkeletonStyle(state.skeleton);
   window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: state }));
 }
 
@@ -994,6 +1016,7 @@ export function defaultStateFor(
     effectSize: 1,
     frosted: THEME_DEFAULT_FROSTED[id] === true,
     reactive: THEME_DEFAULT_REACTIVE[id] === true,
+    skeleton: DEFAULT_SKELETON,
   };
 }
 
@@ -1064,6 +1087,9 @@ export function coerceState(raw: unknown, fallbackId = DEFAULT_THEME_ID): ThemeS
         : 1,
     frosted: typeof o.frosted === 'boolean' ? o.frosted : THEME_DEFAULT_FROSTED[id] === true,
     reactive: typeof o.reactive === 'boolean' ? o.reactive : THEME_DEFAULT_REACTIVE[id] === true,
+    // Absent on anything saved before this existed, which is every stored
+    // theme and every exported file, so it has to fall back rather than fail.
+    skeleton: o.skeleton === 'smooth' || o.skeleton === 'pixel' ? o.skeleton : DEFAULT_SKELETON,
   };
 }
 

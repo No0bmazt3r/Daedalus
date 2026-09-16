@@ -399,6 +399,7 @@ which replaced 71 `bg-black/N` usages that darkened regardless of theme.
 **Syntax (10):** `--hl-bg` `--hl-fg` `--hl-keyword` `--hl-string` `--hl-comment` `--hl-function` `--hl-number` `--hl-builtin` `--hl-variable` `--hl-params`
 **Zones (14):** `--user-bubble-bg` `--ai-bubble-bg` `--bubble-border` `--sidebar-bg` `--brand-color` `--brand-mix-to` `--input-bg` `--input-border` `--send-btn-bg` `--send-btn-hover` `--code-bg` `--code-fg` `--toggle-active` `--incognito`
 **Effects (4):** `--bg-effect-color` `--bg-effect-intensity` `--bg-effect-size` `--bg-effect-reactive`
+**Data attributes (1):** `data-skeleton` on `<html>` — `pixel` or `smooth`, chosen in Theme → Customize. An attribute rather than a variable because the difference is structural (border radius, a background grid, a stepped animation), which one selector can express and a colour token cannot.
 **Typography (2):** `--font-family` (written by the Font selector) `--font-base` (the face everything falls back to — see §4.1)
 
 Emits `daedalus-theme-change` on every apply; the effects layer listens to

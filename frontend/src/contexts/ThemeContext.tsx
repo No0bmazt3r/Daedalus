@@ -41,6 +41,7 @@ import {
   type ThemeColors,
   type ThemeState,
   type UiScale,
+  type SkeletonStyle,
 } from '../lib/themes';
 import {
   flushPending,
@@ -84,6 +85,7 @@ interface ThemeContextType {
   setEffectSize: (v: number) => void;
   setFrosted: (on: boolean) => void;
   setReactive: (on: boolean) => void;
+  setSkeletonStyle: (style: SkeletonStyle) => void;
 
   saveCustomTheme: (name: string) => SaveResult;
   deleteCustomTheme: (name: string) => void;
@@ -311,6 +313,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
   const setFrosted = useCallback((frosted: boolean) => commitEdit({ frosted }), [commitEdit]);
   const setReactive = useCallback((reactive: boolean) => commitEdit({ reactive }), [commitEdit]);
+  const setSkeletonStyle = useCallback(
+    (skeleton: SkeletonStyle) => commitEdit({ skeleton }),
+    [commitEdit],
+  );
 
   const setEffectColor = useCallback(
     (color: string) => {
@@ -435,6 +441,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setEffectSize,
       setFrosted,
       setReactive,
+      setSkeletonStyle,
       saveCustomTheme,
       deleteCustomTheme,
       exportTheme,
@@ -448,7 +455,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       state, customThemes, uiScale, savedAt, savedLabel, syncStatus, selectTheme, setBaseColor,
       setAdvancedColor, clearAdvanced, resetBaseColor, resetAdvancedColor, applyPalette,
       setFont, setDensity, setUiScale, setPattern, setEffectColor, resetEffectColor,
-      setEffectIntensity, setEffectSize, setFrosted, setReactive, saveCustomTheme, deleteCustomTheme,
+      setEffectIntensity, setEffectSize, setFrosted, setReactive, setSkeletonStyle, saveCustomTheme, deleteCustomTheme,
       exportTheme, importTheme, resetToDefault, referenceColors, advancedDefaults, isCustomTheme,
     ]
   );

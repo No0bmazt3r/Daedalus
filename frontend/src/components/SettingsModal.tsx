@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Ghost, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { FloatingWindow } from './ui/floating-window'
+import { Switch } from './ui/switch'
 import {
   useResizableSidebar,
   SIDEBAR_MIN_WIDTH,
@@ -238,21 +239,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         </div>
                       </div>
                     </div>
-                    <button
-                      role="switch"
-                      aria-checked={isIncognito}
-                      aria-label="Incognito mode"
-                      onClick={() => setIsIncognito(!isIncognito)}
-                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${
-                        isIncognito ? 'incognito-bg' : 'theme-switch-off'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                          isIncognito ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
+                    <Switch
+                      checked={isIncognito}
+                      onChange={setIsIncognito}
+                      label="Incognito mode"
+                      // Incognito keeps its own accent rather than the theme's,
+                      // because the whole point of the mode is that it looks
+                      // different from every other state in the app.
+                      className={isIncognito ? 'incognito-bg' : ''}
+                    />
                   </div>
                 </div>
               </div>
