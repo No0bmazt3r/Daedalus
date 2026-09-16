@@ -4,6 +4,7 @@ import { Sidebar } from '../components/Sidebar'
 import { Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ThemeModal } from '../components/ThemeModal'
+import { restoreWindow } from '../components/ui/floating-window'
 import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import { ForgeWindow } from '../components/forge/ForgeWindow'
@@ -15,6 +16,24 @@ import { ThemeProvider } from '../contexts/ThemeContext'
 export const Route = createRootRoute({
   component: RootLayout,
 })
+
+/**
+ * Open a window, or bring it back if it was minimized.
+ *
+ * Minimize is internal to the window, so `open` stays true while it is
+ * collapsed — and every trigger here calls `setOpen(true)`, which is a no-op in
+ * that state. Without the restore step, minimizing Theme and then clicking
+ * Theme again did nothing at all.
+ *
+ * Every path into a window goes through these callbacks, so this is the one
+ * place it needs handling: the sidebar rows, the account menu, and the store
+ * rows that open a specific table. `restoreWindow` is a no-op when the window
+ * is closed or already visible, so it is always safe to call first.
+ */
+function openWindow(id: string, open: () => void) {
+  restoreWindow(id)
+  open()
+}
 
 function RootLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -41,10 +60,12 @@ function RootLayout() {
             <div className="w-64 h-full flex flex-col shrink-0">
               <Sidebar 
                 onClose={() => setSidebarOpen(false)} 
-                onOpenTheme={() => setThemeModalOpen(true)} 
-                onOpenSettings={() => setSettingsModalOpen(true)}
-                onOpenForge={() => setForgeOpen(true)}
-                onOpenStore={(store, table) => setStoreTarget({ store, table })}
+                onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
+                onOpenSettings={() => openWindow('settings', () => setSettingsModalOpen(true))}
+                onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
+                onOpenStore={(store, table) =>
+                  openWindow('stores', () => setStoreTarget({ store, table }))
+                }
                 activeStore={storeTarget}
               />
             </div>

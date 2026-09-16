@@ -326,6 +326,21 @@ Layer 9 below for the per-step detail.
         the active tab, scroll position and filters survive — otherwise
         "restore" would quietly mean "reopen". Escape restores a minimized
         window instead of closing it
+  - [x] Clicking anywhere outside a window **minimizes** it rather than closing. A window holds
+        real work — a filtered model table, a half-written API key, an open
+        store row — and a stray click outside should set that aside, not throw
+        it away. Closing stays deliberate: the ✕, or Escape. The shell windows
+        get this from their backdrop; `ThemeModal` has none by design, so it
+        uses `useMinimizeOnOutsideClick`, a capture-phase `pointerdown` listener
+        that ignores portalled menus, selects and tooltips — those sit outside
+        the window in the DOM but belong to it, and a naive containment test
+        would minimize the window the moment you opened a dropdown in it
+  - [x] Reopening a minimized window from its trigger restores it. Minimize is
+        internal state, so `open` stays true while collapsed and every trigger's
+        `setOpen(true)` was a no-op — clicking Theme after minimizing Theme did
+        nothing. A window registers a restore callback while minimized and
+        `openWindow()` in `__root.tsx` calls it first. Every path into a window
+        goes through those four callbacks, so it is handled in one place
   - [x] Chips dock **beside the incognito toggle**, not in a floating bar. A
         bar at bottom-centre sat directly under the composer, which is the one
         place guaranteed to compete for attention while you type. `ChatInterface`

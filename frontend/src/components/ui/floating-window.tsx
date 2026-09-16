@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, CircleDashed, Minus } from 'lucide-react'
 import { useDraggable } from '../../hooks/useDraggable'
@@ -21,6 +21,100 @@ import { useDraggable } from '../../hooks/useDraggable'
  * unreachable.
  */
 export const MINIMIZED_DOCK_SLOT = 'minimized-dock-slot'
+
+/**
+ * Things that are outside a window in the DOM but belong to it.
+ *
+ * Menus, selects and tooltips are portalled to the end of <body>, so a naive
+ * "is the click inside the window element?" test calls them outside and
+ * minimizes the window the moment you open a dropdown in it. The dock is here
+ * too: clicking a chip is how you restore a *different* window, and it should
+ * not also set this one aside on the way past.
+ */
+const FLOATING_LAYER = [
+  '[data-slot="dropdown-menu-content"]',
+  '[data-slot="dropdown-menu-sub-content"]',
+  '[data-slot="dropdown-menu-portal"]',
+  '[data-slot="tooltip-content"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[role="dialog"]',
+  `#${MINIMIZED_DOCK_SLOT}`,
+  '#minimized-dock-fallback',
+].join(',')
+
+/**
+ * Minimize when a click lands anywhere that is not this window.
+ *
+ * `FloatingWindow` gets this for free from its backdrop, which covers the page
+ * and catches the click. `ThemeModal` has no backdrop by design — it is
+ * non-modal so you can watch the app change while dragging a slider — so it
+ * needs the document-level version instead.
+ *
+ * `pointerdown` in the capture phase rather than `click`: a menu that closes on
+ * mousedown can remove the clicked node before `click` fires, at which point
+ * `contains` is asking about an element that is no longer in the tree.
+ */
+export function useMinimizeOnOutsideClick(
+  ref: { current: HTMLElement | null },
+  enabled: boolean,
+  onOutside: () => void,
+) {
+  useEffect(() => {
+    if (!enabled) return
+    const onPointerDown = (event: PointerEvent) => {
+      const el = ref.current
+      const target = event.target
+      if (!el || !(target instanceof Node)) return
+      if (el.contains(target)) return
+      if (target instanceof Element && target.closest(FLOATING_LAYER)) return
+      onOutside()
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onPointerDown, true)
+  }, [enabled, onOutside, ref])
+}
+
+/**
+ * How a minimized window is reached from outside.
+ *
+ * Minimize is internal state, so the parent that owns `open` cannot see it. The
+ * triggers all call `setOpen(true)` — which is a no-op when `open` is already
+ * true — so after minimizing, clicking Theme or Settings again did nothing at
+ * all and the button looked dead.
+ *
+ * A window registers how to restore itself here while it is minimized, and
+ * anything that means to open it calls `restoreWindow` first. Keyed by a
+ * caller-supplied id rather than by title, because a title is display text and
+ * may be translated or truncated.
+ */
+const restorers = new Map<string, () => void>()
+
+/**
+ * Restore a minimized window. Returns whether there was one.
+ *
+ * Safe to call unconditionally: on a window that is closed, or open and not
+ * minimized, it does nothing and reports false.
+ */
+export function restoreWindow(id: string): boolean {
+  const restore = restorers.get(id)
+  if (!restore) return false
+  restore()
+  return true
+}
+
+/** Registers `restore` for as long as the window is minimized. */
+function useRestoreRegistration(id: string | undefined, minimized: boolean, restore: () => void) {
+  useEffect(() => {
+    if (!id || !minimized) return
+    restorers.set(id, restore)
+    return () => {
+      // Only clear our own entry: a remount could otherwise delete the
+      // registration a newer instance has just written.
+      if (restorers.get(id) === restore) restorers.delete(id)
+    }
+  }, [id, minimized, restore])
+}
 
 let fallbackDock: HTMLDivElement | null = null
 
@@ -81,11 +175,14 @@ function getDock(): HTMLElement | null {
  * into the same strip and look identical once they are there.
  */
 export function useMinimizeToDock({
+  id,
   open,
   onClose,
   title,
   icon,
 }: {
+  /** Stable key, so `restoreWindow(id)` can reach this window while minimized. */
+  id?: string
   open: boolean
   onClose: () => void
   title: ReactNode
@@ -98,17 +195,28 @@ export function useMinimizeToDock({
     if (!open) setMinimized(false)
   }, [open])
 
-  const minimize = () => {
+  // The dock node is created here rather than in an effect: this is the first
+  // moment it is needed, a click handler is where a DOM side effect belongs,
+  // and a page where nobody minimizes anything never grows the node at all.
+  //
+  // Memoised because `useMinimizeOnOutsideClick` takes it as a dependency; a
+  // fresh function each render would tear down and re-add the document
+  // listener on every keystroke in the window.
+  const minimize = useCallback(() => {
     setDock(getDock())
     setMinimized(true)
-  }
+  }, [])
 
-  const chip = renderChip({ title, icon, onRestore: () => setMinimized(false), onClose })
+  const restore = useCallback(() => setMinimized(false), [])
+
+  useRestoreRegistration(id, minimized, restore)
+
+  const chip = renderChip({ title, icon, onRestore: restore, onClose })
 
   return {
     minimized,
     minimize,
-    restore: () => setMinimized(false),
+    restore,
     /** Render this alongside the window; it is null unless minimized. */
     dockChip: minimized && dock ? createPortal(chip, dock) : null,
   }
@@ -152,6 +260,7 @@ function renderChip({
 }
 
 export function FloatingWindow({
+  id,
   open,
   onClose,
   title,
@@ -163,6 +272,8 @@ export function FloatingWindow({
   className = '',
   children,
 }: {
+  /** Stable key, so `restoreWindow(id)` can reach this window while minimized. */
+  id?: string
   open: boolean
   onClose: () => void
   title: ReactNode
@@ -186,6 +297,16 @@ export function FloatingWindow({
     if (!open) setMinimized(false)
   }, [open])
 
+  // Declared here, above the Escape handler that uses `restore`.
+  const minimize = useCallback(() => {
+    setDock(getDock())
+    setMinimized(true)
+  }, [])
+
+  const restore = useCallback(() => setMinimized(false), [])
+
+  useRestoreRegistration(id, minimized, restore)
+
   // Recomputed each time the window opens, so it lands centred even if the
   // browser has been resized since. Dragging takes over from `position` after.
   const anchor = useMemo(() => {
@@ -205,21 +326,16 @@ export function FloatingWindow({
       // Escape restores a minimized window rather than closing it. Closing
       // something you cannot see, and losing whatever was in it, is the wrong
       // response to the key people press to back out of things.
-      if (minimized) setMinimized(false)
+      if (minimized) restore()
       else onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose, minimized])
+  }, [open, onClose, minimized, restore])
+
+  const chip = renderChip({ title, icon, onRestore: restore, onClose })
 
   if (!open) return null
-
-  const chip = renderChip({
-    title,
-    icon,
-    onRestore: () => setMinimized(false),
-    onClose,
-  })
 
   return (
     <>
@@ -232,10 +348,15 @@ export function FloatingWindow({
         style={{ display: minimized ? 'none' : undefined }}
         aria-hidden={minimized}
       >
+      {/* Clicking away minimizes rather than closes. A window here holds real
+          work — a filtered model table, a half-written API key, an open store
+          row — and a stray click outside it should set that aside, not throw
+          it away. Closing stays deliberate: the ✕, or Escape. */}
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"
         style={{ opacity: isPeek ? 0 : 1 }}
-        onClick={onClose}
+        onClick={minimize}
+        title="Click to set this aside"
       />
 
       <div
@@ -271,14 +392,7 @@ export function FloatingWindow({
             {headerActions?.({ isPeek })}
             <button
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => {
-                // The dock node is created here rather than in an effect: this
-                // is the first moment it is needed, a click handler is where a
-                // DOM side effect belongs, and a page where nobody minimizes
-                // anything never grows the node at all.
-                setDock(getDock())
-                setMinimized(true)
-              }}
+              onClick={minimize}
               aria-label="Minimize"
               title="Collapse to the bar at the bottom. Nothing is lost — the window reopens exactly as you left it."
               className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"

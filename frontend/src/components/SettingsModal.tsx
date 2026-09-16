@@ -70,6 +70,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   return (
     <FloatingWindow
+      id="settings"
       open={open}
       onClose={onClose}
       title="Settings"

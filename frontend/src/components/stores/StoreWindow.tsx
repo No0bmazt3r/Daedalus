@@ -24,6 +24,7 @@ export function StoreWindow({
 }) {
   return (
     <FloatingWindow
+      id="stores"
       open={open && !!store && !!table}
       onClose={onClose}
       title="Raw store contents"

@@ -44,7 +44,7 @@ import { useDraggable } from '../hooks/useDraggable'
 import { clearZoneHighlight } from '../lib/zoneHighlight'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Switch } from './ui/switch'
-import { useMinimizeToDock } from './ui/floating-window'
+import { useMinimizeToDock, useMinimizeOnOutsideClick } from './ui/floating-window'
 import { Skeleton } from './ui/skeleton'
 import { ThemeSelect } from './ui/theme-select'
 
@@ -199,11 +199,16 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   // chip is identical to every other one. See useMinimizeToDock for why this
   // modal is not simply built on that shell.
   const { minimized, minimize, restore, dockChip } = useMinimizeToDock({
+    id: 'theme',
     open,
     onClose,
     title: 'Theme',
     icon: <Paintbrush size={14} className="theme-accent" />,
   })
+
+  // No backdrop to catch the click — this window is non-modal on purpose — so
+  // the outside click is detected at the document instead.
+  useMinimizeOnOutsideClick(windowRef, open && !minimized, minimize)
 
   // Auto-saved pill, mirroring the flash Odysseus shows on every tweak.
   const [pillVisible, setPillVisible] = useState(false)

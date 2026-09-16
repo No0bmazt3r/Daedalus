@@ -65,6 +65,7 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
 
   return (
     <FloatingWindow
+      id="forge"
       open={open}
       onClose={onClose}
       title="The Forge"
