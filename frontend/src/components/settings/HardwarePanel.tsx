@@ -13,7 +13,7 @@ export function HardwarePanel({ isPeek }: { isPeek: boolean }) {
     <div className="space-y-6 animate-in fade-in duration-200">
       <div>
         <h3 className="text-xl font-medium mb-1 flex items-center gap-2">
-          <Cpu size={18} className="theme-primary" />
+          <Cpu size={18} className="theme-accent" />
           Hardware
         </h3>
         <p className="text-sm theme-text-muted">

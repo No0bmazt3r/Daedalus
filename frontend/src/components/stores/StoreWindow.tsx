@@ -28,7 +28,7 @@ export function StoreWindow({
       onClose={onClose}
       title="Raw store contents"
       subtitle={store && table ? `${store} / ${table}` : undefined}
-      icon={<Table2 size={16} className="theme-primary" />}
+      icon={<Table2 size={16} className="theme-accent" />}
       width={1152}
       height={750}
     >

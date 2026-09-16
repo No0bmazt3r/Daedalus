@@ -81,13 +81,13 @@ function SessionRow({
         title={sessionLabel(session)}
         className={`flex-1 min-w-0 justify-start h-8 px-2 text-sm font-normal hover:bg-transparent ${active ? 'theme-text' : 'theme-text-muted hover:theme-text'}`}
       >
-        <Circle size={8} className={`shrink-0 mr-2 ${active ? 'theme-primary opacity-100' : 'opacity-60'}`} />
+        <Circle size={8} className={`shrink-0 mr-2 ${active ? 'theme-accent opacity-100' : 'opacity-60'}`} />
         <span className="truncate">{sessionLabel(session)}</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Options for ${sessionLabel(session)}`}
-          className="shrink-0 w-7 h-8 flex items-center justify-center rounded-md theme-text-muted opacity-0 group-hover/row:opacity-100 data-[state=open]:opacity-100 hover:theme-text outline-none"
+          className="shrink-0 w-7 h-8 flex items-center justify-center rounded-md theme-text-muted opacity-0 group-hover/row: data-[state=open]: hover:theme-text outline-none"
         >
           <MoreHorizontal size={14} />
         </DropdownMenuTrigger>
@@ -182,9 +182,9 @@ function DataStores({
                   className={`shrink-0 mr-1 transition-transform ${isOpen ? 'rotate-90' : ''}`}
                 />
                 {store.store === 'sensor' ? (
-                  <HardDrive size={14} className="mr-2 shrink-0 theme-primary" />
+                  <HardDrive size={14} className="mr-2 shrink-0 theme-accent" />
                 ) : (
-                  <Database size={14} className="mr-2 shrink-0 theme-primary" />
+                  <Database size={14} className="mr-2 shrink-0 theme-accent" />
                 )}
                 <span className="truncate flex-1 text-left">{store.label}</span>
                 {/* Health is Settings' job; the dot here is only so a store
@@ -197,10 +197,10 @@ function DataStores({
               {isOpen && (
                 <div className="flex flex-col gap-0.5 ml-[22px] mt-0.5 mb-1 pl-2 border-l theme-border">
                   {store.available && store.tables.length === 0 && (
-                    <span className="px-2 py-1 text-xs theme-text-muted opacity-60">No tables</span>
+                    <span className="px-2 py-1 text-xs theme-text-muted">No tables</span>
                   )}
                   {!store.available && (
-                    <span className="px-2 py-1 text-xs theme-text-muted opacity-60">
+                    <span className="px-2 py-1 text-xs theme-text-muted">
                       {store.error || 'Unavailable'}
                     </span>
                   )}
@@ -274,7 +274,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
         </Button>
       </div>
 
-      <ScrollArea className="flex-1 px-3">
+      <ScrollArea className="flex-1" viewportClassName="px-3">
         {/* Core Modules (Top Navigation) */}
         <div className="flex flex-col gap-0.5 mb-6">
           {/* The three core modules — designed in docs/MODULES.md. Only the
@@ -291,9 +291,9 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               onClick={item.onClick}
               disabled={!item.onClick}
               title={item.onClick ? undefined : 'Not built yet — see docs/MODULES.md'}
-              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-45 disabled:hover:bg-transparent disabled:cursor-default"
+              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled: disabled:hover:bg-transparent disabled:cursor-default"
             >
-              <item.icon size={15} className="mr-2 shrink-0 theme-primary" />
+              <item.icon size={15} className="mr-2 shrink-0 theme-accent" />
               <span className="truncate flex-1 text-left">{item.title}</span>
               {!item.onClick && (
                 <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] opacity-50" />
@@ -309,7 +309,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             onClick={() => setSearching((v) => !v)}
           >
             <span className="text-[11px] font-medium theme-text-muted">Chats and tasks</span>
-            <Search size={12} className={`theme-text-muted transition-opacity ${searching ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+            <Search size={12} className={`theme-text-muted transition-opacity ${searching ? '' : 'opacity-0 group-hover:'}`} />
           </div>
 
           {searching && (
@@ -352,7 +352,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             )}
 
             {status === 'ready' && visible.length === 0 && !isIncognito && (
-              <span className="px-2 py-1 text-xs theme-text-muted opacity-60">
+              <span className="px-2 py-1 text-xs theme-text-muted">
                 {needle ? 'No chats match that.' : 'No chats yet. Ask something to start one.'}
               </span>
             )}

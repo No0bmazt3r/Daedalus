@@ -83,10 +83,10 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b theme-border text-xs shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Table2 size={14} className="theme-primary shrink-0" />
+          <Table2 size={14} className="theme-accent shrink-0" />
           <span className="font-mono truncate">
             <span className="theme-text-muted">{store}</span>
-            <span className="theme-text-muted opacity-50 mx-1">/</span>
+            <span className="theme-text-muted mx-1">/</span>
             {table}
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded border theme-border theme-text-muted uppercase tracking-wide shrink-0">
@@ -116,7 +116,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
             onClick={() => void load()}
             disabled={busy}
             aria-label="Refresh"
-            className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40"
+            className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:"
           >
             <RefreshCw size={14} className={busy ? 'animate-spin' : ''} />
           </button>
@@ -156,7 +156,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
         )}
 
         {!error && page && page.rows.length === 0 && (
-          <div className="p-8 text-center text-sm theme-text-muted opacity-70">
+          <div className="p-8 text-center text-sm theme-text-muted">
             This table is empty.
           </div>
         )}

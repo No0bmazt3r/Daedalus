@@ -31,7 +31,7 @@ export function ColorRow({ label, value, onChange, reference, onReset, title, zo
     >
       <span className="text-xs theme-text-muted truncate">{label}</span>
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] font-mono theme-text-muted opacity-0 group-hover:opacity-60 transition-opacity tabular-nums">
+        <span className="text-[10px] font-mono theme-text-muted opacity-0 group-hover: transition-opacity tabular-nums">
           {value}
         </span>
         <label
@@ -54,8 +54,8 @@ export function ColorRow({ label, value, onChange, reference, onReset, title, zo
             aria-label={`Reset ${label}`}
             className={`p-1 rounded transition-all ${
               changed
-                ? 'theme-primary opacity-100 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
-                : 'theme-text-muted opacity-0 group-hover:opacity-40 hover:!opacity-80'
+                ? 'theme-accent hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
+                : 'theme-text-muted opacity-0 group-hover: hover:!'
             }`}
           >
             <RotateCcw size={11} />

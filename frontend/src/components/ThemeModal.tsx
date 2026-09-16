@@ -314,7 +314,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
             }}
             title={`Delete theme "${id}"`}
             aria-label={`Delete theme ${id}`}
-            className="absolute top-1 right-1 p-0.5 rounded bg-black/40 theme-text-muted opacity-0 group-hover/swatch:opacity-100 hover:theme-text transition-opacity"
+            className="absolute top-1 right-1 p-0.5 rounded bg-black/40 theme-text-muted opacity-0 group-hover/swatch: hover:theme-text transition-opacity"
           >
             <X size={11} />
           </button>
@@ -365,7 +365,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
         >
           <div className="flex items-center gap-2">
-            <Paintbrush size={16} className="theme-primary" />
+            <Paintbrush size={16} className="theme-accent" />
             <span className="text-sm font-semibold select-none">Theme &amp; Appearance</span>
           </div>
           <div className="flex items-center gap-2">
@@ -374,7 +374,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               onClick={() => setIsPeek(!isPeek)}
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border ${
                 isPeek
-                  ? 'bg-primary/20 text-[var(--primary)] border-[var(--primary)]/30'
+                  ? 'bg-primary/20 text-[var(--primary-readable)] border-[var(--primary)]/30'
                   : 'theme-text-muted hover:theme-text border-transparent hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
               }`}
               title="Fade this window to preview the page behind it"
@@ -405,13 +405,13 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
             <TabsList variant="line" className="bg-transparent p-0 h-auto relative flex w-full">
               <TabsTrigger
                 value="themes"
-                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10 after:hidden"
+                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary-readable)] hover:theme-text transition-colors relative z-10 after:hidden"
               >
                 <SwatchBook key={activeTab === 'themes' ? 'on' : 'off'} size={14} className={`mr-2 tab-icon ${activeTab === 'themes' ? 'tab-icon-active' : ''}`} /> Themes
               </TabsTrigger>
               <TabsTrigger
                 value="customize"
-                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10 after:hidden"
+                className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary-readable)] hover:theme-text transition-colors relative z-10 after:hidden"
               >
                 <Paintbrush key={activeTab === 'customize' ? 'on' : 'off'} size={14} className={`mr-2 tab-icon ${activeTab === 'customize' ? 'tab-icon-active' : ''}`} /> Customize
               </TabsTrigger>
@@ -458,7 +458,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                 You have unsaved edits. Give them a name under{' '}
                 <button
                   onClick={() => setActiveTab('customize')}
-                  className="theme-primary underline underline-offset-2"
+                  className="theme-accent underline underline-offset-2"
                 >
                   Customize → Save
                 </button>{' '}
@@ -471,7 +471,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           <TabsContent value="customize" className="flex-1 overflow-y-auto no-scrollbar p-4 m-0 min-h-0 relative">
             <div className="space-y-4">
               {/* Colors */}
-              <Card title="Colors" icon={<Palette size={14} className="theme-primary" />}>
+              <Card title="Colors" icon={<Palette size={14} className="theme-accent" />}>
                 <div className="grid grid-cols-2 gap-x-5 gap-y-0">
                   {BASE_KEYS.map(({ key, label }) => (
                     <ColorRow
@@ -502,7 +502,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   <div className="mt-3 space-y-3 border-t theme-border pt-3">
                     {ADV_GROUPS.map((group) => (
                       <div key={group}>
-                        <div className="text-[10px] uppercase tracking-wider theme-text-muted opacity-70 mb-1">
+                        <div className="text-[10px] uppercase tracking-wider theme-text-muted mb-1">
                           {group}
                         </div>
                         {ADV_KEYS.filter((k) => k.group === group).map(({ key, label }) => (
@@ -530,7 +530,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               </Card>
 
               {/* Colour harmony */}
-              <Card title="Color Harmony" icon={<Shapes size={14} className="theme-primary" />}>
+              <Card title="Color Harmony" icon={<Shapes size={14} className="theme-accent" />}>
                 <div className="flex items-end gap-3">
                   <div className="flex flex-col gap-1">
                     <span className="text-[11px] theme-text-muted">Accent</span>
@@ -591,7 +591,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               </Card>
 
               {/* Font & layout */}
-              <Card title="Font & Layout" icon={<Type size={14} className="theme-primary" />}>
+              <Card title="Font & Layout" icon={<Type size={14} className="theme-accent" />}>
                 <div className="flex gap-3">
                   <Select
                     label="Font"
@@ -637,7 +637,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               {/* Background effect */}
               <Card
                 title="Background Effect"
-                icon={<CircleDashed size={14} className="theme-primary" />}
+                icon={<CircleDashed size={14} className="theme-accent" />}
               >
                 <div className="flex items-end gap-3">
                   <Select
@@ -668,8 +668,8 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                         aria-label="Reset effect color"
                         className={`p-1 rounded transition-colors ${
                           state.effectColor
-                            ? 'theme-primary hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
-                            : 'theme-text-muted opacity-40'
+                            ? 'theme-accent hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
+                            : 'theme-text-muted'
                         }`}
                       >
                         <RotateCcw size={11} />
@@ -681,7 +681,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex flex-col">
                     <span className="text-[11px] theme-text-muted">Reactive</span>
-                    <span className="text-[10px] theme-text-muted opacity-60">
+                    <span className="text-[10px] theme-text-muted">
                       {slidersDisabled
                         ? 'Pick an animated effect to enable'
                         : 'Background responds to your cursor'}
@@ -730,7 +730,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               </Card>
 
               {/* Save / share */}
-              <Card title="Save & Share" icon={<Save size={14} className="theme-primary" />}>
+              <Card title="Save & Share" icon={<Save size={14} className="theme-accent" />}>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -844,7 +844,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
 
             {/* Auto-saved pill */}
             <div
-              className={`sticky bottom-0 float-right -mt-8 mr-1 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-black/70 theme-primary border border-[var(--primary)]/30 pointer-events-none transition-opacity duration-200 ${
+              className={`sticky bottom-0 float-right -mt-8 mr-1 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-black/70 theme-accent border border-[var(--primary)]/30 pointer-events-none transition-opacity duration-200 ${
                 pillVisible ? 'opacity-100' : 'opacity-0'
               }`}
             >

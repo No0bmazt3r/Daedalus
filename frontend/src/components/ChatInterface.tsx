@@ -111,7 +111,7 @@ export function ChatInterface() {
       {messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full">
           <div className="flex items-center gap-3 mb-8">
-            <LabyrinthIcon className={`w-10 h-10 transition-colors duration-300 ${isIncognito ? 'incognito-text incognito-drop-glow' : 'theme-primary'}`} />
+            <LabyrinthIcon className={`w-10 h-10 transition-colors duration-300 ${isIncognito ? 'incognito-text incognito-drop-glow' : 'theme-accent'}`} />
             <h1 className={`text-3xl font-serif tracking-tight transition-colors duration-300 ${isIncognito ? 'incognito-text' : ''}`}>
               <TypewriterText
                 text={isIncognito ? 'Off the record, Operator' : 'Good afternoon, Operator'}
@@ -144,7 +144,7 @@ export function ChatInterface() {
               <div className="flex items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center text-xs theme-text-muted mr-2 cursor-pointer hover:theme-text outline-none data-[state=open]:theme-text">
-                    <Zap size={14} className="mr-1 theme-primary" /> 
+                    <Zap size={14} className="mr-1 theme-accent" /> 
                     {selectedModel}
                     <ChevronDown size={14} className="ml-1 opacity-50" />
                   </DropdownMenuTrigger>
@@ -156,7 +156,7 @@ export function ChatInterface() {
                         disabled={!opt.value}
                         className={`cursor-pointer flex items-center gap-2 ${
                           selectedModel === opt.value
-                            ? 'theme-primary bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
+                            ? 'theme-accent bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
                             : 'theme-text-muted'
                         }`}
                       >
@@ -179,7 +179,7 @@ export function ChatInterface() {
                 <Button 
                   onClick={handleSend} 
                   disabled={!input.trim() || sending}
-                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:theme-track disabled:theme-text-muted p-0"
+                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled: disabled:theme-track disabled:theme-text-muted p-0"
                 >
                   <ArrowUp size={18} strokeWidth={2.5} />
                 </Button>
@@ -201,7 +201,7 @@ export function ChatInterface() {
                   <div className={`text-[15px] leading-relaxed ${msg.role === 'user' ? 'theme-sidebar zone-user-bubble border px-5 py-3 rounded-2xl max-w-[80%]' : 'max-w-[85%] pt-1'}`}>
                     {msg.content}
                     {msg.role === 'assistant' && !msg.persisted && (
-                      <div className="mt-1.5 text-[11px] theme-text-muted opacity-60">
+                      <div className="mt-1.5 text-[11px] theme-text-muted">
                         Placeholder — not saved. Assistant replies persist once the orchestrator lands.
                       </div>
                     )}
@@ -213,7 +213,7 @@ export function ChatInterface() {
                   <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card zone-ai-bubble">
                     <LabyrinthIcon className="w-5 h-5 zone-brand animate-pulse" />
                   </div>
-                  <div className="text-[15px] pt-1 theme-text-muted opacity-70">Thinking…</div>
+                  <div className="text-[15px] pt-1 theme-text-muted">Thinking…</div>
                 </div>
               )}
               {modelNotice && (
@@ -246,7 +246,7 @@ export function ChatInterface() {
                   <Button 
                     onClick={handleSend} 
                     disabled={!input.trim() || sending}
-                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:theme-track disabled:theme-text-muted p-0"
+                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled: disabled:theme-track disabled:theme-text-muted p-0"
                   >
                     <ArrowUp size={18} strokeWidth={2.5} />
                   </Button>

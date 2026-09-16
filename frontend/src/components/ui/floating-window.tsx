@@ -120,7 +120,7 @@ export function FloatingWindow({
               onClick={() => setIsPeek(!isPeek)}
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border mr-1 ${
                 isPeek
-                  ? 'bg-primary/20 text-[var(--primary)] border-[var(--primary)]/30'
+                  ? 'bg-primary/20 text-[var(--primary-readable)] border-[var(--primary)]/30'
                   : 'theme-text-muted hover:theme-text border-transparent hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
               }`}
               title="Fade this window to preview the page behind it"

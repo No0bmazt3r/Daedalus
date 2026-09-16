@@ -73,7 +73,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
       onClose={onClose}
       title="Settings"
       subtitle={activePanel?.label}
-      icon={<Settings2 size={16} className="theme-primary" />}
+      icon={<Settings2 size={16} className="theme-accent" />}
       width={900}
       height={650}
     >
@@ -128,7 +128,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               {groups.map((group) => (
                 <div key={group.id} className={isCompact ? 'flex flex-row items-center gap-1' : ''}>
                   {!sidebar.collapsed && !isCompact && (
-                    <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider theme-text-muted opacity-70">
+                    <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider theme-text-muted">
                       {group.label}
                     </div>
                   )}

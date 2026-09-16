@@ -122,12 +122,12 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             Daedalus keeps its stores physically separate — a fault in ingestion or
             logging cannot reach the sensor data of record.
           </p>
-          <p className="text-xs theme-text-muted mt-2 opacity-75">
+          <p className="text-xs theme-text-muted mt-2">
             Only the vector store runs as a container. The SQLite stores are
             embedded files the backend opens directly, so there is no server to
             run for them.
           </p>
-          <p className="text-xs theme-text-muted mt-2 opacity-75">
+          <p className="text-xs theme-text-muted mt-2">
             This panel reports health. To read the rows, use{' '}
             <span className="theme-text">Data stores</span> in the sidebar.
           </p>
@@ -136,7 +136,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           <button
             onClick={() => void load()}
             disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
           >
             <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
             Refresh
@@ -158,7 +158,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
         <div key={db.id} className={card}>
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-start gap-3 min-w-0">
-              <div className={`p-2.5 rounded-lg shrink-0 ${db.available ? 'bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] theme-primary' : 'theme-surface-strong theme-text-muted'}`}>
+              <div className={`p-2.5 rounded-lg shrink-0 ${db.available ? 'bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] theme-accent' : 'theme-surface-strong theme-text-muted'}`}>
                 {db.id === 'sensor' ? <HardDrive size={18} /> : <Database size={18} />}
               </div>
               <div className="min-w-0">
@@ -178,13 +178,13 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                     {db.deployment}
                   </span>
                   {db.access === 'read-only' && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--primary)]/40 theme-primary uppercase tracking-wide flex items-center gap-1">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--primary)]/40 theme-accent uppercase tracking-wide flex items-center gap-1">
                       <Lock size={9} /> read-only
                     </span>
                   )}
                 </div>
                 <p className="text-xs theme-text-muted mt-1">{db.purpose}</p>
-                <code className="text-[10px] theme-text-muted opacity-60 break-all block mt-1.5">
+                <code className="text-[10px] theme-text-muted break-all block mt-1.5">
                   {db.path}
                 </code>
               </div>
@@ -196,7 +196,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
               <span
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-md border ${
                   db.available
-                    ? 'border-[var(--primary)]/40 theme-primary'
+                    ? 'border-[var(--primary)]/40 theme-accent'
                     : 'status-bad-border status-bad'
                 }`}
               >
@@ -216,7 +216,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
               .filter(([key]) => key !== 'error')
               .map(([key, value]) => (
                 <div key={key} className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70 truncate">
+                  <div className="text-[10px] uppercase tracking-wide theme-text-muted truncate">
                     {humanizeKey(key)}
                   </div>
                   <div className="text-sm font-mono truncate" title={String(value ?? '')}>
@@ -244,7 +244,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                 <Sprout size={12} /> Generate demo data
               </button>
               {seedResult && (
-                <p className="mt-2 text-xs theme-primary flex items-center gap-1.5">
+                <p className="mt-2 text-xs theme-accent flex items-center gap-1.5">
                   <Check size={11} /> {seedResult}
                 </p>
               )}
@@ -288,7 +288,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                 Open metrics &amp; logs
               </a>
             ) : (
-              <p className="text-xs theme-text-muted mt-3 opacity-75">
+              <p className="text-xs theme-text-muted mt-3">
                 Not configured. Set <code className="theme-text">DAEDALUS_OBSERVABILITY_URL</code>{' '}
                 in <code className="theme-text">.env</code> once the stack is running — see
                 M7 in <code className="theme-text">TODO.md</code>.

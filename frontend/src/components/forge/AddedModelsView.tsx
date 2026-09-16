@@ -145,7 +145,7 @@ function LocalModel({
             onClick={() => onBenchmark(row)}
             disabled={!!busy}
             title="Measure TTFT and tok/s on a ~2k-token RAG prompt. Takes minutes."
-            className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+            className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
           >
             {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
           </button>
@@ -153,7 +153,7 @@ function LocalModel({
             onClick={() => onDelete(row)}
             disabled={!!busy}
             title="Delete from this machine."
-            className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] hover:border-[color-mix(in_srgb,var(--status-bad)_45%,transparent)] transition-colors disabled:opacity-40"
+            className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] hover:border-[color-mix(in_srgb,var(--status-bad)_45%,transparent)] transition-colors disabled:"
           >
             <Trash2 size={13} />
           </button>
@@ -316,7 +316,7 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
         <button
           onClick={() => void load()}
           disabled={!!busy}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-50"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
         >
           <RefreshCw size={12} />
           Refresh

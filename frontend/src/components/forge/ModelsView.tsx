@@ -391,7 +391,7 @@ function Row({
                 onClick={() => onBenchmark(row)}
                 disabled={!!busy}
                 title="Measure TTFT and tok/s on a ~2k-token RAG prompt. Takes minutes."
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
               >
                 {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
               </button>
@@ -399,7 +399,7 @@ function Row({
                 onClick={() => onDelete(row)}
                 disabled={!!busy}
                 title="Delete from this machine."
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] hover:border-[color-mix(in_srgb,var(--status-bad)_45%,transparent)] transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] hover:border-[color-mix(in_srgb,var(--status-bad)_45%,transparent)] transition-colors disabled:"
               >
                 <Trash2 size={13} />
               </button>
@@ -417,7 +417,7 @@ function Row({
                     ? 'Estimated not to fit, though you can still pull it.'
                     : `Download via Ollama${row.download_bytes ? ` (${bytes(row.download_bytes)})` : ''}.`
               }
-              className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+              className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
             >
               {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
               Pull
@@ -714,7 +714,7 @@ export function ModelsView() {
             <button
               onClick={() => void inspect()}
               disabled={customLoading || !customTag.trim()}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
             >
               {customLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
               Check fit

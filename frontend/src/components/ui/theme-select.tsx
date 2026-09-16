@@ -72,7 +72,7 @@ export function ThemeSelect<T extends string>({
                   compact ? 'text-xs' : 'text-sm'
                 } ${
                   active
-                    ? 'theme-primary bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
+                    ? 'theme-accent bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
                     : 'theme-text-muted'
                 }`}
               >

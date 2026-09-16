@@ -133,7 +133,7 @@ export function SettingsSearch({ isAdmin, onOpenPanel, collapsed }: SettingsSear
                   </span>
                 </span>
                 {i === activeIndex && (
-                  <CornerDownLeft size={11} className="shrink-0 theme-text-muted opacity-60" />
+                  <CornerDownLeft size={11} className="shrink-0 theme-text-muted" />
                 )}
               </button>
             ))

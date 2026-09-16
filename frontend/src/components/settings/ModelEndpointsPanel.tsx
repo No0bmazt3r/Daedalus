@@ -210,7 +210,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   href={selected.docs}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-0.5 theme-primary hover:underline"
+                  className="inline-flex items-center gap-0.5 theme-accent hover:underline"
                 >
                   Get a key <ExternalLink size={10} />
                 </a>
@@ -303,7 +303,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   <button
                     onClick={() => void runTest(ep.id)}
                     disabled={testing === ep.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled: transition-colors"
                   >
                     {testing === ep.id && <Loader2 size={11} className="animate-spin" />}
                     Test
