@@ -191,6 +191,10 @@
 .theme-text-muted { color: var(--text-muted) !important; }
 .theme-primary { color: var(--primary) !important; }
 .theme-bg-primary { background-color: var(--primary) !important; }
+/* Selected state for a choice the user has committed to — the Forge's
+   deployment mode uses it. Companion to the two above, so a selected card
+   picks up the theme accent rather than hardcoding a colour. */
+.theme-border-primary { border-color: var(--primary) !important; }
 
 @keyframes rain-fall {
   0% { transform: translateY(-100%); }

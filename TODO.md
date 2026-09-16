@@ -178,16 +178,35 @@ CLI first — it's the safe MVP. Web UI only if time allows.
         `query_id` into one causal trace, with a number-by-number
         groundedness verdict over the answer. Build first: the schema
         already exists, so the viewer can go in now against a trace seeder
-  - [ ] **The Forge** — hardware & model console (§8.2, Layer 11). **Step 1 of
-        6 built:** detection lands in Settings → Hardware and the Forge window,
-        sharing one `HardwareView`. Remaining:
-    - [x] Detect — RAM, CPU, GPU/VRAM, disk, Ollama (`GET /api/forge/hardware`)
-    - [ ] Estimate memory per model × quantization
-    - [ ] Score fit → `safe` | `marginal` | `will_not_fit`
-    - [ ] Manage Ollama models — list / pull (SSE progress) / delete
-    - [ ] Benchmark on a RAG-context-sized prompt; write to `model_logs`
-    - [ ] Commit the choice to `config/model_config.json`
-    - [ ] Absorb the Added Models panel, cloud tier clearly marked benchmark-only
+  - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
+        steps built,** as four tabs: Hardware · Models · Deployment · Cloud.
+        `HardwareView` is still shared with Settings → Hardware:
+    - [x] Detect — RAM, CPU, GPU/VRAM, disk, Ollama (`GET /api/forge/hardware`).
+          Runs on a background schedule rather than per panel open — three
+          tiers, dormant when nobody is looking (`services/hardware.py`)
+    - [x] Estimate memory per model × quantization — `services/model_fit.py`.
+          Prefers measured weight size and measured architecture from
+          `/api/show` over the parameter-count arithmetic wherever a model is
+          actually pulled
+    - [x] Score fit → `safe` | `marginal` | `will_not_fit`, against **two**
+          pools: a model too large for VRAM is offloaded, not disqualified.
+          Four weighted dimensions, weights derived from §9.2's own targets
+    - [x] Manage Ollama models — list / pull (SSE progress, cancellable) / delete
+    - [x] Benchmark on a RAG-context-sized prompt (~2k tokens, from `rag_logs`
+          when one exists, a labelled fixture otherwise); warm-up pass first;
+          writes `model_logs` under a `bench_` query id
+    - [x] Commit the choice to `config/model_config.json` — **`auto` or
+          `pinned`.** Auto stores a policy, not a name, and re-resolves to the
+          best-fitting *installed* model on whatever machine reads it
+    - [x] Absorb the Added Models panel — the Cloud tab renders the same
+          `ModelEndpointsPanel`, behind its own benchmark-only warning
+    - [ ] **Verify the catalogue's quality figures.** Six MMLU scores in
+          `backend/app/data/model_catalogue.json` ship `verified: false` with a
+          source URL each; the UI marks them unverified. Check them against the
+          model cards before any of this reaches the report
+    - [ ] Verify the non-default Ollama tags (`tag_verified: false` in the same
+          file) — the registry has no listable tags API, so the Q8_0/FP16 tag
+          names are conventional rather than confirmed
   - [ ] **Labyrinth Blueprints** — the corpus and the knowledge graph, with
         traversal replay for a graph-track `query_id`. Most blocked (M2 +
         Track 2); storage is an open decision — see MODULES.md §3.4

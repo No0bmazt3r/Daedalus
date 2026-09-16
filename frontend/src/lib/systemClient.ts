@@ -6,47 +6,7 @@
 // None of these is on the chat path. The log browser backs the sidebar's Data
 // stores section; the rest are Settings-only.
 
-const REQUEST_TIMEOUT_MS = 15000;
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      ...init,
-      signal: controller.signal,
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    });
-  } catch (err) {
-    throw new Error(
-      err instanceof Error && err.name === 'AbortError'
-        ? 'the backend did not respond in time'
-        : 'could not reach the backend',
-    );
-  } finally {
-    window.clearTimeout(timer);
-  }
-
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    try {
-      const body = (await res.json()) as { detail?: unknown };
-      if (typeof body.detail === 'string') detail = body.detail;
-    } catch {
-      /* non-JSON error body — the status is the message */
-    }
-    throw new Error(detail);
-  }
-
-  try {
-    return (await res.json()) as T;
-  } catch {
-    // A 2xx that isn't JSON means something other than the API answered.
-    throw new Error('the backend returned an unexpected response');
-  }
-}
+import { request } from './http';
 
 // ── raw log browser ──────────────────────────────────────────────────────────
 

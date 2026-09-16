@@ -36,6 +36,10 @@ services:
       DAEDALUS_LOG_DIR: ${DAEDALUS_LOG_DIR:-/logs}
       DAEDALUS_CHAT_DB: ${DAEDALUS_CHAT_DB:-/data/sqlite/chat.db}
       DAEDALUS_PREFS_DB: ${DAEDALUS_PREFS_DB:-/app/data/prefs.db}
+      # Where the Forge writes the deployed model choice, and where FastAPI
+      # reads it. Mounted from the repo below, so a choice committed in the
+      # container survives a rebuild and is visible in a diff.
+      DAEDALUS_CONFIG_DIR: ${DAEDALUS_CONFIG_DIR:-/config}
       # Hardware detection cadence. Defaults are fine; passed through so that
       # tuning them in .env works in the container too, not only in dev mode.
       DAEDALUS_HW_LIVE_INTERVAL: ${DAEDALUS_HW_LIVE_INTERVAL:-30}
@@ -47,6 +51,9 @@ services:
       - ./data:/data
       # Audit/evaluation logs — ai_logs.db.
       - ./logs:/logs
+      # The model choice the Forge commits — config, not data, so it lives in
+      # the repo rather than in a volume nobody can read.
+      - ./config:/config
       # UI preferences.
       - ./backend/data:/app/data
     depends_on:

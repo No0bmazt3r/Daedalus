@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "_about": [
+    "The six candidate models from PROJECT.md 8.1, with the facts the fit",
+    "estimator needs. Data, not code, because these are report numbers: they",
+    "get checked, corrected and cited, and that should never require a commit",
+    "to a Python module.",
+    "",
+    "Every declared number carries `source` and `verified`. `verified: false`",
+    "means nobody has checked it against the model card yet — the API passes",
+    "that through and the UI marks it, so an unchecked figure can never be",
+    "mistaken for a confirmed one on its way into the report.",
+    "",
+    "Declared values are only ever placeholders. The moment a model is pulled,",
+    "Ollama's /api/show reports its real architecture and /api/tags its real",
+    "size on disk, and services/model_fit.py prefers those. See MODULES.md 2.2:",
+    "an estimate and a measurement must never look alike."
+  ],
+  "models": [
+    {
+      "id": "gemma3-1b",
+      "label": "Gemma 3 1B",
+      "vendor": "Google",
+      "tier": "slm",
+      "params_b": 1.0,
+      "context_length": 32768,
+      "default_tag": "gemma3:1b",
+      "quantizations": [
+        { "quant": "Q4_K_M", "tag": "gemma3:1b", "tag_verified": true },
+        { "quant": "Q8_0", "tag": "gemma3:1b-it-q8_0", "tag_verified": false },
+        { "quant": "FP16", "tag": "gemma3:1b-it-fp16", "tag_verified": false }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset — read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": 38.8,
+        "confidence": "low",
+        "source": "https://huggingface.co/google/gemma-3-1b-it",
+        "verified": false
+      },
+      "notes": "Smallest candidate. The floor of the production SLM tier."
+    },
+    {
+      "id": "qwen3-1.7b",
+      "label": "Qwen3 1.7B",
+      "vendor": "Alibaba",
+      "tier": "slm",
+      "params_b": 1.7,
+      "context_length": 32768,
+      "default_tag": "qwen3:1.7b",
+      "quantizations": [
+        { "quant": "Q4_K_M", "tag": "qwen3:1.7b", "tag_verified": true },
+        { "quant": "Q8_0", "tag": "qwen3:1.7b-q8_0", "tag_verified": false },
+        { "quant": "FP16", "tag": "qwen3:1.7b-fp16", "tag_verified": false }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset — read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": 62.6,
+        "confidence": "low",
+        "source": "https://huggingface.co/Qwen/Qwen3-1.7B",
+        "verified": false
+      },
+      "notes": "Native 32K context; Qwen3 extends further with YaRN, which this does not assume."
+    },
+    {
+      "id": "phi3-mini",
+      "label": "Phi-3 Mini 3.8B",
+      "vendor": "Microsoft",
+      "tier": "slm",
+      "params_b": 3.8,
+      "context_length": 131072,
+      "default_tag": "phi3:mini",
+      "quantizations": [
+        { "quant": "Q4_K_M", "tag": "phi3:mini", "tag_verified": true },
+        { "quant": "Q8_0", "tag": "phi3:3.8b-mini-128k-instruct-q8_0", "tag_verified": false },
+        { "quant": "FP16", "tag": "phi3:3.8b-mini-128k-instruct-f16", "tag_verified": false }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset — read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": 68.8,
+        "confidence": "high",
+        "source": "Phi-3 technical report, arXiv:2404.14219 (5-shot MMLU)",
+        "verified": false
+      },
+      "notes": "128K context is the -128k variant; `phi3:mini` defaults to the 4K build. Check which tag you pulled."
+    },
+    {
+      "id": "qwen3-8b",
+      "label": "Qwen3 8B",
+      "vendor": "Alibaba",
+      "tier": "llm",
+      "params_b": 8.0,
+      "context_length": 32768,
+      "default_tag": "qwen3:8b",
+      "quantizations": [
+        { "quant": "Q4_K_M", "tag": "qwen3:8b", "tag_verified": true },
+        { "quant": "FP16", "tag": "qwen3:8b-fp16", "tag_verified": false }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset — read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": 76.9,
+        "confidence": "low",
+        "source": "https://huggingface.co/Qwen/Qwen3-8B",
+        "verified": false
+      },
+      "notes": "Accuracy ceiling of the local tier."
+    },
+    {
+      "id": "llama31-8b",
+      "label": "Llama 3.1 8B",
+      "vendor": "Meta",
+      "tier": "llm",
+      "params_b": 8.0,
+      "context_length": 131072,
+      "default_tag": "llama3.1:8b",
+      "quantizations": [
+        { "quant": "Q4_K_M", "tag": "llama3.1:8b", "tag_verified": true },
+        { "quant": "FP16", "tag": "llama3.1:8b-instruct-fp16", "tag_verified": false }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset — read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": 68.4,
+        "confidence": "medium",
+        "source": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct (5-shot MMLU)",
+        "verified": false
+      },
+      "notes": "128K context, and the largest KV cache of the candidates as a result."
+    },
+    {
+      "id": "mistral-7b",
+      "label": "Mistral 7B",
+      "vendor": "Mistral AI",
+      "tier": "llm",
+      "params_b": 7.0,
+      "context_length": 32768,
+      "default_tag": "mistral:7b",
+      "quantizations": [
+        { "quant": "Q4_K_M", "tag": "mistral:7b", "tag_verified": true },
+        { "quant": "FP16", "tag": "mistral:7b-instruct-fp16", "tag_verified": false }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset — read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": 60.1,
+        "confidence": "medium",
+        "source": "Mistral 7B paper, arXiv:2310.06825 (5-shot MMLU)",
+        "verified": false
+      },
+      "notes": "Sliding-window attention keeps its KV cache smaller than the context length implies."
+    }
+  ]
+}

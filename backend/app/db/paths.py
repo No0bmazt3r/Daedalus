@@ -51,6 +51,15 @@ PREFS_DB = Path(os.environ.get("DAEDALUS_PREFS_DB", _BACKEND_ROOT / "data" / "pr
 CHROMA_DIR = DATA_DIR / "chroma"
 CHROMA_URL = os.environ.get("CHROMA_URL", "").strip()
 
+# The model the orchestrator runs, written by the Forge and read by FastAPI.
+# PROJECT.md 8.1: "Selected via config/model_config.json — never hardcoded."
+#
+# Outside the five stores on purpose. It is configuration, not data: a human
+# reads it, a human may edit it by hand, and it belongs in version control
+# alongside the code it configures rather than in a database nobody can diff.
+CONFIG_DIR = Path(os.environ.get("DAEDALUS_CONFIG_DIR", _BACKEND_ROOT.parent / "config"))
+MODEL_CONFIG = CONFIG_DIR / "model_config.json"
+
 
 def ensure_dirs() -> None:
     """Create every directory the stores need. Safe to call repeatedly."""
@@ -60,5 +69,6 @@ def ensure_dirs() -> None:
         CHAT_DB.parent,
         PREFS_DB.parent,
         CHROMA_DIR,
+        CONFIG_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)
