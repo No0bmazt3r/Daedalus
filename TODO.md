@@ -319,7 +319,30 @@ Layer 9 below for the per-step detail.
 - [x] Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted — every font path in the UI resolves through one variable
 - [x] Attention dimming — the sidebar and the chat surfaces go translucent while the pointer and focus are elsewhere
 - [x] Data stores in the sidebar — the five stores next to the chats, tables and rows one click away in a floating window
-- [x] Shared `FloatingWindow` shell — drag, resize, Peek, Escape. Settings, Data stores and the Forge use it; ThemeModal stays non-modal by design
+- [x] Shared `FloatingWindow` shell — drag, resize, Peek, **minimize**, Escape.
+      Settings, Data stores and the Forge use it; ThemeModal stays non-modal by design
+  - [x] Minimize collapses a window to a chip and clicking the chip restores
+        it. The window is hidden with `display: none` rather than unmounted, so
+        the active tab, scroll position and filters survive — otherwise
+        "restore" would quietly mean "reopen". Escape restores a minimized
+        window instead of closing it
+  - [x] Chips dock **beside the incognito toggle**, not in a floating bar. A
+        bar at bottom-centre sat directly under the composer, which is the one
+        place guaranteed to compete for attention while you type. `ChatInterface`
+        renders the slot; `FloatingWindow` portals into it by id, and falls back
+        to a free-floating strip anywhere the slot is not mounted
+  - [x] `ThemeModal` gets it too, via `useMinimizeToDock`. It stays off the
+        shell — it is non-modal by design, so you can watch the app change
+        while dragging a slider — but borrows the chip and the dock, so both
+        kinds of window look identical once collapsed
+- [x] One `Switch` component for every on/off control — a segmented ON | OFF
+      rather than a pill and knob, so the state is readable from the word and
+      not only from position and colour. Replaced three hand-rolled copies
+- [x] Loading skeletons everywhere, in two styles. `data-skeleton` on `<html>`
+      picks `pixel` (square, block grid, stepped shimmer, to sit with Monocraft)
+      or `smooth`; the control is in Theme → Customize with a live sample.
+      Two panels previously rendered their *empty* state while still fetching,
+      which is the failure this exists to prevent
 - [x] Hardware detection — CPU/RAM/GPU/VRAM/disk/Ollama, in Settings → Hardware and The Forge
 - [x] **Every colour derives from the selected theme.** A theme here is an
       arbitrary accent over an arbitrary background, light or dark, so a

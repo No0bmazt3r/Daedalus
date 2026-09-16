@@ -356,7 +356,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
           onClick={() => void redetect()}
           disabled={busy}
           title="Probe everything again now, including the slow checks the schedule normally skips."
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
         >
           <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
           {busy ? 'Detecting…' : 'Re-detect'}

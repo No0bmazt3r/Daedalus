@@ -1,6 +1,7 @@
 import { LabyrinthIcon } from "./LabyrinthIcon";
 import { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
+import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
 import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown } from 'lucide-react'
@@ -86,6 +87,15 @@ export function ChatInterface() {
     <div className="flex-1 flex flex-col theme-text relative w-full h-full transition-colors duration-200">
     <TooltipProvider delay={200}>
       <div className="absolute top-4 right-6 flex items-center gap-3 z-50">
+        {/* Minimized windows land here, to the left of the incognito toggle.
+            `FloatingWindow` portals into this node by id; see `getDock` there.
+            An existing, always-visible control cluster beats a floating bar:
+            bottom-centre sat directly under the composer, which is the one
+            place guaranteed to compete for attention while you are typing. */}
+        <div
+          id={MINIMIZED_DOCK_SLOT}
+          className="flex flex-wrap items-center justify-end gap-2 max-w-[min(60vw,640px)]"
+        />
         <Tooltip>
           <TooltipTrigger 
             render={
@@ -119,6 +129,14 @@ export function ChatInterface() {
             </h1>
           </div>
           
+          {/* The greeting view previously rendered no error, so a failed first
+              message vanished without explanation. Anything that stops a send
+              has to be visible from wherever the send was made. */}
+          {(error || modelNotice) && (
+            <div className="w-full mb-2 text-[13px] status-warn px-1">
+              {error || modelNotice}
+            </div>
+          )}
           <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-sm focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
             <Textarea 
               ref={textareaRef}
@@ -179,7 +197,7 @@ export function ChatInterface() {
                 <Button 
                   onClick={handleSend} 
                   disabled={!input.trim() || sending}
-                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled: disabled:theme-track disabled:theme-text-muted p-0"
+                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled:opacity-40 disabled:theme-track disabled:theme-text-muted p-0"
                 >
                   <ArrowUp size={18} strokeWidth={2.5} />
                 </Button>
@@ -190,7 +208,10 @@ export function ChatInterface() {
       ) : (
         <>
           <ScrollArea className="flex-1 w-full">
-            <div className="flex flex-col max-w-3xl mx-auto py-8 px-4 gap-6 pb-32">
+            {/* pt-20 clears the control cluster pinned at top-4: the incognito
+                toggle is always there, and minimized-window chips sit beside
+                it, so the first message has to start below both. */}
+            <div className="flex flex-col max-w-3xl mx-auto pt-20 px-4 gap-6 pb-32">
               {messages.map((msg) => (
                 <div key={msg.key} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (
@@ -198,11 +219,19 @@ export function ChatInterface() {
                       <LabyrinthIcon className="w-5 h-5 zone-brand" />
                     </div>
                   )}
-                  <div className={`text-[15px] leading-relaxed ${msg.role === 'user' ? 'theme-sidebar zone-user-bubble border px-5 py-3 rounded-2xl max-w-[80%]' : 'max-w-[85%] pt-1'}`}>
+                  <div
+                    className={`text-[15px] leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'theme-sidebar zone-user-bubble border px-5 py-3 rounded-2xl max-w-[80%]'
+                        : 'max-w-[85%] pt-1'
+                    } ${msg.failed ? 'status-bad-border' : ''}`}
+                  >
                     {msg.content}
-                    {msg.role === 'assistant' && !msg.persisted && (
-                      <div className="mt-1.5 text-[11px] theme-text-muted">
-                        Placeholder — not saved. Assistant replies persist once the orchestrator lands.
+                    {/* A failed send is kept on screen so the text is not lost,
+                        and labelled so it is not mistaken for one that landed. */}
+                    {msg.failed && (
+                      <div className="mt-1.5 text-[11px] status-warn">
+                        Not sent. {error}
                       </div>
                     )}
                   </div>
@@ -219,7 +248,10 @@ export function ChatInterface() {
               {modelNotice && (
                 <div className="text-[13px] status-warn px-1">{modelNotice}</div>
               )}
-              {error && (
+              {/* Suppressed when a bubble already carries it: a failed message
+                  labels itself "Not sent. <reason>", and repeating the reason
+                  underneath reads as two separate problems. */}
+              {error && !messages.some((m) => m.failed) && (
                 <div className="text-[13px] status-warn px-1">{error}</div>
               )}
             </div>
@@ -246,7 +278,7 @@ export function ChatInterface() {
                   <Button 
                     onClick={handleSend} 
                     disabled={!input.trim() || sending}
-                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled: disabled:theme-track disabled:theme-text-muted p-0"
+                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled:opacity-40 disabled:theme-track disabled:theme-text-muted p-0"
                   >
                     <ArrowUp size={18} strokeWidth={2.5} />
                   </Button>

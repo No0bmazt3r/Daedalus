@@ -136,7 +136,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           <button
             onClick={() => void load()}
             disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
           >
             <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
             Refresh

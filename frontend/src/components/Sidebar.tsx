@@ -87,7 +87,7 @@ function SessionRow({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Options for ${sessionLabel(session)}`}
-          className="shrink-0 w-7 h-8 flex items-center justify-center rounded-md theme-text-muted opacity-0 group-hover/row: data-[state=open]: hover:theme-text outline-none"
+          className="shrink-0 w-7 h-8 flex items-center justify-center rounded-md theme-text-muted opacity-0 group-hover/row:opacity-100 data-[state=open]:opacity-100 hover:theme-text outline-none"
         >
           <MoreHorizontal size={14} />
         </DropdownMenuTrigger>
@@ -291,7 +291,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               onClick={item.onClick}
               disabled={!item.onClick}
               title={item.onClick ? undefined : 'Not built yet — see docs/MODULES.md'}
-              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled: disabled:hover:bg-transparent disabled:cursor-default"
+              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default"
             >
               <item.icon size={15} className="mr-2 shrink-0 theme-accent" />
               <span className="truncate flex-1 text-left">{item.title}</span>
@@ -309,7 +309,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             onClick={() => setSearching((v) => !v)}
           >
             <span className="text-[11px] font-medium theme-text-muted">Chats and tasks</span>
-            <Search size={12} className={`theme-text-muted transition-opacity ${searching ? '' : 'opacity-0 group-hover:'}`} />
+            <Search size={12} className={`theme-text-muted transition-opacity ${searching ? '' : 'opacity-0 group-hover:opacity-100'}`} />
           </div>
 
           {searching && (

@@ -18,6 +18,8 @@ Everything below was read off the source, not from memory.
 | Background effects | Built, pointer-reactive — 13 options |
 | Typography | Built — Monocraft (the Minecraft typeface) as the default face, self-hosted |
 | Settings shell | Built — registry, search, resizable rail |
+| Floating windows | Built — drag, resize, Peek, minimize (chips dock beside the incognito toggle), Escape. All four windows, including the non-modal theme palette |
+| Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
 | Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge |
 | The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Three tabs: Hardware, Models, Added Models |
@@ -566,7 +568,9 @@ Paths are relative to `frontend/src/`.
 | `components/Sidebar.tsx` | Chat list from `GET /api/sessions`, plus the Data stores section |
 | `components/stores/StoreBrowser.tsx` | The row grid — paging, sort, row detail. Body only, no window chrome |
 | `components/stores/StoreWindow.tsx` | Puts it in a `FloatingWindow` |
-| `components/ui/floating-window.tsx` | The shared window shell — drag, resize, Peek, Escape |
+| `components/ui/floating-window.tsx` | The shared window shell: drag, resize, Peek, minimize, Escape. Also exports `useMinimizeToDock` for `ThemeModal`, which is off the shell by design |
+| `components/ui/switch.tsx` | The one on/off control — a segmented ON \| OFF, not a pill and knob |
+| `components/ui/skeleton.tsx` | Loading placeholders that hold the shape of what is coming |
 | `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |
 | `components/forge/ForgeWindow.tsx` | The Forge (Layer 11) — step 1 of §8.2 |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
@@ -598,7 +602,8 @@ Three consequences worth keeping:
   (`/stores/$store/$table`) that replaced the whole pane, and that was the wrong
   call: reading rows is something you do *while* looking at something else — a
   chat, a trace — and a full-screen takeover makes you leave the thing you were
-  checking against. A window also gets Peek, which a route cannot offer. The
+  checking against. A window also gets Peek and minimize, which a route cannot
+  offer. The
   route is gone; the deep-linkability it bought was not worth the workflow it
   cost.
 - **The metrics link is always present**, not conditional on a failure. A link

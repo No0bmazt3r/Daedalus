@@ -116,7 +116,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
             onClick={() => void load()}
             disabled={busy}
             aria-label="Refresh"
-            className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:"
+            className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40"
           >
             <RefreshCw size={14} className={busy ? 'animate-spin' : ''} />
           </button>

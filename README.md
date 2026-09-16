@@ -270,6 +270,8 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Typography** | **Monocraft** — the Minecraft typeface — as the default face, bundled and self-hosted; four alternatives in the Font selector |
 | **Background effects** | 13 options, 11 canvas-animated, **pointer-reactive** — including Nexus, Aurora, Bubbles and Voxels |
 | **Attention dimming** | The sidebar and the chat surfaces sit back translucent while the pointer and focus are elsewhere |
+| **Floating windows** | Settings, Data stores, the Forge and the theme palette open as draggable, resizable windows with **Peek** (fade to see the page behind) and **minimize** (collapse to a chip beside the incognito toggle, restored exactly as you left it) |
+| **Loading skeletons** | Placeholders shaped like the content they precede, in a pixel or smooth style — switchable in Theme → Customize |
 | **Data stores** | The five stores in the sidebar under the chats — expand one, click a table, read its rows in a floating window |
 | **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. Settings → Hardware, and **The Forge** |
 | **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` |

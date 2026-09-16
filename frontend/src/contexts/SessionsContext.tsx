@@ -39,8 +39,10 @@ export interface DisplayMessage {
   key: string;
   role: 'user' | 'assistant';
   content: string;
-  /** False for an optimistic echo, and for mock replies the backend never saw. */
+  /** False for an optimistic echo the backend has not confirmed. */
   persisted: boolean;
+  /** The send failed. The text is still yours; it just never reached the server. */
+  failed?: boolean;
 }
 
 export type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -206,7 +208,15 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         // Incognito chats are never listed, so there is nothing to refresh.
         if (!isIncognito) void refresh();
       } catch (err) {
-        setMessages((prev) => prev.filter((m) => m.key !== optimisticKey));
+        // Keep the message on screen, marked as failed, rather than deleting
+        // it. Discarding it threw away what the person typed *and* dropped the
+        // transcript back to empty, which switched the view back to the
+        // greeting — so a failed send looked like nothing had happened at all.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.key === optimisticKey ? { ...m, failed: true, persisted: false } : m,
+          ),
+        );
         setError(err instanceof Error ? err.message : 'could not send that message');
         if (err instanceof SessionApiError && err.status === 0) setStatus('offline');
       } finally {

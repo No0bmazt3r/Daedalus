@@ -30,6 +30,7 @@ import {
   CircleDashed,
   Download,
   Paintbrush,
+  Minus,
   Palette,
   RotateCcw,
   Save,
@@ -43,6 +44,7 @@ import { useDraggable } from '../hooks/useDraggable'
 import { clearZoneHighlight } from '../lib/zoneHighlight'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Switch } from './ui/switch'
+import { useMinimizeToDock } from './ui/floating-window'
 import { Skeleton } from './ui/skeleton'
 import { ThemeSelect } from './ui/theme-select'
 
@@ -193,6 +195,15 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   const [harmonyMode, setHarmonyMode] = useState<'dark' | 'light'>('dark')
 
   const { position, onMouseDown, handleRef, windowRef } = useDraggable()
+  // Borrowed from FloatingWindow rather than reimplemented, so this window's
+  // chip is identical to every other one. See useMinimizeToDock for why this
+  // modal is not simply built on that shell.
+  const { minimized, minimize, restore, dockChip } = useMinimizeToDock({
+    open,
+    onClose,
+    title: 'Theme',
+    icon: <Paintbrush size={14} className="theme-accent" />,
+  })
 
   // Auto-saved pill, mirroring the flash Odysseus shows on every tweak.
   const [pillVisible, setPillVisible] = useState(false)
@@ -216,11 +227,15 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
+      if (e.key !== 'Escape') return
+      // Restore before closing: dismissing something you cannot see, and
+      // losing the edits in it, is the wrong answer to the back-out key.
+      if (minimized) restore()
+      else handleClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, handleClose])
+  }, [open, handleClose, minimized, restore])
 
   const customEntries = useMemo(() => Object.entries(customThemes), [customThemes])
 
@@ -316,7 +331,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
             }}
             title={`Delete theme "${id}"`}
             aria-label={`Delete theme ${id}`}
-            className="absolute top-1 right-1 p-0.5 rounded bg-black/40 theme-text-muted opacity-0 group-hover/swatch: hover:theme-text transition-opacity"
+            className="absolute top-1 right-1 p-0.5 rounded bg-black/40 theme-text-muted opacity-0 group-hover/swatch:opacity-100 hover:theme-text transition-opacity"
           >
             <X size={11} />
           </button>
@@ -348,7 +363,15 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] pointer-events-none">
+    <>
+      {/* `display: none` rather than an early return, so the children stay
+          mounted: unmounting would reset the open tab, the harmony previews
+          and every in-progress edit, and "restore" would mean "start over". */}
+      <div
+        className="fixed inset-0 z-[100] pointer-events-none"
+        style={{ display: minimized ? 'none' : undefined }}
+        aria-hidden={minimized}
+      >
       <div
         ref={windowRef}
         style={style}
@@ -386,6 +409,15 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                 className={isPeek ? 'animate-[spin_4s_linear_infinite]' : ''}
               />
               Peek
+            </button>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={minimize}
+              aria-label="Minimize"
+              title="Collapse to the bar at the top. Nothing is lost — the window reopens exactly as you left it."
+              className="p-1 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded theme-text-muted hover:theme-text"
+            >
+              <Minus size={16} />
             </button>
             <button
               onMouseDown={(e) => e.stopPropagation()}
@@ -861,6 +893,8 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+      </div>
+      {dockChip}
+    </>
   )
 }
