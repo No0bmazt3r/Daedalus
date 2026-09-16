@@ -7,6 +7,8 @@ land.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -19,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import forge, health, logs, prefs, providers, sessions, system
 from .db import migrations, paths, sqlite_util
-from .services import chat_service
+from .services import chat_service, hardware
 
 log = logging.getLogger("daedalus.startup")
 
@@ -55,9 +57,24 @@ async def lifespan(_app: FastAPI):
     if swept:
         log.info("swept %d ephemeral session(s) left by a previous run", swept)
 
-    yield
+    # Hardware detection is slow (a subprocess, an HTTP timeout, and under WSL a
+    # ~2.5s PowerShell interop call) and was being paid inside the request every
+    # time somebody opened the Forge. It now runs here instead: one warm-up pass
+    # off the request path, then a refresh only while somebody is actually
+    # watching the panel. Started, not awaited — a machine that is slow to probe
+    # must not be slow to boot, and the endpoint serves whatever it has.
+    hardware_task = asyncio.create_task(hardware.background_refresh())
 
-    chat_service.purge_ephemeral()
+    try:
+        yield
+    finally:
+        # Ordinary shutdown. Without this the task is garbage-collected
+        # mid-sleep and asyncio complains about it on the way out.
+        hardware_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await hardware_task
+
+        chat_service.purge_ephemeral()
 
 
 app = FastAPI(

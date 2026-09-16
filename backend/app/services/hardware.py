@@ -16,6 +16,10 @@ so the model-fit estimate has real numbers to work from instead of assumptions.
    network call is to Ollama on the configured host — a local API, which is
    what Rule 1 permits. It is given a short timeout so a dead Ollama cannot
    hang the panel.
+3. **Never probe inside a request.** `profile()` serves a cached snapshot that
+   a background task keeps warm; see the *snapshot cache* section at the foot
+   of this module for the three tiers and why they refresh at different rates.
+   Opening a panel must not cost a subprocess.
 
 This is a *setup* surface, not a runtime one (Rule 5): the orchestrator must
 never call it on the chat path.
@@ -23,10 +27,14 @@ never call it on the chat path.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import shutil
 import subprocess
+import threading
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 _psutil_error: str | None = None
@@ -450,19 +458,353 @@ def _host() -> dict[str, Any]:
     }
 
 
-def profile() -> dict[str, Any]:
-    """The full hardware profile. Never raises."""
-    ollama = _ollama()
-    ollama["runs_here"] = _ollama_is_local()
+
+
+def _ollama_section() -> dict[str, Any]:
+    """Reachability and whether the daemon lives in this namespace, as one probe.
+
+    Kept together because they refresh together: both answers change only when
+    somebody starts or stops Ollama, and both are the expensive kind — an HTTP
+    call with a timeout, and a walk over every process in /proc.
+    """
+    out = _ollama()
+    out["runs_here"] = _ollama_is_local()
+    return out
+
+
+# ── snapshot cache and background refresh ────────────────────────────────────
+#
+# Detection used to run inside the request: every time the Forge window or
+# Settings → Hardware was opened, this module spawned nvidia-smi, waited out
+# Ollama's HTTP timeout and — under WSL — paid ~2.5s for a PowerShell interop
+# call, all before the panel could paint. The cost scaled with how often
+# somebody looked at the panel, which is the wrong thing for it to scale with.
+#
+# So the probes now run on a schedule and the endpoint serves the last
+# snapshot. Three tiers, because these fields have very different lifetimes and
+# very different costs:
+#
+#   static — CPU model, core counts, architecture, platform, and the Windows
+#            host's totals. None of it can change while this process runs, and
+#            the WSL probe is by far the most expensive thing here. Probed once.
+#   live   — available RAM, CPU load, free disk. The numbers the model-fit
+#            estimate is read against, so a stale one is actively misleading
+#            rather than merely old. Pure syscalls — the three of them together
+#            measure under 2ms — so 30s costs nothing worth counting.
+#   slow   — Ollama's reachability and version: an HTTP call with a timeout
+#            (2.1s measured when the daemon is down), answering a question whose
+#            truth changes when somebody starts or stops it. Five minutes.
+#
+# The GPU belongs to whichever of the last two its own probe can afford — see
+# `_gpu_tier`. With pynvml installed it is a 13ms in-process call and joins the
+# live tier; falling back to nvidia-smi it costs 613ms and drops to the slow
+# one. Which applies is a property of the machine, not of this file.
+#
+# `cpu` sits in the live tier although most of it is static: the whole probe is
+# a /proc read plus two psutil calls, and splitting it in two to save
+# microseconds would cost more in comprehension than it saves in cycles.
+#
+# The loop also only runs while somebody is watching — IDLE_AFTER seconds with
+# no read and it goes dormant, so a machine with the panel closed does no
+# detection work at all. That leaves waking up to the read path, which repairs
+# a stale live tier itself (a few milliseconds) rather than serving numbers
+# from whenever the panel was last open.
+
+# Overridable because the right interval depends on the machine: on a laptop
+# with hybrid graphics, each nvidia-smi call can wake the discrete GPU, and
+# somebody running the evaluation overnight may want this quieter still.
+LIVE_INTERVAL = float(os.environ.get("DAEDALUS_HW_LIVE_INTERVAL", "30"))
+SLOW_INTERVAL = float(os.environ.get("DAEDALUS_HW_SLOW_INTERVAL", "300"))
+IDLE_AFTER = float(os.environ.get("DAEDALUS_HW_IDLE_AFTER", "120"))
+
+# How often the loop checks whether anything is due. Not itself a probe
+# interval: a tick with nothing due costs one comparison per section.
+_TICK = 5.0
+
+# Past this the UI stops presenting the numbers as current. Two missed refreshes
+# rather than one, so an ordinary scheduling hiccup doesn't cry wolf.
+_STALE_AFTER = 2.0
+
+
+_TIERS: dict[str, float | None] = {
+    "static": None,
+    "live": LIVE_INTERVAL,
+    "slow": SLOW_INTERVAL,
+}
+
+
+class _Section:
+    """One probe, the tier that sets its cadence, and its last answer.
+
+    Tier — not a bare interval — because two of them are configurable and could
+    be set to the same number, and "refresh the live tier" must keep meaning
+    that even when somebody sets the slow one to 30s as well.
+
+    `retier` lets a section pick its own tier from what it just measured. Only
+    the GPU needs it, and it needs it because the cost of that probe is not
+    knowable up front: see `_gpu_tier`.
+    """
+
+    __slots__ = ("probe", "tier", "value", "captured_at", "monotonic_at", "retier")
+
+    def __init__(self, probe: Any, tier: str, retier: Any = None) -> None:
+        self.probe = probe
+        self.tier = tier
+        self.retier = retier
+        self.value: Any = None
+        self.captured_at: float | None = None  # wall clock, for display
+        self.monotonic_at: float = 0.0  # for scheduling — immune to clock changes
+
+    @property
+    def interval(self) -> float | None:
+        """None for the static tier: probed once, then never again."""
+        return _TIERS[self.tier]
+
+    @property
+    def probed(self) -> bool:
+        return self.captured_at is not None
+
+    def age(self, now: float) -> float | None:
+        return None if not self.probed else now - self.monotonic_at
+
+    def due(self, now: float) -> bool:
+        if not self.probed:
+            return True
+        if self.interval is None:
+            return False
+        return now - self.monotonic_at >= self.interval
+
+
+def _gpu_tier(value: Any) -> str:
+    """Which tier the GPU belongs in — decided by what actually answered.
+
+    The two sources differ in cost by fifty times, and which one is available
+    is not knowable until the probe has run: pynvml binds to libnvidia-ml at
+    call time, so the same image reports it present on a machine with the
+    driver and absent on one without.
+
+    Measured on the development machine (WSL2, RTX 3050): pynvml 13ms,
+    nvidia-smi 613ms — the latter being a Windows interop call, not merely a
+    subprocess. So VRAM refreshes with the live numbers when it is cheap, and
+    falls back to the five-minute tier when it is not. No configuration, and no
+    wrong answer on a machine nobody measured.
+    """
+    if isinstance(value, dict) and value.get("source") == "pynvml":
+        return "live"
+    return "slow"
+
+
+def _sections() -> dict[str, _Section]:
     return {
-        "host": _host(),
-        "cpu": _cpu(),
-        "memory": _memory(),
-        "disk": _disk(),
-        "gpu": _gpus(),
-        "ollama": ollama,
+        "host": _Section(_host, "static"),
+        # The expensive one: ~2.5s of PowerShell interop, describing a machine
+        # that cannot change while this process runs.
+        "host_machine": _Section(_wsl_host, "static"),
+        "cpu": _Section(_cpu, "live"),
+        "memory": _Section(_memory, "live"),
+        "disk": _Section(_disk, "live"),
+        # Starts slow and re-tiers itself on the first answer — `_gpu_tier` has
+        # the measurements. Pessimistic to begin with on purpose: the expensive
+        # source is the fallback, so assuming the cheap one and being wrong
+        # would put a 613ms probe in the 30-second tier until it corrected.
+        "gpu": _Section(_gpus, "slow", retier=_gpu_tier),
+        "ollama": _Section(_ollama_section, "slow"),
+    }
+
+
+_state = _sections()
+
+# Held across a refresh so two threads — the loop, and a request that found the
+# live tier stale — cannot probe the same section at once. Every holder
+# re-checks what is due after acquiring, so the second one usually finds
+# nothing left to do and returns immediately.
+_refresh_lock = threading.Lock()
+
+# When the profile was last *asked for*. The loop watches this: no readers, no
+# work. Starts at boot so the warm-up pass counts as interest.
+_last_read_at = time.monotonic()
+
+_background_running = False
+
+
+def _iso(ts: float | None) -> str | None:
+    """Wall-clock seconds as UTC ISO 8601 — the shape every other API here uses."""
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+
+def _refresh_section(section: _Section) -> None:
+    """Run one probe and record when. Never raises.
+
+    Every probe is already internally guarded, so an exception reaching here is
+    a bug rather than an absent GPU — but the loop has to survive it either
+    way, and a section that fails keeps its previous value instead of reverting
+    to null and blanking the panel.
+    """
+    try:
+        section.value = section.probe()
+    except Exception:  # pragma: no cover - defensive
+        if not section.probed:
+            section.value = None
+    if section.retier is not None:
+        # Re-read every time, not just the first: a driver that stops answering
+        # sends the GPU back to the cheap-to-be-wrong-about tier on its own.
+        section.tier = section.retier(section.value)
+    section.captured_at = time.time()
+    section.monotonic_at = time.monotonic()
+
+
+def refresh(*, force: bool = False, tier: str | None = None) -> None:
+    """Re-probe whatever is due.
+
+    `force` re-runs every probe regardless of tier or schedule — what the
+    Re-detect button asks for, and the only way to notice a machine that
+    genuinely changed under a long-running process (a GPU passed through,
+    `.wslconfig` raised and WSL restarted).
+
+    `tier` limits the pass to one tier. The read path uses `tier="live"`:
+    refresh the cheap numbers if they have gone stale, but never make somebody
+    opening a panel wait out Ollama's timeout.
+    """
+    global _host_machine_probed
+
+    if force:
+        # The WSL host answer is memoised inside _wsl_host itself; clearing this
+        # flag is what makes a forced re-detect actually re-detect.
+        _host_machine_probed = False
+
+    with _refresh_lock:
+        now = time.monotonic()
+        for section in _state.values():
+            # A tier filter never suppresses a section's *first* probe: a
+            # never-probed section is null, and serving null because the read
+            # path only asked for the live tier would be a worse answer than
+            # the one probe it costs. After that the filter applies normally.
+            if tier is not None and section.tier != tier and section.probed:
+                continue
+            if force or section.due(now):
+                _refresh_section(section)
+
+
+def _meta(now: float) -> dict[str, Any]:
+    """What the UI needs in order to say how current these numbers are.
+
+    A panel that silently serves a cached snapshot is worse than one that
+    re-probes on every open: the numbers look live and are not. So the age
+    travels with the data and the panel prints it.
+    """
+    live_ages = [
+        age
+        for section in _state.values()
+        if section.tier == "live" and (age := section.age(now)) is not None
+    ]
+    # The oldest live section is the honest answer to "how current is this?" —
+    # the profile is only as fresh as its least fresh number.
+    oldest = max(live_ages) if live_ages else None
+
+    sections: dict[str, Any] = {}
+    for name, section in _state.items():
+        age = section.age(now)
+        sections[name] = {
+            "tier": section.tier,
+            "captured_at": _iso(section.captured_at),
+            "age_seconds": round(age, 1) if age is not None else None,
+            "interval_seconds": section.interval,
+        }
+
+    return {
+        "captured_at": _iso(
+            max(
+                (s.captured_at for s in _state.values() if s.captured_at is not None),
+                default=None,
+            )
+        ),
+        "age_seconds": round(oldest, 1) if oldest is not None else None,
+        "stale": oldest is None or oldest > LIVE_INTERVAL * _STALE_AFTER,
+        "live_interval_seconds": LIVE_INTERVAL,
+        "slow_interval_seconds": SLOW_INTERVAL,
+        # False means the loop is dormant or was never started, so these numbers
+        # only advance when somebody asks for them. Worth showing: it is the
+        # difference between "updating every 30s" and "updated when you looked".
+        "background": _background_running,
+        "next_refresh_in_seconds": (
+            round(max(0.0, LIVE_INTERVAL - oldest), 1) if oldest is not None else 0.0
+        ),
+        "sections": sections,
+    }
+
+
+def _assemble() -> dict[str, Any]:
+    now = time.monotonic()
+    return {
+        "host": _state["host"].value,
+        "cpu": _state["cpu"].value,
+        "memory": _state["memory"].value,
+        "disk": _state["disk"].value,
+        "gpu": _state["gpu"].value,
+        "ollama": _state["ollama"].value,
         # None unless this is WSL with interop available. Present so the UI can
         # name which machine every other figure describes.
-        "host_machine": _wsl_host(),
+        "host_machine": _state["host_machine"].value,
         "detector": "psutil" if psutil is not None else "unavailable",
+        "refresh": _meta(now),
     }
+
+
+def profile() -> dict[str, Any]:
+    """The full hardware profile, from cache. Never raises.
+
+    Costs nothing in the common case — the background loop has already probed,
+    and this assembles a dict. The one exception is the first read after the
+    loop has gone dormant, where the live tier is refreshed inline so that
+    reopening the panel after lunch shows RAM as it is now, not as it was then.
+    That path is syscalls, not subprocesses.
+    """
+    global _last_read_at
+    _last_read_at = time.monotonic()
+    refresh(tier="live")
+    return _assemble()
+
+
+def redetect() -> dict[str, Any]:
+    """Probe everything now, ignoring the schedule. Backs the Re-detect button.
+
+    Deliberately the slow path: this is the one place that pays for the WSL
+    interop call and Ollama's timeout on demand, because somebody asked a
+    question the cache cannot answer — *has the machine changed?*
+    """
+    global _last_read_at
+    _last_read_at = time.monotonic()
+    refresh(force=True)
+    return _assemble()
+
+
+async def background_refresh() -> None:
+    """Keep the snapshot warm while somebody is watching. Runs for the app's life.
+
+    Started from the lifespan in `main.py`. Two things happen here that the
+    request path deliberately does not do:
+
+    1. A full probe at boot, off the request path, so the first person to open
+       the Forge gets an instant panel instead of paying for the WSL call.
+    2. Nothing at all once IDLE_AFTER has passed with no reader. The panel is
+       closed almost all of the time; spawning nvidia-smi every 30s on a
+       machine nobody is looking at is exactly the waste this replaced.
+
+    Probes are blocking, so each pass goes to a worker thread — the event loop
+    must stay free for the chat path, which is the one thing here that is on it.
+    """
+    global _background_running
+    _background_running = True
+    try:
+        await asyncio.to_thread(refresh)
+        while True:
+            await asyncio.sleep(_TICK)
+            if time.monotonic() - _last_read_at > IDLE_AFTER:
+                continue
+            await asyncio.to_thread(refresh)
+    except asyncio.CancelledError:
+        raise
+    finally:
+        _background_running = False

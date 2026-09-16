@@ -19,3 +19,15 @@ httpx>=0.27
 # and disk; GPU comes from pynvml or nvidia-smi when either is present, and
 # neither is required — a CPU-only machine is a supported configuration.
 psutil>=5.9
+
+# NVIDIA's own NVML binding — the `pynvml` module `hardware._gpus()` prefers.
+# Not for capability but for cost: the nvidia-smi fallback is a subprocess, and
+# under WSL a Windows interop call, measured at 613ms against 13ms for this.
+# That difference is what lets VRAM sit in the 30-second refresh tier instead
+# of the five-minute one (see the snapshot cache section in hardware.py).
+#
+# Pure Python, ~53KB, no CUDA toolkit. It binds to libnvidia-ml.so.1 at call
+# time, so on a machine or container without an NVIDIA driver the import
+# succeeds and nvmlInit() fails — which `_gpus()` already treats as "no GPU"
+# and falls through. Safe to install unconditionally; nothing here requires it.
+nvidia-ml-py>=12.535

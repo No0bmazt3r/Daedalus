@@ -117,6 +117,47 @@ export interface GpuDevice {
   driver_version: string | null;
 }
 
+/** Per-section freshness. Tiers and their rates live in the backend service. */
+export interface HardwareSectionMeta {
+  tier: 'static' | 'live' | 'slow';
+  captured_at: string | null;
+  age_seconds: number | null;
+  interval_seconds: number | null;
+}
+
+/**
+ * How current the snapshot is.
+ *
+ * Detection no longer runs inside the request — it costs seconds on a real
+ * machine — so the age travels with the numbers. A cached figure presented as
+ * live would be worse than a slow panel, which is the whole reason this block
+ * exists.
+ */
+export interface HardwareRefreshMeta {
+  /** Newest probe in the snapshot, ISO 8601 UTC. */
+  captured_at: string | null;
+  /** Age of the *oldest* live figure — the snapshot is only as fresh as that. */
+  age_seconds: number | null;
+  /** Past two missed refreshes. The UI says so rather than implying live data. */
+  stale: boolean;
+  live_interval_seconds: number;
+  slow_interval_seconds: number;
+  /** False when the loop is dormant: numbers then advance only on a read. */
+  background: boolean;
+  next_refresh_in_seconds: number;
+  sections: Record<string, HardwareSectionMeta>;
+}
+
+/** The Windows host's totals, when this is running under WSL. Null otherwise. */
+export interface HostMachine {
+  memory_total_bytes: number | null;
+  cpu_model: string | null;
+  cores_physical: number | null;
+  cores_logical: number | null;
+  base_clock_mhz: number | null;
+  gpus: string[];
+}
+
 export interface HardwareProfile {
   host: { platform: string | null; release: string | null; python: string; wsl: boolean };
   cpu: {
@@ -145,13 +186,35 @@ export interface HardwareProfile {
     reachable: boolean;
     version: string | null;
     resolved_url: string | null;
+    /** Whether the daemon is visible in the backend's own process namespace. */
+    runs_here: boolean;
   };
+  /** Null unless under WSL with interop available — names which machine the rest describes. */
+  host_machine: HostMachine | null;
   detector: string;
+  refresh: HardwareRefreshMeta;
 }
 
-/** What this machine is. Always answers; unknowns come back null. */
+/**
+ * What this machine is. Always answers; unknowns come back null.
+ *
+ * Cheap — the backend serves a snapshot a background task keeps warm, so this
+ * is safe to poll while the panel is open and costs about a millisecond. It is
+ * also the signal that keeps that task awake: it goes dormant when nothing has
+ * read the profile for a couple of minutes.
+ */
 export function hardwareProfile(): Promise<HardwareProfile> {
   return request<HardwareProfile>('/api/forge/hardware');
+}
+
+/**
+ * Force a full re-probe — the Re-detect button.
+ *
+ * The expensive path, deliberately: it pays for every probe, including the
+ * ~2.5s WSL interop call the cache exists to avoid. Seconds, not milliseconds.
+ */
+export function redetectHardware(): Promise<HardwareProfile> {
+  return request<HardwareProfile>('/api/forge/hardware/refresh', { method: 'POST' });
 }
 
 // ── cloud model endpoints ────────────────────────────────────────────────────

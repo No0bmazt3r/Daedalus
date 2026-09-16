@@ -36,6 +36,11 @@ services:
       DAEDALUS_LOG_DIR: ${DAEDALUS_LOG_DIR:-/logs}
       DAEDALUS_CHAT_DB: ${DAEDALUS_CHAT_DB:-/data/sqlite/chat.db}
       DAEDALUS_PREFS_DB: ${DAEDALUS_PREFS_DB:-/app/data/prefs.db}
+      # Hardware detection cadence. Defaults are fine; passed through so that
+      # tuning them in .env works in the container too, not only in dev mode.
+      DAEDALUS_HW_LIVE_INTERVAL: ${DAEDALUS_HW_LIVE_INTERVAL:-30}
+      DAEDALUS_HW_SLOW_INTERVAL: ${DAEDALUS_HW_SLOW_INTERVAL:-300}
+      DAEDALUS_HW_IDLE_AFTER: ${DAEDALUS_HW_IDLE_AFTER:-120}
     volumes:
       # Sensor SQLite + documents. Mount the SCADA machine's real database
       # here (read-only at the driver level regardless).

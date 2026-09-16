@@ -17,10 +17,10 @@ export function HardwarePanel({ isPeek }: { isPeek: boolean }) {
           Hardware
         </h3>
         <p className="text-sm theme-text-muted">
-          What this machine is, detected at the moment you opened this panel.
-          Step 1 of the model-fit workflow — estimating, scoring and benchmarking
-          models against it lives in <span className="theme-text">The Forge</span>,
-          in the sidebar.
+          What this machine is, kept current by the backend rather than re-scanned
+          each time you open this panel. Step 1 of the model-fit workflow —
+          estimating, scoring and benchmarking models against it lives in{' '}
+          <span className="theme-text">The Forge</span>, in the sidebar.
         </p>
       </div>
       <HardwareView isPeek={isPeek} />
