@@ -35,7 +35,7 @@ import {
  * ## Colours
  *
  * Verdicts use the `.status-*` classes, not Tailwind literals. A theme here is
- * an arbitrary accent over an arbitrary background — `text-amber-400` is fine on
+ * an arbitrary accent over an arbitrary background — `status-warn` is fine on
  * a dark surface and nearly invisible on a cream one, which is what happened to
  * the first version of this screen. See `deriveStatusColors` in `lib/themes.ts`.
  */

@@ -97,7 +97,7 @@ export function FloatingWindow({
           backdropFilter: isPeek ? 'none' : undefined,
         }}
         className={`pointer-events-auto absolute resize overflow-hidden min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh] flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${
-          isPeek ? 'border-white/20 shadow-none' : ''
+          isPeek ? 'theme-hairline shadow-none' : ''
         } ${className}`}
       >
         <div

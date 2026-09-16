@@ -144,8 +144,8 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
       </div>
 
       {error && (
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-sm">
-          <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
+          <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
           <div>
             <div className="font-medium">Couldn't reach the backend</div>
             <div className="theme-text-muted text-xs mt-1">{error}</div>
@@ -196,11 +196,11 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-md border ${
                   db.available
                     ? 'border-[var(--primary)]/40 theme-primary'
-                    : 'border-red-500/40 text-red-400'
+                    : 'status-bad-border status-bad'
                 }`}
               >
                 <span
-                  className={`w-1.5 h-1.5 rounded-full ${db.available ? 'theme-bg-primary' : 'bg-red-500'}`}
+                  className={`w-1.5 h-1.5 rounded-full ${db.available ? 'theme-bg-primary' : 'status-bad-fill'}`}
                 />
                 {db.available ? 'Healthy' : 'Not healthy'}
               </span>
@@ -226,7 +226,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           </div>
 
           {typeof db.metrics.error === 'string' && db.metrics.error && (
-            <p className="mt-3 text-xs text-amber-400/90">{db.metrics.error}</p>
+            <p className="mt-3 text-xs status-warn">{db.metrics.error}</p>
           )}
 
           {db.id === 'sensor' && !db.available && (

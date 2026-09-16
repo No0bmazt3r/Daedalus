@@ -140,7 +140,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
 
       {/* Rows */}
       <div className="flex-1 overflow-auto min-h-0">
-        {error && <div className="p-4 text-sm text-amber-400/90">{error}</div>}
+        {error && <div className="p-4 text-sm status-warn">{error}</div>}
 
         {!error && page && page.rows.length === 0 && (
           <div className="p-8 text-center text-sm theme-text-muted opacity-70">

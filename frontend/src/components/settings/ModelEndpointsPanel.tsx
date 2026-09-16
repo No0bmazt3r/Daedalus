@@ -119,7 +119,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
 
   const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
   const field =
-    'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-zinc-500/50 placeholder:opacity-40'
+    'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-40'
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -133,8 +133,8 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
       {/* Rule 1 is the whole safety argument of this project — a panel that
           adds cloud providers has to say where it sits relative to it, or it
           reads like a contradiction. */}
-      <div className="flex gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
-        <CloudOff size={16} className="shrink-0 mt-0.5 text-amber-400/90" />
+      <div className="flex gap-3 p-4 rounded-xl border status-warn-border status-warn-bg">
+        <CloudOff size={16} className="shrink-0 mt-0.5 status-warn" />
         <div className="text-xs leading-relaxed theme-text-muted">
           <span className="font-medium theme-text">Benchmark use only.</span>{' '}
           The live reactor assistant runs entirely on local models, and cloud
@@ -223,7 +223,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
             Add
           </button>
           {error && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-400/90">
+            <span className="flex items-center gap-1.5 text-xs status-warn">
               <AlertTriangle size={12} /> {error}
             </span>
           )}
@@ -251,12 +251,12 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm">{ep.label}</span>
                     {ep.last_test_ok === true && (
-                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400">
+                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium status-ok-bg status-ok">
                         <Check size={9} /> connected
                       </span>
                     )}
                     {ep.last_test_ok === false && (
-                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400">
+                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium status-bad-bg status-bad">
                         <X size={9} /> failed
                       </span>
                     )}
@@ -279,7 +279,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   {ep.last_test_detail && (
                     <div
                       className={`text-[11px] mt-1 ${
-                        ep.last_test_ok ? 'text-emerald-400/80' : 'text-red-400/80'
+                        ep.last_test_ok ? 'status-ok' : 'status-bad'
                       }`}
                     >
                       {ep.last_test_detail}
@@ -299,7 +299,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   <button
                     onClick={() => void remove(ep.id)}
                     aria-label={`Remove ${ep.label}`}
-                    className="p-1.5 rounded-lg theme-text-muted hover:text-red-400 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+                    className="p-1.5 rounded-lg theme-text-muted hover:status-bad hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                   >
                     <Trash2 size={14} />
                   </button>

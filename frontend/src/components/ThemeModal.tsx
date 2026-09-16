@@ -328,13 +328,13 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   theme.deleteCustomTheme(id)
                   setPendingDelete(null)
                 }}
-                className="px-1.5 py-0.5 text-[9px] rounded bg-red-500/80 text-white hover:bg-red-500"
+                className="px-1.5 py-0.5 text-[9px] rounded status-bad-fill text-white hover:status-bad-fill"
               >
                 Yes
               </button>
               <button
                 onClick={() => setPendingDelete(null)}
-                className="px-1.5 py-0.5 text-[9px] rounded bg-white/10 theme-text hover:bg-white/20"
+                className="px-1.5 py-0.5 text-[9px] rounded theme-surface-strong theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_16%,transparent)]"
               >
                 No
               </button>
@@ -354,7 +354,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
         className={`pointer-events-auto absolute resize ${
           position.x === 0 ? 'top-16 right-16' : ''
         } w-[480px] max-w-[calc(100vw-2rem)] h-[620px] max-h-[calc(100vh-6rem)] border theme-border rounded-xl shadow-2xl flex flex-col overflow-hidden transition-colors duration-300 ${
-          isPeek ? 'border-white/20 shadow-none' : ''
+          isPeek ? 'theme-hairline shadow-none' : ''
         }`}
       >
         {/* Header (drag handle) */}
@@ -810,7 +810,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                 )}
 
                 {formError && (
-                  <p className="mt-2 text-[11px] text-red-400" role="alert">
+                  <p className="mt-2 text-[11px] status-bad" role="alert">
                     {formError}
                   </p>
                 )}
@@ -822,8 +822,8 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                     syncStatus === 'ready'
                       ? 'theme-bg-primary'
                       : syncStatus === 'loading'
-                        ? 'bg-yellow-500'
-                        : 'bg-red-500'
+                        ? 'status-warn-fill'
+                        : 'status-bad-fill'
                   }`}
                 />
                 {syncStatus === 'ready'

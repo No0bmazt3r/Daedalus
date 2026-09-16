@@ -244,7 +244,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                       aria-label="Incognito mode"
                       onClick={() => setIsIncognito(!isIncognito)}
                       className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${
-                        isIncognito ? 'incognito-bg' : 'bg-zinc-600'
+                        isIncognito ? 'incognito-bg' : 'theme-switch-off'
                       }`}
                     >
                       <span

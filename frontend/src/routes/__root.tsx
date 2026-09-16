@@ -57,7 +57,7 @@ function RootLayout() {
                 variant="ghost" 
                 size="icon" 
                 onClick={() => setSidebarOpen(true)}
-                className="absolute top-2 left-2 z-50 text-zinc-400 hover:text-white"
+                className="absolute top-2 left-2 z-50 theme-text-muted hover:theme-text"
               >
                 <Menu size={20} />
               </Button>

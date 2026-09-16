@@ -66,7 +66,7 @@ function SessionRow({
           if (e.key === 'Enter') commit()
           if (e.key === 'Escape') { setDraft(sessionLabel(session)); setEditing(false) }
         }}
-        className="w-full h-8 px-2 text-sm rounded-md theme-card border theme-border theme-text outline-none focus:ring-1 focus:ring-zinc-500/50"
+        className="w-full h-8 px-2 text-sm rounded-md theme-card border theme-border theme-text outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)]"
       />
     )
   }
@@ -94,7 +94,7 @@ function SessionRow({
           <DropdownMenuItem onClick={() => setEditing(true)} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm">
             <Pencil size={14} className="mr-2 theme-text-muted" /> Rename
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onDelete} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm text-red-400">
+          <DropdownMenuItem onClick={onDelete} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm status-bad">
             <Trash2 size={14} className="mr-2" /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -154,7 +154,7 @@ function DataStores({
       </div>
 
       {error && (
-        <span className="px-2 py-1 text-xs text-amber-400/80 block">
+        <span className="px-2 py-1 text-xs status-warn block">
           Backend unreachable — stores can't be listed
         </span>
       )}
@@ -184,7 +184,7 @@ function DataStores({
                 {/* Health is Settings' job; the dot here is only so a store
                     that cannot be read does not look like an empty one. */}
                 {!store.available && (
-                  <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-red-500" title={store.error || 'unavailable'} />
+                  <span className="shrink-0 w-1.5 h-1.5 rounded-full status-bad-fill" title={store.error || 'unavailable'} />
                 )}
               </button>
 
@@ -313,7 +313,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               onChange={(e) => setFilter(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') { setFilter(''); setSearching(false) } }}
               placeholder="Filter chats…"
-              className="w-full h-8 px-2 mb-1 text-sm rounded-md theme-card border theme-border theme-text outline-none focus:ring-1 focus:ring-zinc-500/50 placeholder:opacity-50"
+              className="w-full h-8 px-2 mb-1 text-sm rounded-md theme-card border theme-border theme-text outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-50"
             />
           )}
 
@@ -333,7 +333,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             )}
 
             {status === 'offline' && (
-              <span className="px-2 py-1 text-xs text-amber-400/80">
+              <span className="px-2 py-1 text-xs status-warn">
                 Backend unreachable — chats can't be listed
               </span>
             )}

@@ -119,7 +119,7 @@ export function ChatInterface() {
             </h1>
           </div>
           
-          <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-sm focus-within:ring-1 focus-within:ring-zinc-500/50 transition-all">
+          <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-sm focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
             <Textarea 
               ref={textareaRef}
               value={input}
@@ -179,7 +179,7 @@ export function ChatInterface() {
                 <Button 
                   onClick={handleSend} 
                   disabled={!input.trim() || sending}
-                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
+                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:theme-track disabled:theme-text-muted p-0"
                 >
                   <ArrowUp size={18} strokeWidth={2.5} />
                 </Button>
@@ -227,7 +227,7 @@ export function ChatInterface() {
           
           <div className="absolute bottom-0 left-0 right-0 p-4">
             <div className="max-w-3xl mx-auto w-full">
-              <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-zinc-500/50 transition-all">
+              <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
                 <Textarea 
                   ref={textareaRef}
                   value={input}
@@ -246,7 +246,7 @@ export function ChatInterface() {
                   <Button 
                     onClick={handleSend} 
                     disabled={!input.trim() || sending}
-                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
+                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:theme-track disabled:theme-text-muted p-0"
                   >
                     <ArrowUp size={18} strokeWidth={2.5} />
                   </Button>

@@ -227,6 +227,13 @@
 .status-warn-border { border-color: color-mix(in srgb, var(--status-warn) 38%, transparent) !important; }
 .status-bad-border { border-color: color-mix(in srgb, var(--status-bad) 38%, transparent) !important; }
 .status-warn-fill { background-color: var(--status-warn) !important; }
+.status-ok-fill { background-color: var(--status-ok) !important; }
+.status-bad-fill { background-color: var(--status-bad) !important; }
+/* A hairline that stays visible on either theme. Used where a literal
+   white/20 or black/40 border was previously assumed. */
+.theme-hairline { border-color: color-mix(in srgb, var(--text-main) 25%, transparent) !important; }
+/* Mid-grey on both themes, so a white switch knob reads against it either way. */
+.theme-switch-off { background-color: color-mix(in srgb, var(--text-main) 38%, transparent) !important; }
 
 /* Accent as *text*. --primary is tuned to look right as a fill; a pale accent
    is a fine bar and an illegible label. See deriveReadableAccent in themes.ts. */
