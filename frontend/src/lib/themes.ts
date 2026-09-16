@@ -830,6 +830,24 @@ export function deriveReadableMuted(colors: ThemeColors): string {
   return best;
 }
 
+/**
+ * Black or white, whichever is readable *on* the theme's accent.
+ *
+ * Buttons that fill with `--primary` need a label colour, and seven of them
+ * hardcoded `text-black`. That happens to work for most accents because most
+ * are light, but it is luck rather than design: of the shipped themes, Organs'
+ * deep red already fails at 3.99:1, and a custom accent is whatever the user
+ * picked — a navy or a dark purple would be black on near-black.
+ *
+ * Only two candidates, because a filled button wants maximum separation from
+ * its background and anything in between is worse than both.
+ */
+export function derivePrimaryContrast(colors: ThemeColors): string {
+  const onBlack = contrastRatio('#000000', colors.primary);
+  const onWhite = contrastRatio('#ffffff', colors.primary);
+  return onBlack >= onWhite ? '#000000' : '#ffffff';
+}
+
 // ── Applying a theme to the document ─────────────────────────────────────
 
 export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
@@ -846,6 +864,8 @@ export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
   // Accent-as-text. See deriveReadableAccent: --primary stays the fill colour,
   // this is the one anything small and textual should use.
   s.setProperty('--primary-readable', deriveReadableAccent(colors));
+  // The label colour for anything filled with --primary.
+  s.setProperty('--primary-contrast', derivePrimaryContrast(colors));
 
   const status = deriveStatusColors(colors);
   s.setProperty('--status-ok', status.ok);

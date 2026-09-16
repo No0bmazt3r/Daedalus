@@ -62,7 +62,7 @@ export function SettingsSearch({ isAdmin, onOpenPanel, collapsed }: SettingsSear
           onClick={() => onOpenPanel('__expand__')}
           title="Find settings"
           aria-label="Find settings"
-          className="w-full flex items-center justify-center p-2 rounded-lg theme-text-muted hover:theme-text hover:bg-black/10 transition-colors"
+          className="w-full flex items-center justify-center p-2 rounded-lg theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)] transition-colors"
         >
           <Search size={15} />
         </button>
@@ -95,7 +95,7 @@ export function SettingsSearch({ isAdmin, onOpenPanel, collapsed }: SettingsSear
           aria-expanded={open}
           aria-controls="settings-search-results"
           role="combobox"
-          className="w-full pl-8 pr-2 py-1.5 text-xs rounded-lg bg-black/20 border theme-border theme-text placeholder:opacity-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-shadow [&::-webkit-search-cancel-button]:appearance-none"
+          className="w-full pl-8 pr-2 py-1.5 text-xs rounded-lg theme-surface-strong border theme-border theme-text placeholder:opacity-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-shadow [&::-webkit-search-cancel-button]:appearance-none"
         />
       </div>
 

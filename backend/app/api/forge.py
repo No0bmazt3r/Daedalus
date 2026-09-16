@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from ..services import benchmark as benchmark_service
 from ..services import forge as forge_service
-from ..services import hardware, model_config, ollama_client
+from ..services import hardware, model_usage, ollama_client
 
 router = APIRouter(prefix="/api/forge", tags=["forge"])
 
@@ -117,6 +117,21 @@ def inspect(
     return forge_service.inspect_tag(tag, context_tokens=context_tokens)
 
 
+@router.get("/usage")
+def usage() -> dict[str, Any]:
+    """Per-model run counts, token totals and latency, from `model_logs`.
+
+    Latency is reported as mean, p50 and p95 because `PROJECT.md` §9.2 asks for
+    exactly those three: a mean alone hides the tail, and the tail is what
+    decides whether an operator ever waits.
+
+    Counts are split by `source`, so a model's benchmark runs stay
+    distinguishable from real chat traffic even though §2.3 deliberately keeps
+    both in one table.
+    """
+    return {"models": model_usage.by_model(), "totals": model_usage.totals()}
+
+
 # ── step 4: manage ───────────────────────────────────────────────────────────
 
 
@@ -200,40 +215,3 @@ def run_benchmark(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ollama_client.OllamaError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-# ── step 6: commit ───────────────────────────────────────────────────────────
-
-
-@router.get("/active-model")
-def active_model() -> dict[str, Any]:
-    """What the orchestrator would run right now, and why.
-
-    Resolves rather than just reading the file, because in `auto` mode the file
-    holds a policy and not a name — the answer depends on this machine and on
-    what is installed at this moment.
-    """
-    return model_config.resolve()
-
-
-@router.put("/active-model")
-def set_active_model(
-    mode: str = Body(..., embed=True),
-    tag: str | None = Body(default=None, embed=True),
-    quantization: str | None = Body(default=None, embed=True),
-    note: str | None = Body(default=None, embed=True),
-) -> dict[str, Any]:
-    """Commit the choice to `config/model_config.json`.
-
-    `mode` is `pinned` (run exactly this) or `auto` (run whichever installed
-    model scores highest on whatever machine this is). Auto is the default for a
-    reason — see `services/model_config.py`; a pinned name is a claim about one
-    machine's hardware that goes quietly stale on any other.
-    """
-    try:
-        model_config.write(mode=mode, tag=tag, quantization=quantization, note=note)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"could not write config: {exc}") from exc
-    return model_config.resolve()

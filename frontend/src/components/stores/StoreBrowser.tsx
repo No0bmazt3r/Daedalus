@@ -106,7 +106,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
           <button
             onClick={() => setNewestFirst((v) => !v)}
             title={newestFirst ? 'Newest first' : 'Oldest first'}
-            className="flex items-center gap-1 px-2 py-1 rounded-md theme-text-muted hover:theme-text hover:bg-black/20"
+            className="flex items-center gap-1 px-2 py-1 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"
           >
             <ArrowDownUp size={12} />
             {newestFirst ? 'Newest' : 'Oldest'}
@@ -115,7 +115,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
             onClick={() => void load()}
             disabled={busy}
             aria-label="Refresh"
-            className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-black/20 disabled:opacity-40"
+            className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40"
           >
             <RefreshCw size={14} className={busy ? 'animate-spin' : ''} />
           </button>
@@ -123,7 +123,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
             disabled={!canPrev}
             aria-label="Previous page"
-            className="p-1 rounded-md theme-text-muted hover:theme-text hover:bg-black/20 disabled:opacity-30"
+            className="p-1 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-30"
           >
             <ChevronLeft size={14} />
           </button>
@@ -131,7 +131,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
             disabled={!canNext}
             aria-label="Next page"
-            className="p-1 rounded-md theme-text-muted hover:theme-text hover:bg-black/20 disabled:opacity-30"
+            className="p-1 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-30"
           >
             <ChevronRight size={14} />
           </button>
@@ -167,7 +167,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
                 <tr
                   key={i}
                   onClick={() => setExpanded(row)}
-                  className="border-b theme-border/40 hover:bg-black/20 cursor-pointer"
+                  className="border-b theme-border/40 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] cursor-pointer"
                 >
                   {page.columns.map((col) => {
                     const text = cellText(row[col])
@@ -208,7 +208,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
               <button
                 onClick={() => setExpanded(null)}
                 aria-label="Close row detail"
-                className="p-1 rounded-md theme-text-muted hover:theme-text hover:bg-black/20"
+                className="p-1 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"
               >
                 <X size={14} />
               </button>

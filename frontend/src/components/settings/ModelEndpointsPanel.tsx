@@ -117,9 +117,9 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
     }
   }, [load])
 
-  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
+  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
   const field =
-    'w-full px-3 py-2 rounded-lg border theme-border bg-black/20 theme-text text-sm outline-none focus:ring-1 focus:ring-zinc-500/50 placeholder:opacity-40'
+    'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-zinc-500/50 placeholder:opacity-40'
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -137,7 +137,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
         <CloudOff size={16} className="shrink-0 mt-0.5 text-amber-400/90" />
         <div className="text-xs leading-relaxed theme-text-muted">
           <span className="font-medium theme-text">Benchmark use only.</span>{' '}
-          The live reactor assistant runs entirely on local models — cloud
+          The live reactor assistant runs entirely on local models, and cloud
           providers are never called from the chat path. These endpoints exist
           as reference baselines for the retrieval comparison and for
           LLM-as-a-judge over exported logs. The store enforces this: a row
@@ -194,9 +194,9 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
             data-lpignore="true"
             spellCheck={false}
           />
-          <p className="text-[11px] theme-text-muted opacity-70 mt-0.5">
-            Stored on this machine only. The backend never returns it — you will
-            see a masked hint like <code>sk-…9f4a</code>.
+          <p className="text-[11px] theme-text-muted mt-0.5">
+            Stored on this machine only. The backend never returns it, so you will
+            only ever see a masked hint like <code>sk-…9f4a</code>.
             {selected?.docs && (
               <>
                 {' '}
@@ -217,7 +217,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
           <button
             onClick={submit}
             disabled={adding || (!baseUrl.trim() && !selected?.base_url)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium theme-bg-primary text-black hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium theme-bg-primary theme-text-on-primary hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
             {adding ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             Add
@@ -261,7 +261,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                       </span>
                     )}
                     {ep.last_test_ok === null && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/25 theme-text-muted">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium theme-surface-strong theme-text-muted">
                         untested
                       </span>
                     )}
@@ -291,7 +291,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   <button
                     onClick={() => void runTest(ep.id)}
                     disabled={testing === ep.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border theme-border theme-text-muted hover:theme-text hover:bg-black/20 disabled:opacity-40 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40 transition-colors"
                   >
                     {testing === ep.id && <Loader2 size={11} className="animate-spin" />}
                     Test
@@ -299,7 +299,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                   <button
                     onClick={() => void remove(ep.id)}
                     aria-label={`Remove ${ep.label}`}
-                    className="p-1.5 rounded-lg theme-text-muted hover:text-red-400 hover:bg-black/20 transition-colors"
+                    className="p-1.5 rounded-lg theme-text-muted hover:text-red-400 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                   >
                     <Trash2 size={14} />
                   </button>

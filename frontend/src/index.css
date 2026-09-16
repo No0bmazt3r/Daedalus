@@ -123,6 +123,7 @@
   --status-bad: #c1352c;
   --status-info: #1160b4;
   --primary-readable: oklch(0.205 0 0);
+  --primary-contrast: #ffffff;
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -164,6 +165,7 @@
   --status-bad: #ef6f66;
   --status-info: #64a6f5;
   --primary-readable: oklch(0.922 0 0);
+  --primary-contrast: #000000;
 
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -229,6 +231,10 @@
 /* Accent as *text*. --primary is tuned to look right as a fill; a pale accent
    is a fine bar and an illegible label. See deriveReadableAccent in themes.ts. */
 .theme-accent { color: var(--primary-readable) !important; }
+/* The label colour for anything filled with --primary. See
+   derivePrimaryContrast: a hardcoded text-black is black-on-dark the moment
+   somebody picks a dark accent. */
+.theme-text-on-primary { color: var(--primary-contrast) !important; }
 .theme-accent-border { border-color: var(--primary-readable) !important; }
 
 /* Surfaces that follow the theme instead of always darkening.
@@ -240,6 +246,43 @@
 .theme-surface { background-color: color-mix(in srgb, var(--text-main) 5%, transparent) !important; }
 .theme-surface-strong { background-color: color-mix(in srgb, var(--text-main) 9%, transparent) !important; }
 .theme-track { background-color: color-mix(in srgb, var(--text-main) 14%, transparent) !important; }
+
+/* Selected-tab icon.
+   A one-shot spin-in on selection rather than a continuous rotation: a
+   permanently spinning icon reads as "loading, please wait", which is the one
+   thing a tab is not doing. This fires once when the tab becomes active and
+   settles slightly enlarged, so the selection stays distinct at rest without
+   anything still moving.
+   The overshoot in the easing is what makes it feel like a click landed. */
+@keyframes tab-icon-select {
+  0%   { transform: rotate(-200deg) scale(0.55); opacity: 0.35; }
+  55%  { transform: rotate(12deg)   scale(1.22); opacity: 1; }
+  100% { transform: rotate(0deg)    scale(1.1);  opacity: 1; }
+}
+
+.tab-icon {
+  transition: transform 220ms cubic-bezier(0.34, 1.2, 0.64, 1), opacity 220ms ease;
+}
+
+.tab-icon-active {
+  animation: tab-icon-select 460ms cubic-bezier(0.34, 1.32, 0.64, 1) both;
+  /* A faint halo in the theme accent, so the resting state is still marked
+     once the animation has finished. */
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--primary) 55%, transparent));
+}
+
+/* Anyone who has asked the OS for less motion gets the end state directly.
+   The distinction is carried by scale, colour and the halo, none of which
+   depend on the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-icon-active {
+    animation: none;
+    transform: scale(1.1);
+  }
+  .tab-icon {
+    transition: none;
+  }
+}
 
 @keyframes rain-fall {
   0% { transform: translateY(-100%); }

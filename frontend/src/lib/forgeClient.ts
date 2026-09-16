@@ -308,7 +308,7 @@ export function runBenchmark(tag: string): Promise<BenchmarkResult> {
   });
 }
 
-// ── commit (step 6) ──────────────────────────────────────────────────────────
+// ── inspect one arbitrary tag ────────────────────────────────────────────────
 
 export interface InspectResult {
   row: ModelRow | null;
@@ -321,45 +321,52 @@ export interface InspectResult {
  * `hf.co/{repo}:{quant}`. For when you already know the model and only want the
  * verdict.
  */
-export function inspectTag(
-  tag: string,
-  opts: TableOptions = {},
-): Promise<InspectResult> {
+export function inspectTag(tag: string, opts: TableOptions = {}): Promise<InspectResult> {
   const params = new URLSearchParams({ tag });
   if (opts.contextTokens) params.set('context_tokens', String(opts.contextTokens));
   return request<InspectResult>(`/api/forge/inspect?${params}`, { timeoutMs: 30000 });
 }
 
-export interface ActiveModel {
-  mode: 'auto' | 'pinned';
-  tag: string | null;
-  resolved: boolean;
-  /** Why this model — in auto mode, the ranking that chose it. */
-  reason: string;
-  row: ModelRow | null;
-  candidates_considered: number;
-  config: {
-    mode: 'auto' | 'pinned';
-    pinned: { tag: string; quantization: string | null } | null;
-    updated_at: string | null;
-    updated_by: string | null;
-    note: string | null;
+// ── usage and latency, per model ─────────────────────────────────────────────
+
+/** mean / p50 / p95, because §9.2 asks for all three. A mean alone hides the tail. */
+export interface LatencySummary {
+  mean: number | null;
+  p50: number | null;
+  p95: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface ModelUsage {
+  model_name: string;
+  runs: number;
+  errors: number;
+  /** Benchmark runs and real chat traffic share one table; this separates them. */
+  by_source: Record<string, number>;
+  first_used: string | null;
+  last_used: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  /** Wall clock: what the caller waited through. */
+  time_to_first_token_ms: LatencySummary;
+  total_inference_ms: LatencySummary;
+  /** From the engine's own counters: what the model costs. */
+  tokens_per_sec: LatencySummary;
+}
+
+export interface UsageReport {
+  models: Record<string, ModelUsage>;
+  totals: {
+    models: number;
+    runs: number;
+    errors: number;
+    prompt_tokens: number;
+    completion_tokens: number;
   };
 }
 
-/** What the orchestrator would run right now. Resolves, rather than just reading the file. */
-export function activeModel(): Promise<ActiveModel> {
-  return request<ActiveModel>('/api/forge/active-model');
-}
-
-export function setActiveModel(body: {
-  mode: 'auto' | 'pinned';
-  tag?: string | null;
-  quantization?: string | null;
-  note?: string | null;
-}): Promise<ActiveModel> {
-  return request<ActiveModel>('/api/forge/active-model', {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
+/** Everything `model_logs` knows about what has actually run. */
+export function modelUsage(): Promise<UsageReport> {
+  return request<UsageReport>('/api/forge/usage');
 }

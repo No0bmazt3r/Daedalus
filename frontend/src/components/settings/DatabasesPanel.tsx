@@ -110,7 +110,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
     }
   }, [load])
 
-  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
+  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -135,7 +135,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           <button
             onClick={() => void load()}
             disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-50"
           >
             <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
             Refresh
@@ -157,7 +157,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
         <div key={db.id} className={card}>
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-start gap-3 min-w-0">
-              <div className={`p-2.5 rounded-lg shrink-0 ${db.available ? 'bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] theme-primary' : 'bg-black/20 theme-text-muted'}`}>
+              <div className={`p-2.5 rounded-lg shrink-0 ${db.available ? 'bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] theme-primary' : 'theme-surface-strong theme-text-muted'}`}>
                 {db.id === 'sensor' ? <HardDrive size={18} /> : <Database size={18} />}
               </div>
               <div className="min-w-0">
@@ -238,7 +238,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
               <button
                 onClick={() => void seed()}
                 disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg theme-bg-primary text-black hover:opacity-80 transition-opacity disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg theme-bg-primary theme-text-on-primary hover:opacity-80 transition-opacity disabled:opacity-50"
               >
                 <Sprout size={12} /> Generate demo data
               </button>
@@ -260,7 +260,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           appears during an outage is a link nobody knows exists. */}
       <div className={card}>
         <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-lg shrink-0 bg-black/20 theme-text-muted">
+          <div className="p-2.5 rounded-lg shrink-0 theme-surface-strong theme-text-muted">
             <Activity size={18} />
           </div>
           <div className="min-w-0 flex-1">
@@ -275,7 +275,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                 href={obs.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
               >
                 <ExternalLink size={12} />
                 Open metrics &amp; logs

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ChevronDown, Download, FlaskConical, Loader2, RefreshCw, Trash2,
   CircleCheck, CircleAlert, CircleSlash, Cloud, HelpCircle, X, Search, Cpu, ExternalLink,
+  Star, Library, HardDrive, Globe, Terminal, Layers,
 } from 'lucide-react'
 import {
-  modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark, setActiveModel,
+  modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark,
   type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type ModelSource,
 } from '../../lib/forgeClient'
 
@@ -75,13 +76,18 @@ const PROVENANCE_HELP: Record<string, string> = {
   assumed: 'A documented default, because nothing better is available yet.',
 }
 
-const SOURCES: { id: ModelSource | 'all'; label: string; hint: string }[] = [
-  { id: 'shortlist', label: 'Shortlist', hint: "The six candidates from PROJECT.md §8.1, which are what the report argues about" },
-  { id: 'library', label: 'Library', hint: 'The wider Ollama library, every tag verified against the registry' },
-  { id: 'installed', label: 'Installed', hint: 'On this disk right now' },
-  { id: 'huggingface', label: 'Hugging Face', hint: 'Live GGUF search. Pull any of these with hf.co/{repo}:{quant}' },
-  { id: 'custom', label: 'Custom', hint: 'Score a tag you already know: an Ollama tag, or hf.co/{repo}:{quant}' },
-  { id: 'all', label: 'All', hint: 'Everything except the live search' },
+const SOURCES: {
+  id: ModelSource | 'all'
+  label: string
+  icon: typeof Star
+  hint: string
+}[] = [
+  { id: 'shortlist', label: 'Shortlist', icon: Star, hint: "The six candidates from PROJECT.md §8.1, which are what the report argues about" },
+  { id: 'library', label: 'Library', icon: Library, hint: 'The wider Ollama library, every tag verified against the registry' },
+  { id: 'installed', label: 'Installed', icon: HardDrive, hint: 'On this disk right now' },
+  { id: 'huggingface', label: 'Hugging Face', icon: Globe, hint: 'Live GGUF search. Pull any of these with hf.co/{repo}:{quant}' },
+  { id: 'custom', label: 'Custom', icon: Terminal, hint: 'Score a tag you already know: an Ollama tag, or hf.co/{repo}:{quant}' },
+  { id: 'all', label: 'All', icon: Layers, hint: 'Everything except the live search' },
 ]
 
 function Pill({ children, title, tone = 'muted' }: {
@@ -283,14 +289,13 @@ function Detail({ row }: { row: ModelRow }) {
 }
 
 function Row({
-  row, busy, onPull, onDelete, onBenchmark, onUse,
+  row, busy, onPull, onDelete, onBenchmark,
 }: {
   row: ModelRow
   busy: string | null
   onPull: (row: ModelRow) => void
   onDelete: (row: ModelRow) => void
   onBenchmark: (row: ModelRow) => void
-  onUse: (row: ModelRow) => void
 }) {
   const [open, setOpen] = useState(false)
   const verdict = VERDICT[row.verdict.fit] ?? VERDICT.unknown
@@ -390,14 +395,6 @@ function Row({
                 {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
               </button>
               <button
-                onClick={() => onUse(row)}
-                disabled={!!busy || row.verdict.fit === 'will_not_fit'}
-                title="Pin the deployed model to this one."
-                className="px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
-              >
-                Use
-              </button>
-              <button
                 onClick={() => onDelete(row)}
                 disabled={!!busy}
                 title="Delete from this machine."
@@ -436,7 +433,7 @@ function Row({
       </div>
 
       {open && (
-        <div className="border-t theme-border px-4 py-4 theme-surface">
+        <div className="border-t theme-border px-4 py-4 theme-surface animate-in fade-in slide-in-from-top-1 duration-200 ease-out">
           <Detail row={row} />
         </div>
       )}
@@ -444,7 +441,7 @@ function Row({
   )
 }
 
-export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
+export function ModelsView() {
   const [table, setTable] = useState<ModelTable | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -601,19 +598,6 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
     }
   }, [load])
 
-  const handleUse = useCallback(async (row: ModelRow) => {
-    setBusy(row.tag)
-    try {
-      await setActiveModel({ mode: 'pinned', tag: row.tag, quantization: row.quantization })
-      setNotice(`Deployment pinned to ${row.tag}.`)
-      onCommitted?.()
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'could not write the config')
-    } finally {
-      setBusy(null)
-    }
-  }, [onCommitted])
-
   if (error) {
     return (
       <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
@@ -667,23 +651,29 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
 
       {/* ── source tabs ── */}
       <div className="flex items-center gap-1 flex-wrap border-b theme-border pb-2">
-        {SOURCES.map((entry) => (
-          <button
-            key={entry.id}
-            onClick={() => setSource(entry.id)}
-            title={entry.hint}
-            className={`px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
-              source === entry.id
-                ? 'theme-accent theme-surface-strong'
-                : 'theme-text-muted hover:theme-text'
-            }`}
-          >
-            {entry.label}
-            <span className="theme-text-muted ml-1 tabular-nums">
-              {entry.id === 'huggingface' && hfRows === null ? '' : counts[entry.id] ?? 0}
-            </span>
-          </button>
-        ))}
+        {SOURCES.map((entry) => {
+          const selected = source === entry.id
+          return (
+            <button
+              key={entry.id}
+              onClick={() => setSource(entry.id)}
+              title={entry.hint}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
+                selected ? 'theme-accent theme-surface-strong' : 'theme-text-muted hover:theme-text'
+              }`}
+            >
+              <entry.icon
+                key={selected ? 'on' : 'off'}
+                size={12}
+                className={`tab-icon shrink-0 ${selected ? 'tab-icon-active' : ''}`}
+              />
+              {entry.label}
+              <span className="theme-text-muted tabular-nums">
+                {entry.id === 'huggingface' && hfRows === null ? '' : counts[entry.id] ?? 0}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {/* ── filters ── */}
@@ -845,7 +835,9 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
         </div>
       )}
 
-      <div className="space-y-2">
+      {/* Keyed on the source so switching lists replays the entry animation
+          instead of swapping rows in place. */}
+      <div key={source} className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out">
         {hfLoading && source === 'huggingface' && (
           <div className="flex items-center gap-2 text-xs theme-text-muted py-2">
             <Loader2 size={13} className="animate-spin" />
@@ -860,7 +852,6 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
             onPull={handlePull}
             onDelete={handleDelete}
             onBenchmark={handleBenchmark}
-            onUse={handleUse}
           />
         ))}
         {!visible.length && !hfLoading && !customLoading && (

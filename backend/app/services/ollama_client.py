@@ -77,11 +77,38 @@ _resolve_lock = threading.Lock()
 
 
 def candidate_base_urls() -> list[str]:
-    """Where to look for Ollama, best guess first. See the module docstring."""
+    """Where to look for Ollama, best guess first. See the module docstring.
+
+    Three fallbacks, each for a failure that actually happens:
+
+    - **localhost**, because `host.docker.internal` does not resolve when
+      `./daedalus.sh dev` runs the backend on the host rather than in a
+      container, which is how most development happens.
+    - **127.0.0.1**, because `localhost` resolves to `::1` first on a dual-stack
+      machine and Ollama binds IPv4 only by default. The connection is refused
+      on a machine where the daemon is running perfectly well, which is a
+      genuinely confusing way to be told nothing is there.
+    - **`host.docker.internal` last** when it is not the configured value, so a
+      containerised backend still finds a host daemon if the configuration is
+      pointed somewhere else.
+    """
     base = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
     candidates = [base]
-    if "host.docker.internal" in base:
-        candidates.append(base.replace("host.docker.internal", "localhost"))
+
+    def add(url: str) -> None:
+        if url not in candidates:
+            candidates.append(url)
+
+    # Only when the configured host is already a local alias. A base pointing at
+    # a real remote machine is a deliberate choice — the lab box, the other
+    # laptop — and quietly answering from a daemon on *this* machine instead
+    # would attribute a benchmark to the wrong hardware. If the remote is down,
+    # that is worth an error rather than a substitution.
+    if any(alias in base for alias in ("host.docker.internal", "localhost", "127.0.0.1")):
+        for alias in ("host.docker.internal", "localhost", "127.0.0.1"):
+            for replacement in ("localhost", "127.0.0.1", "host.docker.internal"):
+                if alias in base:
+                    add(base.replace(alias, replacement))
 
     with _resolve_lock:
         known = _resolved_base
@@ -134,10 +161,41 @@ def _request(method: str, path: str, *, timeout: float, **kwargs: Any) -> Any:
             raise OllamaError(_error_detail(response))
         return response.json() if response.content else {}
 
-    raise OllamaUnavailable(
-        f"no Ollama daemon answered on {' or '.join(candidate_base_urls())}"
-        + (f" ({last_error.__class__.__name__})" if last_error else "")
+    raise OllamaUnavailable(_unavailable_message(last_error))
+
+
+def _unavailable_message(last_error: Exception | None) -> str:
+    """Why nothing answered, and what to do about it.
+
+    "ConnectError" is true and useless. There are only a handful of reasons this
+    fails in practice and they have different fixes, so the message names them
+    rather than making somebody guess which one they are looking at.
+    """
+    tried = ", ".join(candidate_base_urls())
+    kind = last_error.__class__.__name__ if last_error else "no response"
+
+    base = os.environ.get("OLLAMA_BASE_URL", "").strip()
+    is_remote = bool(base) and not any(
+        alias in base for alias in ("host.docker.internal", "localhost", "127.0.0.1")
     )
+
+    hint = "Start it with `ollama serve`, or check it is installed."
+    if is_remote:
+        hint = (
+            f"OLLAMA_BASE_URL points at {base}, so only that host was tried. There is no "
+            "local fallback, because answering from this machine would attribute results "
+            "to the wrong hardware. Check the remote daemon is up and was started with "
+            "OLLAMA_HOST=0.0.0.0."
+        )
+    elif "Connect" in kind or "Timeout" in kind:
+        hint = (
+            "Check it is running (`ollama list` should answer). "
+            "If it runs on another machine or in Docker, Ollama binds 127.0.0.1 "
+            "by default and will not accept outside connections, so start it with "
+            "OLLAMA_HOST=0.0.0.0 and set OLLAMA_BASE_URL to point at it."
+        )
+
+    return f"no Ollama daemon answered on {tried} ({kind}). {hint}"
 
 
 def _error_detail(response: Any) -> str:
@@ -302,10 +360,7 @@ def pull(name: str) -> Iterator[dict[str, Any]]:
             last_error = exc
             continue
 
-    raise OllamaUnavailable(
-        f"no Ollama daemon answered on {' or '.join(candidate_base_urls())}"
-        + (f" ({last_error.__class__.__name__})" if last_error else "")
-    )
+    raise OllamaUnavailable(_unavailable_message(last_error))
 
 
 def _normalise_pull_event(event: dict[str, Any]) -> dict[str, Any]:

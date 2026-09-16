@@ -65,7 +65,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   // Peek now comes from the window shell, so the card treatment is derived
   // inside the render prop rather than from component state.
   const cardFor = (isPeek: boolean) =>
-    `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
+    `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
   return (
     <FloatingWindow
@@ -84,7 +84,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div
             className={`relative theme-border flex shrink-0 ${
               isCompact ? 'flex-row items-center border-b overflow-x-auto no-scrollbar' : 'flex-col border-r'
-            } ${isPeek ? '' : 'bg-black/5'}`}
+            } ${isPeek ? '' : 'theme-surface'}`}
             style={{
               width: isCompact ? '100%' : sidebar.width,
               // Animate only when not dragging, or the rail lags the pointer.
@@ -103,7 +103,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 aria-expanded={!sidebar.collapsed}
                 aria-label={sidebar.collapsed ? 'Expand settings navigation' : 'Collapse settings navigation'}
                 title={sidebar.collapsed ? 'Expand settings navigation' : 'Collapse settings navigation'}
-                className="p-1.5 rounded-md hover:bg-black/10 theme-text-muted hover:theme-text transition-colors"
+                className="p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)] theme-text-muted hover:theme-text transition-colors"
               >
                 {sidebar.collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
               </button>
@@ -171,8 +171,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             )}
           </div>
 
-          {/* Panel area */}
-          <div className={`@container flex-1 overflow-y-auto no-scrollbar bg-transparent min-w-0 ${isCompact ? 'p-5' : 'p-8'}`}>
+          {/* Panel area. Keyed on the active panel so switching replays the
+              entry animation rather than swapping contents in place. */}
+          <div
+            key={activeTab}
+            className={`@container flex-1 overflow-y-auto no-scrollbar bg-transparent min-w-0 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out ${isCompact ? 'p-5' : 'p-8'}`}
+          >
             {/* One measure for every panel. It grows with the window up to a
                 readable limit, then centres — stretching a settings form to
                 full width would just make a 1300px-wide select, which is
@@ -214,7 +218,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 <div className="space-y-4">
                   <div
                     className={`flex items-center justify-between p-5 rounded-xl border theme-border transition-colors ${
-                      isPeek ? 'bg-transparent' : 'bg-black/10'
+                      isPeek ? 'bg-transparent' : 'theme-surface'
                     }`}
                   >
                     <div className="flex items-center gap-4">
@@ -222,7 +226,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         className={`p-3 rounded-lg ${
                           isIncognito
                             ? 'incognito-bg-soft incognito-text incognito-glow'
-                            : 'bg-black/20 theme-text-muted'
+                            : 'theme-surface-strong theme-text-muted'
                         }`}
                       >
                         <Ghost size={22} />
@@ -297,11 +301,17 @@ function NavButton({
         title={panel.label}
         className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
           active
-            ? 'bg-black/25 theme-text font-medium'
-            : 'theme-text-muted hover:bg-black/10 hover:theme-text'
+            ? 'theme-surface-strong theme-text font-medium'
+            : 'theme-text-muted hover:bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)] hover:theme-text'
         }`}
       >
-        <Icon size={14} className="shrink-0" />
+        {/* Keyed on `active` so the one-shot select animation replays when
+            the panel is chosen. See .tab-icon in index.css. */}
+        <Icon
+          key={active ? 'on' : 'off'}
+          size={14}
+          className={`shrink-0 tab-icon ${active ? 'tab-icon-active' : ''}`}
+        />
         <span className="whitespace-nowrap">{panel.label}</span>
         {!panel.implemented && (
           <span className="w-1 h-1 rounded-full bg-current opacity-30" title="Not built yet" />
@@ -317,11 +327,15 @@ function NavButton({
       title={collapsed ? panel.label : undefined}
       className={`w-full flex items-center px-4 py-2 text-sm transition-colors border-r-2 ${
         active
-          ? 'bg-black/20 theme-text font-medium border-[var(--primary)]'
-          : 'theme-text-muted hover:bg-black/10 hover:theme-text border-transparent'
+          ? 'theme-surface-strong theme-text font-medium border-[var(--primary)]'
+          : 'theme-text-muted hover:bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)] hover:theme-text border-transparent'
       } ${collapsed ? 'justify-center px-0' : 'gap-3'}`}
     >
-      <Icon size={15} className="shrink-0" />
+      <Icon
+        key={active ? 'on' : 'off'}
+        size={15}
+        className={`shrink-0 tab-icon ${active ? 'tab-icon-active' : ''}`}
+      />
       {!collapsed && (
         <span className="truncate flex items-center gap-1.5">
           {panel.label}

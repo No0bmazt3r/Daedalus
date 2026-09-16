@@ -72,7 +72,7 @@ function SessionRow({
   }
 
   return (
-    <div className={`group/row flex items-center rounded-md ${active ? 'bg-black/30' : 'hover:bg-black/20'}`}>
+    <div className={`group/row flex items-center rounded-md ${active ? 'theme-track' : 'hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'}`}>
       <Button
         variant="ghost"
         onClick={onSelect}
@@ -91,10 +91,10 @@ function SessionRow({
           <MoreHorizontal size={14} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40 theme-card theme-border theme-text border p-1">
-          <DropdownMenuItem onClick={() => setEditing(true)} className="py-2 px-2 cursor-pointer hover:bg-black/20 rounded-md text-sm">
+          <DropdownMenuItem onClick={() => setEditing(true)} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm">
             <Pencil size={14} className="mr-2 theme-text-muted" /> Rename
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onDelete} className="py-2 px-2 cursor-pointer hover:bg-black/20 rounded-md text-sm text-red-400">
+          <DropdownMenuItem onClick={onDelete} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm text-red-400">
             <Trash2 size={14} className="mr-2" /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -169,7 +169,7 @@ function DataStores({
             <div key={store.store}>
               <button
                 onClick={() => setOpen((o) => ({ ...o, [store.store]: !o[store.store] }))}
-                className="w-full flex items-center h-8 px-2 rounded-md text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                className="w-full flex items-center h-8 px-2 rounded-md text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
               >
                 <ChevronRight
                   size={13}
@@ -207,8 +207,8 @@ function DataStores({
                         onClick={() => onOpenStore(store.store, table.name)}
                         className={`w-full flex items-center h-7 px-2 rounded-md text-xs transition-colors ${
                           active
-                            ? 'bg-black/30 theme-text'
-                            : 'theme-text-muted hover:theme-text hover:bg-black/20'
+                            ? 'theme-track theme-text'
+                            : 'theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
                         }`}
                       >
                         <Table2 size={11} className="shrink-0 mr-2 opacity-60" />
@@ -244,13 +244,13 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
     <div className="flex flex-col h-full theme-sidebar zone-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
       {/* Header */}
       <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-black/20 p-1.5 rounded-md transition-colors">
+        <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] p-1.5 rounded-md transition-colors">
           <LabyrinthIcon className="w-5 h-5 zone-brand" />
           <span className="font-semibold text-[15px] tracking-wide font-serif zone-brand-text">Daedalus</span>
         </div>
         <div className="flex items-center gap-1">
           {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="w-8 h-8 theme-text-muted hover:theme-text hover:bg-black/20">
+            <Button variant="ghost" size="icon" onClick={onClose} className="w-8 h-8 theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
               <PanelLeftClose size={16} />
             </Button>
           )}
@@ -261,7 +261,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
       <div className="px-3 mb-4">
         <Button
           onClick={newChat}
-          className="w-full justify-start gap-2 bg-black/20 hover:bg-black/40 theme-text theme-border shadow-none font-normal h-9"
+          className="w-full justify-start gap-2 theme-surface-strong hover:bg-[color-mix(in_srgb,var(--text-main)_14%,transparent)] theme-text theme-border shadow-none font-normal h-9"
         >
           <Plus size={16} />
           New
@@ -285,7 +285,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               onClick={item.onClick}
               disabled={!item.onClick}
               title={item.onClick ? undefined : 'Not built yet — see docs/MODULES.md'}
-              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-black/20 disabled:opacity-45 disabled:hover:bg-transparent disabled:cursor-default"
+              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-45 disabled:hover:bg-transparent disabled:cursor-default"
             >
               <item.icon size={15} className="mr-2 shrink-0 theme-primary" />
               <span className="truncate flex-1 text-left">{item.title}</span>
@@ -363,9 +363,9 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
       {/* Bottom Section */}
       <div className="p-3 border-t theme-border mt-auto flex flex-col gap-1">
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center justify-between p-2 rounded-md hover:bg-black/20 cursor-pointer transition-colors w-full border-none outline-none">
+          <DropdownMenuTrigger className="flex items-center justify-between p-2 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] cursor-pointer transition-colors w-full border-none outline-none">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full theme-bg-primary zone-toggle-active flex items-center justify-center font-bold text-black text-xs">S</div>
+              <div className="w-8 h-8 rounded-full theme-bg-primary zone-toggle-active flex items-center justify-center font-bold theme-text-on-primary text-xs">S</div>
               <span className="text-sm font-medium">Sharvin</span>
             </div>
           </DropdownMenuTrigger>
@@ -374,14 +374,14 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               <span className="font-semibold text-base">Sharvin</span>
             </div>
             <DropdownMenuSeparator className="theme-border my-1 border-b" />
-            <DropdownMenuItem onClick={onOpenTheme} className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+            <DropdownMenuItem onClick={onOpenTheme} className="py-2.5 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md">
               <Palette size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Theme & Appearance</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenSettings} className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+            <DropdownMenuItem onClick={onOpenSettings} className="py-2.5 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md">
               <Settings size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="theme-border my-1 border-b" />
-            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-black/20 rounded-md">
+            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md">
               <LogOut size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Sign out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>

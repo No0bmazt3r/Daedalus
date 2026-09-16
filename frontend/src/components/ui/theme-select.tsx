@@ -49,7 +49,7 @@ export function ThemeSelect<T extends string>({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={ariaLabel || label}
-          className={`flex w-full items-center justify-between gap-2 rounded-lg border theme-border theme-text bg-black/20 transition-colors hover:bg-black/30 focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)] data-[popup-open]:ring-1 data-[popup-open]:ring-[var(--primary)] ${
+          className={`flex w-full items-center justify-between gap-2 rounded-lg border theme-border theme-text theme-surface-strong transition-colors hover:bg-[color-mix(in_srgb,var(--text-main)_12%,transparent)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)] data-[popup-open]:ring-1 data-[popup-open]:ring-[var(--primary)] ${
             compact ? 'px-2 py-1.5 text-xs' : 'px-3 py-2.5 text-sm'
           }`}
         >

@@ -95,7 +95,7 @@ export function ChatInterface() {
                 className={`w-9 h-9 rounded-full transition-all duration-300 ${
                   isIncognito 
                     ? 'incognito-text incognito-bg-soft incognito-glow scale-110' 
-                    : 'theme-text-muted hover:theme-text hover:bg-black/20'
+                    : 'theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
                 }`}
                 onClick={() => setIsIncognito(!isIncognito)}
               />
@@ -132,12 +132,12 @@ export function ChatInterface() {
             
             <div className="flex items-center justify-between px-3 pb-3 pt-1">
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-black/20">
+                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
                   <Plus size={18} />
                 </Button>
                 <div className="flex items-center rounded-lg p-0.5 border theme-border bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)]">
-                  <button className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)]">Chat</button>
-                  <button className="px-3 py-1 text-xs font-medium theme-text-muted hover:theme-text">System</button>
+                  <button className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] transition-colors duration-200">Chat</button>
+                  <button className="px-3 py-1 text-xs font-medium theme-text-muted hover:theme-text transition-colors duration-200">System</button>
                 </div>
               </div>
               
@@ -173,13 +173,13 @@ export function ChatInterface() {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-black/20">
+                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
                   <Mic size={18} />
                 </Button>
                 <Button 
                   onClick={handleSend} 
                   disabled={!input.trim() || sending}
-                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 text-black disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
+                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
                 >
                   <ArrowUp size={18} strokeWidth={2.5} />
                 </Button>
@@ -239,14 +239,14 @@ export function ChatInterface() {
                 />
                 
                 <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-black/20">
+                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
                     <Plus size={18} />
                   </Button>
                   
                   <Button 
                     onClick={handleSend} 
                     disabled={!input.trim() || sending}
-                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 text-black disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
+                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover:opacity-80 theme-text-on-primary disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500 p-0"
                   >
                     <ArrowUp size={18} strokeWidth={2.5} />
                   </Button>

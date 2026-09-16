@@ -68,7 +68,7 @@ function Card({
   className?: string
 }) {
   return (
-    <div className={`p-4 rounded-lg border theme-border bg-black/10 ${className}`}>
+    <div className={`p-4 rounded-lg border theme-border theme-surface ${className}`}>
       {title && (
         <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
           {icon}
@@ -289,8 +289,8 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           onClick={() => theme.selectTheme(id)}
           className={`w-full flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200 hover:scale-105 ${
             active
-              ? 'border-[var(--primary)] bg-black/20 shadow-md'
-              : 'border-transparent hover:bg-black/10'
+              ? 'border-[var(--primary)] theme-surface-strong shadow-md'
+              : 'border-transparent hover:bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)]'
           }`}
         >
           <div className="mb-2">
@@ -361,7 +361,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
         <div
           ref={handleRef}
           onMouseDown={onMouseDown}
-          className="flex items-center justify-between p-3 border-b theme-border bg-black/20 cursor-move shrink-0"
+          className="flex items-center justify-between p-3 border-b theme-border theme-surface-strong cursor-move shrink-0"
           style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
         >
           <div className="flex items-center gap-2">
@@ -375,7 +375,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border ${
                 isPeek
                   ? 'bg-primary/20 text-[var(--primary)] border-[var(--primary)]/30'
-                  : 'theme-text-muted hover:theme-text border-transparent hover:bg-black/20'
+                  : 'theme-text-muted hover:theme-text border-transparent hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
               }`}
               title="Fade this window to preview the page behind it"
             >
@@ -389,7 +389,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               onMouseDown={(e) => e.stopPropagation()}
               onClick={handleClose}
               aria-label="Close theme"
-              className="p-1 hover:bg-black/20 rounded theme-text-muted hover:theme-text ml-1"
+              className="p-1 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded theme-text-muted hover:theme-text ml-1"
             >
               <X size={16} />
             </button>
@@ -401,19 +401,19 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           onValueChange={setActiveTab}
           className="flex flex-col flex-1 overflow-hidden gap-0"
         >
-          <div className="px-4 pt-3 border-b theme-border bg-black/10 shrink-0">
+          <div className="px-4 pt-3 border-b theme-border theme-surface shrink-0">
             <TabsList variant="line" className="bg-transparent p-0 h-auto relative flex w-full">
               <TabsTrigger
                 value="themes"
                 className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10 after:hidden"
               >
-                <SwatchBook size={14} className="mr-2" /> Themes
+                <SwatchBook key={activeTab === 'themes' ? 'on' : 'off'} size={14} className={`mr-2 tab-icon ${activeTab === 'themes' ? 'tab-icon-active' : ''}`} /> Themes
               </TabsTrigger>
               <TabsTrigger
                 value="customize"
                 className="flex-1 rounded-none px-2 pb-3 theme-text-muted data-active:text-[var(--primary)] hover:theme-text transition-colors relative z-10 after:hidden"
               >
-                <Paintbrush size={14} className="mr-2" /> Customize
+                <Paintbrush key={activeTab === 'customize' ? 'on' : 'off'} size={14} className={`mr-2 tab-icon ${activeTab === 'customize' ? 'tab-icon-active' : ''}`} /> Customize
               </TabsTrigger>
 
               {/* The only underline — the primitive's own is hidden above */}
@@ -521,7 +521,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                     <button
                       type="button"
                       onClick={theme.clearAdvanced}
-                      className="w-full py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                      className="w-full py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                     >
                       Clear Advanced Overrides
                     </button>
@@ -583,7 +583,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   <button
                     type="button"
                     onClick={() => theme.applyPalette(harmonyPreview)}
-                    className="px-3 py-1.5 text-xs font-medium rounded theme-bg-primary text-black hover:opacity-80 transition-opacity"
+                    className="px-3 py-1.5 text-xs font-medium rounded theme-bg-primary theme-text-on-primary hover:opacity-80 transition-opacity"
                   >
                     Generate
                   </button>
@@ -621,7 +621,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                       aria-checked={state.frosted}
                       onClick={() => theme.setFrosted(!state.frosted)}
                       className={`relative w-11 h-6 rounded-full border theme-border transition-colors ${
-                        state.frosted ? 'bg-[var(--primary)]' : 'bg-black/30'
+                        state.frosted ? 'bg-[var(--primary)]' : 'theme-track'
                       }`}
                     >
                       <span
@@ -668,7 +668,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                         aria-label="Reset effect color"
                         className={`p-1 rounded transition-colors ${
                           state.effectColor
-                            ? 'theme-primary hover:bg-black/20'
+                            ? 'theme-primary hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
                             : 'theme-text-muted opacity-40'
                         }`}
                       >
@@ -696,7 +696,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                     className={`relative w-11 h-6 rounded-full border theme-border transition-colors shrink-0 ${
                       state.reactive && !slidersDisabled
                         ? 'bg-[var(--primary)]'
-                        : 'bg-black/30'
+                        : 'theme-track'
                     } ${slidersDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     <span
@@ -744,12 +744,12 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSave()
                     }}
-                    className="flex-1 min-w-0 bg-black/30 border theme-border rounded px-2 py-1.5 text-xs theme-text placeholder:opacity-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                    className="flex-1 min-w-0 theme-track border theme-border rounded px-2 py-1.5 text-xs theme-text placeholder:opacity-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
                   />
                   <button
                     type="button"
                     onClick={handleSave}
-                    className="px-3 py-1.5 text-xs font-medium rounded theme-bg-primary text-black hover:opacity-80 transition-opacity shrink-0"
+                    className="px-3 py-1.5 text-xs font-medium rounded theme-bg-primary theme-text-on-primary hover:opacity-80 transition-opacity shrink-0"
                   >
                     Save
                   </button>
@@ -763,14 +763,14 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                       setImportText('')
                       setFormError('')
                     }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                   >
                     <Upload size={11} /> Import
                   </button>
                   <button
                     type="button"
                     onClick={handleExport}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                   >
                     {exported ? <Check size={11} /> : <Download size={11} />}
                     {exported ? 'Downloaded' : 'Export'}
@@ -784,13 +784,13 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                       value={importText}
                       placeholder="Paste theme JSON here..."
                       onChange={(e) => setImportText(e.target.value)}
-                      className="w-full bg-black/30 border theme-border rounded px-2 py-1.5 text-[11px] font-mono theme-text placeholder:opacity-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] resize-y"
+                      className="w-full theme-track border theme-border rounded px-2 py-1.5 text-[11px] font-mono theme-text placeholder:opacity-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] resize-y"
                     />
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={handleImport}
-                        className="flex-1 py-1.5 text-[11px] rounded theme-bg-primary text-black hover:opacity-80 transition-opacity"
+                        className="flex-1 py-1.5 text-[11px] rounded theme-bg-primary theme-text-on-primary hover:opacity-80 transition-opacity"
                       >
                         Apply
                       </button>
@@ -801,7 +801,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                           setImportText('')
                           setFormError('')
                         }}
-                        className="flex-1 py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                        className="flex-1 py-1.5 text-[11px] rounded border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                       >
                         Cancel
                       </button>
@@ -836,7 +836,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               <button
                 type="button"
                 onClick={theme.resetToDefault}
-                className="w-full flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
               >
                 <RotateCcw size={12} /> Reset to Default
               </button>

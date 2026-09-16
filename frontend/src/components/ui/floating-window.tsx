@@ -103,7 +103,7 @@ export function FloatingWindow({
         <div
           ref={handleRef}
           onMouseDown={onMouseDown}
-          className="flex items-center justify-between px-4 py-3 border-b theme-border cursor-move bg-black/10 select-none shrink-0"
+          className="flex items-center justify-between px-4 py-3 border-b theme-border cursor-move theme-surface select-none shrink-0"
           style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
         >
           <div className="flex items-center gap-2 font-medium min-w-0">
@@ -121,7 +121,7 @@ export function FloatingWindow({
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border mr-1 ${
                 isPeek
                   ? 'bg-primary/20 text-[var(--primary)] border-[var(--primary)]/30'
-                  : 'theme-text-muted hover:theme-text border-transparent hover:bg-black/20'
+                  : 'theme-text-muted hover:theme-text border-transparent hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
               }`}
               title="Fade this window to preview the page behind it"
             >
@@ -132,14 +132,14 @@ export function FloatingWindow({
               onMouseDown={(e) => e.stopPropagation()}
               onClick={onClose}
               aria-label="Close"
-              className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-black/20"
+              className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"
             >
               <X size={16} />
             </button>
           </div>
         </div>
 
-        <div className={`flex-1 min-h-0 flex flex-col ${isPeek ? 'bg-transparent' : 'bg-black/5'}`}>
+        <div className={`flex-1 min-h-0 flex flex-col ${isPeek ? 'bg-transparent' : 'theme-surface'}`}>
           {typeof children === 'function' ? children({ isPeek }) : children}
         </div>
       </div>

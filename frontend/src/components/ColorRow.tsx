@@ -54,7 +54,7 @@ export function ColorRow({ label, value, onChange, reference, onReset, title, zo
             aria-label={`Reset ${label}`}
             className={`p-1 rounded transition-all ${
               changed
-                ? 'theme-primary opacity-100 hover:bg-black/20'
+                ? 'theme-primary opacity-100 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]'
                 : 'theme-text-muted opacity-0 group-hover:opacity-40 hover:!opacity-80'
             }`}
           >

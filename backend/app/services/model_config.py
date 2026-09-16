@@ -34,9 +34,26 @@ a model would fit; it does not put the weights on the disk. `auto` therefore
 ranks the installed set, never the catalogue — recommending a model to pull is
 the models table's job, and running one is this module's.
 
-Rule 5: this is written by a setup surface and read by the runtime. The write
-path lives behind `/api/forge`; the read path is `resolve()`, which the
-orchestrator may call. Nothing here reaches back into the Forge.
+## No UI writes this any more
+
+There was a Deployment tab. It was removed because it set a value the chat
+composer's own model picker already sets, and two controls for one decision is
+how they drift apart.
+
+What remains is the part that could not live in a browser: something has to
+answer when no browser is choosing. A scripted run, the M8 evaluation harness,
+the first request after a restart before anyone touches the picker — all of
+them resolve through here. The default is `auto`, so on a fresh checkout that
+means "the best-scoring installed model for whatever machine this is" rather
+than a name somebody typed on different hardware.
+
+`write()` is kept and still used by the tests. Pinning is now a hand edit of
+`config/model_config.json`, which is the right weight for it: pinning is what
+you do to make an experiment reproducible, and that belongs in a file under
+version control rather than behind a button.
+
+Rule 5 still holds: the read path is `resolve()`, which the orchestrator may
+call. Nothing here reaches back into the Forge.
 """
 
 from __future__ import annotations
