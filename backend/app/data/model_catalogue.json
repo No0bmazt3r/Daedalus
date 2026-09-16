@@ -7,14 +7,26 @@
     "to a Python module.",
     "",
     "Every declared number carries `source` and `verified`. `verified: false`",
-    "means nobody has checked it against the model card yet — the API passes",
+    "means nobody has checked it against the model card yet \u2014 the API passes",
     "that through and the UI marks it, so an unchecked figure can never be",
     "mistaken for a confirmed one on its way into the report.",
     "",
     "Declared values are only ever placeholders. The moment a model is pulled,",
     "Ollama's /api/show reports its real architecture and /api/tags its real",
     "size on disk, and services/model_fit.py prefers those. See MODULES.md 2.2:",
-    "an estimate and a measurement must never look alike."
+    "an estimate and a measurement must never look alike.",
+    "",
+    "Two sets in one list. `shortlist: true` marks the six candidates from",
+    "PROJECT.md 8.1 that the report argues about; the rest are the wider Ollama",
+    "library, present so the console can answer 'what else could this machine",
+    "run?'. Library entries carry no MMLU on purpose \u2014 inventing quality scores",
+    "for thirty models is the fabrication the shortlist's verified flags exist",
+    "to prevent, and they score on fit and speed instead.",
+    "",
+    "Every tag here was verified against registry.ollama.ai. services/",
+    "ollama_registry.py re-checks them at runtime and also reads each tag's real",
+    "weight size from its manifest, which replaces the params x bytes/param",
+    "arithmetic before anything is downloaded."
   ],
   "models": [
     {
@@ -26,15 +38,27 @@
       "context_length": 32768,
       "default_tag": "gemma3:1b",
       "quantizations": [
-        { "quant": "Q4_K_M", "tag": "gemma3:1b", "tag_verified": true },
-        { "quant": "Q8_0", "tag": "gemma3:1b-it-q8_0", "tag_verified": false },
-        { "quant": "FP16", "tag": "gemma3:1b-it-fp16", "tag_verified": false }
+        {
+          "quant": "Q4_K_M",
+          "tag": "gemma3:1b",
+          "tag_verified": true
+        },
+        {
+          "quant": "Q8_0",
+          "tag": "gemma3:1b-it-q8_0",
+          "tag_verified": true
+        },
+        {
+          "quant": "FP16",
+          "tag": "gemma3:1b-it-fp16",
+          "tag_verified": true
+        }
       ],
       "arch": {
         "layers": null,
         "kv_heads": null,
         "head_dim": null,
-        "source": "unset — read from Ollama /api/show once pulled",
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
         "verified": false
       },
       "quality": {
@@ -43,7 +67,9 @@
         "source": "https://huggingface.co/google/gemma-3-1b-it",
         "verified": false
       },
-      "notes": "Smallest candidate. The floor of the production SLM tier."
+      "notes": "Smallest candidate. The floor of the production SLM tier.",
+      "shortlist": true,
+      "kind": "general"
     },
     {
       "id": "qwen3-1.7b",
@@ -54,15 +80,27 @@
       "context_length": 32768,
       "default_tag": "qwen3:1.7b",
       "quantizations": [
-        { "quant": "Q4_K_M", "tag": "qwen3:1.7b", "tag_verified": true },
-        { "quant": "Q8_0", "tag": "qwen3:1.7b-q8_0", "tag_verified": false },
-        { "quant": "FP16", "tag": "qwen3:1.7b-fp16", "tag_verified": false }
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen3:1.7b",
+          "tag_verified": true
+        },
+        {
+          "quant": "Q8_0",
+          "tag": "qwen3:1.7b-q8_0",
+          "tag_verified": true
+        },
+        {
+          "quant": "FP16",
+          "tag": "qwen3:1.7b-fp16",
+          "tag_verified": true
+        }
       ],
       "arch": {
         "layers": null,
         "kv_heads": null,
         "head_dim": null,
-        "source": "unset — read from Ollama /api/show once pulled",
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
         "verified": false
       },
       "quality": {
@@ -71,7 +109,9 @@
         "source": "https://huggingface.co/Qwen/Qwen3-1.7B",
         "verified": false
       },
-      "notes": "Native 32K context; Qwen3 extends further with YaRN, which this does not assume."
+      "notes": "Native 32K context; Qwen3 extends further with YaRN, which this does not assume.",
+      "shortlist": true,
+      "kind": "general"
     },
     {
       "id": "phi3-mini",
@@ -82,15 +122,27 @@
       "context_length": 131072,
       "default_tag": "phi3:mini",
       "quantizations": [
-        { "quant": "Q4_K_M", "tag": "phi3:mini", "tag_verified": true },
-        { "quant": "Q8_0", "tag": "phi3:3.8b-mini-128k-instruct-q8_0", "tag_verified": false },
-        { "quant": "FP16", "tag": "phi3:3.8b-mini-128k-instruct-f16", "tag_verified": false }
+        {
+          "quant": "Q4_K_M",
+          "tag": "phi3:mini",
+          "tag_verified": true
+        },
+        {
+          "quant": "Q8_0",
+          "tag": "phi3:3.8b-mini-128k-instruct-q8_0",
+          "tag_verified": true
+        },
+        {
+          "quant": "FP16",
+          "tag": "phi3:3.8b-mini-128k-instruct-fp16",
+          "tag_verified": true
+        }
       ],
       "arch": {
         "layers": null,
         "kv_heads": null,
         "head_dim": null,
-        "source": "unset — read from Ollama /api/show once pulled",
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
         "verified": false
       },
       "quality": {
@@ -99,7 +151,9 @@
         "source": "Phi-3 technical report, arXiv:2404.14219 (5-shot MMLU)",
         "verified": false
       },
-      "notes": "128K context is the -128k variant; `phi3:mini` defaults to the 4K build. Check which tag you pulled."
+      "notes": "128K context is the -128k variant; `phi3:mini` defaults to the 4K build. Check which tag you pulled.",
+      "shortlist": true,
+      "kind": "general"
     },
     {
       "id": "qwen3-8b",
@@ -110,14 +164,22 @@
       "context_length": 32768,
       "default_tag": "qwen3:8b",
       "quantizations": [
-        { "quant": "Q4_K_M", "tag": "qwen3:8b", "tag_verified": true },
-        { "quant": "FP16", "tag": "qwen3:8b-fp16", "tag_verified": false }
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen3:8b",
+          "tag_verified": true
+        },
+        {
+          "quant": "FP16",
+          "tag": "qwen3:8b-fp16",
+          "tag_verified": true
+        }
       ],
       "arch": {
         "layers": null,
         "kv_heads": null,
         "head_dim": null,
-        "source": "unset — read from Ollama /api/show once pulled",
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
         "verified": false
       },
       "quality": {
@@ -126,7 +188,9 @@
         "source": "https://huggingface.co/Qwen/Qwen3-8B",
         "verified": false
       },
-      "notes": "Accuracy ceiling of the local tier."
+      "notes": "Accuracy ceiling of the local tier.",
+      "shortlist": true,
+      "kind": "general"
     },
     {
       "id": "llama31-8b",
@@ -137,14 +201,22 @@
       "context_length": 131072,
       "default_tag": "llama3.1:8b",
       "quantizations": [
-        { "quant": "Q4_K_M", "tag": "llama3.1:8b", "tag_verified": true },
-        { "quant": "FP16", "tag": "llama3.1:8b-instruct-fp16", "tag_verified": false }
+        {
+          "quant": "Q4_K_M",
+          "tag": "llama3.1:8b",
+          "tag_verified": true
+        },
+        {
+          "quant": "FP16",
+          "tag": "llama3.1:8b-instruct-fp16",
+          "tag_verified": true
+        }
       ],
       "arch": {
         "layers": null,
         "kv_heads": null,
         "head_dim": null,
-        "source": "unset — read from Ollama /api/show once pulled",
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
         "verified": false
       },
       "quality": {
@@ -153,7 +225,9 @@
         "source": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct (5-shot MMLU)",
         "verified": false
       },
-      "notes": "128K context, and the largest KV cache of the candidates as a result."
+      "notes": "128K context, and the largest KV cache of the candidates as a result.",
+      "shortlist": true,
+      "kind": "general"
     },
     {
       "id": "mistral-7b",
@@ -164,14 +238,22 @@
       "context_length": 32768,
       "default_tag": "mistral:7b",
       "quantizations": [
-        { "quant": "Q4_K_M", "tag": "mistral:7b", "tag_verified": true },
-        { "quant": "FP16", "tag": "mistral:7b-instruct-fp16", "tag_verified": false }
+        {
+          "quant": "Q4_K_M",
+          "tag": "mistral:7b",
+          "tag_verified": true
+        },
+        {
+          "quant": "FP16",
+          "tag": "mistral:7b-instruct-fp16",
+          "tag_verified": true
+        }
       ],
       "arch": {
         "layers": null,
         "kv_heads": null,
         "head_dim": null,
-        "source": "unset — read from Ollama /api/show once pulled",
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
         "verified": false
       },
       "quality": {
@@ -180,7 +262,1001 @@
         "source": "Mistral 7B paper, arXiv:2310.06825 (5-shot MMLU)",
         "verified": false
       },
-      "notes": "Sliding-window attention keeps its KV cache smaller than the context length implies."
+      "notes": "Sliding-window attention keeps its KV cache smaller than the context length implies.",
+      "shortlist": true,
+      "kind": "general"
+    },
+    {
+      "id": "qwen3-0_6b",
+      "label": "Qwen3 0.6B",
+      "vendor": "Alibaba",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 0.6,
+      "context_length": null,
+      "default_tag": "qwen3:0.6b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen3:0.6b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "smollm2-360m",
+      "label": "SmolLM2 360M",
+      "vendor": "HuggingFace",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 0.36,
+      "context_length": null,
+      "default_tag": "smollm2:360m",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "smollm2:360m",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "tinyllama-latest",
+      "label": "TinyLlama 1.1B",
+      "vendor": "TinyLlama",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 1.1,
+      "context_length": null,
+      "default_tag": "tinyllama:latest",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "tinyllama:latest",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "llama3_2-1b",
+      "label": "Llama 3.2 1B",
+      "vendor": "Meta",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 1.24,
+      "context_length": null,
+      "default_tag": "llama3.2:1b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "llama3.2:1b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "smollm2-1_7b",
+      "label": "SmolLM2 1.7B",
+      "vendor": "HuggingFace",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 1.7,
+      "context_length": null,
+      "default_tag": "smollm2:1.7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "smollm2:1.7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "gemma2-2b",
+      "label": "Gemma 2 2B",
+      "vendor": "Google",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 2.6,
+      "context_length": null,
+      "default_tag": "gemma2:2b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "gemma2:2b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "granite3_3-2b",
+      "label": "Granite 3.3 2B",
+      "vendor": "IBM",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 2.5,
+      "context_length": null,
+      "default_tag": "granite3.3:2b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "granite3.3:2b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "exaone3_5-2_4b",
+      "label": "EXAONE 3.5 2.4B",
+      "vendor": "LG AI",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 2.4,
+      "context_length": null,
+      "default_tag": "exaone3.5:2.4b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "exaone3.5:2.4b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "deepseek-r1-1_5b",
+      "label": "DeepSeek-R1 1.5B",
+      "vendor": "DeepSeek",
+      "tier": "slm",
+      "kind": "reasoning",
+      "shortlist": false,
+      "params_b": 1.5,
+      "context_length": null,
+      "default_tag": "deepseek-r1:1.5b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "deepseek-r1:1.5b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen2_5-coder-1_5b",
+      "label": "Qwen2.5 Coder 1.5B",
+      "vendor": "Alibaba",
+      "tier": "slm",
+      "kind": "coding",
+      "shortlist": false,
+      "params_b": 1.5,
+      "context_length": null,
+      "default_tag": "qwen2.5-coder:1.5b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen2.5-coder:1.5b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen2_5-3b",
+      "label": "Qwen2.5 3B",
+      "vendor": "Alibaba",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 3.1,
+      "context_length": null,
+      "default_tag": "qwen2.5:3b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen2.5:3b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "llama3_2-3b",
+      "label": "Llama 3.2 3B",
+      "vendor": "Meta",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 3.2,
+      "context_length": null,
+      "default_tag": "llama3.2:3b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "llama3.2:3b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "phi4-mini-latest",
+      "label": "Phi-4 Mini 3.8B",
+      "vendor": "Microsoft",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 3.8,
+      "context_length": null,
+      "default_tag": "phi4-mini:latest",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "phi4-mini:latest",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen3-4b",
+      "label": "Qwen3 4B",
+      "vendor": "Alibaba",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 4.0,
+      "context_length": null,
+      "default_tag": "qwen3:4b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen3:4b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "gemma3-4b",
+      "label": "Gemma 3 4B",
+      "vendor": "Google",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 4.3,
+      "context_length": null,
+      "default_tag": "gemma3:4b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "gemma3:4b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "nemotron-mini-4b",
+      "label": "Nemotron Mini 4B",
+      "vendor": "NVIDIA",
+      "tier": "slm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 4.0,
+      "context_length": null,
+      "default_tag": "nemotron-mini:4b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "nemotron-mini:4b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "deepseek-r1-7b",
+      "label": "DeepSeek-R1 7B",
+      "vendor": "DeepSeek",
+      "tier": "llm",
+      "kind": "reasoning",
+      "shortlist": false,
+      "params_b": 7.0,
+      "context_length": null,
+      "default_tag": "deepseek-r1:7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "deepseek-r1:7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen2_5-7b",
+      "label": "Qwen2.5 7B",
+      "vendor": "Alibaba",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 7.6,
+      "context_length": null,
+      "default_tag": "qwen2.5:7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen2.5:7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen2_5-coder-7b",
+      "label": "Qwen2.5 Coder 7B",
+      "vendor": "Alibaba",
+      "tier": "llm",
+      "kind": "coding",
+      "shortlist": false,
+      "params_b": 7.6,
+      "context_length": null,
+      "default_tag": "qwen2.5-coder:7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen2.5-coder:7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "codellama-7b",
+      "label": "Code Llama 7B",
+      "vendor": "Meta",
+      "tier": "llm",
+      "kind": "coding",
+      "shortlist": false,
+      "params_b": 7.0,
+      "context_length": null,
+      "default_tag": "codellama:7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "codellama:7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "olmo2-7b",
+      "label": "OLMo 2 7B",
+      "vendor": "AI2",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 7.3,
+      "context_length": null,
+      "default_tag": "olmo2:7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "olmo2:7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "llava-7b",
+      "label": "LLaVA 7B",
+      "vendor": "LLaVA",
+      "tier": "llm",
+      "kind": "vision",
+      "shortlist": false,
+      "params_b": 7.0,
+      "context_length": null,
+      "default_tag": "llava:7b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "llava:7b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "granite3_3-8b",
+      "label": "Granite 3.3 8B",
+      "vendor": "IBM",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 8.1,
+      "context_length": null,
+      "default_tag": "granite3.3:8b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "granite3.3:8b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "deepseek-r1-8b",
+      "label": "DeepSeek-R1 8B",
+      "vendor": "DeepSeek",
+      "tier": "llm",
+      "kind": "reasoning",
+      "shortlist": false,
+      "params_b": 8.0,
+      "context_length": null,
+      "default_tag": "deepseek-r1:8b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "deepseek-r1:8b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "gemma3-12b",
+      "label": "Gemma 3 12B",
+      "vendor": "Google",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 12.2,
+      "context_length": null,
+      "default_tag": "gemma3:12b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "gemma3:12b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "mistral-nemo-12b",
+      "label": "Mistral Nemo 12B",
+      "vendor": "Mistral AI",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 12.2,
+      "context_length": null,
+      "default_tag": "mistral-nemo:12b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "mistral-nemo:12b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen3-14b",
+      "label": "Qwen3 14B",
+      "vendor": "Alibaba",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 14.8,
+      "context_length": null,
+      "default_tag": "qwen3:14b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen3:14b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "phi4-14b",
+      "label": "Phi-4 14B",
+      "vendor": "Microsoft",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 14.7,
+      "context_length": null,
+      "default_tag": "phi4:14b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "phi4:14b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "deepseek-r1-14b",
+      "label": "DeepSeek-R1 14B",
+      "vendor": "DeepSeek",
+      "tier": "llm",
+      "kind": "reasoning",
+      "shortlist": false,
+      "params_b": 14.8,
+      "context_length": null,
+      "default_tag": "deepseek-r1:14b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "deepseek-r1:14b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "gemma3-27b",
+      "label": "Gemma 3 27B",
+      "vendor": "Google",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 27.4,
+      "context_length": null,
+      "default_tag": "gemma3:27b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "gemma3:27b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
+    },
+    {
+      "id": "qwen3-32b",
+      "label": "Qwen3 32B",
+      "vendor": "Alibaba",
+      "tier": "llm",
+      "kind": "general",
+      "shortlist": false,
+      "params_b": 32.8,
+      "context_length": null,
+      "default_tag": "qwen3:32b",
+      "quantizations": [
+        {
+          "quant": "Q4_K_M",
+          "tag": "qwen3:32b",
+          "tag_verified": true
+        }
+      ],
+      "arch": {
+        "layers": null,
+        "kv_heads": null,
+        "head_dim": null,
+        "source": "unset \u2014 read from Ollama /api/show once pulled",
+        "verified": false
+      },
+      "quality": {
+        "mmlu": null,
+        "confidence": null,
+        "source": null,
+        "verified": false
+      },
+      "notes": null
     }
   ]
 }

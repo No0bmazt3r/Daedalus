@@ -21,6 +21,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import forge, health, logs, prefs, providers, sessions, system
 from .db import migrations, paths, sqlite_util
+# Aliased: `api.forge` is already imported above under that name, and the two
+# shadowing each other broke router registration at import time.
+from .services import forge as forge_service
 from .services import chat_service, hardware
 
 log = logging.getLogger("daedalus.startup")
@@ -65,14 +68,21 @@ async def lifespan(_app: FastAPI):
     # must not be slow to boot, and the endpoint serves whatever it has.
     hardware_task = asyncio.create_task(hardware.background_refresh())
 
+    # The Forge's model table needs one registry manifest per catalogue tag —
+    # fifty round trips, ~11s, and the answers are immutable per tag. Fetched
+    # once here so the first panel open is instant instead of paying for it.
+    # A thread, not the event loop: these are blocking HTTP reads.
+    registry_task = asyncio.create_task(asyncio.to_thread(forge_service.warm_registry))
+
     try:
         yield
     finally:
         # Ordinary shutdown. Without this the task is garbage-collected
         # mid-sleep and asyncio complains about it on the way out.
-        hardware_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await hardware_task
+        for task in (hardware_task, registry_task):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
         chat_service.purge_ephemeral()
 

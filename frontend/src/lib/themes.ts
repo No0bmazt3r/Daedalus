@@ -655,6 +655,181 @@ export function generateHarmonyColors(
   };
 }
 
+// ── Status colours ────────────────────────────────────────────────────────
+//
+// Green / amber / red for "safe", "marginal" and "will not fit", plus anything
+// else that needs to signal a verdict rather than a brand.
+//
+// These have to be derived rather than written as Tailwind literals. A theme
+// here is an arbitrary accent over an arbitrary background, light or dark, so
+// `text-amber-400` is legible on a dark surface and almost invisible on a pale
+// one — which is exactly what happened to the Forge's "unverified" warnings on
+// a cream theme. Deriving them from the background's lightness means one set of
+// class names stays readable on every theme anybody builds.
+//
+// Hues are the conventional ones and deliberately not tinted toward the accent:
+// a red that has drifted toward a yellow accent stops reading as an error.
+
+interface StatusColors {
+  ok: string;
+  warn: string;
+  bad: string;
+  info: string;
+}
+
+/**
+ * Status colours pitched against the background they will sit on.
+ *
+ * On a dark surface they are light and saturated; on a pale one they are dark
+ * and saturated. Both directions clear WCAG AA for normal text against their
+ * own background, which the mid-range Tailwind defaults do not.
+ */
+export function deriveStatusColors(colors: ThemeColors): StatusColors {
+  const isDark = relativeLuminance(colors.bg) < 0.5;
+  return isDark
+    ? {
+        ok: hslToHex(150, 62, 58),
+        warn: hslToHex(38, 92, 62),
+        bad: hslToHex(2, 78, 66),
+        info: hslToHex(210, 80, 68),
+      }
+    : {
+        // Pitched a little darker than the obvious values: on the palest themes
+        // (Daylight, Paper) the mid-range versions landed at 4.44–4.48:1, just
+        // under AA, which is the kind of near-miss that only shows up when it
+        // is measured rather than eyeballed.
+        ok: hslToHex(150, 74, 24),
+        warn: hslToHex(28, 94, 29),
+        bad: hslToHex(2, 74, 40),
+        info: hslToHex(210, 84, 34),
+      };
+}
+
+/** WCAG AA for normal text. Everything derived here is held to it. */
+const AA_CONTRAST = 4.5;
+
+/**
+ * The theme's accent, adjusted until it is readable *as text* on the theme's
+ * background.
+ *
+ * `--primary` is chosen to look good as a fill: a bar, a dot, a selected
+ * background. Small text is a different job. A pale yellow accent is a fine
+ * progress bar and an unreadable label on a cream background — which is exactly
+ * what the Forge's headings, active tabs and selected chips turned into.
+ *
+ * So the hue and saturation are kept, because that is what makes it recognisably
+ * *this theme's* accent, and only the lightness moves — away from the
+ * background until it clears AA. On a dark theme that means lightening, on a
+ * light one darkening. An accent that already passes is returned untouched, so
+ * most themes see no change at all.
+ */
+export function deriveReadableAccent(colors: ThemeColors): string {
+  if (contrastRatio(colors.primary, colors.bg) >= AA_CONTRAST) return colors.primary;
+
+  const [h, s, startL] = hexToHSL(colors.primary);
+  // Keep some saturation: an accent desaturated to grey stops reading as the
+  // theme's colour, which is the whole reason for using it.
+  const saturation = Math.max(s, 30);
+  const step = relativeLuminance(colors.bg) < 0.5 ? 2 : -2;
+
+  let best = colors.primary;
+  let bestRatio = contrastRatio(colors.primary, colors.bg);
+
+  for (let l = startL + step; l >= 0 && l <= 100; l += step) {
+    const candidate = hslToHex(h, saturation, l);
+    const ratio = contrastRatio(candidate, colors.bg);
+    if (ratio > bestRatio) {
+      bestRatio = ratio;
+      best = candidate;
+    }
+    if (ratio >= AA_CONTRAST) return candidate;
+  }
+  // Ran out of lightness before clearing AA — return the best found rather than
+  // something arbitrary. Only reachable for an accent on a mid-grey background,
+  // where nothing of that hue would pass.
+  return best;
+}
+
+/**
+ * The theme's body text colour, floored to AA against its own background.
+ *
+ * Two shipped themes do not clear it on their own — Cute at 3.26:1 and
+ * Retrowave at 4.46:1 — and that is *body* text, not a secondary label. It is
+ * also why `deriveReadableMuted` could not fully fix Retrowave: muted is
+ * clamped so it never overshoots the body text, so body text being unreadable
+ * puts a ceiling on everything quieter than it.
+ *
+ * Same treatment as the others: hue and saturation held, lightness pushed away
+ * from the background only as far as AA requires. A theme that already passes
+ * is returned untouched, which is fourteen of the sixteen.
+ */
+export function deriveReadableText(colors: ThemeColors): string {
+  if (contrastRatio(colors.text, colors.bg) >= AA_CONTRAST) return colors.text;
+
+  const [h, s, startL] = hexToHSL(colors.text);
+  const step = relativeLuminance(colors.bg) < 0.5 ? 2 : -2;
+
+  let best = colors.text;
+  let bestRatio = contrastRatio(colors.text, colors.bg);
+
+  for (let l = startL + step; l >= 0 && l <= 100; l += step) {
+    const candidate = hslToHex(h, s, l);
+    const ratio = contrastRatio(candidate, colors.bg);
+    if (ratio > bestRatio) {
+      bestRatio = ratio;
+      best = candidate;
+    }
+    if (ratio >= AA_CONTRAST) return candidate;
+  }
+  return best;
+}
+
+/**
+ * The theme's muted text colour, nudged until it is actually readable.
+ *
+ * Muted text is quieter on purpose, but it is still content — a memory
+ * breakdown, a provenance note, the reason a model ranked where it did. Several
+ * of the shipped themes picked a `textMuted` that looks right next to the main
+ * text and does not clear AA against the background: Retrowave sat at 2.64:1,
+ * Daylight at 3.19:1, Lavender at 4.04:1. On those, a panel of secondary text
+ * reads as a grey smear.
+ *
+ * So the hue and saturation are kept — that is the theme's character — and the
+ * lightness moves *toward the main text colour* until it clears AA. It stops as
+ * soon as it passes, so a theme that was already fine is untouched and the
+ * others move as little as they can. Muted stays visibly quieter than body
+ * text; it just stops being invisible.
+ *
+ * Applied to every theme, including generated ones, because a user-built theme
+ * can land on the same problem and there is nowhere else to catch it.
+ */
+export function deriveReadableMuted(colors: ThemeColors): string {
+  if (contrastRatio(colors.textMuted, colors.bg) >= AA_CONTRAST) return colors.textMuted;
+
+  const [h, s, mutedL] = hexToHSL(colors.textMuted);
+  const [, , textL] = hexToHSL(deriveReadableText(colors));
+  // Toward the main text, which is by construction the readable end.
+  const step = textL > mutedL ? 2 : -2;
+
+  let best = colors.textMuted;
+  let bestRatio = contrastRatio(colors.textMuted, colors.bg);
+
+  for (let l = mutedL + step; l >= 0 && l <= 100; l += step) {
+    // Never overshoot the body text — muted must stay the quieter of the two.
+    if ((step > 0 && l > textL) || (step < 0 && l < textL)) break;
+    const candidate = hslToHex(h, s, l);
+    const ratio = contrastRatio(candidate, colors.bg);
+    if (ratio > bestRatio) {
+      bestRatio = ratio;
+      best = candidate;
+    }
+    if (ratio >= AA_CONTRAST) return candidate;
+  }
+  // Reached the body text without clearing AA — then the body text does not
+  // clear it either, and this is as close as muted can honestly get.
+  return best;
+}
+
 // ── Applying a theme to the document ─────────────────────────────────────
 
 export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
@@ -664,8 +839,19 @@ export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
   s.setProperty('--card', colors.card);
   s.setProperty('--border', colors.border);
   s.setProperty('--primary', colors.primary);
-  s.setProperty('--text-main', colors.text);
-  s.setProperty('--text-muted', colors.textMuted);
+  s.setProperty('--text-main', deriveReadableText(colors));
+  // Floored to AA — see deriveReadableMuted. Most themes pass untouched.
+  s.setProperty('--text-muted', deriveReadableMuted(colors));
+
+  // Accent-as-text. See deriveReadableAccent: --primary stays the fill colour,
+  // this is the one anything small and textual should use.
+  s.setProperty('--primary-readable', deriveReadableAccent(colors));
+
+  const status = deriveStatusColors(colors);
+  s.setProperty('--status-ok', status.ok);
+  s.setProperty('--status-warn', status.warn);
+  s.setProperty('--status-bad', status.bad);
+  s.setProperty('--status-info', status.info);
 
   // Keep the mobile browser chrome matched to the background.
   const meta = document.querySelector('meta[name="theme-color"]');

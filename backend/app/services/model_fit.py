@@ -86,12 +86,42 @@ _QUANT: dict[str, dict[str, float]] = {
     "Q6_K": {"bytes_per_param": 0.82, "speed_multiplier": 0.95, "quality_penalty": -1.0},
     "BF16": {"bytes_per_param": 2.00, "speed_multiplier": 0.60, "quality_penalty": 0.0},
     "F32": {"bytes_per_param": 4.00, "speed_multiplier": 0.35, "quality_penalty": 0.0},
+    "Q3_K_S": {"bytes_per_param": 0.44, "speed_multiplier": 1.28, "quality_penalty": -10.0},
+    "Q3_K_L": {"bytes_per_param": 0.53, "speed_multiplier": 1.22, "quality_penalty": -7.0},
+    "Q4_1": {"bytes_per_param": 0.56, "speed_multiplier": 1.15, "quality_penalty": -5.5},
+    "Q5_1": {"bytes_per_param": 0.75, "speed_multiplier": 0.98, "quality_penalty": -2.0},
+    "Q2_K_L": {"bytes_per_param": 0.44, "speed_multiplier": 1.32, "quality_penalty": -11.0},
+    "Q6_K_L": {"bytes_per_param": 0.85, "speed_multiplier": 0.93, "quality_penalty": -0.8},
     # 4-bit float formats. Better quality than integer Q4 at the same width,
     # which is why the penalty is lighter than Q4_K_M's.
     "MXFP4": {"bytes_per_param": 0.55, "speed_multiplier": 1.10, "quality_penalty": -3.0},
     "NVFP4": {"bytes_per_param": 0.55, "speed_multiplier": 1.15, "quality_penalty": -3.0},
     "FP8": {"bytes_per_param": 1.00, "speed_multiplier": 0.85, "quality_penalty": 0.0},
+    # ── llama.cpp's importance-matrix quants, ubiquitous in Hugging Face GGUF
+    # repositories and therefore unavoidable once discovery is on. Widths are
+    # llama.cpp's published bits-per-weight ÷ 8. They reach further down than
+    # the K-quants — IQ1_S is under a fifth of a byte per parameter — which is
+    # why the quality penalties get severe fast.
+    "IQ1_S": {"bytes_per_param": 0.20, "speed_multiplier": 1.45, "quality_penalty": -22.0},
+    "IQ1_M": {"bytes_per_param": 0.22, "speed_multiplier": 1.42, "quality_penalty": -19.0},
+    "IQ2_XXS": {"bytes_per_param": 0.26, "speed_multiplier": 1.40, "quality_penalty": -16.0},
+    "IQ2_XS": {"bytes_per_param": 0.29, "speed_multiplier": 1.38, "quality_penalty": -14.0},
+    "IQ2_S": {"bytes_per_param": 0.31, "speed_multiplier": 1.36, "quality_penalty": -13.0},
+    "IQ2_M": {"bytes_per_param": 0.34, "speed_multiplier": 1.34, "quality_penalty": -11.0},
+    "IQ3_XXS": {"bytes_per_param": 0.38, "speed_multiplier": 1.30, "quality_penalty": -9.0},
+    "IQ3_XS": {"bytes_per_param": 0.41, "speed_multiplier": 1.28, "quality_penalty": -8.0},
+    "IQ3_S": {"bytes_per_param": 0.43, "speed_multiplier": 1.26, "quality_penalty": -7.5},
+    "IQ3_M": {"bytes_per_param": 0.46, "speed_multiplier": 1.24, "quality_penalty": -7.0},
+    "IQ4_XS": {"bytes_per_param": 0.53, "speed_multiplier": 1.18, "quality_penalty": -4.5},
+    "IQ4_NL": {"bytes_per_param": 0.56, "speed_multiplier": 1.16, "quality_penalty": -4.0},
 }
+
+# Bit width parsed out of a quantization name nobody has tabulated — `Q7_K`,
+# some future `IQ5_M`. Infers the width from the leading digit rather than
+# silently pretending the model is Q4_K_M, which would under-report memory for
+# anything heavier and is the kind of quiet wrongness this console exists to
+# avoid. `quant_known()` still reports False, so the UI can mark it inferred.
+_QUANT_WIDTH = re.compile(r"^I?Q(\d+)", re.IGNORECASE)
 
 # Ollama reports "F16" where §8.2 says "FP16"; same thing, and the catalogue and
 # the registry should not have to agree on spelling for a row to score.
@@ -101,20 +131,47 @@ DEFAULT_QUANT = "Q4_K_M"
 
 
 def normalise_quant(raw: str | None) -> str:
-    """A quantization name from anywhere — catalogue, Ollama, a typed tag.
+    """A quantization name from anywhere — catalogue, Ollama, a Hugging Face file.
 
-    Unknown names fall back to Q4_K_M rather than failing: the overwhelming
-    majority of Ollama's library is Q4_K_M, so it is the least wrong guess, and
-    `quant_known()` lets the caller mark the row as an approximation.
+    Returns the name as given when it is one this module can price, so an
+    inferred entry keeps its real label in the UI rather than being relabelled
+    as something it is not. `quant_spec()` is what turns it into numbers.
     """
     if not raw:
         return DEFAULT_QUANT
     name = raw.strip().upper().replace("-", "_")
     name = _QUANT_ALIASES.get(name, name)
-    return name if name in _QUANT else DEFAULT_QUANT
+    if name in _QUANT:
+        return name
+    return name if _QUANT_WIDTH.match(name) else DEFAULT_QUANT
+
+
+def quant_spec(quant: str) -> dict[str, float]:
+    """Bytes per parameter, speed multiplier and quality penalty for a quant.
+
+    Tabulated where known; inferred from the bit width otherwise. The inferred
+    path assumes K-quant-like overhead — a little above the raw width, because
+    scales and the higher-precision embedding tensors are not free.
+    """
+    if quant in _QUANT:
+        return _QUANT[quant]
+
+    match = _QUANT_WIDTH.match(quant)
+    if match:
+        bits = max(1, min(int(match.group(1)), 32))
+        bytes_per_param = round(bits / 8 * 1.08, 3)
+        return {
+            "bytes_per_param": bytes_per_param,
+            # Narrower is faster, on the same memory-bandwidth argument the
+            # whole speed estimate rests on: fewer bytes read per token.
+            "speed_multiplier": round(min(1.45, max(0.35, 4.0 / max(bits, 1) * 1.15)), 2),
+            "quality_penalty": round(-max(0.0, (8 - bits)) * 1.6, 1),
+        }
+    return _QUANT[DEFAULT_QUANT]
 
 
 def quant_known(raw: str | None) -> bool:
+    """True when the width is tabulated rather than inferred from the name."""
     if not raw:
         return False
     name = raw.strip().upper().replace("-", "_")
@@ -270,6 +327,11 @@ _SPEED_SATURATION_TPS = 60.0
 _QUALITY_FLOOR_MMLU = 25.0
 _QUALITY_CEILING_MMLU = 85.0
 
+# Stand-in capability for a model nobody has scored — the midpoint of the band
+# above. Not a claim about the model; a neutral base the quantization penalty
+# can be applied to, so unscored rows still order correctly among themselves.
+_UNKNOWN_MMLU_BASELINE = 55.0
+
 
 def _catalogue_raw() -> dict[str, Any]:
     """The catalogue file. Read fresh every call, deliberately.
@@ -322,6 +384,7 @@ def estimate_memory(
     quant: str,
     arch: dict[str, Any] | None = None,
     weights_bytes: int | None = None,
+    weights_source_hint: str | None = None,
     context_tokens: int = DEFAULT_WORKING_CONTEXT,
 ) -> dict[str, Any]:
     """`(params × bytes_per_param) + kv_cache + runtime_overhead`, in bytes.
@@ -330,11 +393,14 @@ def estimate_memory(
     replaces the parameter-count arithmetic entirely rather than being averaged
     with it — a measurement is not a second opinion.
     """
-    spec = _QUANT.get(quant, _QUANT[DEFAULT_QUANT])
+    spec = quant_spec(quant)
 
     if weights_bytes:
         weights = int(weights_bytes)
-        weights_source = "measured"
+        # `registry` when the size came from a manifest for a model that is not
+        # downloaded, `measured` when it came off this disk. Both are real byte
+        # counts rather than arithmetic, and the caller knows which it passed.
+        weights_source = weights_source_hint or "measured"
     else:
         weights = int(params_b * 1e9 * spec["bytes_per_param"])
         weights_source = "declared"
@@ -345,6 +411,8 @@ def estimate_memory(
 
     if weights_source == "measured":
         weights_term = f"{weights / GB:.2f} GB on disk"
+    elif weights_source == "registry":
+        weights_term = f"{weights / GB:.2f} GB published size"
     else:
         weights_term = f"{params_b}B × {spec['bytes_per_param']} B/param"
 
@@ -382,8 +450,19 @@ def _lookup_bandwidth(gpu_name: str | None) -> float | None:
     return None
 
 
-def _cpu_backend(arch: str | None) -> str:
-    return "cpu_arm" if (arch or "").lower() in {"arm64", "aarch64"} else "cpu_x86"
+def _cpu_backend(arch: str | None, platform_name: str | None = None) -> str:
+    """Which fallback constant applies when there is no bandwidth figure.
+
+    Apple Silicon is called out because it is neither a discrete-GPU machine nor
+    an ordinary CPU one: the GPU shares system memory, so nothing reports VRAM,
+    but inference runs on Metal at roughly twice the throughput of the ARM CPU
+    path. Falling through to `cpu_arm` on an M-series Mac would under-report it
+    by about half and wrongly rank models as too slow to bother with.
+    """
+    is_arm = (arch or "").lower() in {"arm64", "aarch64"}
+    if is_arm and (platform_name or "").lower() == "darwin":
+        return "metal"
+    return "cpu_arm" if is_arm else "cpu_x86"
 
 
 def estimate_speed(
@@ -394,6 +473,7 @@ def estimate_speed(
     gpu_name: str | None,
     vram_free_bytes: int | None,
     cpu_arch: str | None,
+    platform_name: str | None = None,
 ) -> dict[str, Any]:
     """Estimated generation throughput in tokens/sec.
 
@@ -405,7 +485,7 @@ def estimate_speed(
     Falls back to llmfit's `K ÷ params_B × quant_multiplier` when there is no
     bandwidth figure, which on a CPU-only machine is always.
     """
-    spec = _QUANT.get(quant, _QUANT[DEFAULT_QUANT])
+    spec = quant_spec(quant)
     model_gb = weights_bytes / GB
     bandwidth = _lookup_bandwidth(gpu_name)
 
@@ -432,7 +512,7 @@ def estimate_speed(
             "basis": f"{offload * 100:.0f}% offloaded to system RAM",
         }
 
-    backend = _cpu_backend(cpu_arch)
+    backend = _cpu_backend(cpu_arch, platform_name)
     k = _BACKEND_K[backend]
     tps = (k / params_b) * spec["speed_multiplier"] if params_b > 0 else 0.0
     return {
@@ -465,6 +545,11 @@ def memory_budget(hardware: dict[str, Any]) -> dict[str, Any]:
     host's: the model runs inside the VM, so the VM's slice is the constraint.
     `hardware.host_machine` carries the host total for context, and the UI names
     which machine it is describing.
+
+    A machine with no GPU is a first-class case, not a degraded one: there is
+    simply no VRAM pool, `verdict()` judges against system RAM and reports
+    `placement: cpu`, and `estimate_speed` falls to the backend constant for the
+    CPU or, on Apple Silicon, for Metal.
     """
     gpu = hardware.get("gpu") or {}
     devices = gpu.get("devices") or []
@@ -606,12 +691,31 @@ def _quality_score(mmlu: float | None, quant: str) -> dict[str, Any]:
     real differences between candidates visible instead of compressed into the
     top half.
     """
-    penalty = _QUANT.get(quant, _QUANT[DEFAULT_QUANT])["quality_penalty"]
+    penalty = quant_spec(quant)["quality_penalty"]
+
     if mmlu is None:
-        # Unknown quality is scored at the midpoint, not at zero. Zero would
-        # bury every model whose score nobody has filled in yet, and this
-        # catalogue ships with most of them unverified on purpose.
-        return {"score": 50.0, "effective_mmlu": None, "quant_penalty": penalty, "known": False}
+        # Unknown capability is scored from a neutral baseline, not skipped.
+        #
+        # Returning a flat midpoint here was wrong: it made an IQ1_S build and a
+        # Q8_0 build of the same unscored model identical on quality, so a
+        # 1.6-bit quantization — which is severely degraded, and which this
+        # module prices at −22 MMLU points — ranked *above* better ones purely
+        # because it was smaller and faster. Hugging Face search surfaced it
+        # immediately, since almost nothing there has an MMLU score.
+        #
+        # The penalty is real information about the model even when the base
+        # score is not, so it is applied to the baseline instead. Rows are then
+        # ordered correctly against each other while still not claiming to know
+        # the absolute capability.
+        effective = _UNKNOWN_MMLU_BASELINE + penalty
+        span = _QUALITY_CEILING_MMLU - _QUALITY_FLOOR_MMLU
+        score = _clamp(((effective - _QUALITY_FLOOR_MMLU) / span) * 100.0)
+        return {
+            "score": round(score, 1),
+            "effective_mmlu": None,
+            "quant_penalty": penalty,
+            "known": False,
+        }
 
     effective = mmlu + penalty
     span = _QUALITY_CEILING_MMLU - _QUALITY_FLOOR_MMLU
@@ -633,7 +737,12 @@ def _context_score(context_length: int | None, needed: int) -> float:
     otherwise stay quiet. Hence the low weight and the early saturation.
     """
     if not context_length:
-        return 0.0
+        # Unknown, not zero. Ollama's registry publishes no context length, so
+        # most library entries have none until they are pulled — scoring that as
+        # nil would rank every un-pulled model below every pulled one for a
+        # reason that has nothing to do with the model. The neutral midpoint
+        # matches how an unknown MMLU is handled.
+        return 50.0
     if context_length < needed:
         return _clamp((context_length / needed) * 40.0)
     # 4× the requirement is full marks — beyond that the headroom is unused.
@@ -651,6 +760,7 @@ def score_row(
     budget: dict[str, Any],
     arch: dict[str, Any] | None = None,
     weights_bytes: int | None = None,
+    weights_source_hint: str | None = None,
     context_tokens: int = DEFAULT_WORKING_CONTEXT,
 ) -> dict[str, Any]:
     """One model × quantization, estimated and scored against this machine.
@@ -665,6 +775,7 @@ def score_row(
         quant=quant,
         arch=arch,
         weights_bytes=weights_bytes,
+        weights_source_hint=weights_source_hint,
         context_tokens=context_tokens,
     )
 
@@ -679,6 +790,7 @@ def score_row(
         gpu_name=devices[0].get("name") if devices else None,
         vram_free_bytes=budget.get("vram_available_bytes"),
         cpu_arch=(hardware.get("cpu") or {}).get("arch"),
+        platform_name=(hardware.get("host") or {}).get("platform"),
     )
 
     quality = _quality_score(mmlu, quant)

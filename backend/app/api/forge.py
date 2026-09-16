@@ -81,6 +81,42 @@ def models(
     return forge_service.models(context_tokens)
 
 
+@router.get("/huggingface")
+def huggingface(
+    q: str = Query(default="", description="Search terms. Empty returns the most-downloaded GGUF repositories."),
+    limit: int = Query(default=24, ge=1, le=60),
+    context_tokens: int | None = Query(default=None, ge=256, le=131072),
+) -> dict[str, Any]:
+    """GGUF models on Hugging Face, scored against this machine.
+
+    Separate from `/models` deliberately: this one needs the internet and can
+    fail, and the main table has to render on an offline machine. Rows here are
+    pullable — `hf.co/{repo}:{quant}` is a tag Ollama understands — so a search
+    result goes straight to the same Pull button as everything else.
+
+    Always 200. An unreachable Hugging Face comes back as an empty list with a
+    reason, not a 502: it is a search box, and the console keeps working.
+    """
+    return forge_service.huggingface_rows(q, limit=limit, context_tokens=context_tokens)
+
+
+@router.get("/inspect")
+def inspect(
+    tag: str = Query(..., description="Any tag Ollama would accept, including hf.co/{repo}:{quant}."),
+    context_tokens: int | None = Query(default=None, ge=256, le=131072),
+) -> dict[str, Any]:
+    """Score one tag the catalogue has never heard of.
+
+    The "I already know which model I want, just tell me whether it fits" path.
+    Resolves through the Ollama registry, or through Hugging Face for an
+    `hf.co/...` tag, then scores it exactly like a catalogue row.
+
+    Always 200: a tag that does not exist is a finding, not a server error, and
+    the message names the fix.
+    """
+    return forge_service.inspect_tag(tag, context_tokens=context_tokens)
+
+
 # ── step 4: manage ───────────────────────────────────────────────────────────
 
 

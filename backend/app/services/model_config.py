@@ -190,7 +190,7 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
             "reason": (
                 f"pinned to {tag}"
                 if match
-                else f"pinned to {tag}, which is not installed — pull it or switch to auto"
+                else f"pinned to {tag}, which is not installed. Pull it, or switch to auto."
             ),
             "row": match,
             "candidates_considered": len(installed),
@@ -211,7 +211,7 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
             "reason": (
                 "no installed model fits this machine"
                 if installed
-                else "no models are installed — pull one from the Forge"
+                else "no models are installed. Pull one from the Models tab."
             ),
             "row": None,
             "candidates_considered": len(installed),
@@ -224,8 +224,8 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         "tag": best["tag"],
         "resolved": True,
         "reason": (
-            f"best fit of {len(runnable)} installed model(s) on this machine "
-            f"— score {best['score']}, {best['verdict']['fit']}"
+            f"best fit of {len(runnable)} installed model(s) on this machine: "
+            f"scored {best['score']}, {best['verdict']['fit']}"
         ),
         "row": best,
         "candidates_considered": len(installed),

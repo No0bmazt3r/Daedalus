@@ -72,8 +72,8 @@ export function DeploymentPanel({ reloadKey = 0 }: { reloadKey?: number }) {
 
   if (error && !active) {
     return (
-      <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-sm">
-        <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
+        <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
         <div>
           <div className="font-medium">Couldn't read the deployment config</div>
           <div className="theme-text-muted text-xs mt-1">{error}</div>
@@ -103,17 +103,17 @@ export function DeploymentPanel({ reloadKey = 0 }: { reloadKey?: number }) {
     <div className="space-y-4 animate-in fade-in duration-200">
       <p className="text-sm theme-text-muted">
         What the orchestrator runs. Written to{' '}
-        <code className="theme-text">config/model_config.json</code> and read by FastAPI —
-        never hardcoded.
+        <code className="theme-text">config/model_config.json</code> and read by FastAPI.
+        Never hardcoded.
       </p>
 
       {/* ── what is resolved right now ── */}
-      <div className="p-4 rounded-xl border theme-border bg-black/10">
+      <div className="p-4 rounded-xl border theme-border theme-surface">
         <div className="flex items-center gap-2 mb-2">
           {active.resolved ? (
-            <Check size={15} className="text-emerald-400 shrink-0" />
+            <Check size={15} className="status-ok shrink-0" />
           ) : (
-            <AlertTriangle size={15} className="text-amber-400 shrink-0" />
+            <AlertTriangle size={15} className="status-warn shrink-0" />
           )}
           <span className="text-sm font-medium">
             {active.tag ?? 'Nothing to run'}
@@ -124,13 +124,13 @@ export function DeploymentPanel({ reloadKey = 0 }: { reloadKey?: number }) {
         </div>
         <p className="text-xs theme-text-muted">{active.reason}</p>
         {active.row?.measured?.tokens_per_sec ? (
-          <p className="text-xs theme-text-muted opacity-75 mt-1.5">
+          <p className="text-xs theme-text-muted mt-1.5">
             Measured at {active.row.measured.time_to_first_token_ms}ms to first token,{' '}
             {active.row.measured.tokens_per_sec} tok/s.
           </p>
         ) : active.row ? (
-          <p className="text-xs theme-text-muted opacity-75 mt-1.5">
-            Not benchmarked — the figures behind this choice are still estimates.
+          <p className="text-xs theme-text-muted mt-1.5">
+            Not benchmarked yet, so the figures behind this choice are still estimates.
           </p>
         ) : null}
       </div>
@@ -151,30 +151,30 @@ export function DeploymentPanel({ reloadKey = 0 }: { reloadKey?: number }) {
               }
               className={`text-left p-4 rounded-xl border transition-colors disabled:opacity-40 ${
                 selected
-                  ? 'theme-border-primary bg-black/20'
-                  : 'theme-border bg-black/5 hover:bg-black/15'
+                  ? 'theme-accent-border theme-surface-strong'
+                  : 'theme-border theme-surface hover:bg-[color-mix(in_srgb,var(--text-main)_7%,transparent)]'
               }`}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <mode.icon size={14} className={selected ? 'theme-primary' : 'theme-text-muted'} />
+                <mode.icon size={14} className={selected ? 'theme-accent' : 'theme-text-muted'} />
                 <span className="text-sm font-medium">{mode.title}</span>
                 {busy && <Loader2 size={12} className="animate-spin ml-auto" />}
-                {selected && !busy && <Check size={13} className="theme-primary ml-auto" />}
+                {selected && !busy && <Check size={13} className="theme-accent ml-auto" />}
               </div>
-              <p className="text-xs theme-text-muted opacity-75">{mode.body}</p>
+              <p className="text-xs theme-text-muted">{mode.body}</p>
             </button>
           )
         })}
       </div>
 
-      {error && <p className="text-xs text-amber-400/90">{error}</p>}
+      {error && <p className="text-xs status-warn">{error}</p>}
 
-      <div className="flex items-start gap-2 text-[11px] theme-text-muted opacity-70">
+      <div className="flex items-start gap-2 text-[11px] theme-text-muted">
         <FileJson size={12} className="shrink-0 mt-0.5" />
         <span>
           {active.config.updated_at
             ? `Last written ${active.config.updated_at} by ${active.config.updated_by ?? 'unknown'}.`
-            : 'Never written — running on the default policy.'}
+            : 'Never written, so it is running on the default policy.'}
           {' '}Considered {active.candidates_considered} installed model
           {active.candidates_considered === 1 ? '' : 's'}.
         </span>

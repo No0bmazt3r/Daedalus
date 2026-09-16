@@ -121,7 +121,7 @@ function cadence(hw: HardwareProfile): string {
     parts.push(
       sentence(
         `${list(byTier.slow)} ${agree(byTier.slow, 'refreshes', 'refresh')} every ${slow} min` +
-          ' — slower to probe, and rarely changing.',
+          ', which are slower to probe and rarely change.',
       ),
     )
   }
@@ -141,10 +141,10 @@ function cadence(hw: HardwareProfile): string {
 function Meter({ percent, tone = 'primary' }: { percent: number; tone?: 'primary' | 'warn' }) {
   const clamped = Math.max(0, Math.min(100, percent))
   return (
-    <div className="h-1.5 rounded-full bg-black/30 overflow-hidden mt-2">
+    <div className="h-1.5 rounded-full theme-track overflow-hidden mt-2">
       <div
         className={`h-full rounded-full transition-[width] duration-500 ${
-          tone === 'warn' ? 'bg-amber-400/80' : 'theme-bg-primary'
+          tone === 'warn' ? 'status-warn-fill' : 'theme-bg-primary'
         }`}
         style={{ width: `${clamped}%` }}
       />
@@ -155,7 +155,7 @@ function Meter({ percent, tone = 'primary' }: { percent: number; tone?: 'primary
 function Stat({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70 truncate">
+      <div className="text-[10px] uppercase tracking-wide theme-text-muted truncate">
         {label}
       </div>
       <div className="text-sm font-mono truncate" title={title ?? value}>
@@ -268,7 +268,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
     }
   }, [poll])
 
-  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'bg-black/10'}`
+  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
   // Only when there is nothing to show. Once the panel is populated a failed
   // poll must not blank it — the backend restarting mid-session is ordinary,
@@ -277,8 +277,8 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   // freshness line instead, next to the age it explains.
   if (error && !hw) {
     return (
-      <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-sm">
-        <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
+        <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
         <div>
           <div className="font-medium">Couldn't reach the backend</div>
           <div className="theme-text-muted text-xs mt-1">{error}</div>
@@ -295,9 +295,9 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   const shownAge = ageSeconds ?? meta.age_seconds
   const live = Math.round(meta.live_interval_seconds)
   const freshness = error
-    ? `Couldn't refresh (${error}) — showing the last reading, from ${ago(shownAge)}`
+    ? `Couldn't refresh (${error}). Showing the last reading, from ${ago(shownAge)}`
     : meta.stale
-      ? `Cached — last read ${ago(shownAge)}`
+      ? `Cached. Last read ${ago(shownAge)}`
       : meta.background
         ? `Updated ${ago(shownAge)} · refreshing every ${live}s`
         : `Updated ${ago(shownAge)}`
@@ -317,18 +317,18 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         <div className="min-w-0">
           <p className="text-sm theme-text-muted">
             Detected on this machine. These are the numbers the model-fit estimate
-            works from — <span className="theme-text">measured, not assumed</span>.
+            works from: <span className="theme-text">measured, not assumed</span>.
           </p>
           {/* These numbers are cached, so the panel says how old they are.
               Quietly serving a stale figure as if it were live is the one
               failure this design could introduce, so it is on screen. */}
           <p
-            className="text-xs theme-text-muted opacity-70 mt-1.5 flex items-center gap-1.5"
+            className="text-xs theme-text-muted mt-1.5 flex items-center gap-1.5"
             title={tierExplainer}
           >
             <span
               className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
-                error || meta.stale ? 'bg-amber-400/80' : 'theme-bg-primary'
+                error || meta.stale ? 'status-warn-fill' : 'theme-bg-primary'
               }`}
             />
             <span className="truncate">{freshness}</span>
@@ -337,8 +337,8 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         <button
           onClick={() => void redetect()}
           disabled={busy}
-          title="Probe everything again now — including the slow checks the schedule skips."
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-50"
+          title="Probe everything again now, including the slow checks the schedule normally skips."
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
         >
           <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
           {busy ? 'Detecting…' : 'Re-detect'}
@@ -348,7 +348,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       {/* ── CPU ── */}
       <div className={card}>
         <div className="flex items-center gap-2 mb-3">
-          <Cpu size={16} className="theme-primary" />
+          <Cpu size={16} className="theme-accent" />
           <span className="font-medium">Processor</span>
         </div>
         <div className="text-sm mb-3 break-words">{hw.cpu.model ?? 'Unknown CPU'}</div>
@@ -366,7 +366,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       {/* ── Memory ── */}
       <div className={card}>
         <div className="flex items-center gap-2 mb-3">
-          <MemoryStick size={16} className="theme-primary" />
+          <MemoryStick size={16} className="theme-accent" />
           <span className="font-medium">Memory</span>
           <span className="text-xs theme-text-muted ml-auto tabular-nums">
             {bytes(mem.available_bytes)} free of {bytes(mem.total_bytes)}
@@ -380,23 +380,23 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         </div>
         {/* Available RAM, not total, is what decides whether a model loads —
             so it is the number the fit estimate must be read against. */}
-        <p className="text-xs theme-text-muted opacity-75 mt-3">
+        <p className="text-xs theme-text-muted mt-3">
           Model fit is judged against <span className="theme-text">available</span> memory,
-          not total — the rest is already spoken for.
+          not total. The rest is already spoken for.
         </p>
         {/* A dash here used to be unexplained. The probe now says which reader
             answered and what stopped the better one, because "no RAM figure"
             and "psutil did not install on this distro" need different fixes. */}
         {mem.total_bytes === null ? (
-          <p className="text-xs text-amber-400/90 mt-2 break-words">
+          <p className="text-xs status-warn mt-2 break-words">
             RAM could not be read. {mem.error ?? 'No probe answered.'}
           </p>
         ) : (
           mem.source &&
           mem.source !== 'psutil' && (
-            <p className="text-xs theme-text-muted opacity-75 mt-2 break-words">
+            <p className="text-xs theme-text-muted mt-2 break-words">
               Read from <code className="theme-text">{mem.source}</code>
-              {mem.error ? ` — ${mem.error}` : ''}
+              {mem.error ? `: ${mem.error}` : ''}
             </p>
           )
         )}
@@ -405,7 +405,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       {/* ── GPU ── */}
       <div className={card}>
         <div className="flex items-center gap-2 mb-3">
-          <MonitorCog size={16} className="theme-primary" />
+          <MonitorCog size={16} className="theme-accent" />
           <span className="font-medium">Graphics</span>
           {hw.gpu.source && (
             <span className="text-[10px] px-1.5 py-0.5 rounded border theme-border theme-text-muted uppercase tracking-wide">
@@ -417,11 +417,11 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         {hw.gpu.devices.length === 0 ? (
           <div className="text-sm theme-text-muted">
             No GPU detected.
-            <span className="opacity-75">
+            <span>
               {' '}
               {hw.gpu.error
                 ? hw.gpu.error
-                : 'Not an error — the production SLM tier is chosen to run on CPU.'}
+                : 'Not an error. The production SLM tier is chosen to run on CPU.'}
             </span>
           </div>
         ) : (
@@ -450,7 +450,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       {/* ── Disk ── */}
       <div className={card}>
         <div className="flex items-center gap-2 mb-3">
-          <HardDrive size={16} className="theme-primary" />
+          <HardDrive size={16} className="theme-accent" />
           <span className="font-medium">Disk</span>
           <span className="text-xs theme-text-muted ml-auto tabular-nums">
             {bytes(disk.free_bytes)} free of {bytes(disk.total_bytes)}
@@ -459,7 +459,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         <Meter percent={diskUsedPct} tone={diskUsedPct > 90 ? 'warn' : 'primary'} />
         {/* Reported where models land, not `/` — on a small root with a large
             home, the root figure answers the wrong question. */}
-        <code className="text-[10px] theme-text-muted opacity-60 break-all block mt-3">
+        <code className="text-[10px] theme-text-muted break-all block mt-3">
           {disk.path}
         </code>
       </div>
@@ -467,7 +467,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       {/* ── Runtime ── */}
       <div className={card}>
         <div className="flex items-center gap-2 mb-3">
-          <Server size={16} className="theme-primary" />
+          <Server size={16} className="theme-accent" />
           <span className="font-medium">Runtime</span>
         </div>
         <div className="grid grid-cols-2 @sm:grid-cols-4 gap-x-4 gap-y-2">
@@ -485,10 +485,10 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
           <Stat label="Detector" value={hw.detector} />
         </div>
         {hw.ollama.resolved_url && hw.ollama.resolved_url !== hw.ollama.base_url && (
-          <p className="text-xs theme-text-muted opacity-75 mt-3">
+          <p className="text-xs theme-text-muted mt-3">
             Answered on <code className="theme-text">{hw.ollama.resolved_url}</code>, not the
-            configured <code>{hw.ollama.base_url}</code> — normal in dev mode, where the backend
-            runs on the host rather than in the container.
+            configured <code>{hw.ollama.base_url}</code>. That is normal in dev mode, where the
+            backend runs on the host rather than in the container.
           </p>
         )}
       </div>

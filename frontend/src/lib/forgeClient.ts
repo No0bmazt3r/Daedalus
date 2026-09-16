@@ -11,8 +11,17 @@ import { request } from './http';
 
 // ── the model table (steps 2 & 3) ────────────────────────────────────────────
 
-/** `declared` is arithmetic; `measured` came off the machine. Never conflate them. */
-export type Provenance = 'declared' | 'measured' | 'assumed' | 'unknown';
+/**
+ * Where a number came from, in increasing order of authority:
+ *
+ *   declared  — arithmetic over a parameter count. Nothing has been run
+ *   registry  — the real published size, from an Ollama manifest, before pulling
+ *   measured  — real bytes on disk and real architecture, after pulling
+ *
+ * Never conflated: MODULES.md §2.2 turns on an estimate and a measurement being
+ * visibly different things.
+ */
+export type Provenance = 'declared' | 'registry' | 'measured' | 'assumed' | 'unknown';
 
 export type FitVerdict = 'safe' | 'marginal' | 'will_not_fit' | 'cloud' | 'unknown';
 
@@ -74,8 +83,15 @@ export interface ModelRow {
   /** False when nobody has confirmed this tag exists in Ollama's registry. */
   tag_verified: boolean;
   tier: 'slm' | 'llm' | 'discovered';
-  /** `catalogue` was declared up front; `discovered` was found installed. */
-  source: 'catalogue' | 'discovered';
+  /** Rough capability, for filtering. */
+  kind: 'general' | 'coding' | 'reasoning' | 'vision';
+  /** One of PROJECT.md §8.1's six report candidates, as opposed to the wider library. */
+  shortlist: boolean;
+  source: ModelSource;
+  /** Registry says the tag is real. `null` means the registry was unreachable, not that it is wrong. */
+  tag_exists: boolean | null;
+  /** Real download size from the Ollama manifest — known before pulling. */
+  download_bytes: number | null;
   params_b: number | null;
   context_length: number | null;
   context_source: Provenance;
@@ -109,7 +125,19 @@ export interface ModelRow {
     measured_tokens_per_sec: number;
     ratio: number;
   } | null;
+  /** Only on Hugging Face rows. */
+  hf?: {
+    repo: string;
+    url: string;
+    architecture: string | null;
+    downloads: number | null;
+    likes: number | null;
+    gated: boolean;
+  };
 }
+
+/** Which list a row came from. Drives the filter bar. */
+export type ModelSource = 'shortlist' | 'library' | 'installed' | 'huggingface' | 'cloud' | 'custom';
 
 export interface MemoryBudget {
   primary: 'vram' | 'ram';
@@ -130,10 +158,40 @@ export interface ModelTable {
   weights: Record<string, number>;
 }
 
+export interface TableOptions {
+  contextTokens?: number;
+}
+
 /** The ranked table. Answers with Ollama stopped — the estimate half needs no daemon. */
-export function modelTable(contextTokens?: number): Promise<ModelTable> {
-  const query = contextTokens ? `?context_tokens=${contextTokens}` : '';
-  return request<ModelTable>(`/api/forge/models${query}`);
+export function modelTable(opts: TableOptions = {}): Promise<ModelTable> {
+  const params = new URLSearchParams();
+  if (opts.contextTokens) params.set('context_tokens', String(opts.contextTokens));
+  const query = params.toString();
+  return request<ModelTable>(`/api/forge/models${query ? `?${query}` : ''}`);
+}
+
+export interface HuggingFaceResult {
+  rows: ModelRow[];
+  /** Non-null when the search could not run — offline is a normal state here. */
+  error: string | null;
+  cached: boolean;
+}
+
+/**
+ * Search Hugging Face for GGUF models, scored against this machine.
+ *
+ * Its own call rather than part of the table because it needs the internet and
+ * can fail, and the main table must render without either. Results are pullable
+ * — Ollama takes `hf.co/{repo}:{quant}` directly.
+ */
+export function searchHuggingFace(
+  query: string,
+  opts: TableOptions & { limit?: number } = {},
+): Promise<HuggingFaceResult> {
+  const params = new URLSearchParams({ q: query, limit: String(opts.limit ?? 24) });
+  if (opts.contextTokens) params.set('context_tokens', String(opts.contextTokens));
+  // Hugging Face plus a cold cache can take a few seconds.
+  return request<HuggingFaceResult>(`/api/forge/huggingface?${params}`, { timeoutMs: 30000 });
 }
 
 // ── manage (step 4) ──────────────────────────────────────────────────────────
@@ -251,6 +309,26 @@ export function runBenchmark(tag: string): Promise<BenchmarkResult> {
 }
 
 // ── commit (step 6) ──────────────────────────────────────────────────────────
+
+export interface InspectResult {
+  row: ModelRow | null;
+  /** Names the fix when a tag cannot be resolved — "no manifest for …", and so on. */
+  error: string | null;
+}
+
+/**
+ * Score one arbitrary tag: an Ollama library tag, a namespaced repo, or
+ * `hf.co/{repo}:{quant}`. For when you already know the model and only want the
+ * verdict.
+ */
+export function inspectTag(
+  tag: string,
+  opts: TableOptions = {},
+): Promise<InspectResult> {
+  const params = new URLSearchParams({ tag });
+  if (opts.contextTokens) params.set('context_tokens', String(opts.contextTokens));
+  return request<InspectResult>(`/api/forge/inspect?${params}`, { timeoutMs: 30000 });
+}
 
 export interface ActiveModel {
   mode: 'auto' | 'pinned';

@@ -38,13 +38,14 @@ report, and it closes as you work through the six steps.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from typing import Any
 
 from ..db import audit_store, sqlite_util
 from ..db.paths import AUDIT_DB
-from . import hardware, model_fit, ollama_client
+from . import hardware, hf_discovery, model_fit, ollama_client, ollama_registry
 
 # /api/show costs a round trip per model. Keyed by digest, so a re-pulled or
 # changed model invalidates itself and nothing else does — the architecture of
@@ -139,6 +140,9 @@ def _row(
     tag: str,
     tier: str,
     source: str,
+    kind: str = "general",
+    shortlist: bool = False,
+    registry: dict[str, Any] | None = None,
     params_b: float,
     quant: str,
     context_length: int | None,
@@ -155,16 +159,24 @@ def _row(
 ) -> dict[str, Any]:
     arch: dict[str, Any] | None = None
     weights_bytes: int | None = None
+    weights_hint: str | None = None
     measured_context: int | None = None
 
+    # Weight size, best source first. All three beat `params × bytes_per_param`,
+    # and the row reports which one answered so an estimate is never mistaken
+    # for a measurement.
     if installed and not installed.get("remote"):
-        # Installed: prefer everything the machine can tell us over everything
-        # the catalogue guessed.
         weights_bytes = installed.get("size_bytes")
+        weights_hint = "measured"
         detail = _show_cached(installed["name"], installed.get("digest"))
         if detail:
             arch = detail.get("arch")
             measured_context = detail.get("context_length")
+    elif registry and registry.get("weights_bytes"):
+        # Not downloaded, but the registry publishes the real size — so even an
+        # un-pulled row estimates from a byte count rather than arithmetic.
+        weights_bytes = registry["weights_bytes"]
+        weights_hint = "registry"
 
     scored = model_fit.score_row(
         params_b=params_b,
@@ -175,6 +187,7 @@ def _row(
         budget=budget,
         arch=arch,
         weights_bytes=weights_bytes,
+        weights_source_hint=weights_hint,
         context_tokens=context_tokens,
     )
 
@@ -197,7 +210,13 @@ def _row(
         "tag": tag,
         "tag_verified": tag_verified,
         "tier": tier,
+        "kind": kind,
+        "shortlist": shortlist,
         "source": source,
+        # None when the registry could not be reached — distinct from False,
+        # which means the tag genuinely is not published.
+        "tag_exists": (registry or {}).get("exists"),
+        "download_bytes": (registry or {}).get("weights_bytes"),
         "params_b": params_b,
         "context_length": measured_context or context_length,
         "context_source": "measured" if measured_context else "declared",
@@ -234,9 +253,24 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     claimed: set[str] = set()
 
+    catalogue = model_fit.catalogue()
+
+    # One parallel pass over the registry for every tag in the catalogue, before
+    # scoring any of them. Serially this would be one round trip per row and the
+    # table has fifty; batched and cached it is a second on the first call of a
+    # process and free thereafter. It answers two things at once: whether the
+    # tag is real, and how large the download actually is.
+    all_tags = [
+        variant.get("tag") or model.get("default_tag")
+        for model in catalogue
+        for variant in (model.get("quantizations") or [])
+    ]
+    manifests = ollama_registry.verify_many([t for t in all_tags if t])
+
     # ── declared candidates ──
-    for model in model_fit.catalogue():
+    for model in catalogue:
         quality = model.get("quality") or {}
+        shortlist = bool(model.get("shortlist"))
         for variant in model.get("quantizations") or []:
             tag = variant.get("tag") or model.get("default_tag")
             if not tag:
@@ -249,7 +283,13 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
                     label=model.get("label") or model["id"],
                     tag=tag,
                     tier=model.get("tier") or "slm",
-                    source="catalogue",
+                    kind=model.get("kind") or "general",
+                    shortlist=shortlist,
+                    registry=manifests.get(tag),
+                    # Two sets, distinguished: `shortlist` is what the report
+                    # argues about, `library` is everything else this machine
+                    # could run. The filter bar is built on this.
+                    source="shortlist" if shortlist else "library",
                     params_b=float(model.get("params_b") or 0),
                     quant=variant["quant"],
                     context_length=model.get("context_length"),
@@ -284,7 +324,11 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
                 "tag": tag,
                 "tag_verified": True,
                 "tier": "discovered",
-                "source": "discovered",
+                "kind": "general",
+                "shortlist": False,
+                "tag_exists": None,
+                "download_bytes": None,
+                "source": "cloud" if model.get("remote") else "installed",
                 "params_b": None,
                 "context_length": None,
                 "context_source": "unknown",
@@ -294,7 +338,7 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
                     # weights are not on this disk, so scoring them against this
                     # machine's memory would be answering a question nobody
                     # asked. Listed, labelled, and left unranked.
-                    "Hosted by Ollama's cloud, not on this machine — benchmark reference only, never deployed."
+                    "Hosted by Ollama's cloud, not on this machine. Benchmark reference only, never deployed."
                     if model.get("remote")
                     else "Ollama reports no parameter count for this model, so it cannot be scored."
                 ),
@@ -327,8 +371,10 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
             model_id=tag,
             label=tag,
             tag=tag,
-            tier="discovered",
-            source="discovered",
+            tier="slm" if params_b <= 4.0 else "llm",
+            source="installed",
+            kind="general",
+            shortlist=False,
             params_b=params_b,
             quant=quant_raw or model_fit.DEFAULT_QUANT,
             context_length=None,
@@ -406,3 +452,253 @@ def invalidate_cache() -> None:
     """Forget cached `/api/show` results — after a pull or a delete."""
     with _show_lock:
         _show_cache.clear()
+
+
+# The widths people actually run, best-quality first. A repository shipping
+# twenty variants gets cut to these, in this order, so one prolific publisher
+# cannot bury every other result — and so the list leads with a usable quant
+# rather than with IQ1_S purely because it is the smallest.
+_QUANT_LADDER = ("Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS", "Q3_K_M", "Q2_K")
+
+
+def _pick_quants(available: list[str] | None, limit: int = 4) -> list[str]:
+    """Up to `limit` quantizations worth offering, in descending quality."""
+    if not available:
+        return [model_fit.DEFAULT_QUANT]
+    present = {q.upper() for q in available}
+    picked = [q for q in _QUANT_LADDER if q in present][:limit]
+    if picked:
+        return picked
+    # Nothing from the ladder — an unusual repository. Fall back to the widest
+    # few it does ship, which are the least degraded.
+    return sorted(
+        available,
+        key=lambda q: -model_fit.quant_spec(model_fit.normalise_quant(q))["bytes_per_param"],
+    )[:limit]
+
+
+def huggingface_rows(
+    query: str = "",
+    *,
+    limit: int = 24,
+    context_tokens: int | None = None,
+) -> dict[str, Any]:
+    """GGUF repositories from Hugging Face, scored against this machine.
+
+    Kept out of `models()` and behind its own call for two reasons. It is a
+    network search that can be slow or fail, and the main table must render on
+    an offline machine; and it is a *query*, answering "what else is out there"
+    rather than "what am I choosing between", which is a different question and
+    belongs behind a search box.
+
+    Each repository contributes one row per quantization it ships, because that
+    is the unit you can actually pull — `hf.co/{repo}:{quant}` — and the whole
+    point is that Q4_K_M of a 14B model and Q8_0 of the same model are different
+    answers to "will this run".
+    """
+    context_tokens = context_tokens or model_fit.DEFAULT_WORKING_CONTEXT
+    found = hf_discovery.search(query, limit=limit)
+    if found["error"]:
+        return {"rows": [], "error": found["error"], "cached": found["cached"]}
+
+    hardware_profile = hardware.profile()
+    budget = model_fit.memory_budget(hardware_profile)
+    installed, _ = _installed_index()
+    benchmarks = _last_benchmarks()
+
+    rows: list[dict[str, Any]] = []
+    for repo in found["models"]:
+        quants = _pick_quants(repo["quantizations"])
+        for quant in quants:
+            tag = hf_discovery.ollama_tag(repo["repo"], quant)
+            row = _row(
+                row_id=f"hf@{repo['repo']}@{quant}",
+                model_id=repo["repo"],
+                label=repo["repo"].split("/")[-1],
+                tag=tag,
+                tier="slm" if repo["params_b"] <= 4.0 else "llm",
+                source="huggingface",
+                kind="general",
+                shortlist=False,
+                registry=None,
+                params_b=repo["params_b"],
+                quant=quant,
+                context_length=repo.get("context_length"),
+                # Nobody has scored these. Same treatment as a discovered
+                # model: neutral on quality, judged on fit and speed.
+                mmlu=None,
+                quality_meta=None,
+                hardware_profile=hardware_profile,
+                budget=budget,
+                installed=installed.get(tag),
+                benchmarks=benchmarks,
+                context_tokens=context_tokens,
+                vendor=repo.get("author"),
+                notes=(
+                    f"{repo['downloads']:,} downloads on Hugging Face"
+                    if repo.get("downloads")
+                    else None
+                ),
+            )
+            row["quantization_known"] = model_fit.quant_known(quant)
+            row["hf"] = {
+                "repo": repo["repo"],
+                "url": repo["url"],
+                "architecture": repo.get("architecture"),
+                "downloads": repo.get("downloads"),
+                "likes": repo.get("likes"),
+                "gated": repo.get("gated"),
+            }
+            rows.append(row)
+
+    rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0)))
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+
+    return {
+        "rows": rows,
+        "error": None,
+        "cached": found["cached"],
+        "budget": budget,
+        "context_tokens": context_tokens,
+    }
+
+
+def warm_registry() -> None:
+    """Pre-fetch every catalogue tag's manifest. Called from the lifespan.
+
+    Without it the first `GET /api/forge/models` of a process pays ~11s of
+    registry round trips before it can answer — the cost is per-tag and the
+    catalogue has fifty. Off the request path it is invisible, and afterwards
+    the table builds in about 25ms.
+    """
+    try:
+        tags = [
+            variant.get("tag") or model.get("default_tag")
+            for model in model_fit.catalogue()
+            for variant in (model.get("quantizations") or [])
+        ]
+        ollama_registry.verify_many([t for t in tags if t])
+    except Exception:  # pragma: no cover - defensive
+        # Offline is normal. The table falls back to declared estimates.
+        pass
+
+
+# Quantization suffix on an Ollama tag: `qwen3:8b-q4_K_M`, `phi3:mini-fp16`.
+_TAG_QUANT = re.compile(r"[-:]((?:I?Q\d[\w_]*)|f?p?16|bf16|f32|mxfp4)$", re.IGNORECASE)
+
+
+def inspect_tag(tag: str, *, context_tokens: int | None = None) -> dict[str, Any]:
+    """Score one arbitrary tag the catalogue has never heard of.
+
+    The "I know what I want, just tell me if it fits" path. Takes anything
+    Ollama would take — a library tag (`qwen3:30b`), a namespaced repo, or a
+    Hugging Face pull (`hf.co/user/repo:Q4_K_M`) — and puts it through the same
+    scorer as everything else.
+
+    Parameter count is derived from the published weight size rather than
+    declared, because the registry reports bytes and not parameters. That
+    inversion is fine here: the memory estimate wants bytes and already has the
+    real ones, so the derived parameter count is only used for the CPU speed
+    fallback, where being a few percent out is far below the noise floor of the
+    estimate itself.
+    """
+    tag = (tag or "").strip()
+    if not tag:
+        return {"row": None, "error": "no tag given"}
+
+    context_tokens = context_tokens or model_fit.DEFAULT_WORKING_CONTEXT
+    hardware_profile = hardware.profile()
+    budget = model_fit.memory_budget(hardware_profile)
+    installed, _ = _installed_index()
+    benchmarks = _last_benchmarks()
+
+    match = _TAG_QUANT.search(tag)
+    quant = model_fit.normalise_quant(match.group(1) if match else None)
+
+    local = installed.get(tag)
+    hf_repo = hf_discovery.parse_hf_tag(tag)
+    registry = None
+    hf_row: dict[str, Any] | None = None
+
+    if not local and hf_repo:
+        # A Hugging Face pull. Ollama's registry knows nothing about it — the
+        # size and parameter count have to come from Hugging Face's own API.
+        repo, tag_quant = hf_repo
+        if tag_quant:
+            quant = model_fit.normalise_quant(tag_quant)
+        found = hf_discovery.detail(repo)
+        if found["error"]:
+            return {"row": None, "error": found["error"]}
+        hf_row = found["model"]
+    elif not local:
+        registry = ollama_registry.manifest(tag)
+
+    if not local and registry and registry.get("exists") is False:
+        return {
+            "row": None,
+            # Ollama's own vocabulary, so the message matches what a failed pull
+            # would say rather than inventing a second way to describe it.
+            "error": f"no manifest for '{tag}'. Check the tag against the model's page.",
+        }
+
+    weights = (local or {}).get("size_bytes") or (registry or {}).get("weights_bytes")
+    if local and local.get("parameter_size"):
+        params_b = model_fit.parse_params_b(local["parameter_size"]) or 0.0
+    elif hf_row:
+        # Hugging Face reports the parameter count directly, so this is the one
+        # path that does not have to work backwards from a byte count.
+        params_b = hf_row["params_b"]
+        weights = None
+    elif weights:
+        params_b = round(weights / 1e9 / model_fit.quant_spec(quant)["bytes_per_param"], 2)
+    else:
+        return {
+            "row": None,
+            "error": (
+                f"could not size '{tag}'. The registry did not answer, so there is nothing "
+                "to estimate from. Check your connection, or pull it and it gets measured."
+            ),
+        }
+
+    row = _row(
+        row_id=f"custom@{tag}",
+        model_id=tag,
+        label=tag.split("/")[-1],
+        tag=tag,
+        tier="slm" if params_b <= 4.0 else "llm",
+        source="custom",
+        kind="general",
+        shortlist=False,
+        registry=registry,
+        params_b=params_b,
+        quant=quant,
+        context_length=(hf_row or {}).get("context_length"),
+        mmlu=None,
+        quality_meta=None,
+        hardware_profile=hardware_profile,
+        budget=budget,
+        installed=local,
+        benchmarks=benchmarks,
+        context_tokens=context_tokens,
+        vendor=(hf_row or {}).get("author"),
+        notes=(
+            None
+            if local
+            else "Parameter count from Hugging Face."
+            if hf_row
+            else "Parameter count derived from the published weight size, not declared."
+        ),
+    )
+    if hf_row:
+        row["hf"] = {
+            "repo": hf_row["repo"],
+            "url": hf_row["url"],
+            "architecture": hf_row.get("architecture"),
+            "downloads": hf_row.get("downloads"),
+            "likes": hf_row.get("likes"),
+            "gated": hf_row.get("gated"),
+        }
+    row["rank"] = 1
+    row["quantization_known"] = model_fit.quant_known(match.group(1) if match else None)
+    return {"row": row, "error": None, "budget": budget}

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ChevronDown, Download, FlaskConical, Loader2, RefreshCw, Trash2,
-  CircleCheck, CircleAlert, CircleSlash, Cloud, HelpCircle, X,
+  CircleCheck, CircleAlert, CircleSlash, Cloud, HelpCircle, X, Search, Cpu, ExternalLink,
 } from 'lucide-react'
 import {
-  modelTable, pullModel, deleteModel, runBenchmark,
-  type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult,
+  modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark, setActiveModel,
+  type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type ModelSource,
 } from '../../lib/forgeClient'
 
 /**
@@ -14,24 +14,29 @@ import {
  * ## The one rule this screen exists to keep
  *
  * `MODULES.md` §2.2: *an estimate and a measurement must never look alike.* The
- * whole value of this module to the report is the gap between the two, and how
- * it closes as you work through it — so every row carries both columns, they
- * are styled differently, and "not benchmarked" is a first-class state rendered
- * in words rather than left as a blank cell.
+ * value of this module to the report is the gap between them and how it closes,
+ * so every row carries both, styled apart, and "not benchmarked" is a state
+ * written in words rather than an empty cell.
  *
- * On the development machine that gap is currently 0.38×: llama3.2 estimated at
- * 29 tok/s, measured at 11. That is not a bug in the estimator, it is the
- * finding — a 4GB card has to hold the KV cache and compute buffers too, so a
- * model that fits on paper part-offloads in practice. The table shows the ratio
- * rather than hiding it.
+ * ## Four lists, one scorer
  *
- * ## Ranking
+ * | source | what it is |
+ * |---|---|
+ * | Shortlist | the six candidates from §8.1 that the report argues about |
+ * | Library | the wider verified Ollama library — what else this machine could run |
+ * | Installed | what is on this disk, including models nobody declared |
+ * | Hugging Face | a live GGUF search, pullable via `hf.co/{repo}:{quant}` |
  *
- * Rows arrive ranked by the backend and are rendered in that order. The
- * ordering is not editorial: it is the weighted composite from
- * `services/model_fit.py`, whose weights come from `PROJECT.md` §9.2's own
- * targets. Expanding a row shows every input that produced it, because a
- * ranking nobody can check is a ranking nobody should act on.
+ * All four are scored by the same code against the same hardware, so a row from
+ * one can be compared with a row from another. Only the provenance differs, and
+ * every row says which it is.
+ *
+ * ## Colours
+ *
+ * Verdicts use the `.status-*` classes, not Tailwind literals. A theme here is
+ * an arbitrary accent over an arbitrary background — `text-amber-400` is fine on
+ * a dark surface and nearly invisible on a cream one, which is what happened to
+ * the first version of this screen. See `deriveStatusColors` in `lib/themes.ts`.
  */
 
 function bytes(n: number | null | undefined, digits = 1): string {
@@ -48,53 +53,231 @@ function bytes(n: number | null | undefined, digits = 1): string {
 }
 
 const VERDICT = {
-  safe: { icon: CircleCheck, tone: 'text-emerald-400', label: 'safe' },
-  marginal: { icon: CircleAlert, tone: 'text-amber-400', label: 'marginal' },
-  will_not_fit: { icon: CircleSlash, tone: 'text-red-400/80', label: 'will not fit' },
+  safe: { icon: CircleCheck, tone: 'status-ok', label: 'safe' },
+  marginal: { icon: CircleAlert, tone: 'status-warn', label: 'marginal' },
+  will_not_fit: { icon: CircleSlash, tone: 'status-bad', label: 'will not fit' },
   cloud: { icon: Cloud, tone: 'theme-text-muted', label: 'cloud' },
   unknown: { icon: HelpCircle, tone: 'theme-text-muted', label: 'unknown' },
 } as const
 
 const PLACEMENT_HELP: Record<string, string> = {
-  gpu: 'Weights fit in VRAM — the fast path.',
-  offload: 'Too large for VRAM; Ollama splits layers between GPU and system RAM. It runs, slower.',
-  cpu: 'No usable GPU — runs on the CPU from system RAM.',
+  gpu: 'Weights fit in VRAM. This is the fast path.',
+  offload: 'Too large for VRAM, so Ollama splits layers between GPU and system RAM. It runs, just slower.',
+  cpu: 'Runs on the CPU from system RAM.',
   none: 'Fits neither VRAM nor system RAM.',
   cloud: "Hosted by Ollama's cloud. Benchmark reference only, never deployed (Rule 1).",
 }
 
+const PROVENANCE_HELP: Record<string, string> = {
+  declared: 'Arithmetic over a parameter count. Nothing has been run yet.',
+  registry: "Real published size from the model's Ollama manifest, known before downloading.",
+  measured: 'Real bytes on this disk, read from Ollama.',
+  assumed: 'A documented default, because nothing better is available yet.',
+}
+
+const SOURCES: { id: ModelSource | 'all'; label: string; hint: string }[] = [
+  { id: 'shortlist', label: 'Shortlist', hint: "The six candidates from PROJECT.md §8.1, which are what the report argues about" },
+  { id: 'library', label: 'Library', hint: 'The wider Ollama library, every tag verified against the registry' },
+  { id: 'installed', label: 'Installed', hint: 'On this disk right now' },
+  { id: 'huggingface', label: 'Hugging Face', hint: 'Live GGUF search. Pull any of these with hf.co/{repo}:{quant}' },
+  { id: 'custom', label: 'Custom', hint: 'Score a tag you already know: an Ollama tag, or hf.co/{repo}:{quant}' },
+  { id: 'all', label: 'All', hint: 'Everything except the live search' },
+]
+
 function Pill({ children, title, tone = 'muted' }: {
-  children: React.ReactNode; title?: string; tone?: 'muted' | 'warn'
+  children: React.ReactNode; title?: string; tone?: 'muted' | 'warn' | 'ok'
 }) {
+  const toneClass =
+    tone === 'warn' ? 'status-warn status-warn-border'
+      : tone === 'ok' ? 'status-ok status-ok-border'
+        : 'theme-border theme-text-muted'
   return (
     <span
       title={title}
-      className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 ${
-        tone === 'warn'
-          ? 'border-amber-400/40 text-amber-400/90'
-          : 'theme-border theme-text-muted'
-      }`}
+      className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 ${toneClass}`}
     >
       {children}
     </span>
   )
 }
 
-/** A 0–100 dimension as a labelled bar, so a composite score can be taken apart. */
+/** One labelled number in the detail panel. */
+function Fact({ label, value, hint, mono = true }: {
+  label: string; value: React.ReactNode; hint?: string; mono?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-1">
+      <span className="text-[11px] theme-text-muted shrink-0" title={hint}>
+        {label}
+      </span>
+      <span className={`text-[11px] ${mono ? 'font-mono tabular-nums' : ''} text-right`}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+/** A 0–100 dimension with its weight, so a composite can be taken apart. */
 function Dimension({ label, value, weight }: { label: string; value: number; weight: number }) {
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 mb-1">
-        <span className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70">
-          {label}
-        </span>
-        <span className="text-[10px] font-mono theme-text-muted tabular-nums">
-          {value.toFixed(0)} <span className="opacity-50">× {weight.toFixed(2)}</span>
-        </span>
-      </div>
-      <div className="h-1 rounded-full bg-black/30 overflow-hidden">
+    <div className="flex items-center gap-2 py-0.5">
+      <span className="text-[11px] theme-text-muted w-14 shrink-0 capitalize">{label}</span>
+      <div className="h-1.5 rounded-full theme-track overflow-hidden flex-1 min-w-0">
         <div className="h-full rounded-full theme-bg-primary" style={{ width: `${value}%` }} />
       </div>
+      <span className="text-[11px] font-mono tabular-nums w-20 text-right shrink-0 whitespace-nowrap">
+        {value.toFixed(0)}
+        <span className="theme-text-muted"> ×{weight.toFixed(2)}</span>
+      </span>
+    </div>
+  )
+}
+
+function Section({ title, children, right }: {
+  title: string; children: React.ReactNode; right?: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <span className="text-[10px] uppercase tracking-widest theme-text-muted">
+          {title}
+        </span>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Detail({ row }: { row: ModelRow }) {
+  const est = row.estimate
+
+  if (!est) {
+    return (
+      <p className="text-[11px] theme-text-muted leading-relaxed">
+        {row.notes ?? 'Not scorable, because Ollama reports no parameter count for this model.'}
+      </p>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-x-8 gap-y-4">
+      <Section
+        title="Memory estimate"
+        right={
+          <span
+            className="text-[10px] theme-text-muted"
+            title={PROVENANCE_HELP[est.weights_source]}
+          >
+            {est.weights_source} weights
+          </span>
+        }
+      >
+        <div className="divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]">
+          <Fact
+            label="Weights"
+            value={bytes(est.weights_bytes)}
+            hint={PROVENANCE_HELP[est.weights_source]}
+          />
+          <Fact
+            label={`KV cache · ${est.context_tokens.toLocaleString()} tok`}
+            value={bytes(est.kv_cache_bytes)}
+            hint={`${(est.kv_bytes_per_token / 1024).toFixed(0)} KB per token. ${PROVENANCE_HELP[est.kv_source] ?? est.kv_source}`}
+          />
+          <Fact label="Runtime overhead" value={bytes(est.runtime_overhead_bytes)} />
+          <Fact
+            label="Total"
+            value={<span className="font-semibold">{bytes(est.total_bytes)}</span>}
+          />
+        </div>
+        {row.verdict.utilisation !== null && (
+          <p className="text-[11px] theme-text-muted mt-2">
+            {(row.verdict.utilisation * 100).toFixed(0)}% of available{' '}
+            {row.verdict.judged_against === 'vram' ? 'VRAM' :
+              row.verdict.judged_against === 'vram+ram' ? 'VRAM + system RAM' : 'system RAM'}
+            {row.verdict.headroom_bytes !== null && row.verdict.headroom_bytes > 0 &&
+              ` · ${bytes(row.verdict.headroom_bytes)} spare`}
+          </p>
+        )}
+      </Section>
+
+      <Section
+        title="Score"
+        right={
+          <span className="text-[11px] font-mono theme-text">
+            {row.score ?? '—'}
+            <span className="theme-text-muted"> / 100</span>
+          </span>
+        }
+      >
+        {row.dimensions && row.weights ? (
+          <>
+            <div>
+              {(['quality', 'speed', 'fit', 'context'] as const).map((k) => (
+                <Dimension key={k} label={k} value={row.dimensions![k]} weight={row.weights![k]} />
+              ))}
+            </div>
+            <p className="text-[11px] theme-text-muted mt-2 leading-relaxed">
+              Weighted for grounded RAG, using PROJECT.md §9.2's own targets. Hallucination
+              rate is the hardest of those to hit, so quality carries the most.
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] theme-text-muted">Not scored.</p>
+        )}
+      </Section>
+
+      <Section title="Speed estimate">
+        <p className="text-[11px] theme-text-muted leading-relaxed">
+          <code className="theme-text">{row.speed?.basis}</code>
+          <br />
+          Generation is memory-bound (every weight gets read once per token), so throughput
+          tracks bandwidth ÷ model size.
+        </p>
+      </Section>
+
+      <Section title="Quality">
+        {row.quality_meta?.mmlu != null ? (
+          <p className="text-[11px] theme-text-muted leading-relaxed">
+            MMLU {row.quality_meta.mmlu}
+            {row.quality?.quant_penalty ? ` ${row.quality.quant_penalty} for ${row.quantization}` : ''}
+            {row.quality?.effective_mmlu != null && ` = ${row.quality.effective_mmlu} effective`}
+            {!row.quality_meta.verified && (
+              <>
+                <br />
+                <span className="status-warn">Unverified.</span>
+                <span> Check it against </span>
+                <span className="break-all">{row.quality_meta.source}</span>
+              </>
+            )}
+          </p>
+        ) : (
+          <p className="text-[11px] theme-text-muted leading-relaxed">
+            No capability score, because this model was never declared in the catalogue. It
+            scores from a neutral baseline with the {row.quantization} penalty applied, so it
+            still ranks correctly against other unscored models without claiming a figure
+            nobody has measured.
+          </p>
+        )}
+      </Section>
+
+      {row.hf && (
+        <Section title="Hugging Face">
+          <div className="divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]">
+            <Fact label="Repository" value={row.hf.repo} mono={false} />
+            <Fact label="Architecture" value={row.hf.architecture ?? '—'} />
+            <Fact label="Downloads" value={row.hf.downloads?.toLocaleString() ?? '—'} />
+          </div>
+          <a
+            href={row.hf.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-[11px] theme-accent hover:underline inline-flex items-center gap-1 mt-2"
+          >
+            Open on Hugging Face <ExternalLink size={10} />
+          </a>
+        </Section>
+      )}
     </div>
   )
 }
@@ -116,50 +299,45 @@ function Row({
   const isBusy = busy === row.tag
 
   return (
-    <div className="rounded-xl border theme-border bg-black/10 overflow-hidden">
+    <div className="rounded-xl border theme-border theme-surface overflow-hidden">
       <div className="flex items-start gap-3 p-3">
-        <span className="text-[10px] font-mono theme-text-muted opacity-50 tabular-nums w-5 shrink-0 pt-1">
+        <span className="text-[11px] font-mono theme-text-muted tabular-nums w-5 shrink-0 pt-0.5">
           {row.score === null ? '—' : row.rank}
         </span>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium truncate">{row.label}</span>
-            <Pill>{row.quantization}</Pill>
-            {row.installed && <Pill title="Pulled and on this disk.">installed</Pill>}
-            {row.source === 'discovered' && (
-              <Pill title="Found in Ollama rather than declared in the catalogue — scored from the parameter count it reports for itself.">
-                discovered
-              </Pill>
-            )}
-            {!row.tag_verified && (
-              <Pill tone="warn" title="Nobody has confirmed this tag exists in Ollama's registry. If the pull fails, correct it in backend/app/data/model_catalogue.json.">
-                tag unverified
+            <Pill title={`Quantization: ${row.quantization_known ? 'width is tabulated' : 'width inferred from the name'}`}>
+              {row.quantization}
+            </Pill>
+            {row.shortlist && <Pill tone="ok" title="One of the six candidates PROJECT.md §8.1 names.">shortlist</Pill>}
+            {row.installed && <Pill tone="ok" title="Pulled and on this disk.">installed</Pill>}
+            {row.tag_exists === false && (
+              <Pill tone="warn" title="The Ollama registry has no manifest for this tag, so a pull would fail.">
+                tag missing
               </Pill>
             )}
           </div>
-          <code className="text-[10px] theme-text-muted opacity-60 break-all">{row.tag}</code>
+          <code className="text-[10px] theme-text-muted break-all">{row.tag}</code>
 
           <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-1 mt-2">
-            {/* ── estimated ── */}
             <div>
-              <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70">
+              <div className="text-[10px] uppercase tracking-wide theme-text-muted">
                 Estimated
               </div>
-              <div className="text-xs font-mono">
-                {row.estimate ? `~${bytes(row.estimate.total_bytes)}` : '—'}
+              <div className="text-xs font-mono" title={row.estimate?.formula}>
+                {row.estimate ? `${row.estimate.weights_source === 'declared' ? '~' : ''}${bytes(row.estimate.total_bytes)}` : '—'}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70">
-                Fit
-              </div>
+              <div className="text-[10px] uppercase tracking-wide theme-text-muted">Fit</div>
               <div className={`text-xs flex items-center gap-1 ${verdict.tone}`}>
                 <VerdictIcon size={11} className="shrink-0" />
                 <span className="truncate">{verdict.label}</span>
                 {row.verdict.placement !== 'none' && row.verdict.placement !== 'unknown' && (
                   <span
-                    className="theme-text-muted opacity-60 text-[10px]"
+                    className="theme-text-muted text-[10px]"
                     title={PLACEMENT_HELP[row.verdict.placement]}
                   >
                     {row.verdict.placement}
@@ -168,16 +346,15 @@ function Row({
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70">
+              <div className="text-[10px] uppercase tracking-wide theme-text-muted">
                 Est. speed
               </div>
               <div className="text-xs font-mono theme-text-muted" title={row.speed?.basis}>
                 {row.speed?.tokens_per_sec ? `~${row.speed.tokens_per_sec} tok/s` : '—'}
               </div>
             </div>
-            {/* ── measured: deliberately styled apart from the three above ── */}
             <div>
-              <div className="text-[10px] uppercase tracking-wide theme-primary opacity-80">
+              <div className="text-[10px] uppercase tracking-wide theme-accent">
                 Measured
               </div>
               {measured?.tokens_per_sec ? (
@@ -185,18 +362,17 @@ function Row({
                   {measured.time_to_first_token_ms}ms · {measured.tokens_per_sec} tok/s
                 </div>
               ) : (
-                <div className="text-xs theme-text-muted opacity-50 italic">not benchmarked</div>
+                <div className="text-xs theme-text-muted italic">not benchmarked</div>
               )}
             </div>
           </div>
 
-          {/* The finding, when there is one. */}
           {row.estimate_accuracy && (
             <p
-              className="text-[11px] mt-2 text-amber-400/80"
+              className="text-[11px] mt-2 status-warn"
               title="Measured ÷ estimated generation rate. Below 1 means the estimate was optimistic."
             >
-              Estimate was {row.estimate_accuracy.ratio < 1 ? 'optimistic' : 'conservative'} —
+              Estimate was {row.estimate_accuracy.ratio < 1 ? 'optimistic' : 'conservative'}:
               measured {row.estimate_accuracy.ratio.toFixed(2)}× the predicted rate.
             </p>
           )}
@@ -209,7 +385,7 @@ function Row({
                 onClick={() => onBenchmark(row)}
                 disabled={!!busy}
                 title="Measure TTFT and tok/s on a ~2k-token RAG prompt. Takes minutes."
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
               >
                 {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
               </button>
@@ -217,7 +393,7 @@ function Row({
                 onClick={() => onUse(row)}
                 disabled={!!busy || row.verdict.fit === 'will_not_fit'}
                 title="Pin the deployed model to this one."
-                className="px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-40"
+                className="px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
               >
                 Use
               </button>
@@ -225,7 +401,7 @@ function Row({
                 onClick={() => onDelete(row)}
                 disabled={!!busy}
                 title="Delete from this machine."
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-red-400 hover:border-red-400/40 transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] hover:border-[color-mix(in_srgb,var(--status-bad)_45%,transparent)] transition-colors disabled:opacity-40"
               >
                 <Trash2 size={13} />
               </button>
@@ -235,13 +411,15 @@ function Row({
           ) : (
             <button
               onClick={() => onPull(row)}
-              disabled={!!busy}
+              disabled={!!busy || row.tag_exists === false}
               title={
-                row.verdict.fit === 'will_not_fit'
-                  ? 'Estimated not to fit this machine — you can still pull it.'
-                  : 'Download via Ollama.'
+                row.tag_exists === false
+                  ? 'The registry has no manifest for this tag.'
+                  : row.verdict.fit === 'will_not_fit'
+                    ? 'Estimated not to fit, though you can still pull it.'
+                    : `Download via Ollama${row.download_bytes ? ` (${bytes(row.download_bytes)})` : ''}.`
               }
-              className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-40"
+              className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
             >
               {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
               Pull
@@ -257,65 +435,9 @@ function Row({
         </div>
       </div>
 
-      {/* ── the inputs, so the ranking can be checked rather than trusted ── */}
       {open && (
-        <div className="border-t theme-border px-3 py-3 bg-black/10 space-y-3">
-          {row.estimate ? (
-            <div>
-              <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70 mb-1">
-                Memory estimate
-              </div>
-              <code className="text-[11px] theme-text-muted break-words">{row.estimate.formula}</code>
-              <div className="text-[11px] theme-text-muted opacity-60 mt-1">
-                weights {row.estimate.weights_source} · KV {row.estimate.kv_source} ·
-                {' '}judged against {row.verdict.judged_against ?? '—'}
-                {row.verdict.utilisation !== null &&
-                  ` · ${(row.verdict.utilisation * 100).toFixed(0)}% of it`}
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] theme-text-muted">{row.notes ?? 'Not scorable.'}</p>
-          )}
-
-          {row.dimensions && row.weights && (
-            <div>
-              <div className="text-[10px] uppercase tracking-wide theme-text-muted opacity-70 mb-2">
-                Score {row.score} — weighted for grounded RAG (PROJECT.md §9.2)
-              </div>
-              <div className="grid grid-cols-2 @lg:grid-cols-4 gap-3">
-                {(['quality', 'speed', 'fit', 'context'] as const).map((k) => (
-                  <Dimension key={k} label={k} value={row.dimensions![k]} weight={row.weights![k]} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {row.speed && (
-            <div className="text-[11px] theme-text-muted">
-              <span className="opacity-70">Speed basis:</span> <code>{row.speed.basis}</code>
-            </div>
-          )}
-
-          {row.quality_meta && (
-            <div className="text-[11px] theme-text-muted">
-              <span className="opacity-70">Quality:</span>{' '}
-              {row.quality_meta.mmlu !== null ? `MMLU ${row.quality_meta.mmlu}` : 'not set'}
-              {row.quality?.quant_penalty ? ` ${row.quality.quant_penalty} for ${row.quantization}` : ''}
-              {!row.quality_meta.verified && (
-                <span className="text-amber-400/80">
-                  {' '}— unverified, check against{' '}
-                  <span className="break-all">{row.quality_meta.source}</span>
-                </span>
-              )}
-            </div>
-          )}
-          {!row.quality_meta && row.source === 'discovered' && (
-            <p className="text-[11px] theme-text-muted opacity-70">
-              No quality score — this model was discovered, not declared. It is scored at the
-              midpoint on that dimension so it competes on fit and speed rather than being
-              buried for a figure the catalogue never had.
-            </p>
-          )}
+        <div className="border-t theme-border px-4 py-4 theme-surface">
+          <Detail row={row} />
         </div>
       )}
     </div>
@@ -331,6 +453,40 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
   const [result, setResult] = useState<BenchmarkResult | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  // ── filters ──
+  const [source, setSource] = useState<ModelSource | 'all'>('shortlist')
+  const [search, setSearch] = useState('')
+  const [tier, setTier] = useState<'all' | 'slm' | 'llm'>('all')
+  const [runnableOnly, setRunnableOnly] = useState(false)
+
+  // ── Hugging Face is its own fetch: it needs the network and can fail ──
+  const [hfRows, setHfRows] = useState<ModelRow[] | null>(null)
+  const [hfError, setHfError] = useState<string | null>(null)
+  const [hfLoading, setHfLoading] = useState(false)
+
+  // ── Custom: one tag, typed and scored on demand ──
+  const [customTag, setCustomTag] = useState('')
+  const [customRow, setCustomRow] = useState<ModelRow | null>(null)
+  const [customError, setCustomError] = useState<string | null>(null)
+  const [customLoading, setCustomLoading] = useState(false)
+
+  const inspect = useCallback(async () => {
+    const tag = customTag.trim()
+    if (!tag) return
+    setCustomLoading(true)
+    setCustomError(null)
+    try {
+      const res = await inspectTag(tag)
+      setCustomRow(res.row)
+      setCustomError(res.error)
+    } catch (e) {
+      setCustomError(e instanceof Error ? e.message : 'lookup failed')
+      setCustomRow(null)
+    } finally {
+      setCustomLoading(false)
+    }
+  }, [customTag])
+
   const load = useCallback(async () => {
     try {
       setTable(await modelTable())
@@ -344,6 +500,60 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
     void load()
   }, [load])
 
+  // Debounced, because this hits Hugging Face and the box is typed into.
+  useEffect(() => {
+    if (source !== 'huggingface') return
+    let cancelled = false
+    setHfLoading(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await searchHuggingFace(search)
+        if (cancelled) return
+        setHfRows(res.rows)
+        setHfError(res.error)
+      } catch (e) {
+        if (!cancelled) setHfError(e instanceof Error ? e.message : 'search failed')
+      } finally {
+        if (!cancelled) setHfLoading(false)
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [source, search])
+
+  const visible = useMemo(() => {
+    if (source === 'custom') return customRow ? [customRow] : []
+    const base = source === 'huggingface' ? (hfRows ?? []) : (table?.rows ?? [])
+    const needle = search.trim().toLowerCase()
+    return base.filter((row) => {
+      if (source !== 'all' && source !== 'huggingface' && row.source !== source) return false
+      // The HF list is already the result of a server-side search; filtering it
+      // again by the same box would hide rows the search deliberately matched
+      // on a field this one does not see.
+      if (needle && source !== 'huggingface') {
+        const hay = `${row.label} ${row.tag} ${row.vendor ?? ''} ${row.kind}`.toLowerCase()
+        if (!hay.includes(needle)) return false
+      }
+      if (tier !== 'all' && row.tier !== tier) return false
+      if (runnableOnly && !['safe', 'marginal'].includes(row.verdict.fit)) return false
+      return true
+    })
+  }, [source, hfRows, customRow, table?.rows, search, tier, runnableOnly])
+
+  const counts = useMemo(() => {
+    const rows = table?.rows ?? []
+    return {
+      shortlist: rows.filter((r) => r.source === 'shortlist').length,
+      library: rows.filter((r) => r.source === 'library').length,
+      installed: rows.filter((r) => r.source === 'installed').length,
+      all: rows.length,
+      huggingface: hfRows?.length ?? 0,
+      custom: customRow ? 1 : 0,
+    } as Record<string, number>
+  }, [table?.rows, hfRows, customRow])
+
   const handlePull = useCallback(async (row: ModelRow) => {
     setBusy(row.tag)
     setNotice(null)
@@ -355,8 +565,6 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
       setNotice(`Pulled ${row.tag}.`)
       await load()
     } catch (e) {
-      // Ollama's own message — "model not found" names the fix, and the
-      // catalogue ships tags nobody has verified, so this is not an edge case.
       setNotice(e instanceof Error ? e.message : 'the pull failed')
     } finally {
       setBusy(null)
@@ -384,8 +592,7 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
     setNotice(null)
     setResult(null)
     try {
-      const measurement = await runBenchmark(row.tag)
-      setResult(measurement)
+      setResult(await runBenchmark(row.tag))
       await load()
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'the benchmark failed')
@@ -395,7 +602,6 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
   }, [load])
 
   const handleUse = useCallback(async (row: ModelRow) => {
-    const { setActiveModel } = await import('../../lib/forgeClient')
     setBusy(row.tag)
     try {
       await setActiveModel({ mode: 'pinned', tag: row.tag, quantization: row.quantization })
@@ -410,8 +616,8 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
 
   if (error) {
     return (
-      <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-sm">
-        <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
+        <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
         <div>
           <div className="font-medium">Couldn't load the model table</div>
           <div className="theme-text-muted text-xs mt-1">{error}</div>
@@ -423,36 +629,136 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
   if (!table) return <div className="text-sm theme-text-muted">Scoring models…</div>
 
   const budget = table.budget
+  const chip = (active: boolean) =>
+    `px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
+      active
+        ? 'theme-accent-border theme-accent theme-surface-strong'
+        : 'theme-border theme-text-muted hover:theme-text'
+    }`
 
   return (
     <div className="space-y-3 animate-in fade-in duration-200">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
           Every candidate estimated against this machine, ranked. The{' '}
-          <span className="theme-text">Measured</span> column is the one that counts —
-          estimates are placeholders until a benchmark replaces them.
+          <span className="theme-text">Measured</span> column is the one that counts.
+          Estimates are placeholders until a benchmark replaces them.
         </p>
         <button
           onClick={() => void load()}
           disabled={!!busy}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-black/20 transition-colors disabled:opacity-50"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:"
         >
           <RefreshCw size={12} />
           Rescore
         </button>
       </div>
 
-      <div className="text-xs theme-text-muted opacity-75">
-        Budget: {bytes(budget.vram_available_bytes)} VRAM
-        {budget.device ? ` (${budget.device})` : ''} + {bytes(budget.ram_available_bytes)} system RAM.
-        KV cache budgeted for a {table.context_tokens.toLocaleString()}-token prompt.
+      {/* ── what every verdict below is judged against ── */}
+      <div className="flex items-center gap-2 flex-wrap text-xs theme-text-muted">
+        <Cpu size={12} className="shrink-0" />
+        <span>
+          {budget.vram_available_bytes
+            ? `${bytes(budget.vram_available_bytes)} VRAM${budget.device ? ` (${budget.device})` : ''} + ${bytes(budget.ram_available_bytes)} system RAM`
+            : `${bytes(budget.ram_available_bytes)} system RAM. No GPU, so everything runs on the CPU`}
+          {' · KV budgeted for '}{table.context_tokens.toLocaleString()} tokens
+        </span>
       </div>
 
+      {/* ── source tabs ── */}
+      <div className="flex items-center gap-1 flex-wrap border-b theme-border pb-2">
+        {SOURCES.map((entry) => (
+          <button
+            key={entry.id}
+            onClick={() => setSource(entry.id)}
+            title={entry.hint}
+            className={`px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
+              source === entry.id
+                ? 'theme-accent theme-surface-strong'
+                : 'theme-text-muted hover:theme-text'
+            }`}
+          >
+            {entry.label}
+            <span className="theme-text-muted ml-1 tabular-nums">
+              {entry.id === 'huggingface' && hfRows === null ? '' : counts[entry.id] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── filters ── */}
+      {source === 'custom' ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              value={customTag}
+              onChange={(e) => setCustomTag(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void inspect()}
+              placeholder="qwen3:30b  ·  hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M"
+              spellCheck={false}
+              className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] font-mono rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted placeholder: focus:outline-none focus:theme-accent-border"
+            />
+            <button
+              onClick={() => void inspect()}
+              disabled={customLoading || !customTag.trim()}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+            >
+              {customLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+              Check fit
+            </button>
+          </div>
+          <p className="text-[11px] theme-text-muted">
+            Any tag Ollama would accept. Library tags resolve through Ollama's registry;
+            <code className="theme-text"> hf.co/…</code> tags resolve through Hugging Face.
+            Either way it is scored against this machine like everything else.
+          </p>
+          {customError && (
+            <div className="flex items-start gap-2 p-2.5 rounded-lg border status-warn-border status-warn-bg text-[11px]">
+              <AlertTriangle size={13} className="status-warn shrink-0 mt-0.5" />
+              <span className="break-words">{customError}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={source === 'huggingface' ? 'Search Hugging Face…' : 'Filter by name, tag or vendor…'}
+            className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted placeholder: focus:outline-none focus:theme-accent-border"
+          />
+        </div>
+        {(['all', 'slm', 'llm'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTier(t)}
+            title={
+              t === 'slm' ? 'Small language models, 4B parameters and under'
+                : t === 'llm' ? 'Larger local models, above 4B'
+                  : 'Both sizes'
+            }
+            className={chip(tier === t)}
+          >
+            {t === 'all' ? 'Any size' : t.toUpperCase()}
+          </button>
+        ))}
+        <button
+          onClick={() => setRunnableOnly((v) => !v)}
+          title="Hide anything estimated not to fit this machine."
+          className={chip(runnableOnly)}
+        >
+          Runnable only
+        </button>
+      </div>
+      )}
+
       {!table.ollama.available && (
-        <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-400/30 bg-amber-400/10 text-xs">
-          <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
+          <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
           <div>
-            <div className="font-medium">Ollama isn't reachable — estimates only</div>
+            <div className="font-medium">Ollama isn't reachable, so these are estimates only</div>
             <div className="theme-text-muted mt-0.5">
               {table.ollama.error} Nothing can be pulled, measured or deployed until it answers.
             </div>
@@ -460,10 +766,22 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
         </div>
       )}
 
+      {source === 'huggingface' && hfError && (
+        <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
+          <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium">Hugging Face search unavailable</div>
+            <div className="theme-text-muted mt-0.5">
+              {hfError} The other three lists work offline.
+            </div>
+          </div>
+        </div>
+      )}
+
       {progress && (
-        <div className="p-3 rounded-xl border theme-border bg-black/20">
+        <div className="p-3 rounded-xl border theme-border theme-surface-strong">
           <div className="flex items-center gap-2 text-xs mb-2">
-            <Loader2 size={13} className="animate-spin theme-primary" />
+            <Loader2 size={13} className="animate-spin theme-accent" />
             <span className="truncate flex-1">{progress.status}</span>
             {progress.percent !== null && (
               <span className="font-mono tabular-nums">{progress.percent}%</span>
@@ -471,12 +789,12 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
             <button
               onClick={() => cancelPull?.()}
               title="Stop. Ollama keeps the layers already downloaded, so resuming won't start over."
-              className="p-1 rounded theme-text-muted hover:text-red-400"
+              className="p-1 rounded theme-text-muted hover:text-[var(--status-bad)]"
             >
               <X size={13} />
             </button>
           </div>
-          <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
+          <div className="h-1.5 rounded-full theme-track overflow-hidden">
             <div
               className="h-full rounded-full theme-bg-primary transition-[width] duration-300"
               style={{ width: `${progress.percent ?? 0}%` }}
@@ -491,9 +809,9 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
       )}
 
       {result && (
-        <div className="p-3 rounded-xl border theme-border bg-black/20 text-xs space-y-1">
+        <div className="p-3 rounded-xl border theme-border theme-surface-strong text-xs space-y-1">
           <div className="flex items-center gap-2">
-            <FlaskConical size={13} className="theme-primary" />
+            <FlaskConical size={13} className="theme-accent" />
             <span className="font-medium">Benchmarked {result.tag}</span>
             <button onClick={() => setResult(null)} className="ml-auto theme-text-muted hover:theme-text">
               <X size={13} />
@@ -503,7 +821,7 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
             {result.time_to_first_token_ms}ms to first token · {result.tokens_per_sec} tok/s ·{' '}
             {result.prompt_token_count} prompt tokens
           </div>
-          <div className="theme-text-muted opacity-70">
+          <div className="theme-text-muted">
             Prompt from{' '}
             {result.prompt.source === 'rag_logs' ? (
               <span className="theme-text">a real logged retrieval</span>
@@ -511,7 +829,7 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
               'the bundled fixture'
             )}
             {' · '}
-            {result.warmed_up ? 'warmed up first' : 'cold — includes loading the weights'}
+            {result.warmed_up ? 'warmed up first' : 'cold, so it includes loading the weights'}
             {' · logged as '}
             <code>{result.query_id}</code>
           </div>
@@ -519,7 +837,7 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
       )}
 
       {notice && (
-        <div className="flex items-start gap-2 p-2.5 rounded-lg border theme-border bg-black/20 text-xs">
+        <div className="flex items-start gap-2 p-2.5 rounded-lg border theme-border theme-surface-strong text-xs">
           <span className="flex-1 break-words">{notice}</span>
           <button onClick={() => setNotice(null)} className="theme-text-muted hover:theme-text">
             <X size={12} />
@@ -528,7 +846,13 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
       )}
 
       <div className="space-y-2">
-        {table.rows.map((row) => (
+        {hfLoading && source === 'huggingface' && (
+          <div className="flex items-center gap-2 text-xs theme-text-muted py-2">
+            <Loader2 size={13} className="animate-spin" />
+            Searching Hugging Face…
+          </div>
+        )}
+        {visible.map((row) => (
           <Row
             key={row.id}
             row={row}
@@ -539,6 +863,13 @@ export function ModelsView({ onCommitted }: { onCommitted?: () => void }) {
             onUse={handleUse}
           />
         ))}
+        {!visible.length && !hfLoading && !customLoading && (
+          <p className="text-xs theme-text-muted py-6 text-center">
+            {source === 'custom'
+              ? 'Type a model tag above to score it against this machine.'
+              : `Nothing matches these filters.${runnableOnly ? ' Try turning off "Runnable only".' : ''}`}
+          </p>
+        )}
       </div>
     </div>
   )

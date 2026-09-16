@@ -20,6 +20,7 @@ import {
   type Theme,
   type ThemeColors,
   type UiScale,
+  deriveReadableText,
 } from '../lib/themes'
 import { useTheme } from '../contexts/ThemeContext'
 import { ColorRow } from './ColorRow'
@@ -293,7 +294,12 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
           }`}
         >
           <div className="mb-2">
-            <Swatches colors={[colors.bg, colors.sidebar, colors.text, colors.primary]} />
+            {/* The *applied* text colour, not the declared one — applyColors
+                floors it to AA, so a swatch showing the raw value would
+                advertise a shade the theme never actually renders. */}
+            <Swatches
+              colors={[colors.bg, colors.sidebar, deriveReadableText(colors), colors.primary]}
+            />
           </div>
           <span className="text-[10px] font-medium opacity-80 truncate max-w-full">
             {name.toLowerCase()}

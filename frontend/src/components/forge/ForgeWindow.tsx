@@ -36,10 +36,10 @@ import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
  */
 
 const TABS = [
-  { id: 'hardware', label: 'Hardware', icon: Cpu, hint: 'Step 1 — what this machine is' },
-  { id: 'models', label: 'Models', icon: Layers, hint: 'Steps 2–5 — estimate, score, manage, benchmark' },
-  { id: 'deployment', label: 'Deployment', icon: Rocket, hint: 'Step 6 — what actually runs' },
-  { id: 'cloud', label: 'Cloud', icon: Cloud, hint: 'Offline benchmark reference only — never deployed' },
+  { id: 'hardware', label: 'Hardware', icon: Cpu, hint: 'Step 1: what this machine is' },
+  { id: 'models', label: 'Models', icon: Layers, hint: 'Steps 2 to 5: estimate, score, manage, benchmark' },
+  { id: 'deployment', label: 'Deployment', icon: Rocket, hint: 'Step 6: what actually runs' },
+  { id: 'cloud', label: 'Cloud', icon: Cloud, hint: 'Offline benchmark reference only, never deployed' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -56,7 +56,7 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
       onClose={onClose}
       title="The Forge"
       subtitle="hardware & model console"
-      icon={<Hammer size={16} className="theme-primary" />}
+      icon={<Hammer size={16} className="theme-accent" />}
       width={900}
       height={720}
     >
@@ -72,7 +72,7 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
                   title={entry.hint}
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs rounded-t-lg border-b-2 transition-colors ${
                     selected
-                      ? 'border-current theme-primary'
+                      ? 'border-current theme-accent'
                       : 'border-transparent theme-text-muted hover:theme-text'
                   }`}
                 >
@@ -93,10 +93,10 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
                   {/* Stated before the panel, not after it: somebody arriving
                       here should know these can never be deployed before they
                       start adding keys, not once they have. */}
-                  <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-400/30 bg-amber-400/10 text-xs">
-                    <Cloud size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
+                    <Cloud size={14} className="status-warn shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-medium">Benchmark reference only — never deployed</div>
+                      <div className="font-medium">Benchmark reference only, never deployed</div>
                       <div className="theme-text-muted mt-0.5">
                         PROJECT.md Rule 1: production is fully local. These endpoints exist so the
                         dual-track comparison has an accuracy ceiling to measure against, and they

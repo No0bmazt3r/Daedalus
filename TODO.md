@@ -200,13 +200,23 @@ CLI first — it's the safe MVP. Web UI only if time allows.
           best-fitting *installed* model on whatever machine reads it
     - [x] Absorb the Added Models panel — the Cloud tab renders the same
           `ModelEndpointsPanel`, behind its own benchmark-only warning
+    - [x] **Discovery beyond the six.** 37 catalogue entries (6 shortlisted +
+          31 verified Ollama library), plus live Hugging Face GGUF search and a
+          Custom tab that scores any tag — `hf.co/{repo}:{quant}` included
+    - [x] **Universal hardware.** Two-pool verdicts (GPU / offload / CPU): a
+          machine with no GPU has no VRAM pool, is judged against system RAM and
+          reports `placement: cpu`, and Apple Silicon uses the Metal constant
+          rather than the ARM CPU one — which is nearly a 2x difference
+    - [x] Verify the Ollama tags — `services/ollama_registry.py` reads each
+          tag's OCI manifest, which both confirms it exists and reports the real
+          weight size, so estimates use published bytes rather than
+          `params × bytes_per_param` before anything is downloaded
     - [ ] **Verify the catalogue's quality figures.** Six MMLU scores in
           `backend/app/data/model_catalogue.json` ship `verified: false` with a
           source URL each; the UI marks them unverified. Check them against the
-          model cards before any of this reaches the report
-    - [ ] Verify the non-default Ollama tags (`tag_verified: false` in the same
-          file) — the registry has no listable tags API, so the Q8_0/FP16 tag
-          names are conventional rather than confirmed
+          model cards before any of this reaches the report. (Library and
+          discovered models carry no MMLU at all, by design — they are scored
+          from a neutral baseline with the quantization penalty applied)
   - [ ] **Labyrinth Blueprints** — the corpus and the knowledge graph, with
         traversal replay for a graph-track `query_id`. Most blocked (M2 +
         Track 2); storage is an open decision — see MODULES.md §3.4

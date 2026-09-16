@@ -115,6 +115,15 @@
 }
 
 :root {
+  /* Status defaults for the light case. applyColors() overwrites these on every
+     theme change; they exist so the first paint — before the theme context has
+     run — is not an unstyled colour. Kept in step with deriveStatusColors(). */
+  --status-ok: #14803c;
+  --status-warn: #a75c07;
+  --status-bad: #c1352c;
+  --status-info: #1160b4;
+  --primary-readable: oklch(0.205 0 0);
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -150,6 +159,12 @@
 }
 
 .dark {
+  --status-ok: #4fd07f;
+  --status-warn: #f5ad3d;
+  --status-bad: #ef6f66;
+  --status-info: #64a6f5;
+  --primary-readable: oklch(0.922 0 0);
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -195,6 +210,36 @@
    deployment mode uses it. Companion to the two above, so a selected card
    picks up the theme accent rather than hardcoding a colour. */
 .theme-border-primary { border-color: var(--primary) !important; }
+
+/* Status colours — see deriveStatusColors() in lib/themes.ts for why these are
+   derived from the theme rather than written as Tailwind literals. Text, a 12%
+   surface tint and a 38% border, so a callout can be built from one name. */
+.status-ok { color: var(--status-ok) !important; }
+.status-warn { color: var(--status-warn) !important; }
+.status-bad { color: var(--status-bad) !important; }
+.status-info { color: var(--status-info) !important; }
+.status-ok-bg { background-color: color-mix(in srgb, var(--status-ok) 12%, transparent) !important; }
+.status-warn-bg { background-color: color-mix(in srgb, var(--status-warn) 12%, transparent) !important; }
+.status-bad-bg { background-color: color-mix(in srgb, var(--status-bad) 12%, transparent) !important; }
+.status-ok-border { border-color: color-mix(in srgb, var(--status-ok) 38%, transparent) !important; }
+.status-warn-border { border-color: color-mix(in srgb, var(--status-warn) 38%, transparent) !important; }
+.status-bad-border { border-color: color-mix(in srgb, var(--status-bad) 38%, transparent) !important; }
+.status-warn-fill { background-color: var(--status-warn) !important; }
+
+/* Accent as *text*. --primary is tuned to look right as a fill; a pale accent
+   is a fine bar and an illegible label. See deriveReadableAccent in themes.ts. */
+.theme-accent { color: var(--primary-readable) !important; }
+.theme-accent-border { border-color: var(--primary-readable) !important; }
+
+/* Surfaces that follow the theme instead of always darkening.
+   `bg-black/10` makes a grey card on a light theme and a slightly-less-black
+   one on a dark theme — two different effects from one class. Mixing the *text*
+   colour into transparency darkens on light themes and lightens on dark ones,
+   which is the same visual weight either way. The chat header already used this
+   trick inline; these give it a name. */
+.theme-surface { background-color: color-mix(in srgb, var(--text-main) 5%, transparent) !important; }
+.theme-surface-strong { background-color: color-mix(in srgb, var(--text-main) 9%, transparent) !important; }
+.theme-track { background-color: color-mix(in srgb, var(--text-main) 14%, transparent) !important; }
 
 @keyframes rain-fall {
   0% { transform: translateY(-100%); }
