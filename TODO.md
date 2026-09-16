@@ -224,6 +224,12 @@ CLI first — it's the safe MVP. Web UI only if time allows.
       today, unreplayable traces forever if it lands after rows exist
 - [x] Mark the unbuilt modules in the sidebar — Ariadne's Thread and Labyrinth
       Blueprints are disabled with a dot and a tooltip; The Forge opens
+- [x] **Wire the serving path (thin slice of M4).** `POST /api/chat` resolves the
+      model through `config/model_config.json`, calls Ollama with the replayed
+      conversation, and writes a `model_logs` row tagged `source='chat'` beside
+      the Forge's `source='benchmark'` rows. The chat picker is filtered to
+      local installed models and defaults to the committed choice, so Rule 1
+      cannot be broken from the composer. Retrieval and tool-calling still to come
 - [ ] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet
 - [x] "Added Models" panel — list local Ollama models alongside the cloud baselines
 - [x] **Split the Databases feature in two, by how often you reach for each half.**

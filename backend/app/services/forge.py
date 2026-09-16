@@ -78,8 +78,11 @@ def _last_benchmarks() -> dict[str, dict[str, Any]]:
     requires the latency chapter to draw benchmark and production numbers from
     one place so they are comparable.
 
-    Generation rate excludes prefill: time-to-first-token is the prefill, and
-    folding it into tok/s would make a long RAG prompt look like a slow model.
+    Generation rate comes from the engine's own `generation_ms`, not from
+    `completion ÷ (total − TTFT)`. The subtraction charges the model for any
+    client-side delay; on a busy machine that halved the figure. Rows written
+    before migration 002 have no `generation_ms` and fall back to the old
+    arithmetic, flagged so the UI can say which it used.
     """
     try:
         audit_store.init_db()
@@ -106,17 +109,28 @@ def _last_benchmarks() -> dict[str, dict[str, Any]]:
         ttft = row.get("time_to_first_token_ms")
         total = row.get("total_inference_ms")
         completion = row.get("completion_token_count")
+        generation_ms = row.get("generation_ms")
+
         tps = None
-        if completion and total and ttft is not None and total > ttft:
+        rate_source = None
+        if completion and generation_ms:
+            tps = round(completion / (generation_ms / 1000.0), 1)
+            rate_source = "engine"
+        elif completion and total and ttft is not None and total > ttft:
             tps = round(completion / ((total - ttft) / 1000.0), 1)
+            rate_source = "wall_clock"
+
         out[name] = {
             "at": row.get("timestamp"),
             "query_id": row.get("query_id"),
             "time_to_first_token_ms": ttft,
             "total_inference_ms": total,
+            "prefill_ms": row.get("prefill_ms"),
+            "generation_ms": generation_ms,
             "prompt_token_count": row.get("prompt_token_count"),
             "completion_token_count": completion,
             "tokens_per_sec": tps,
+            "rate_source": rate_source,
         }
     return out
 

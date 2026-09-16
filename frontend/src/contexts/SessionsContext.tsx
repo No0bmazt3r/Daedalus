@@ -9,7 +9,6 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import {
-  appendUserMessage,
   createSession,
   deleteSession as apiDeleteSession,
   getMessages,
@@ -20,6 +19,7 @@ import {
   type ChatSession,
 } from '../lib/sessionsClient';
 import { useSettings } from './SettingsContext';
+import { sendChat } from '../lib/chatClient';
 
 /**
  * Conversation state for the whole app.
@@ -55,6 +55,8 @@ interface SessionsContextValue {
   newChat: () => void;
   selectSession: (id: string) => void;
   sendMessage: (content: string) => Promise<void>;
+  /** Set when the server answered with a different model than was asked for. */
+  modelNotice: string | null;
   rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
@@ -76,7 +78,7 @@ function toDisplay(message: ChatMessage): DisplayMessage {
 }
 
 export function SessionsProvider({ children }: { children: ReactNode }) {
-  const { isIncognito } = useSettings();
+  const { isIncognito, selectedModel } = useSettings();
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionsStatus>('loading');
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [modelNotice, setModelNotice] = useState<string | null>(null);
 
   // Guards against a slow transcript fetch landing after the user has already
   // clicked a different chat, which would show the wrong conversation.
@@ -182,28 +185,26 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           setActiveEphemeral(isIncognito);
         }
 
-        const saved = await appendUserMessage(sessionId, trimmed);
-        setMessages((prev) =>
-          prev.map((m) => (m.key === optimisticKey ? toDisplay(saved) : m)),
+        // One call. /api/chat records both turns server-side, so posting the
+        // user message separately would store it twice.
+        const reply = await sendChat(sessionId, trimmed, selectedModel || null);
+
+        setMessages((prev) => [
+          ...prev.map((m) => (m.key === optimisticKey ? toDisplay(reply.user_message) : m)),
+          toDisplay(reply.message),
+        ]);
+
+        // An override the server declined still produced an answer, from a
+        // different model than the picker shows. Saying so beats letting the
+        // operator believe they were talking to something they were not.
+        setModelNotice(
+          reply.model_choice.source === 'config' && reply.model_choice.rejected
+            ? reply.model_choice.reason
+            : null,
         );
 
         // Incognito chats are never listed, so there is nothing to refresh.
         if (!isIncognito) void refresh();
-
-        // TODO(Layer 7): replace with POST /api/chat. Until an orchestrator
-        // exists there is no answer to persist — and assistant turns are
-        // written server-side by design, so this reply is display-only and is
-        // marked as such rather than being silently dropped on reload.
-        setMessages((prev) => [
-          ...prev,
-          {
-            key: `mock-${Date.now()}`,
-            role: 'assistant',
-            content:
-              'The orchestrator is not wired up yet, so this reply is a placeholder and is not saved. Your message was stored.',
-            persisted: false,
-          },
-        ]);
       } catch (err) {
         setMessages((prev) => prev.filter((m) => m.key !== optimisticKey));
         setError(err instanceof Error ? err.message : 'could not send that message');
@@ -212,7 +213,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         setSending(false);
       }
     },
-    [activeSessionId, isIncognito, messages, modeMismatch, refresh, sending],
+    [activeSessionId, isIncognito, messages, modeMismatch, refresh, selectedModel, sending],
   );
 
   const rename = useCallback(
@@ -260,6 +261,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       newChat,
       selectSession,
       sendMessage,
+      modelNotice,
       rename,
       remove,
       refresh,
@@ -271,6 +273,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       visibleMessages,
       status,
       error,
+      modelNotice,
       sending,
       newChat,
       selectSession,

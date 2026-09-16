@@ -41,9 +41,9 @@ function TypewriterText({ text }: { text: string }) {
 }
 
 export function ChatInterface() {
-  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel, models, modelsLoading, modelsError } = useSettings()
+  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel, models, modelsLoading, modelsError, deployedModel } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
-  const { messages, sendMessage, sending, error } = useSessions()
+  const { messages, sendMessage, sending, error, modelNotice } = useSessions()
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
@@ -55,7 +55,7 @@ export function ChatInterface() {
     } else if (models.length > 0) {
       modelOptions = models.map(m => ({ value: m.name, label: m.name }))
     } else {
-      modelOptions = [{ value: '', label: 'No models configured' }]
+      modelOptions = [{ value: '', label: 'No local models — pull one in The Forge' }]
     }
   }
 
@@ -154,13 +154,21 @@ export function ChatInterface() {
                         key={opt.value}
                         onClick={() => { if (opt.value) setSelectedModel(opt.value) }}
                         disabled={!opt.value}
-                        className={`cursor-pointer ${
+                        className={`cursor-pointer flex items-center gap-2 ${
                           selectedModel === opt.value
                             ? 'theme-primary bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
                             : 'theme-text-muted'
                         }`}
                       >
-                        {opt.label}
+                        <span className="truncate">{opt.label}</span>
+                        {deployedModel?.tag === opt.value && (
+                          <span
+                            className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0"
+                            title={deployedModel.reason}
+                          >
+                            {deployedModel.mode}
+                          </span>
+                        )}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
@@ -208,8 +216,11 @@ export function ChatInterface() {
                   <div className="text-[15px] pt-1 theme-text-muted opacity-70">Thinking…</div>
                 </div>
               )}
+              {modelNotice && (
+                <div className="text-[13px] status-warn px-1">{modelNotice}</div>
+              )}
               {error && (
-                <div className="text-[13px] text-amber-400/90 px-1">{error}</div>
+                <div className="text-[13px] status-warn px-1">{error}</div>
               )}
             </div>
           </ScrollArea>

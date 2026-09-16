@@ -249,14 +249,16 @@ def run(
 ) -> dict[str, Any]:
     """Benchmark one model. Writes `model_logs` and returns the measurement.
 
-    Time-to-first-token is taken from the wall clock at the first streamed
-    chunk, not from Ollama's `prompt_eval_duration`. The two differ by queueing
-    and transport, and the wall clock is the one an operator experiences — which
-    is what Objective 3's latency target is about.
+    Records two different things and does not mix them. Time-to-first-token and
+    total are wall clock, because that is what an operator waits through and
+    what Objective 3's latency target is about. Prefill and generation come from
+    Ollama's own counters, because those are properties of the model rather than
+    of whatever else the machine was doing.
 
-    Generation rate deliberately excludes prefill: `completion ÷ (total − TTFT)`.
-    Folding prefill in would make a long evidence pack look like a slow model,
-    and the whole point of §2.3 is that the evidence pack is long.
+    `tokens_per_sec` is the engine's generation rate, not `completion ÷ (total −
+    TTFT)`. The subtraction looks equivalent and is not: it silently charges the
+    model for any client-side delay, which is how the first version of this
+    benchmark reported a model at less than half its real speed.
     """
     if ollama_client.httpx is None:
         raise ollama_client.OllamaUnavailable("httpx is not installed")
@@ -326,14 +328,32 @@ def run(
     total_ms = int((ended - started) * 1000)
     ttft_ms = int((first_token_at - started) * 1000) if first_token_at else None
 
-    # Ollama's own counters are authoritative for token counts — a character
-    # estimate would put a made-up number in the table the report draws from.
+    # Ollama's own counters, for both the token counts and the timings.
+    #
+    # Deriving the generation rate from the wall clock was wrong and produced a
+    # badly misleading number: the first run of this benchmark reported
+    # llama3.2 at 11 tok/s where the engine reported 23.9, because
+    # `(total - ttft)` swept up several seconds of unrelated load on a busy
+    # machine and attributed it to the model. It also made the estimator look
+    # 0.38x optimistic when, measured properly, it was within a percent.
+    #
+    # So the two are recorded separately and neither is derived from the other:
+    #
+    #   prefill_ms / generation_ms  what the engine spent. How fast the model is
+    #   ttft_ms / total_ms          what the caller waited. What an operator feels
+    #
+    # Both belong in the latency chapter. Only the first is a property of the
+    # model, and only the second answers Objective 3.
+    ns = 1_000_000
     prompt_tokens_actual = final.get("prompt_eval_count")
     completion_tokens = final.get("eval_count") or (len(pieces) or None)
+    prefill_ms = int(final.get("prompt_eval_duration", 0) // ns) or None
+    generation_ms = int(final.get("eval_duration", 0) // ns) or None
+    load_ms = int(final.get("load_duration", 0) // ns) or None
 
     tokens_per_sec = None
-    if completion_tokens and ttft_ms is not None and total_ms > ttft_ms:
-        tokens_per_sec = round(completion_tokens / ((total_ms - ttft_ms) / 1000.0), 1)
+    if completion_tokens and generation_ms:
+        tokens_per_sec = round(completion_tokens / (generation_ms / 1000.0), 1)
 
     status = "error" if error else "ok"
     audit_store.log(
@@ -345,6 +365,10 @@ def run(
         completion_token_count=completion_tokens,
         time_to_first_token_ms=ttft_ms,
         total_inference_ms=total_ms,
+        prefill_ms=prefill_ms,
+        generation_ms=generation_ms,
+        load_ms=load_ms,
+        source="benchmark",
         status=status,
         error_message=error,
     )
@@ -357,6 +381,11 @@ def run(
         "error": error,
         "time_to_first_token_ms": ttft_ms,
         "total_inference_ms": total_ms,
+        # Engine-side. `prefill_ms` is the honest cost of the evidence pack and
+        # is most of what TTFT consists of on a RAG prompt.
+        "prefill_ms": prefill_ms,
+        "generation_ms": generation_ms,
+        "load_ms": load_ms,
         "tokens_per_sec": tokens_per_sec,
         "prompt_token_count": prompt_tokens_actual,
         "completion_token_count": completion_tokens,
