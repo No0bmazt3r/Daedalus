@@ -19,7 +19,7 @@ import {
   type ChatSession,
 } from '../lib/sessionsClient';
 import { useSettings } from './SettingsContext';
-import { sendChat } from '../lib/chatClient';
+import { sendChat, checkChatStatus } from '../lib/chatClient';
 
 /**
  * Conversation state for the whole app.
@@ -43,6 +43,8 @@ export interface DisplayMessage {
   persisted: boolean;
   /** The send failed. The text is still yours; it just never reached the server. */
   failed?: boolean;
+  /** The tag of the model that generated this message, if known. */
+  modelTag?: string;
 }
 
 export type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -76,6 +78,7 @@ function toDisplay(message: ChatMessage): DisplayMessage {
     role: message.role,
     content: message.content,
     persisted: true,
+    modelTag: message.model_tag,
   };
 }
 
@@ -142,6 +145,48 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         const loaded = await getMessages(id);
         if (loadToken.current !== token) return; // superseded by a newer click
         setMessages(loaded.map(toDisplay));
+        
+        // Also check if a background generation is running for this session.
+        try {
+          const statusResult = await checkChatStatus(id);
+          if (statusResult.generating && loadToken.current === token) {
+            setSending(true);
+            setMessages((prev) => [
+              ...prev,
+              {
+                key: `optimistic-reconnect-${Date.now()}`,
+                role: 'assistant',
+                content: '',
+                created_at: new Date().toISOString(),
+                persisted: false,
+              },
+            ]);
+            
+            // Poll until it finishes
+            const pollTimer = setInterval(async () => {
+              if (loadToken.current !== token) {
+                clearInterval(pollTimer);
+                return;
+              }
+              try {
+                const check = await checkChatStatus(id);
+                if (!check.generating) {
+                  clearInterval(pollTimer);
+                  if (loadToken.current === token) {
+                    const finalLoaded = await getMessages(id);
+                    setMessages(finalLoaded.map(toDisplay));
+                    setSending(false);
+                  }
+                }
+              } catch (e) {
+                // Ignore poll errors, just keep trying
+              }
+            }, 2000);
+          }
+        } catch (e) {
+          // It's okay if status check fails, just ignore
+        }
+        
         setStatus('ready');
       } catch (err) {
         if (loadToken.current !== token) return;

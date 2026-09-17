@@ -34,6 +34,7 @@ export interface ChatMessage {
   evidence: unknown;
   token_estimate: number;
   created_at: string;
+  model_tag?: string;
 }
 
 const BASE = '/api/sessions';

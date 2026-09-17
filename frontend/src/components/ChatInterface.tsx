@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown } from 'lucide-react'
+import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -38,6 +38,45 @@ function TypewriterText({ text }: { text: string }) {
       {displayedText}
       <span className="animate-[pulse_1s_ease-in-out_infinite] inline-block w-[3px] h-[0.9em] bg-current ml-1 rounded-sm opacity-70"></span>
     </span>
+  )
+}
+
+function MessageActions({ text, modelTag }: { text: string, modelTag?: string }) {
+  const [copied, setCopied] = useState(false)
+  
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <button 
+        onClick={handleCopy}
+        className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+        title="Copy"
+      >
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+      </button>
+      <button 
+        className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+        title="Fork conversation from this point"
+      >
+        <GitFork size={14} />
+      </button>
+      <button 
+        className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+        title="Rerun prompt"
+      >
+        <RefreshCw size={14} />
+      </button>
+      {modelTag && (
+        <span className="text-[11px] theme-text-muted ml-1 select-none">
+          {modelTag}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -213,7 +252,7 @@ export function ChatInterface() {
                 it, so the first message has to start below both. */}
             <div className="flex flex-col max-w-3xl mx-auto pt-20 px-4 gap-6 pb-32">
               {messages.map((msg) => (
-                <div key={msg.key} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.key} className={`flex w-full group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (
                     <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card zone-ai-bubble">
                       <LabyrinthIcon className="w-5 h-5 zone-brand" />
@@ -231,6 +270,11 @@ export function ChatInterface() {
                     ) : (
                       msg.content
                     )}
+                    
+                    {msg.role === 'assistant' && msg.persisted && msg.content !== '' && (
+                      <MessageActions text={msg.content} modelTag={msg.modelTag} />
+                    )}
+
                     {/* A failed send is kept on screen so the text is not lost,
                         and labelled so it is not mistaken for one that landed. */}
                     {msg.failed && (

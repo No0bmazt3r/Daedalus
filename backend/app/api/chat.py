@@ -77,3 +77,16 @@ def chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+@router.get("/{session_id}/status")
+def chat_status(session_id: str) -> dict[str, Any]:
+    """Check if a background generation is actively running for this session."""
+    state = inference.ACTIVE_GENERATIONS.get(session_id)
+    if not state:
+        return {"generating": False}
+    
+    return {
+        "generating": True,
+        "model": state["model"],
+        "started_at": state["started_at"],
+    }

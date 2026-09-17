@@ -37,7 +37,7 @@ export interface LogPage {
 }
 
 export async function logCatalogue(): Promise<LogStore[]> {
-  const data = await request<{ stores: LogStore[] }>('/api/logs/catalogue');
+  const data = await request<{ stores: LogStore[] }>('/api/logs/catalogue', { cache: 'no-store' });
   return data.stores;
 }
 
@@ -53,6 +53,7 @@ export function readLogTable(
   });
   return request<LogPage>(
     `/api/logs/${encodeURIComponent(store)}/${encodeURIComponent(table)}?${params}`,
+    { cache: 'no-store' }
   );
 }
 

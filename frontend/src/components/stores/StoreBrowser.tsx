@@ -48,8 +48,8 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
     setExpanded(null)
   }, [store, table])
 
-  const load = useCallback(async () => {
-    setBusy(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setBusy(true)
     try {
       setPage(await readLogTable(store, table, { limit: PAGE_SIZE, offset, newestFirst }))
       setError(null)
@@ -57,13 +57,20 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
       setError(e instanceof Error ? e.message : 'could not read that table')
       setPage(null)
     } finally {
-      setBusy(false)
+      if (!silent) setBusy(false)
     }
   }, [store, table, offset, newestFirst])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // Auto-refresh the first page so it feels live.
+  useEffect(() => {
+    if (offset !== 0) return
+    const timer = setInterval(() => void load(true), 2000)
+    return () => clearInterval(timer)
+  }, [offset, load])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -97,9 +104,13 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
               ? `${offset + 1}–${offset + shown} of ${total.toLocaleString()}`
               : 'no rows'}
           </span>
+
           {page?.redacted_columns?.length ? (
-            <span className="flex items-center gap-1 theme-text-muted shrink-0">
-              <EyeOff size={11} /> {page.redacted_columns.length} redacted
+            <span 
+              className="text-[10px] px-1.5 py-0.5 rounded border theme-border status-warn uppercase tracking-wide shrink-0"
+              title={`Secret values hidden in: ${page.redacted_columns.join(', ')}`}
+            >
+              Masked
             </span>
           ) : null}
         </div>

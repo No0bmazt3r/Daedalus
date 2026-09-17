@@ -126,25 +126,33 @@ function DataStores({
 
   useEffect(() => {
     let cancelled = false
-    void (async () => {
+
+    const load = async () => {
       try {
         const loaded = await logCatalogue()
         if (cancelled) return
-        setStores(loaded)
-        // Open a store that actually has rows in it, so the section is useful
-        // on arrival instead of a row of closed folders. Falls back to the
-        // first readable store on a fresh install, where everything is empty.
-        const withRows = loaded.find(
-          (s) => s.available && s.tables.some((t) => (t.rows ?? 0) > 0),
-        )
-        const first = withRows ?? loaded.find((s) => s.available && s.tables.length)
-        if (first) setOpen({ [first.store]: true })
+        setStores((prev) => {
+          // Open a store with rows automatically, but only on the first load.
+          if (prev === null) {
+            const withRows = loaded.find(
+              (s) => s.available && s.tables.some((t) => (t.rows ?? 0) > 0),
+            )
+            const first = withRows ?? loaded.find((s) => s.available && s.tables.length)
+            if (first) setOpen({ [first.store]: true })
+          }
+          return loaded
+        })
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'unavailable')
       }
-    })()
+    }
+
+    void load()
+    const timer = setInterval(() => void load(), 3000)
+
     return () => {
       cancelled = true
+      clearInterval(timer)
     }
   }, [])
 

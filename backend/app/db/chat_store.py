@@ -167,6 +167,7 @@ def _message_row(row: sqlite3.Row) -> dict[str, Any]:
         "evidence": evidence,
         "token_estimate": row["token_estimate"],
         "created_at": row["created_at"],
+        "model_tag": row["model_tag"] if "model_tag" in row.keys() else None,
     }
 
 
@@ -359,6 +360,7 @@ def append_message(
     *,
     query_id: str | None = None,
     evidence: Any = None,
+    model_tag: str | None = None,
 ) -> dict[str, Any]:
     """Append one message and return it, including its allocated `seq`.
 
@@ -396,12 +398,12 @@ def append_message(
                 """
                 INSERT INTO chat_messages
                     (session_id, seq, role, content, query_id,
-                     evidence_json, token_estimate, created_at)
+                     evidence_json, token_estimate, created_at, model_tag)
                 VALUES (
                     ?,
                     (SELECT COALESCE(MAX(seq), 0) + 1
                        FROM chat_messages WHERE session_id = ?),
-                    ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 (
@@ -413,6 +415,7 @@ def append_message(
                     evidence_json,
                     tokens,
                     now,
+                    model_tag,
                 ),
             )
             conn.execute(

@@ -127,3 +127,7 @@ export interface ActiveChatModel {
 export function activeChatModel(): Promise<ActiveChatModel> {
   return request<ActiveChatModel>('/api/chat/model');
 }
+
+export function checkChatStatus(sessionId: string): Promise<{ generating: boolean; model?: string; started_at?: number }> {
+  return request<{ generating: boolean; model?: string; started_at?: number }>(`/api/chat/${encodeURIComponent(sessionId)}/status`);
+}
