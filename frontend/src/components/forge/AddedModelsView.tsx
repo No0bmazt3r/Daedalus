@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import {
   modelTable, modelUsage, deleteModel, runBenchmark,
-  type ModelRow, type BenchmarkResult, type ModelUsage,
+  type ModelRow, type BenchmarkResult, type BenchmarkProgress, type ModelUsage,
 } from '../../lib/forgeClient'
 import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
 import { SkeletonList } from '../ui/skeleton'
@@ -101,11 +101,12 @@ function Stat({ label, value, title }: { label: string; value: string; title?: s
 }
 
 function LocalModel({
-  row, usage, busy, onBenchmark, onDelete,
+  row, usage, busy, benchProgress, onBenchmark, onDelete,
 }: {
   row: ModelRow
   usage: ModelUsage | undefined
   busy: string | null
+  benchProgress?: BenchmarkProgress | null
   onBenchmark: (row: ModelRow) => void
   onDelete: (row: ModelRow) => void
 }) {
@@ -178,9 +179,15 @@ function LocalModel({
         <Stat label="Last used" value={usage ? since(usage.last_used) : 'never'} />
       </div>
 
-      {/* Measured latency. Absent until something has actually run, and said in
-          words rather than left as a row of dashes. */}
-      {usage && usage.runs > 0 ? (
+      {isBusy && benchProgress ? (
+        <div className="border-t theme-border px-3 py-2.5 text-[11px] font-mono theme-text-muted animate-pulse">
+          {benchProgress.phase === 'building_prompt' && 'Building prompt...'}
+          {benchProgress.phase === 'warming_up' && 'Warming up...'}
+          {benchProgress.phase === 'generating' && `Measuring: ${benchProgress.tokens ?? 0} tokens`}
+          {benchProgress.phase === 'error' && <span className="status-bad">Failed</span>}
+          {benchProgress.phase === 'done' && 'Saving...'}
+        </div>
+      ) : usage && usage.runs > 0 ? (
         <div className="border-t theme-border px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-2">
             <Activity size={11} className="theme-accent" />
@@ -240,6 +247,7 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [result, setResult] = useState<BenchmarkResult | null>(null)
+  const [benchProgress, setBenchProgress] = useState<BenchmarkProgress | null>(null)
 
   const load = useCallback(async () => {
     // Settled, not all: usage is derived from the audit log and the inventory
@@ -274,13 +282,21 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
     setBusy(row.tag)
     setNotice(null)
     setResult(null)
+    setBenchProgress(null)
     try {
-      setResult(await runBenchmark(row.tag))
+      const { done } = runBenchmark(row.tag, (p) => {
+        setBenchProgress(p)
+        if (p.phase === 'done' && p.result) {
+          setResult(p.result)
+        }
+      })
+      await done
       await load()
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'the benchmark failed')
     } finally {
       setBusy(null)
+      setBenchProgress(null)
     }
   }, [load])
 
@@ -416,6 +432,7 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
                     row={row}
                     usage={usage[row.tag]}
                     busy={busy}
+                    benchProgress={busy === row.tag ? benchProgress : null}
                     onBenchmark={handleBenchmark}
                     onDelete={handleDelete}
                   />

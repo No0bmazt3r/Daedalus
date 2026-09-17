@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark,
-  type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type ModelSource,
+  type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type BenchmarkProgress, type ModelSource,
 } from '../../lib/forgeClient'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
 
@@ -290,10 +290,11 @@ function Detail({ row }: { row: ModelRow }) {
 }
 
 function Row({
-  row, busy, onPull, onDelete, onBenchmark,
+  row, busy, benchProgress, onPull, onDelete, onBenchmark,
 }: {
   row: ModelRow
   busy: string | null
+  benchProgress?: BenchmarkProgress | null
   onPull: (row: ModelRow) => void
   onDelete: (row: ModelRow) => void
   onBenchmark: (row: ModelRow) => void
@@ -363,7 +364,15 @@ function Row({
               <div className="text-[10px] uppercase tracking-wide theme-accent">
                 Measured
               </div>
-              {measured?.tokens_per_sec ? (
+              {isBusy && benchProgress ? (
+                <div className="text-xs font-mono theme-text-muted truncate animate-pulse">
+                  {benchProgress.phase === 'building_prompt' && 'building prompt...'}
+                  {benchProgress.phase === 'warming_up' && 'warming up...'}
+                  {benchProgress.phase === 'generating' && `measuring: ${benchProgress.tokens ?? 0} tokens`}
+                  {benchProgress.phase === 'error' && <span className="status-bad">failed</span>}
+                  {benchProgress.phase === 'done' && 'saving...'}
+                </div>
+              ) : measured?.tokens_per_sec ? (
                 <div className="text-xs font-mono theme-text" title={`Benchmarked ${measured.at ?? ''}`}>
                   {measured.time_to_first_token_ms}ms · {measured.tokens_per_sec} tok/s
                 </div>
@@ -589,13 +598,21 @@ export function ModelsView() {
     setBusy(row.tag)
     setNotice(null)
     setResult(null)
+    setBenchProgress(null)
     try {
-      setResult(await runBenchmark(row.tag))
+      const { done } = runBenchmark(row.tag, (p) => {
+        setBenchProgress(p)
+        if (p.phase === 'done' && p.result) {
+          setResult(p.result)
+        }
+      })
+      await done
       await load()
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'the benchmark failed')
     } finally {
       setBusy(null)
+      setBenchProgress(null)
     }
   }, [load])
 
@@ -875,6 +892,7 @@ export function ModelsView() {
             key={row.id}
             row={row}
             busy={busy}
+            benchProgress={busy === row.tag ? benchProgress : null}
             onPull={handlePull}
             onDelete={handleDelete}
             onBenchmark={handleBenchmark}

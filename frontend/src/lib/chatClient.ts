@@ -52,18 +52,68 @@ export interface ChatReply {
  * locally installed model. An override the server refused comes back in
  * `model_choice.reason` rather than failing, so the UI can say what answered.
  */
+export interface ChatProgress {
+  phase: 'generating' | 'done' | 'error';
+  piece?: string;
+  result?: ChatReply;
+  error?: string;
+}
+
 export function sendChat(
   sessionId: string,
   message: string,
-  model?: string | null,
+  model: string | null,
+  onProgress: (p: ChatProgress) => void,
 ): Promise<ChatReply> {
-  return request<ChatReply>('/api/chat', {
-    method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, message, model: model || null }),
-    // A small model on a slow machine is seconds to first token, and there is
-    // no streaming yet.
-    timeoutMs: 5 * 60 * 1000,
-  });
+  const controller = new AbortController();
+  let buffer = '';
+
+  return (async () => {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message, model: model || null }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+
+    if (!res.body) throw new Error('No response body');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let finalReply: ChatReply | undefined = undefined;
+
+    while (true) {
+      const { value, done: finished } = await reader.read();
+      if (finished) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() ?? '';
+      for (const frame of frames) {
+        const line = frame.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        try {
+          const event = JSON.parse(line.slice(6)) as ChatProgress;
+          onProgress(event);
+          if (event.phase === 'error') {
+             throw new Error(event.error ?? 'Unknown error');
+          }
+          if (event.phase === 'done' && event.result) {
+             finalReply = event.result;
+          }
+        } catch (err) {
+          if (err instanceof SyntaxError) continue;
+          throw err;
+        }
+      }
+    }
+
+    if (!finalReply) throw new Error('Stream ended without a final result');
+    return finalReply;
+  })();
 }
 
 export interface ActiveChatModel {

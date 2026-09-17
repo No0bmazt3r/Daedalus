@@ -42,6 +42,7 @@ import json
 import re
 import time
 from typing import Any
+from collections.abc import Iterator
 
 from ..db import audit_store
 from . import chat_service, model_config, ollama_client
@@ -120,14 +121,14 @@ def choose_model(requested: str | None = None) -> dict[str, Any]:
     }
 
 
-def answer(
+def answer_stream(
     session_id: str,
     question: str,
     *,
     model: str | None = None,
     evidence: str | None = None,
-) -> dict[str, Any]:
-    """Answer one message. Writes the assistant turn and a `model_logs` row.
+) -> Iterator[dict[str, Any]]:
+    """Answer one message. Yields progress events, writes the assistant turn, and logs.
 
     `evidence` is where retrieval will plug in. It is a parameter now, unused by
     any caller, so the prompt is assembled in its final shape rather than being
@@ -137,7 +138,8 @@ def answer(
     choice = choose_model(model)
     tag = choice["tag"]
     if not tag:
-        raise NoModelAvailable(choice["reason"])
+        yield {"phase": "error", "error": choice["reason"]}
+        return
 
     query_id = audit_store.new_query_id()
 
@@ -197,6 +199,7 @@ def answer(
                             first_token_at = time.perf_counter()
                         if piece:
                             pieces.append(piece)
+                            yield {"phase": "generating", "piece": piece}
                         if event.get("done"):
                             final = event
                 break
@@ -208,6 +211,7 @@ def answer(
             raise ollama_client.OllamaUnavailable("no Ollama daemon answered")
     except Exception as exc:  # noqa: BLE001
         error = f"{exc.__class__.__name__}: {exc}"
+        yield {"phase": "error", "error": error}
 
     ended = time.perf_counter()
     total_ms = int((ended - started) * 1000)
@@ -235,40 +239,33 @@ def answer(
     )
 
     if error:
-        raise ollama_client.OllamaError(error)
+        return
 
-    # Written only on success. A failed call must not leave a blank assistant
-    # turn in the transcript that the next prompt would replay as context.
-    #
-    # `query_id` goes with it: that is the thread joining this turn to its
-    # `model_logs` row and, later, to the retrieval and tool rows Ariadne's
-    # Thread reassembles. Losing it here would make the transcript and the
-    # evidence two unrelated tables.
     stored = chat_service.add_assistant_message(
         session_id, text, query_id=query_id, evidence=evidence
     )
 
-    return {
-        "query_id": query_id,
-        "session_id": session_id,
-        # Both turns, so the caller can reconcile its optimistic echo and append
-        # the answer without a second round trip to re-read the transcript.
-        "user_message": user_turn,
-        "message": stored,
-        "answer": text,
-        "model": tag,
-        "model_choice": choice,
-        "timings": {
-            "time_to_first_token_ms": ttft_ms,
-            "total_inference_ms": total_ms,
-            "prefill_ms": int(final.get("prompt_eval_duration", 0) // ns) or None,
-            "generation_ms": int(final.get("eval_duration", 0) // ns) or None,
-        },
-        "context": {
-            "history_messages": len(window.messages),
-            "dropped": window.dropped,
-            "estimated_tokens": window.estimated_tokens,
-            # Layer 7 should summarise after responding, never on this path.
-            "needs_summary": window.needs_summary,
-        },
+    yield {
+        "phase": "done",
+        "result": {
+            "query_id": query_id,
+            "session_id": session_id,
+            "user_message": user_turn,
+            "message": stored,
+            "answer": text,
+            "model": tag,
+            "model_choice": choice,
+            "timings": {
+                "time_to_first_token_ms": ttft_ms,
+                "total_inference_ms": total_ms,
+                "prefill_ms": int(final.get("prompt_eval_duration", 0) // ns) or None,
+                "generation_ms": int(final.get("eval_duration", 0) // ns) or None,
+            },
+            "context": {
+                "history_messages": len(window.messages),
+                "dropped": window.dropped,
+                "estimated_tokens": window.estimated_tokens,
+                "needs_summary": window.needs_summary,
+            },
+        }
     }

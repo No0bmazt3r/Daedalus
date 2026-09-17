@@ -174,9 +174,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
       // Echo immediately; the composer should never feel like it stalled.
       const optimisticKey = `local-${Date.now()}`;
+      const assistantKey = `local-ai-${Date.now()}`;
       setMessages([
         ...history,
         { key: optimisticKey, role: 'user', content: trimmed, persisted: false },
+        { key: assistantKey, role: 'assistant', content: '', persisted: false },
       ]);
 
       try {
@@ -187,12 +189,17 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           setActiveEphemeral(isIncognito);
         }
 
-        // One call. /api/chat records both turns server-side, so posting the
-        // user message separately would store it twice.
-        const reply = await sendChat(sessionId, trimmed, selectedModel || null);
+        const reply = await sendChat(sessionId, trimmed, selectedModel || null, (p) => {
+           if (p.phase === 'generating' && p.piece) {
+              setMessages((prev) => prev.map((m) => 
+                 m.key === assistantKey ? { ...m, content: m.content + p.piece! } : m
+              ));
+           }
+        });
 
         setMessages((prev) => [
-          ...prev.map((m) => (m.key === optimisticKey ? toDisplay(reply.user_message) : m)),
+          ...prev.filter((m) => m.key !== optimisticKey && m.key !== assistantKey),
+          toDisplay(reply.user_message),
           toDisplay(reply.message),
         ]);
 
@@ -213,9 +220,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         // transcript back to empty, which switched the view back to the
         // greeting — so a failed send looked like nothing had happened at all.
         setMessages((prev) =>
-          prev.map((m) =>
-            m.key === optimisticKey ? { ...m, failed: true, persisted: false } : m,
-          ),
+          prev
+            .filter(m => m.key !== assistantKey) // remove the broken assistant turn
+            .map((m) =>
+              m.key === optimisticKey ? { ...m, failed: true, persisted: false } : m,
+            ),
         );
         setError(err instanceof Error ? err.message : 'could not send that message');
         if (err instanceof SessionApiError && err.status === 0) setStatus('offline');

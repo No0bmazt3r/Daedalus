@@ -51,7 +51,7 @@ STORE_LABELS: Final[dict[str, str]] = {
 
 # Any column whose name contains one of these is replaced with a marker.
 # Defence in depth — nothing in BROWSABLE currently has such a column.
-REDACTED_COLUMNS: Final[tuple[str, ...]] = ("api_key", "secret", "token", "password")
+REDACTED_COLUMNS: Final[tuple[str, ...]] = ("api_key", "secret", "auth_token", "access_token", "session_token", "bearer", "password")
 REDACTED_MARKER: Final = "••• redacted"
 
 DEFAULT_LIMIT: Final = 100

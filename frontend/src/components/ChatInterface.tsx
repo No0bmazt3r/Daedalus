@@ -226,7 +226,11 @@ export function ChatInterface() {
                         : 'max-w-[85%] pt-1'
                     } ${msg.failed ? 'status-bad-border' : ''}`}
                   >
-                    {msg.content}
+                    {msg.role === 'assistant' && msg.content === '' && !msg.persisted ? (
+                      <span className="theme-text-muted animate-pulse">Thinking…</span>
+                    ) : (
+                      msg.content
+                    )}
                     {/* A failed send is kept on screen so the text is not lost,
                         and labelled so it is not mistaken for one that landed. */}
                     {msg.failed && (
@@ -237,14 +241,6 @@ export function ChatInterface() {
                   </div>
                 </div>
               ))}
-              {sending && (
-                <div className="flex w-full justify-start">
-                  <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card zone-ai-bubble">
-                    <LabyrinthIcon className="w-5 h-5 zone-brand animate-pulse" />
-                  </div>
-                  <div className="text-[15px] pt-1 theme-text-muted">Thinking…</div>
-                </div>
-              )}
               {modelNotice && (
                 <div className="text-[13px] status-warn px-1">{modelNotice}</div>
               )}

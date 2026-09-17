@@ -300,12 +300,60 @@ export interface BenchmarkResult {
  * CPU-bound machine that is genuinely slow. The default 15s abort would kill
  * every run, so this one gets its own timeout.
  */
-export function runBenchmark(tag: string): Promise<BenchmarkResult> {
-  return request<BenchmarkResult>('/api/forge/benchmark', {
-    method: 'POST',
-    body: JSON.stringify({ tag }),
-    timeoutMs: 10 * 60 * 1000,
-  });
+export interface BenchmarkProgress {
+  phase: 'building_prompt' | 'warming_up' | 'generating' | 'done' | 'error';
+  tokens?: number;
+  piece?: string;
+  result?: BenchmarkResult;
+  error?: string;
+}
+
+export function runBenchmark(
+  tag: string,
+  onProgress: (p: BenchmarkProgress) => void
+): { done: Promise<void>; cancel: () => void } {
+  const controller = new AbortController();
+  let buffer = '';
+
+  const done = (async () => {
+    const res = await fetch('/api/forge/benchmark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+
+    if (!res.body) throw new Error('No response body');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done: finished } = await reader.read();
+      if (finished) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() ?? '';
+      for (const frame of frames) {
+        const line = frame.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        try {
+          const event = JSON.parse(line.slice(6)) as BenchmarkProgress;
+          onProgress(event);
+          if (event.phase === 'error') throw new Error(event.error ?? 'Unknown error');
+        } catch (err) {
+          if (err instanceof SyntaxError) continue;
+          throw err;
+        }
+      }
+    }
+  })();
+
+  return { done, cancel: () => controller.abort() };
 }
 
 // ── inspect one arbitrary tag ────────────────────────────────────────────────

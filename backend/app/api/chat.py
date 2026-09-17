@@ -14,8 +14,10 @@ be rearranged when they do.
 from __future__ import annotations
 
 from typing import Any
+from collections.abc import Iterator
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import StreamingResponse
 
 from ..services import inference, model_config, ollama_client
 
@@ -45,30 +47,33 @@ def chat(
     session_id: str = Body(..., embed=True),
     message: str = Body(..., embed=True),
     model: str | None = Body(default=None, embed=True),
-) -> dict[str, Any]:
-    """Answer one message in a session.
-
-    `model` overrides the committed choice for this request only. It is honoured
-    only for a locally installed model: the response says which model actually
-    answered and why, so an override that was refused is visible rather than
-    silent. Rule 1 means a cloud endpoint can never serve this path.
-
-    Synchronous for now. Streaming belongs here eventually — a small model on a
-    slow machine is several seconds to first token — but the shape of the
-    response is the thing worth settling first.
-    """
+) -> StreamingResponse:
+    """Answer one message in a session, streaming the response."""
     if not message.strip():
         raise HTTPException(status_code=400, detail="message is empty")
 
-    try:
-        return inference.answer(session_id, message.strip(), model=model)
-    except inference.NoModelAvailable as exc:
-        # 503 rather than 500: nothing is broken, there is just nothing to run.
-        # The message names the fix, which is usually "pull a model".
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except ollama_client.OllamaUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except ollama_client.OllamaError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"no such session: {exc}") from exc
+    def events() -> Iterator[str]:
+        try:
+            for event in inference.answer_stream(session_id, message.strip(), model=model):
+                yield f"data: {json.dumps(event)}\n\n"
+        except inference.NoModelAvailable as exc:
+            yield f"data: {json.dumps({'phase': 'error', 'error': str(exc)})}\n\n"
+        except ollama_client.OllamaUnavailable as exc:
+            yield f"data: {json.dumps({'phase': 'error', 'error': str(exc)})}\n\n"
+        except ollama_client.OllamaError as exc:
+            yield f"data: {json.dumps({'phase': 'error', 'error': str(exc)})}\n\n"
+        except KeyError as exc:
+            yield f"data: {json.dumps({'phase': 'error', 'error': f'no such session: {exc}'})}\n\n"
+        except Exception as exc:  # noqa: BLE001
+            yield f"data: {json.dumps({'phase': 'error', 'error': f'{exc.__class__.__name__}: {exc}'})}\n\n"
+
+    from fastapi.responses import StreamingResponse
+    import json
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
