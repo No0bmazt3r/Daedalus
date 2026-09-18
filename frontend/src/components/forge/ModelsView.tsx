@@ -458,6 +458,7 @@ export function ModelsView() {
   const [progress, setProgress] = useState<PullProgress | null>(null)
   const [cancelPull, setCancelPull] = useState<(() => void) | null>(null)
   const [result, setResult] = useState<BenchmarkResult | null>(null)
+  const [benchProgress, setBenchProgress] = useState<BenchmarkProgress | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   // ── filters ──

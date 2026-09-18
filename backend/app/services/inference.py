@@ -39,10 +39,12 @@ model by whatever else the machine was doing.
 from __future__ import annotations
 
 import json
+import queue
 import re
+import threading
 import time
-from typing import Any
 from collections.abc import Iterator
+from typing import Any
 
 from ..db import audit_store
 from . import chat_service, model_config, ollama_client
@@ -69,7 +71,12 @@ _LEADING_STAMP = re.compile(r"^\s*\[\s*\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
 
 
 class NoModelAvailable(RuntimeError):
-    """Nothing is installed, or the configured model is not."""
+    """Nothing is installed, or the configured model is not.
+
+    Kept for callers that want to fail loudly. `answer_stream` does not raise it
+    — by the time it knows, it is already a streaming response, so it yields a
+    terminal `error` event instead.
+    """
 
 
 def _installed_tags() -> set[str]:
@@ -121,7 +128,12 @@ def choose_model(requested: str | None = None) -> dict[str, Any]:
     }
 
 
+# Sessions with a generation in flight, keyed by session id. The worker owns the
+# entry: it is added before the thread starts and removed in the thread's
+# `finally`, so `GET /api/chat/{id}/status` can answer truthfully even after the
+# client that started the generation has disconnected.
 ACTIVE_GENERATIONS: dict[str, dict[str, Any]] = {}
+
 
 def answer_stream(
     session_id: str,
@@ -130,7 +142,20 @@ def answer_stream(
     model: str | None = None,
     evidence: str | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Answer one message. Yields progress events, writes the assistant turn, and logs.
+    """Answer one message, yielding progress events as the model produces them.
+
+    Yields `{"phase": "generating", "piece": ...}` per token, then exactly one
+    terminal event — `{"phase": "done", "result": {...}}` or
+    `{"phase": "error", "error": ...}`. Errors are yielded rather than raised:
+    by the time the first token is out the HTTP response has already begun, so
+    there is no status code left to fail with.
+
+    The model call runs on a worker thread rather than inline. That is what lets
+    a generation survive the client going away — the browser navigating off the
+    page closes the SSE response, and the turn would otherwise be lost
+    mid-flight. The worker finishes, writes the assistant turn, and clears its
+    `ACTIVE_GENERATIONS` entry regardless; a returning client polls `/status`
+    and picks the transcript back up.
 
     `evidence` is where retrieval will plug in. It is a parameter now, unused by
     any caller, so the prompt is assembled in its final shape rather than being
@@ -138,7 +163,11 @@ def answer_stream(
     question, because that is the ordering `chat_service` already documents.
     """
     if session_id in ACTIVE_GENERATIONS:
-        raise ValueError("A generation is already in progress for this session.")
+        yield {
+            "phase": "error",
+            "error": "a generation is already in progress for this session",
+        }
+        return
 
     choice = choose_model(model)
     tag = choice["tag"]
@@ -148,6 +177,15 @@ def answer_stream(
 
     query_id = audit_store.new_query_id()
 
+    # History first, then record the question. The order matters both ways:
+    # `build_context` must not see this turn (it is appended to the prompt
+    # separately, and would otherwise appear twice), and the store must have it
+    # before the answer so the transcript reads user-then-assistant.
+    #
+    # Recording it before the model call rather than after is deliberate. A
+    # failed call then leaves the question in the transcript with no answer,
+    # which is what actually happened and is recoverable; writing it afterwards
+    # would lose the turn entirely whenever Ollama was down.
     window = chat_service.build_context(session_id)
     user_turn = chat_service.add_user_message(session_id, question)
 
@@ -159,11 +197,11 @@ def answer_stream(
 
     payload = {"model": tag, "messages": messages, "stream": True}
 
-    import queue
-    import threading
-    q: queue.Queue = queue.Queue()
+    # `None` is the sentinel that closes the stream. Unbounded on purpose: the
+    # worker must never block on a consumer that has gone away.
+    events: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
-    state = {
+    state: dict[str, Any] = {
         "pieces": [],
         "started_at": time.time(),
         "model": tag,
@@ -208,7 +246,7 @@ def answer_stream(
                                     first_token_at = time.perf_counter()
                                 if piece:
                                     pieces.append(piece)
-                                    q.put({"phase": "generating", "piece": piece})
+                                    events.put({"phase": "generating", "piece": piece})
                                 if event.get("done"):
                                     final = event
                         break
@@ -220,7 +258,7 @@ def answer_stream(
                     raise ollama_client.OllamaUnavailable("no Ollama daemon answered")
             except Exception as exc:  # noqa: BLE001
                 error = f"{exc.__class__.__name__}: {exc}"
-                q.put({"phase": "error", "error": error})
+                events.put({"phase": "error", "error": error})
 
             ended = time.perf_counter()
             total_ms = int((ended - started) * 1000)
@@ -240,6 +278,9 @@ def answer_stream(
                 prefill_ms=int(final.get("prompt_eval_duration", 0) // ns) or None,
                 generation_ms=int(final.get("eval_duration", 0) // ns) or None,
                 load_ms=int(final.get("load_duration", 0) // ns) or None,
+                # What separates these rows from the Forge's `bench_` ones in the
+                # same table. §2.3 wants both here; this is how the analysis tells
+                # them apart.
                 source="chat",
                 status="error" if error else "ok",
                 error_message=error,
@@ -257,18 +298,28 @@ def answer_stream(
             )
 
             if error:
-                q.put(None)
                 return
 
+            # Written only on success. A failed call must not leave a blank
+            # assistant turn in the transcript that the next prompt would replay
+            # as context.
+            #
+            # `query_id` goes with it: that is the thread joining this turn to its
+            # `model_logs` row and, later, to the retrieval and tool rows Ariadne's
+            # Thread reassembles. Losing it here would make the transcript and the
+            # evidence two unrelated tables.
             stored = chat_service.add_assistant_message(
                 session_id, text, query_id=query_id, evidence=evidence, model_tag=tag
             )
 
-            q.put({
+            events.put({
                 "phase": "done",
                 "result": {
                     "query_id": query_id,
                     "session_id": session_id,
+                    # Both turns, so the caller can reconcile its optimistic echo
+                    # and append the answer without a second round trip to
+                    # re-read the transcript.
                     "user_message": user_turn,
                     "message": stored,
                     "answer": text,
@@ -284,11 +335,27 @@ def answer_stream(
                         "history_messages": len(window.messages),
                         "dropped": window.dropped,
                         "estimated_tokens": window.estimated_tokens,
+                        # Layer 7 should summarise after responding, never here.
                         "needs_summary": window.needs_summary,
                     },
                 }
             })
-            q.put(None)
+        except Exception as exc:  # noqa: BLE001
+            # The inner try covers the model call. This one covers everything
+            # after it — the two audit writes and the transcript write — because
+            # a failure there would otherwise leave the consumer blocked on a
+            # sentinel that never arrives.
+            events.put({"phase": "error", "error": f"{exc.__class__.__name__}: {exc}"})
         finally:
             ACTIVE_GENERATIONS.pop(session_id, None)
+            # Always last, and always exactly once: this is what ends the stream.
+            events.put(None)
+
+    threading.Thread(target=_worker, name=f"chat-{query_id}", daemon=True).start()
+
+    while True:
+        event = events.get()
+        if event is None:
+            return
+        yield event
 

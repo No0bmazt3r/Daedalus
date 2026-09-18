@@ -262,7 +262,10 @@ export interface SystemModel {
   id: string;
   name: string;
   provider: string;
+  /** `cloud` is an evaluation baseline and may never answer a query (Rule 1). */
   type: 'local' | 'cloud';
+  /** Why a cloud model cannot be selected. Null for local ones. */
+  note?: string | null;
   details?: Record<string, unknown>;
 }
 

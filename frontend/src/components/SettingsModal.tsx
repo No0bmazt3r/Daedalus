@@ -21,6 +21,7 @@ import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { HardwarePanel } from './settings/HardwarePanel'
 import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
+import { AddedModelsView } from './forge/AddedModelsView'
 
 interface SettingsModalProps {
   open: boolean
@@ -187,6 +188,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl">
 
             {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
+
+            {/* The Forge's own inventory view, not a second implementation of
+                it. Same reasoning as ModelEndpointsPanel appearing in both
+                places: one component, two entry points, so the console and the
+                Forge can never describe the deployment differently. */}
+            {activeTab === 'added-models' && <AddedModelsView isPeek={isPeek} />}
 
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 

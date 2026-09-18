@@ -71,8 +71,8 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     ],
   }),
   panel({
-    id: 'added-models', label: 'Added Models', group: 'models', icon: List,
-    keywords: ['models', 'configured', 'installed', 'quantization'],
+    id: 'added-models', label: 'Added Models', group: 'models', icon: List, implemented: true,
+    keywords: ['models', 'configured', 'installed', 'quantization', 'benchmark', 'cloud', 'inventory'],
   }),
   panel({
     id: 'hardware', label: 'Hardware', group: 'models', icon: Cpu, implemented: true,

@@ -166,12 +166,25 @@ require_venv() {
 # Applied per-command rather than exported, because `docker compose` reads the
 # shell environment in preference to .env: exporting host paths globally would
 # hand them to the container, which is precisely backwards.
+# host_ollama_url — where Ollama is, as seen *from the host*.
+#
+# .env holds the container's view, `host.docker.internal`, which does not
+# resolve outside Docker. Left as-is the backend pays a full DNS timeout on
+# every call before falling back. Unset stays unset rather than becoming the
+# empty string: the backend reads that literally and ends up with no candidate
+# URL at all, which is worse than the default it would otherwise use.
+host_ollama_url() {
+  case "${OLLAMA_BASE_URL:-}" in
+    "") return 0 ;;
+    "http://host.docker.internal:11434") printf 'http://127.0.0.1:11434' ;;
+    *) printf '%s' "$OLLAMA_BASE_URL" ;;
+  esac
+}
+
 host_py() {
   local root="$PWD"
-  local ollama_url="${OLLAMA_BASE_URL:-}"
-  [ "$ollama_url" = "http://host.docker.internal:11434" ] && ollama_url="http://127.0.0.1:11434"
   (cd backend && env \
-      OLLAMA_BASE_URL="$ollama_url" \
+      ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
       DAEDALUS_DATA_DIR="$root/data" \
       DAEDALUS_LOG_DIR="$root/logs" \
       DAEDALUS_PREFS_DB="$root/backend/data/prefs.db" \
@@ -182,10 +195,8 @@ host_py() {
 # host_uvicorn — the dev server, with the same host-path mapping.
 host_uvicorn() {
   local root="$PWD"
-  local ollama_url="${OLLAMA_BASE_URL:-}"
-  [ "$ollama_url" = "http://host.docker.internal:11434" ] && ollama_url="http://127.0.0.1:11434"
   env \
-    OLLAMA_BASE_URL="$ollama_url" \
+    ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
     DAEDALUS_DATA_DIR="$root/data" \
     DAEDALUS_LOG_DIR="$root/logs" \
     DAEDALUS_PREFS_DB="$root/backend/data/prefs.db" \
@@ -208,15 +219,15 @@ wait_for_api() {
 }
 
 check_ollama() {
-  local url="${OLLAMA_BASE_URL:-http://localhost:11434}"
-  [ "$url" = "http://host.docker.internal:11434" ] && url="http://127.0.0.1:11434"
+  local url; url="$(host_ollama_url)"
+  [ -n "$url" ] || url="http://localhost:11434"
   if curl -fsS --max-time 2 "${url}/api/tags" >/dev/null 2>&1; then
     ok "Ollama reachable at ${url}"
     return 0
   fi
 
   warn "no Ollama reachable at ${url}"
-  
+
   if have ollama; then
     info "Ollama is installed but not running. Attempting to start it automatically..."
     local started=0
@@ -233,7 +244,7 @@ check_ollama() {
         open -a Ollama >/dev/null 2>&1 && started=1
       fi
     fi
-    
+
     if [ "$started" -eq 1 ]; then
       sleep 2
       if curl -fsS --max-time 2 "${url}/api/tags" >/dev/null 2>&1; then

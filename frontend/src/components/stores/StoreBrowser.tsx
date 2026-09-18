@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, X, EyeOff, ArrowDownUp, Table2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, X, ArrowDownUp, Table2 } from 'lucide-react'
 import { Skeleton } from '../ui/skeleton'
 import { readLogTable, type LogPage } from '../../lib/systemClient'
 

@@ -72,6 +72,11 @@ const SessionsContext = createContext<SessionsContextValue | null>(null);
 // array identity on every render and defeat the memo below.
 const NO_MESSAGES: DisplayMessage[] = [];
 
+// How often a reopened chat asks whether its in-flight answer has landed. Slow
+// enough not to hammer the API, fast enough that the answer does not feel stuck
+// after the generation has actually finished.
+const RECONNECT_POLL_MS = 2000;
+
 function toDisplay(message: ChatMessage): DisplayMessage {
   return {
     key: `m${message.id}`,
@@ -101,6 +106,19 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   // clicked a different chat, which would show the wrong conversation.
   const loadToken = useRef(0);
 
+  // The reconnect poll below. Held in a ref so switching chats or unmounting
+  // can stop it — an interval left running holds the composer disabled and
+  // keeps hitting the API for a session nobody is looking at any more.
+  const pollTimer = useRef<number | null>(null);
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current !== null) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopPolling, [stopPolling]);
+
   const refresh = useCallback(async () => {
     try {
       setSessions(await listSessions());
@@ -118,11 +136,13 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   const newChat = useCallback(() => {
     loadToken.current += 1;
+    stopPolling();
+    setSending(false);
     setActiveSessionId(null);
     setActiveEphemeral(null);
     setMessages([]);
     setError(null);
-  }, []);
+  }, [stopPolling]);
 
   // Toggling incognito hides the open chat rather than resetting state in an
   // effect: continuing to append to a persisted session while the UI says
@@ -134,6 +154,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   const selectSession = useCallback((id: string) => {
     const token = ++loadToken.current;
+    stopPolling();
+    setSending(false);
     setActiveSessionId(id);
     // Only non-ephemeral sessions are listed, so anything clickable is one.
     setActiveEphemeral(false);
@@ -145,49 +167,54 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         const loaded = await getMessages(id);
         if (loadToken.current !== token) return; // superseded by a newer click
         setMessages(loaded.map(toDisplay));
-        
-        // Also check if a background generation is running for this session.
-        try {
-          const statusResult = await checkChatStatus(id);
-          if (statusResult.generating && loadToken.current === token) {
-            setSending(true);
-            setMessages((prev) => [
-              ...prev,
-              {
-                key: `optimistic-reconnect-${Date.now()}`,
-                role: 'assistant',
-                content: '',
-                created_at: new Date().toISOString(),
-                persisted: false,
-              },
-            ]);
-            
-            // Poll until it finishes
-            const pollTimer = setInterval(async () => {
-              if (loadToken.current !== token) {
-                clearInterval(pollTimer);
-                return;
-              }
-              try {
-                const check = await checkChatStatus(id);
-                if (!check.generating) {
-                  clearInterval(pollTimer);
-                  if (loadToken.current === token) {
-                    const finalLoaded = await getMessages(id);
-                    setMessages(finalLoaded.map(toDisplay));
-                    setSending(false);
-                  }
-                }
-              } catch (e) {
-                // Ignore poll errors, just keep trying
-              }
-            }, 2000);
-          }
-        } catch (e) {
-          // It's okay if status check fails, just ignore
-        }
-        
         setStatus('ready');
+
+        // The generation outlives the request that started it, so reopening a
+        // chat mid-answer has to pick it back up rather than show a transcript
+        // that stops short. A failed status check is not worth surfacing: the
+        // transcript above is already correct, and the answer will appear on
+        // the next load.
+        let generating = false;
+        try {
+          generating = (await checkChatStatus(id)).generating;
+        } catch {
+          return;
+        }
+        if (!generating || loadToken.current !== token) return;
+
+        setSending(true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            key: `reconnect-${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            persisted: false,
+          },
+        ]);
+
+        // Polling, not streaming: the tokens already produced went to the
+        // response this client never received, so there is nothing to resume —
+        // only a finished transcript to wait for.
+        stopPolling();
+        pollTimer.current = window.setInterval(() => {
+          void (async () => {
+            if (loadToken.current !== token) {
+              stopPolling();
+              return;
+            }
+            try {
+              if ((await checkChatStatus(id)).generating) return;
+              stopPolling();
+              if (loadToken.current !== token) return;
+              setMessages((await getMessages(id)).map(toDisplay));
+              setSending(false);
+            } catch {
+              // A blip between polls is not the end of the generation. Keep
+              // the timer running; the next tick tries again.
+            }
+          })();
+        }, RECONNECT_POLL_MS);
       } catch (err) {
         if (loadToken.current !== token) return;
         if (err instanceof SessionApiError && err.isNotFound) {
@@ -202,7 +229,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         setError(err instanceof Error ? err.message : 'could not open that chat');
       }
     })();
-  }, []);
+  }, [stopPolling]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -234,14 +261,20 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           setActiveEphemeral(isIncognito);
         }
 
+        // One call. /api/chat records both turns server-side, so posting the
+        // user message separately would store it twice.
         const reply = await sendChat(sessionId, trimmed, selectedModel || null, (p) => {
-           if (p.phase === 'generating' && p.piece) {
-              setMessages((prev) => prev.map((m) => 
-                 m.key === assistantKey ? { ...m, content: m.content + p.piece! } : m
-              ));
-           }
+          if (p.phase !== 'generating' || !p.piece) return;
+          const piece = p.piece;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.key === assistantKey ? { ...m, content: m.content + piece } : m,
+            ),
+          );
         });
 
+        // Both placeholders go and the stored turns replace them, so the keys
+        // and timestamps are the server's rather than this client's guesses.
         setMessages((prev) => [
           ...prev.filter((m) => m.key !== optimisticKey && m.key !== assistantKey),
           toDisplay(reply.user_message),
@@ -266,7 +299,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         // greeting — so a failed send looked like nothing had happened at all.
         setMessages((prev) =>
           prev
-            .filter(m => m.key !== assistantKey) // remove the broken assistant turn
+            // The half-streamed answer goes; it is not a turn that landed.
+            .filter((m) => m.key !== assistantKey)
             .map((m) =>
               m.key === optimisticKey ? { ...m, failed: true, persisted: false } : m,
             ),

@@ -4,13 +4,16 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check } from 'lucide-react'
+import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
   DropdownMenuTrigger, 
   DropdownMenuContent, 
-  DropdownMenuItem 
+  DropdownMenuItem,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
 } from './ui/dropdown-menu'
 
 import { useSettings } from '../contexts/SettingsContext'
@@ -43,7 +46,7 @@ function TypewriterText({ text }: { text: string }) {
 
 function MessageActions({ text, modelTag }: { text: string, modelTag?: string }) {
   const [copied, setCopied] = useState(false)
-  
+
   const handleCopy = () => {
     void navigator.clipboard.writeText(text)
     setCopied(true)
@@ -52,22 +55,27 @@ function MessageActions({ text, modelTag }: { text: string, modelTag?: string })
 
   return (
     <div className="flex items-center gap-1.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-      <button 
+      <button
         onClick={handleCopy}
         className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
         title="Copy"
       >
         {copied ? <Check size={14} /> : <Copy size={14} />}
       </button>
-      <button 
-        className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
-        title="Fork conversation from this point"
+      {/* Not wired up yet. Disabled rather than inert: a button that quietly
+          does nothing reads as a bug, and these are the shape the branching
+          work in MODULES.md will fill in. */}
+      <button
+        disabled
+        className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
+        title="Fork conversation from this point — not available yet"
       >
         <GitFork size={14} />
       </button>
-      <button 
-        className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
-        title="Rerun prompt"
+      <button
+        disabled
+        className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
+        title="Rerun prompt — not available yet"
       >
         <RefreshCw size={14} />
       </button>
@@ -81,7 +89,7 @@ function MessageActions({ text, modelTag }: { text: string, modelTag?: string })
 }
 
 export function ChatInterface() {
-  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel, models, modelsLoading, modelsError, deployedModel } = useSettings()
+  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel, models, referenceModels, modelsLoading, modelsError, deployedModel } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
   const { messages, sendMessage, sending, error, modelNotice } = useSessions()
   const [input, setInput] = useState('')
@@ -205,7 +213,7 @@ export function ChatInterface() {
                     {selectedModel}
                     <ChevronDown size={14} className="ml-1 opacity-50" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 z-50 theme-card theme-border theme-text border">
+                  <DropdownMenuContent align="end" className="w-72 z-50 theme-card theme-border theme-text border">
                     {modelOptions.map(opt => (
                       <DropdownMenuItem
                         key={opt.value}
@@ -228,6 +236,37 @@ export function ChatInterface() {
                         )}
                       </DropdownMenuItem>
                     ))}
+
+                    {/* Cloud models are listed but never selectable. Rule 1
+                        allows them as evaluation baselines only, and omitting
+                        them entirely just makes an operator wonder why the tag
+                        they installed is missing. Shown, labelled, disabled. */}
+                    {referenceModels.length > 0 && (
+                      <>
+                        <DropdownMenuSeparator className="theme-border" />
+                        {/* Label and rows inside a Group: Base UI's GroupLabel
+                            reads its context and throws without one. */}
+                        <DropdownMenuGroup>
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide theme-text-muted font-normal">
+                            Benchmark only · Rule 1
+                          </DropdownMenuLabel>
+                          {referenceModels.map(m => (
+                            <DropdownMenuItem
+                              key={m.id}
+                              disabled
+                              title={m.note ?? undefined}
+                              className="flex items-center gap-2 opacity-50 cursor-not-allowed"
+                            >
+                              <Cloud size={12} className="shrink-0" />
+                              <span className="truncate">{m.name}</span>
+                              <span className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0">
+                                cloud
+                              </span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuGroup>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
@@ -270,7 +309,7 @@ export function ChatInterface() {
                     ) : (
                       msg.content
                     )}
-                    
+
                     {msg.role === 'assistant' && msg.persisted && msg.content !== '' && (
                       <MessageActions text={msg.content} modelTag={msg.modelTag} />
                     )}

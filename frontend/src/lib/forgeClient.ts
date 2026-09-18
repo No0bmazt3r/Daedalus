@@ -7,7 +7,7 @@
 // Rule 5: every one of these is a setup surface. Nothing in the chat path may
 // import this module.
 
-import { request } from './http';
+import { request, streamEvents, type EventStream } from './http';
 
 // ── the model table (steps 2 & 3) ────────────────────────────────────────────
 
@@ -293,13 +293,7 @@ export interface BenchmarkResult {
   sample: string;
 }
 
-/**
- * Measure TTFT and tok/s on a RAG-context-sized prompt.
- *
- * Minutes, not seconds: a warm-up pass plus a ~2k-token prefill, and on a
- * CPU-bound machine that is genuinely slow. The default 15s abort would kill
- * every run, so this one gets its own timeout.
- */
+/** One event from the benchmark stream. Exactly one `done` or `error` arrives. */
 export interface BenchmarkProgress {
   phase: 'building_prompt' | 'warming_up' | 'generating' | 'done' | 'error';
   tokens?: number;
@@ -308,52 +302,34 @@ export interface BenchmarkProgress {
   error?: string;
 }
 
+/**
+ * Measure TTFT and tok/s on a RAG-context-sized prompt.
+ *
+ * Minutes, not seconds: a warm-up pass plus a ~2k-token prefill, and on a
+ * CPU-bound machine that is genuinely slow. It streams so the UI can show what
+ * it is doing rather than sit on a spinner for several minutes, and `cancel`
+ * exists so leaving the panel does not leave the read hanging.
+ *
+ * The measurement arrives on the `done` event. `done` the promise only says the
+ * stream closed, and rejects if the run failed.
+ */
 export function runBenchmark(
   tag: string,
-  onProgress: (p: BenchmarkProgress) => void
-): { done: Promise<void>; cancel: () => void } {
-  const controller = new AbortController();
-  let buffer = '';
+  onProgress: (p: BenchmarkProgress) => void,
+): EventStream {
+  let failure: string | undefined;
 
-  const done = (async () => {
-    const res = await fetch('/api/forge/benchmark', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tag }),
-      signal: controller.signal,
-    });
+  const stream = streamEvents<BenchmarkProgress>('/api/forge/benchmark', { tag }, (event) => {
+    onProgress(event);
+    if (event.phase === 'error') failure = event.error ?? 'the benchmark failed';
+  });
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    }
-
-    if (!res.body) throw new Error('No response body');
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { value, done: finished } = await reader.read();
-      if (finished) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const frames = buffer.split('\n\n');
-      buffer = frames.pop() ?? '';
-      for (const frame of frames) {
-        const line = frame.split('\n').find((l) => l.startsWith('data: '));
-        if (!line) continue;
-        try {
-          const event = JSON.parse(line.slice(6)) as BenchmarkProgress;
-          onProgress(event);
-          if (event.phase === 'error') throw new Error(event.error ?? 'Unknown error');
-        } catch (err) {
-          if (err instanceof SyntaxError) continue;
-          throw err;
-        }
-      }
-    }
-  })();
-
-  return { done, cancel: () => controller.abort() };
+  return {
+    cancel: stream.cancel,
+    done: stream.done.then(() => {
+      if (failure) throw new Error(failure);
+    }),
+  };
 }
 
 // ── inspect one arbitrary tag ────────────────────────────────────────────────

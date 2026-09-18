@@ -5,7 +5,7 @@
 // call whose latency is measured in seconds rather than milliseconds, so it
 // gets its own timeout.
 
-import { request } from './http';
+import { request, streamEvents } from './http';
 import type { ChatMessage } from './sessionsClient';
 
 export interface ChatTimings {
@@ -42,16 +42,7 @@ export interface ChatReply {
   };
 }
 
-/**
- * Ask a question and get an answer.
- *
- * The server records both turns, so a caller must not also POST the user
- * message — that would store it twice.
- *
- * `model` overrides the committed choice for this request only, and only for a
- * locally installed model. An override the server refused comes back in
- * `model_choice.reason` rather than failing, so the UI can say what answered.
- */
+/** One event from the answer stream. Exactly one `done` or `error` arrives. */
 export interface ChatProgress {
   phase: 'generating' | 'done' | 'error';
   piece?: string;
@@ -59,61 +50,45 @@ export interface ChatProgress {
   error?: string;
 }
 
+/**
+ * Ask a question and get an answer, streamed.
+ *
+ * The server records both turns, so a caller must not also POST the user
+ * message — that would store it twice.
+ *
+ * `model` overrides the committed choice for this request only, and only for a
+ * locally installed model. An override the server refused comes back in
+ * `model_choice.reason` rather than failing, so the UI can say what answered.
+ *
+ * `onProgress` sees every event; the promise is the whole answer, for callers
+ * that only want the finished turn. A failure arrives as an `error` event
+ * rather than a rejected fetch — the response has already started by then — so
+ * it is recorded and thrown once the stream closes.
+ */
 export function sendChat(
   sessionId: string,
   message: string,
   model: string | null,
   onProgress: (p: ChatProgress) => void,
 ): Promise<ChatReply> {
-  const controller = new AbortController();
-  let buffer = '';
+  let reply: ChatReply | undefined;
+  let failure: string | undefined;
 
-  return (async () => {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, message, model: model || null }),
-      signal: controller.signal,
-    });
+  const { done } = streamEvents<ChatProgress>(
+    '/api/chat',
+    { session_id: sessionId, message, model: model || null },
+    (event) => {
+      onProgress(event);
+      if (event.phase === 'error') failure = event.error ?? 'the model did not answer';
+      if (event.phase === 'done' && event.result) reply = event.result;
+    },
+  );
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    }
-
-    if (!res.body) throw new Error('No response body');
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let finalReply: ChatReply | undefined = undefined;
-
-    while (true) {
-      const { value, done: finished } = await reader.read();
-      if (finished) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const frames = buffer.split('\n\n');
-      buffer = frames.pop() ?? '';
-      for (const frame of frames) {
-        const line = frame.split('\n').find((l) => l.startsWith('data: '));
-        if (!line) continue;
-        try {
-          const event = JSON.parse(line.slice(6)) as ChatProgress;
-          onProgress(event);
-          if (event.phase === 'error') {
-             throw new Error(event.error ?? 'Unknown error');
-          }
-          if (event.phase === 'done' && event.result) {
-             finalReply = event.result;
-          }
-        } catch (err) {
-          if (err instanceof SyntaxError) continue;
-          throw err;
-        }
-      }
-    }
-
-    if (!finalReply) throw new Error('Stream ended without a final result');
-    return finalReply;
-  })();
+  return done.then(() => {
+    if (failure) throw new Error(failure);
+    if (!reply) throw new Error('the answer stream ended without a result');
+    return reply;
+  });
 }
 
 export interface ActiveChatModel {
@@ -128,6 +103,18 @@ export function activeChatModel(): Promise<ActiveChatModel> {
   return request<ActiveChatModel>('/api/chat/model');
 }
 
-export function checkChatStatus(sessionId: string): Promise<{ generating: boolean; model?: string; started_at?: number }> {
-  return request<{ generating: boolean; model?: string; started_at?: number }>(`/api/chat/${encodeURIComponent(sessionId)}/status`);
+export interface ChatStatus {
+  generating: boolean;
+  model?: string;
+  started_at?: number;
+}
+
+/**
+ * Whether an answer is still being generated for this session.
+ *
+ * The generation outlives the request that started it, so a client that
+ * reloaded or navigated away has no other way to find out.
+ */
+export function checkChatStatus(sessionId: string): Promise<ChatStatus> {
+  return request<ChatStatus>(`/api/chat/${encodeURIComponent(sessionId)}/status`);
 }

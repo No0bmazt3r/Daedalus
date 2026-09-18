@@ -5,14 +5,20 @@ import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
 /**
  * Per-session UI state, including which model the composer will use.
  *
- * ## Why the list is filtered
+ * ## Why the list is split rather than filtered
  *
- * `/api/system/models` returns local Ollama models *and* configured cloud
- * endpoints. Offering both here would let an operator pick a cloud model to
- * answer a live reactor question, which Rule 1 forbids outright — cloud
- * endpoints exist as offline evaluation baselines and are never deployed. The
- * backend rejects such an override anyway, but a picker that lists a choice it
- * cannot honour is a bad picker.
+ * `/api/system/models` returns local Ollama models *and* cloud ones — both
+ * Ollama's own `*-cloud` tags and the configured benchmark endpoints. Only the
+ * local half is selectable: letting an operator pick a cloud model to answer a
+ * live reactor question is what Rule 1 forbids outright, and `choose_model`
+ * rejects such an override anyway.
+ *
+ * They are kept and handed over as `referenceModels` rather than dropped. A
+ * picker that silently omits `gpt-oss:120b-cloud` invites the question this
+ * comment exists to answer — "is it broken, or did I imagine installing it?" —
+ * whereas one that lists it greyed out, with the reason attached, shows the
+ * boundary being enforced. That is the more useful thing for the evaluation
+ * chapter to be able to point at, too.
  *
  * ## Why the default comes from the server
  *
@@ -28,8 +34,10 @@ interface SettingsContextType {
   setIsIncognito: (val: boolean) => void;
   selectedModel: string;
   setSelectedModel: (val: string) => void;
-  /** Local, installed models only. Cloud endpoints are excluded by design. */
+  /** Local, installed models. The only ones that may answer a query. */
   models: SystemModel[];
+  /** Cloud models: shown, never selectable. Each carries its own `note`. */
+  referenceModels: SystemModel[];
   modelsLoading: boolean;
   modelsError: string | null;
   /** What the Forge committed, and why. Null until resolved. */
@@ -42,6 +50,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [isIncognito, setIsIncognito] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [models, setModels] = useState<SystemModel[]>([]);
+  const [referenceModels, setReferenceModels] = useState<SystemModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [deployedModel, setDeployedModel] = useState<ActiveChatModel | null>(null);
@@ -66,6 +75,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
         const local = listed.value.filter((m) => m.type === 'local');
         setModels(local);
+        setReferenceModels(listed.value.filter((m) => m.type === 'cloud'));
         setModelsLoading(false);
 
         setSelectedModel((prev) => {
@@ -91,6 +101,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       selectedModel,
       setSelectedModel,
       models,
+      referenceModels,
       modelsLoading,
       modelsError,
       deployedModel,

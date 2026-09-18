@@ -58,3 +58,78 @@ export async function request<T>(path: string, init?: RequestOptions): Promise<T
     throw new Error('the backend returned an unexpected response');
   }
 }
+
+// ── server-sent events ───────────────────────────────────────────────────────
+
+export interface EventStream {
+  /** Resolves when the server closes the stream, rejects if it breaks. */
+  done: Promise<void>;
+  /** Abort the request. `done` then rejects. */
+  cancel: () => void;
+}
+
+/**
+ * POST JSON, then read an SSE response frame by frame.
+ *
+ * Here rather than in each client for the same reason `request` is: chat and
+ * the benchmark both stream, and two copies of the framing would eventually
+ * disagree about something subtle — a frame split across two chunks, say,
+ * which is the case that only shows up under a slow model.
+ *
+ * No timeout, deliberately. These are the two calls that are legitimately slow:
+ * a long answer is minutes of a healthy connection, and the fifteen-second
+ * abort `request` uses would kill every one of them.
+ */
+export function streamEvents<E>(
+  path: string,
+  body: unknown,
+  onEvent: (event: E) => void,
+): EventStream {
+  const controller = new AbortController();
+
+  const done = (async () => {
+    const res = await fetch(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    if (!res.body) throw new Error('the backend sent no response body');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      for (;;) {
+        const { value, done: finished } = await reader.read();
+        if (finished) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // A blank line ends a frame, so the last piece after the split is a
+        // partial one. It stays in the buffer until the rest of it arrives.
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find((l) => l.startsWith('data: '));
+          if (!line) continue;
+          let event: E;
+          try {
+            event = JSON.parse(line.slice(6)) as E;
+          } catch {
+            // Only the parse is guarded. Wrapping the callback too would
+            // swallow whatever the caller threw whenever it was a SyntaxError.
+            continue;
+          }
+          onEvent(event);
+        }
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+  })();
+
+  return { done, cancel: () => controller.abort() };
+}

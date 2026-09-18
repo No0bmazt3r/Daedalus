@@ -22,6 +22,7 @@ from ..db import (
     sqlite_util,
     vector_store,
 )
+from ..services import model_endpoints, ollama_client
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -182,48 +183,67 @@ def seed_demo() -> dict[str, Any]:
 
 @router.get("/models")
 def list_models() -> dict[str, Any]:
-    """Dynamically discover models on hand.
-    
-    Queries the local Ollama instance (fast fail if absent) and lists configured
-    cloud benchmark endpoints.
+    """Every model the console can name, and whether it may answer a query.
+
+    Two kinds, and the difference is Rule 1:
+
+    - **local** — installed Ollama weights on this machine. These may serve a
+      live query.
+    - **cloud** — Ollama's own cloud-hosted tags (a `*-cloud` entry is a
+      384-byte pointer at ollama.com, not weights), and the configured
+      benchmark endpoints. These are evaluation baselines and may never answer.
+
+    Cloud entries are returned rather than hidden so the console can show the
+    boundary instead of pretending the model does not exist. `note` says why
+    each one cannot be selected; the picker renders it on a disabled row.
+
+    The local half goes through `ollama_client.list_models()` rather than
+    calling `/api/tags` here. That client owns the base-URL fallback and the
+    `remote` detection, and a second copy of either would eventually disagree
+    with `choose_model` about which tags are real — which is precisely the
+    disagreement Rule 1 is enforced against.
     """
-    import os
-    import httpx
-    from ..services import model_endpoints
-    
-    models = []
-    
-    # 1. Fetch from Ollama
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    models: list[dict[str, Any]] = []
+
     try:
-        # short timeout so the UI doesn't hang if Ollama is off
-        with httpx.Client(timeout=1.5) as client:
-            resp = client.get(f"{ollama_url}/api/tags")
-            if resp.status_code == 200:
-                data = resp.json()
-                for m in data.get("models", []):
-                    models.append({
-                        "id": f"ollama:{m['name']}",
-                        "name": m["name"],
-                        "provider": "ollama",
-                        "type": "local",
-                        "details": m.get("details", {})
-                    })
+        for m in ollama_client.list_models():
+            remote = bool(m.get("remote"))
+            models.append({
+                "id": f"ollama:{m['name']}",
+                "name": m["name"],
+                "provider": "ollama",
+                "type": "cloud" if remote else "local",
+                "note": (
+                    "Hosted by Ollama's cloud, not on this machine. "
+                    "Benchmark reference only — Rule 1 keeps it off the chat path."
+                    if remote
+                    else None
+                ),
+                "details": {
+                    "family": m.get("family"),
+                    "parameter_size": m.get("parameter_size"),
+                    "quantization_level": m.get("quantization_level"),
+                },
+            })
     except Exception:
+        # A dead Ollama is a normal state, not an error: the dashboard works
+        # without it. The picker says "no local models" on an empty list.
         pass
-        
-    # 2. Fetch configured cloud endpoints
+
     try:
-        endpoints = model_endpoints.list_endpoints()
-        for ep in endpoints:
+        for ep in model_endpoints.list_endpoints():
             models.append({
                 "id": f"cloud:{ep['id']}",
                 "name": ep["label"],
                 "provider": ep["provider"],
                 "type": "cloud",
-                "details": {"base_url": ep["base_url"]}
+                "note": (
+                    "A configured benchmark endpoint. Rule 1 allows it as an "
+                    "offline evaluation baseline, never as a runtime model."
+                ),
+                "details": {"base_url": ep["base_url"]},
             })
     except Exception:
         pass
-        
+
     return {"models": models}
