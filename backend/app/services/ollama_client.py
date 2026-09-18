@@ -51,7 +51,22 @@ PULL_READ_TIMEOUT = 60.0
 
 
 class OllamaError(RuntimeError):
-    """Ollama answered, and said no. Carries the daemon's own message."""
+    """Ollama answered, and said no. Carries the daemon's own message.
+
+    `signin_url` is set when the refusal was `unauthorized` on a cloud tag.
+    Ollama hands back a URL with this machine's public key in it, and following
+    it is the whole fix — so it is worth carrying rather than discarding.
+
+    It is deliberately *not* part of `str(exc)`. The message string is what gets
+    written to `model_logs.error_message`, and those rows are exported for the
+    evaluation chapter; a URL that binds this machine's key to whoever opens it
+    does not belong in an exported log. Callers that want it read the attribute
+    and put it somewhere transient.
+    """
+
+    def __init__(self, message: str, *, signin_url: str | None = None) -> None:
+        super().__init__(message)
+        self.signin_url = signin_url
 
 
 class OllamaUnavailable(RuntimeError):
@@ -158,7 +173,7 @@ def _request(method: str, path: str, *, timeout: float, **kwargs: Any) -> Any:
         # It answered, even to say no — this is where Ollama lives.
         _remember(base)
         if response.status_code >= 400:
-            raise OllamaError(_error_detail(response))
+            raise error_from(response)
         return response.json() if response.content else {}
 
     raise OllamaUnavailable(_unavailable_message(last_error))
@@ -196,6 +211,28 @@ def _unavailable_message(last_error: Exception | None) -> str:
         )
 
     return f"no Ollama daemon answered on {tried} ({kind}). {hint}"
+
+
+def _signin_url(response: Any) -> str | None:
+    """The signin URL Ollama returns alongside `unauthorized` on a cloud tag."""
+    try:
+        body = response.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    url = body.get("signin_url")
+    # Only ollama.com, and only https. The URL is acted on by a human clicking
+    # it, so a daemon answering on this port must not be able to aim that click
+    # wherever it likes.
+    if isinstance(url, str) and url.startswith("https://ollama.com/"):
+        return url
+    return None
+
+
+def error_from(response: Any) -> OllamaError:
+    """The exception for a refusal, with the signin URL kept off the message."""
+    return OllamaError(_error_detail(response), signin_url=_signin_url(response))
 
 
 def _error_detail(response: Any) -> str:
@@ -338,7 +375,7 @@ def pull(name: str) -> Iterator[dict[str, Any]]:
                 _remember(base)
                 if response.status_code >= 400:
                     response.read()
-                    raise OllamaError(_error_detail(response))
+                    raise error_from(response)
                 for line in response.iter_lines():
                     if not line.strip():
                         continue

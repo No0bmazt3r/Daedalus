@@ -267,8 +267,22 @@ fixture if not, and record which was used alongside the result.
 
 Every benchmark run writes to `model_logs` with a synthetic `query_id` prefixed
 `bench_`, so the latency chapter of the report draws from the same table as live
-traffic and the two are comparable. `source` (`'benchmark'` or `'chat'`) is what
-lets an analysis separate them again.
+traffic and the two are comparable. `source` is what lets an analysis separate
+them again, and it has three values, not two:
+
+| `source` | meaning |
+|---|---|
+| `chat` | a live query. Local model, Rule 1. |
+| `benchmark` | a Forge run on this machine's hardware. |
+| `benchmark_cloud` | a Forge run against an Ollama cloud tag. Measures *their* hardware. |
+
+`benchmark_cloud` is a separate value rather than a flag on `benchmark` so that
+any query asking what this machine can do keeps filtering `source = 'benchmark'`
+and stays correct unchanged. A cloud run also forces the fixture prompt — the
+real pack is genuine plant documents and a cloud call leaves the building — and
+its `tokens_per_sec` is **not quotable**: Ollama's cloud returns no engine
+counters, so the wall-clock fallback divides by a tiny window and reported a
+120B model at 836 tok/s. See [`BENCHMARK.md`](BENCHMARK.md) §7.
 
 **Two clocks, and they must not be mixed.** The first version of this benchmark
 derived the generation rate as `completion ÷ (total − TTFT)`, which looks
@@ -287,7 +301,16 @@ A warm-up pass runs before the timed one. Without it the first benchmark of a
 model measures disk: cold, llama3.2 reported 22.0s TTFT against 1.2s warm, and
 nearly all of that gap was reading 1.9GB of weights off an SSD rather than the
 model being slow. `warmed_up` travels with the result so nobody has to guess
-which was measured.
+which was measured. It is skipped for cloud tags, which have no local weights.
+
+**Reasoning models need the clock started differently.** Ollama streams a chain
+of thought in a separate `thinking` field and leaves `response` empty until it
+finishes deliberating. Watching only `response` recorded **no TTFT at all** for
+qwen3 and gpt-oss — both reasoning models, and both of this project's actual
+candidates. The clock now starts on the first generated token of either kind.
+
+The full methodology, including the threats to validity this measurement does
+*not* survive, is in [`BENCHMARK.md`](BENCHMARK.md).
 
 ### 2.4 Detection, and the three decisions worth keeping
 

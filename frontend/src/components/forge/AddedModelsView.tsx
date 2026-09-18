@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, ArrowLeft, Cloud, Cpu, FlaskConical, Loader2, Plus, RefreshCw,
-  Trash2, X, CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Settings2,
+  AlertTriangle, ArrowLeft, Cloud, Cpu, ExternalLink, FlaskConical, Loader2, Plus,
+  RefreshCw, Trash2, X, CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity,
+  Settings2,
 } from 'lucide-react'
 import {
   modelTable, modelUsage, deleteModel, runBenchmark,
@@ -103,12 +104,16 @@ function Stat({ label, value, title }: { label: string; value: string; title?: s
 
 /** One Ollama cloud tag: usable as a baseline, never as a deployment target. */
 function CloudModel({
-  row, usage, busy, benchProgress, onBenchmark,
+  row, usage, busy, benchProgress, signinUrl, lastError, onBenchmark,
 }: {
   row: ModelRow
   usage: ModelUsage | undefined
   busy: string | null
   benchProgress?: BenchmarkProgress | null
+  /** Live only: Ollama returns it with the refusal, and it is never stored. */
+  signinUrl: string | null
+  /** Why the last run failed, as Ollama put it. Cleared on the next attempt. */
+  lastError: string | null
   onBenchmark: (row: ModelRow) => void
 }) {
   const isBusy = busy === row.tag
@@ -162,18 +167,73 @@ function CloudModel({
             <Activity size={11} className="theme-accent" />
             <span className="text-[10px] uppercase tracking-wide theme-text-muted">
               Baseline — Ollama's hardware, not this machine
+              {measured.rate_source === 'wall_clock' && ' · rate approximate'}
             </span>
           </div>
           <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-2">
             <Stat label="TTFT" value={ms(measured.time_to_first_token_ms)} />
             <Stat label="End-to-end" value={ms(measured.total_inference_ms)} />
-            <Stat label="Generation" value={`${measured.tokens_per_sec} tok/s`} />
+            <Stat
+              label="Generation"
+              value={
+                measured.rate_source === 'engine'
+                  ? `${measured.tokens_per_sec} tok/s`
+                  : `~${measured.tokens_per_sec} tok/s`
+              }
+              title={
+                measured.rate_source === 'engine'
+                  ? "Ollama's own eval_duration — a property of the model."
+                  : 'Derived from wall clock: Ollama\'s cloud returns no engine '
+                    + 'counters, so this divides tokens by (total − TTFT). That window '
+                    + 'includes network time, and on a short generation it is small '
+                    + 'enough that the result is not a trustworthy generation rate. '
+                    + 'TTFT and end-to-end above are measured directly and are sound.'
+              }
+            />
             <Stat label="Measured" value={since(measured.at ?? null)} />
           </div>
         </div>
+      ) : usage && usage.errors > 0 ? (
+        // A failed attempt still writes a `model_logs` row, so it counts as a
+        // run above. Saying only "not benchmarked" next to "1 run, just now"
+        // reads as a broken panel rather than a rejected request.
+        <div className="border-t theme-border px-3 py-2.5 text-[11px] status-warn flex items-start gap-1.5">
+          <CircleAlert size={12} className="shrink-0 mt-px" />
+          <span>
+            Last run failed ({usage.errors} of {usage.runs}).
+            {/* Ollama's own words. Not being signed in is only one of the ways
+                this fails — a free account that has spent its five-hour or
+                weekly window gets a 429 and is already linked, so telling it
+                to sign in would send somebody to fix a thing that is not
+                broken. The signin offer appears only when Ollama asked for it. */}
+            {lastError ? <> <span className="font-mono">{lastError}</span></> : null}
+            {signinUrl ? (
+              // Handed back with the refusal, key already in it, so there is
+              // nothing to type. Gone on reload by design — it is a capability,
+              // not a setting, and is never persisted.
+              <>
+                {' '}This machine is not linked to an account yet.{' '}
+                <a
+                  href={signinUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1 underline theme-accent"
+                >
+                  Sign in to Ollama
+                  <ExternalLink size={10} />
+                </a>
+                {' '}— it is free — then benchmark again.
+              </>
+            ) : lastError ? (
+              <> Benchmark again once that clears.</>
+            ) : (
+              <> Run it again to see why.</>
+            )}
+          </span>
+        </div>
       ) : (
         <div className="border-t theme-border px-3 py-2.5 text-[11px] theme-text-muted italic">
-          Not benchmarked yet. Needs <code>ollama signin</code>.
+          Not benchmarked yet. Needs <code>ollama signin</code> first.
         </div>
       )}
     </div>
@@ -377,6 +437,8 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
   // The add/manage form is a destination, not the pane itself. You arrive at
   // the inventory first and go there only when you want to change something.
   const [managingApi, setManagingApi] = useState(false)
+  const [signinUrl, setSigninUrl] = useState<string | null>(null)
+  const [lastError, setLastError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     // Settled, not all: usage is derived from the audit log and the inventory
@@ -418,9 +480,15 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
     setNotice(null)
     setResult(null)
     setBenchProgress(null)
+    setSigninUrl(null)
+    setLastError(null)
     try {
       const { done } = runBenchmark(row.tag, (p) => {
         setBenchProgress(p)
+        if (p.phase === 'error') {
+          setLastError(p.error ?? null)
+          if (p.signin_url) setSigninUrl(p.signin_url)
+        }
         if (p.phase === 'done' && p.result) {
           setResult(p.result)
         }
@@ -618,6 +686,8 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
                     usage={usage[row.tag]}
                     busy={busy}
                     benchProgress={busy === row.tag ? benchProgress : null}
+                    signinUrl={signinUrl}
+                    lastError={lastError}
                     onBenchmark={handleBenchmark}
                   />
                 ))

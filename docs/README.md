@@ -14,6 +14,7 @@ over anything else here.
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
 | Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — design only, none built |
+| Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
 | Run it | [`../README.md`](../README.md) |
 | Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |
 | Know what this project borrowed, and from whom | [`../ACKNOWLEDGMENTS.md`](../ACKNOWLEDGMENTS.md) |
@@ -31,7 +32,10 @@ two disagree, resolve in this order:
 3. **[`MODULES.md`](MODULES.md)** — design for Ariadne's Thread, The Forge and
    Labyrinth Blueprints. Subordinate to `PROJECT.md`: it elaborates §10.2 and
    never overrides it. **Nothing in it is built.**
-4. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
+4. **[`BENCHMARK.md`](BENCHMARK.md)** — canonical for *how latency is measured
+   and what may be concluded from it*. Elaborates `MODULES.md` §2.3. Written to
+   be defended: §9 names the limitations rather than hiding them.
+5. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
    historical. Still useful for depth, but **superseded wherever they conflict
    with `PROJECT.md`**.
 

@@ -229,9 +229,7 @@ def answer_stream(
                         ) as response:
                             if response.status_code >= 400:
                                 response.read()
-                                raise ollama_client.OllamaError(
-                                    ollama_client._error_detail(response)
-                                )
+                                raise ollama_client.error_from(response)
                             for line in response.iter_lines():
                                 if not line.strip():
                                     continue

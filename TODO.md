@@ -183,11 +183,29 @@ Layer 9 below for the per-step detail.
       **two** memory pools so a model too large for VRAM is offloaded rather
       than disqualified
 - [x] Ollama management: list, pull (SSE, cancellable), delete
-- [x] Benchmark runner on a RAG-sized prompt, with a warm-up pass
+- [x] Benchmark runner on a RAG-sized prompt, with a warm-up pass. Streams
+      progress (SSE) so a multi-minute run shows what it is doing. Methodology
+      and its limitations written up in [`docs/BENCHMARK.md`](docs/BENCHMARK.md)
+- [x] **Start the TTFT clock on the first token of *either* kind.** Ollama streams
+      a reasoning model's chain of thought in `thinking` and leaves `response`
+      empty until it finishes. Watching only `response` recorded **no TTFT at
+      all** for qwen3 and gpt-oss — both reasoning models, and both of this
+      project's actual candidates — so Objective 3's headline metric was NULL on
+      2 of the first 4 successful runs
+- [x] **Benchmark cloud tags, tagged apart from local ones.** `source='benchmark_cloud'`
+      (migration `003` records the vocabulary), warm-up skipped, and the prompt
+      forced to the fixture so a cloud call never carries real plant documents
+      off the machine
 - [x] Write the selection to `config/model_config.json`
 - [ ] Average the benchmark over several runs — currently one run per click.
       `GET /api/forge/usage` already aggregates every logged run into
-      mean/p50/p95, so this is about the *per-click* figure, not the report's
+      mean/p50/p95, so this is about the *per-click* figure, not the report's.
+      **The measured spread makes this matter**: live TTFT for the same model and
+      prompt ranged 3,399 ms to 13,432 ms (4×), driven by cold loads. No figure
+      in the report may be a single run — see `BENCHMARK.md` §9.1
+- [ ] Record *which* hardware served a cloud benchmark. `model_logs` has no host
+      column, so two `benchmark_cloud` rows months apart may not be comparable and
+      nothing in the data would say so (`BENCHMARK.md` §9.4)
 - [ ] Cross-check estimates against LLM Checker for the methodology chapter.
       Worth doing now that there is something to check: on the development
       machine the estimator predicted 28.9 tok/s against 27.9 measured
@@ -416,6 +434,21 @@ Layer 9 below for the per-step detail.
 - [x] **Host/container path mapping** — `.env` holds container paths, so `daedalus.sh dev` was pointing the dev server at `backend/data/` while Docker wrote to `data/` and `logs/`. Host-side commands now map them, so both see the same files
 - [x] Unknown `/api/*` paths return 404 instead of falling through to the SPA catch-all
 - [x] Unified model discovery via `/api/system/models` querying both Ollama REST API (`OLLAMA_BASE_URL`) and cloud benchmark endpoints.
+- [x] **`/api/system/models` routed through `ollama_client`.** It previously called
+      `/api/tags` itself and labelled *every* row `type: 'local'`, so Ollama's
+      cloud tags were offered in the chat picker as if they could answer. It also
+      bypassed the base-URL fallback, so in dev mode it paid a full DNS timeout
+      and returned nothing. Cloud rows now return `type: 'cloud'` with a `note`,
+      and the picker shows them disabled under "Benchmark only · Rule 1"
+- [x] **Forge → Added Models → Cloud is an inventory, not a form.** It opened
+      straight onto the add-API-provider panel, so Ollama's cloud tags were
+      invisible everywhere in the model manager. It now lists them with a
+      benchmark action, lists configured endpoints with their test status, and
+      reaches the add form only when asked
+- [x] The **Installed** tab in Forge → Models filtered `row.source === 'installed'`
+      — but `source` is *provenance*, not state, so a shortlisted model kept
+      `source='shortlist'` once pulled and the tab was permanently empty. Filters
+      the `installed` boolean now
 - [x] Dynamic model integration — Chat interface selector now adaptively loads models on-hand instead of hardcoded placeholders.
 
 ---
@@ -447,6 +480,12 @@ Layer 9 below for the per-step detail.
       honour one (ollama#7240). The route for those is `huggingface-cli download`
       then `ollama create`. No token field is offered, because it would be a box
       that often does not work
+- [ ] **A cloud `tokens_per_sec` is not quotable.** Ollama's cloud returns no
+      engine counters, so the wall-clock fallback divides by a window of a few
+      hundred ms and reported `gpt-oss:120b` at 836 tok/s. The UI marks it `~`
+      with `rate_source: wall_clock`; the report must not cite it. TTFT and
+      end-to-end for cloud rows are measured directly and are sound
+      (`BENCHMARK.md` §7)
 - [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
 
 ---

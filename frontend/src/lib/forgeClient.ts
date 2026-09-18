@@ -72,6 +72,16 @@ export interface Measurement {
   prompt_token_count: number | null;
   completion_token_count: number | null;
   tokens_per_sec: number | null;
+  /**
+   * Where `tokens_per_sec` came from, and it decides whether the figure means
+   * anything. `engine` is Ollama's own `eval_duration` — a property of the
+   * model. `wall_clock` is `completion ÷ (total − TTFT)`, the fallback for a
+   * run that reported no counters, and it charges the model for every
+   * client-side and network delay in that window. On a short generation the
+   * window is small enough that the quotient is nonsense, so the UI has to say
+   * which one it is rather than print both the same way.
+   */
+  rate_source: 'engine' | 'wall_clock' | null;
 }
 
 export interface ModelRow {
@@ -300,6 +310,12 @@ export interface BenchmarkProgress {
   piece?: string;
   result?: BenchmarkResult;
   error?: string;
+  /**
+   * Set when a cloud tag was refused for want of an account. Ollama returns a
+   * URL carrying this machine's public key; following it is the fix. It rides
+   * the event and nothing else — never the persisted error message.
+   */
+  signin_url?: string;
 }
 
 /**

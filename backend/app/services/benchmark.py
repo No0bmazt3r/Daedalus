@@ -327,8 +327,13 @@ def run_stream(
     started = time.perf_counter()
     first_token_at: float | None = None
     pieces: list[str] = []
+    # Counted but not kept: thinking is generation the caller waits through, so
+    # it belongs in the token count and in TTFT. It is not part of the answer,
+    # so it stays out of `sample`.
+    thinking_tokens = 0
     final: dict[str, Any] = {}
     error: str | None = None
+    signin_url: str | None = None
 
     payload = {
         "model": tag,
@@ -353,7 +358,7 @@ def run_stream(
                 ) as response:
                     if response.status_code >= 400:
                         response.read()
-                        raise ollama_client.OllamaError(ollama_client._error_detail(response))
+                        raise ollama_client.error_from(response)
                     for line in response.iter_lines():
                         if not line.strip():
                             continue
@@ -363,12 +368,29 @@ def run_stream(
                             continue
                         if event.get("error"):
                             raise ollama_client.OllamaError(str(event["error"]))
+                        # A reasoning model emits its chain of thought in
+                        # `thinking` and leaves `response` empty until it is
+                        # done deliberating. Watching only `response` recorded
+                        # no first token at all for qwen3 and gpt-oss — both
+                        # reasoning models — so TTFT, the one figure Objective 3
+                        # turns on, came back NULL on the very models this
+                        # project runs. The clock starts at the first generated
+                        # token of either kind, because that is the moment the
+                        # engine stopped prefilling and started producing.
                         piece = event.get("response") or ""
-                        if piece and first_token_at is None:
+                        thought = event.get("thinking") or ""
+                        if (piece or thought) and first_token_at is None:
                             first_token_at = time.perf_counter()
+                        if thought:
+                            thinking_tokens += 1
                         if piece:
                             pieces.append(piece)
-                            yield {"phase": "generating", "tokens": len(pieces), "piece": piece}
+                        if piece or thought:
+                            yield {
+                                "phase": "generating",
+                                "tokens": len(pieces) + thinking_tokens,
+                                "piece": piece,
+                            }
                         if event.get("done"):
                             final = event
                 break
@@ -380,6 +402,9 @@ def run_stream(
             raise ollama_client.OllamaUnavailable("no Ollama daemon answered")
     except Exception as exc:  # noqa: BLE001
         error = f"{exc.__class__.__name__}: {exc}"
+        # Held separately from `error`, which is what gets logged. See
+        # `OllamaError` for why the URL must not reach `model_logs`.
+        signin_url = getattr(exc, "signin_url", None)
 
     ended = time.perf_counter()
     total_ms = int((ended - started) * 1000)
@@ -403,7 +428,7 @@ def run_stream(
     # model, and only the second answers Objective 3.
     ns = 1_000_000
     prompt_tokens_actual = final.get("prompt_eval_count")
-    completion_tokens = final.get("eval_count") or (len(pieces) or None)
+    completion_tokens = final.get("eval_count") or ((len(pieces) + thinking_tokens) or None)
     prefill_ms = int(final.get("prompt_eval_duration", 0) // ns) or None
     generation_ms = int(final.get("eval_duration", 0) // ns) or None
     load_ms = int(final.get("load_duration", 0) // ns) or None
@@ -431,7 +456,10 @@ def run_stream(
     )
 
     if error:
-        yield {"phase": "error", "error": error}
+        event: dict[str, Any] = {"phase": "error", "error": error}
+        if signin_url:
+            event["signin_url"] = signin_url
+        yield event
     else:
         yield {
             "phase": "done",

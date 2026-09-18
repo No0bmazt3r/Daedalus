@@ -29,7 +29,7 @@ Everything below was read off the source, not from memory.
 | Data stores (×5) | Built and containerised, each with a versioned schema |
 | Preference API | Built |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
-| Chat UI | Wired end to end — `POST /api/chat` answers from a local model, both turns persist, the picker offers installed local models only |
+| Chat UI | Wired end to end — `POST /api/chat` streams tokens from a local model, both turns persist, and a generation survives the client disconnecting. The picker offers installed local models only; cloud tags appear disabled and labelled |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration, tools, RAG | **Not started.** Chat answers from conversation history alone; there is no evidence pack and no tool-calling yet |
 
@@ -72,9 +72,10 @@ to it.
 | `GET` | `/api/forge/usage` | Per-model runs, tokens and latency from `model_logs` |
 | `POST` | `/api/forge/models/pull` | Pull via Ollama, streaming progress as SSE |
 | `DELETE` | `/api/forge/models/{tag}` | Remove a local model |
-| `POST` | `/api/forge/benchmark` | Benchmark on a RAG-sized prompt; writes `model_logs` |
-| `POST` | `/api/chat` | Answer a message. Resolves the model, replays history, logs the call |
+| `POST` | `/api/forge/benchmark` | Benchmark on a RAG-sized prompt; **SSE**; writes `model_logs`. See [`BENCHMARK.md`](BENCHMARK.md) |
+| `POST` | `/api/chat` | Answer a message, **streamed as SSE**. Resolves the model, replays history, logs the call |
 | `GET` | `/api/chat/model` | Which model would answer right now, and why |
+| `GET` | `/api/chat/{id}/status` | Whether a generation is still running for that session. A generation outlives the request that started it, so a reconnecting client polls this |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 
 Writable preference keys (anything else is rejected with 404):
@@ -259,9 +260,29 @@ cannot push megabytes into the browser.
 
 ### Dynamic Model Discovery — `/api/system/models`
 
-Daedalus fetches models dynamically rather than keeping hardcoded lists. The frontend components (Chat model selector) adaptively query the `/api/system/models` endpoint which aggregates:
-- **Local Models:** Probes the local Ollama instance (at `OLLAMA_BASE_URL`) for downloaded SLMs, failing fast if offline.
-- **Cloud Baselines:** Includes any external endpoints configured in the Added Models settings.
+Daedalus fetches models dynamically rather than keeping hardcoded lists. The
+frontend (chat model selector) queries `/api/system/models`, which returns both
+kinds and says which is which:
+
+| `type` | what it is | may answer a query |
+|---|---|---|
+| `local` | installed Ollama weights on this machine | yes |
+| `cloud` | Ollama's own `*-cloud` tags, plus configured benchmark endpoints | **never** — Rule 1 |
+
+Every `cloud` row carries a `note` saying why it cannot be selected, and the
+picker renders those rows disabled under a **"Benchmark only · Rule 1"** heading
+rather than hiding them. Omitting them invites "did I imagine installing that?";
+showing them disabled makes the boundary visible.
+
+The local half goes through `ollama_client.list_models()` rather than calling
+`/api/tags` here. That client owns the base-URL fallback and the `remote`
+detection, and a second copy of either would eventually disagree with
+`choose_model` about which tags are real — which is exactly the disagreement
+Rule 1 is enforced against.
+
+> An `*-cloud` tag is a ~384-byte pointer carrying `remote_host:
+> https://ollama.com`, not weights. Ollama lists it beside local models, which
+> is why the distinction has to be made explicitly at every layer.
 
 ### Cloud model endpoints — `services/model_endpoints.py`
 

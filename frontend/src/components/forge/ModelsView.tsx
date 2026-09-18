@@ -565,7 +565,16 @@ export function ModelsView() {
     const base = source === 'huggingface' ? (hfRows ?? []) : (table?.rows ?? [])
     const needle = search.trim().toLowerCase()
     return base.filter((row) => {
-      if (source !== 'all' && source !== 'huggingface' && row.source !== source) return false
+      // `installed` is a state, every other tab is a provenance. Matching it
+      // against `row.source` filtered on the wrong field and left the tab
+      // permanently empty: a model in the shortlist carries source
+      // 'shortlist' whether or not it is on this disk, and 'installed' is
+      // only ever set for one Ollama has that the catalogue never declared.
+      if (source === 'installed') {
+        if (!row.installed) return false
+      } else if (source !== 'all' && source !== 'huggingface' && row.source !== source) {
+        return false
+      }
       // The HF list is already the result of a server-side search; filtering it
       // again by the same box would hide rows the search deliberately matched
       // on a field this one does not see.
@@ -584,7 +593,7 @@ export function ModelsView() {
     return {
       shortlist: rows.filter((r) => r.source === 'shortlist').length,
       library: rows.filter((r) => r.source === 'library').length,
-      installed: rows.filter((r) => r.source === 'installed').length,
+      installed: rows.filter((r) => r.installed).length,
       all: rows.length,
       huggingface: hfRows?.length ?? 0,
       custom: customRow ? 1 : 0,
