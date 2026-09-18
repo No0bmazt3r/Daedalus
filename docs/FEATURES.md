@@ -73,7 +73,7 @@ to it.
 | `POST` | `/api/forge/models/pull` | Pull via Ollama, streaming progress as SSE |
 | `DELETE` | `/api/forge/models/{tag}` | Remove a local model |
 | `POST` | `/api/forge/benchmark` | Benchmark on a RAG-sized prompt; **SSE**; writes `model_logs`. See [`BENCHMARK.md`](BENCHMARK.md) |
-| `POST` | `/api/chat` | Answer a message, **streamed as SSE**. Resolves the model, replays history, logs the call |
+| `POST` | `/api/chat` | Answer a message, **streamed as SSE**. Resolves the model, replays history, logs the call as `chat` or `chat_cloud` |
 | `GET` | `/api/chat/model` | Which model would answer right now, and why |
 | `GET` | `/api/chat/{id}/status` | Whether a generation is still running for that session. A generation outlives the request that started it, so a reconnecting client polls this |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
@@ -264,15 +264,21 @@ Daedalus fetches models dynamically rather than keeping hardcoded lists. The
 frontend (chat model selector) queries `/api/system/models`, which returns both
 kinds and says which is which:
 
-| `type` | what it is | may answer a query |
+| `type` | what it is | on the production path |
 |---|---|---|
 | `local` | installed Ollama weights on this machine | yes |
-| `cloud` | Ollama's own `*-cloud` tags, plus configured benchmark endpoints | **never** — Rule 1 |
+| `cloud` | Ollama's own `*-cloud` tags, plus configured benchmark endpoints | **no** — selectable as a marked override only |
 
-Every `cloud` row carries a `note` saying why it cannot be selected, and the
-picker renders those rows disabled under a **"Benchmark only · Rule 1"** heading
-rather than hiding them. Omitting them invites "did I imagine installing that?";
-showing them disabled makes the boundary visible.
+Both are selectable. Cloud rows sit under **"Evaluation only · not Rule 1 safe"**
+and carry a `note` explaining the consequence; choosing one logs the turn as
+`source='chat_cloud'` and badges it in the transcript, so production metrics stay
+clean while the comparison stays inside the system where it is logged. See
+`PROJECT.md` §3 Rule 1.
+
+Each row also carries `capabilities` from Ollama's `/api/show` — `thinking`,
+`tools`, `vision` — rendered as icons. The choice is not only about speed: a
+reasoning model answers a troubleshooting question differently, and structurally
+slower, than one that cannot.
 
 The local half goes through `ollama_client.list_models()` rather than calling
 `/api/tags` here. That client owns the base-URL fallback and the `remote`

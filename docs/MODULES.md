@@ -272,9 +272,13 @@ them again, and it has three values, not two:
 
 | `source` | meaning |
 |---|---|
-| `chat` | a live query. Local model, Rule 1. |
+| `chat` | a live query on a local model. **The production path.** |
+| `chat_cloud` | a live query the operator pointed at a cloud model — a marked override. |
 | `benchmark` | a Forge run on this machine's hardware. |
 | `benchmark_cloud` | a Forge run against an Ollama cloud tag. Measures *their* hardware. |
+
+`host` (migration `004`) records which service served the run, so cloud rows can
+be grouped and a comparison can require the same host.
 
 `benchmark_cloud` is a separate value rather than a flag on `benchmark` so that
 any query asking what this machine can do keeps filtering `source = 'benchmark'`

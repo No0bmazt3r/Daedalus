@@ -203,9 +203,11 @@ Layer 9 below for the per-step detail.
       **The measured spread makes this matter**: live TTFT for the same model and
       prompt ranged 3,399 ms to 13,432 ms (4×), driven by cold loads. No figure
       in the report may be a single run — see `BENCHMARK.md` §9.1
-- [ ] Record *which* hardware served a cloud benchmark. `model_logs` has no host
-      column, so two `benchmark_cloud` rows months apart may not be comparable and
-      nothing in the data would say so (`BENCHMARK.md` §9.4)
+- [x] Record *which* host served a run — `model_logs.host` (migration `004`),
+      `ollama.com` for a cloud row and NULL for local. Host only, never a full URL:
+      a base URL can carry a key and these rows are exported. It groups runs; it
+      does not identify the GPU behind the host, which Ollama does not disclose
+      (`BENCHMARK.md` §9.4)
 - [ ] Cross-check estimates against LLM Checker for the methodology chapter.
       Worth doing now that there is something to check: on the development
       machine the estimator predicted 28.9 tok/s against 27.9 measured
@@ -297,6 +299,20 @@ Layer 9 below for the per-step detail.
       today, unreplayable traces forever if it lands after rows exist
 - [x] Mark the unbuilt modules in the sidebar — Ariadne's Thread and Labyrinth
       Blueprints are disabled with a dot and a tooltip; The Forge opens
+- [x] **Cloud models are selectable, marked, and logged apart.** Rule 1 narrowed
+      from *prevented* to *recorded*: `choose_model` honours a cloud override,
+      the turn is written `source='chat_cloud'` with its `host`, the picker puts
+      those rows under "Evaluation only · not Rule 1 safe", and the transcript
+      badges the answer. Every Objective 3 query filters `source='chat'` and keeps
+      describing the local production path unchanged (`PROJECT.md` §3 Rule 1)
+- [x] **Capability badges in the model picker** — `thinking`, `tools`, `vision`
+      from Ollama's `/api/show`. Model choice is not only about speed: a reasoning
+      model is structurally slower to first token and answers differently
+- [x] **`model_tag` never reached the browser.** The store wrote it and read it
+      back, but `MessageOut` did not declare the field and FastAPI's
+      `response_model` silently drops what it does not name — so the transcript
+      could never say which model answered, and a cloud turn could not be told
+      from a local one after the fact. Declared now
 - [x] **Wire the serving path (thin slice of M4).** `POST /api/chat` resolves the
       model through `config/model_config.json`, calls Ollama with the replayed
       conversation, and writes a `model_logs` row tagged `source='chat'` beside
@@ -431,6 +447,13 @@ Layer 9 below for the per-step detail.
 - [x] Settings shell responds to its **container** width — below 620px the rail goes horizontal and resize/collapse withdraw (Odysseus' `isDesktopSidebarMode`)
 - [x] `docs/SCRIPTS.md` — every script, subcommand, flag and exit code, and the reasoning behind each safeguard
 - [x] `ACKNOWLEDGMENTS.md` — credits Odysseus (PewDiePie) for the theme/settings/prefs design, and records **why this is not a fork**: Odysseus is AGPL-3.0, Daedalus is MIT, and no Odysseus code is present
+- [x] **Removed the orphaned stores under `backend/data/`** and widened
+      `sync.sh`'s check to catch the directories too, not just the three `.db`
+      files. The originals predate the host-path mapping, but `paths.py` creates
+      its tree on import, so running a backend script by hand from `backend/`
+      recreates it and writes measurements to a store nothing reads — which is
+      exactly how one benchmark row went missing during this work. `prefs.db`
+      lives in `backend/data/` legitimately and is untouched
 - [x] **Host/container path mapping** — `.env` holds container paths, so `daedalus.sh dev` was pointing the dev server at `backend/data/` while Docker wrote to `data/` and `logs/`. Host-side commands now map them, so both see the same files
 - [x] Unknown `/api/*` paths return 404 instead of falling through to the SPA catch-all
 - [x] Unified model discovery via `/api/system/models` querying both Ollama REST API (`OLLAMA_BASE_URL`) and cloud benchmark endpoints.

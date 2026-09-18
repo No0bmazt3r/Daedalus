@@ -258,13 +258,23 @@ export async function deleteEndpoint(id: string): Promise<boolean> {
 
 // ── system models ────────────────────────────────────────────────────────────
 
+/** What Ollama says a model can do. Open-ended: unknown values are ignored. */
+export type ModelCapability =
+  | 'completion' | 'tools' | 'thinking' | 'vision' | 'insert' | 'embedding';
+
 export interface SystemModel {
   id: string;
   name: string;
   provider: string;
-  /** `cloud` is an evaluation baseline and may never answer a query (Rule 1). */
+  /**
+   * Where it runs. `cloud` is selectable, but it is an evaluation override
+   * rather than the production path — the turn is logged `chat_cloud` and the
+   * transcript marks it. See `note`.
+   */
   type: 'local' | 'cloud';
-  /** Why a cloud model cannot be selected. Null for local ones. */
+  /** From Ollama's `/api/show`. Empty when it could not be asked. */
+  capabilities?: ModelCapability[];
+  /** The warning to show beside a cloud model. Null for local ones. */
   note?: string | null;
   details?: Record<string, unknown>;
 }

@@ -163,9 +163,9 @@ which is the answer text.
 
 ## 7. Cloud baselines, and what they may and may not claim
 
-Rule 1 forbids cloud models at runtime and permits them **only as offline
-evaluation baselines**. Benchmarking one is therefore legitimate, and the result
-means something different from a local run. Three things follow, all set from
+Rule 1 keeps cloud models out of the **production configuration** and permits
+them as evaluation baselines (`PROJECT.md` §3). Benchmarking one is therefore
+legitimate, and the result means something different from a local run. Three things follow, all set from
 the tag rather than trusted to the caller:
 
 **1. It is logged as a different kind of row.** `source = 'benchmark_cloud'`, not
@@ -207,9 +207,19 @@ one place so they are comparable. `source` is what separates them again:
 
 | `source` | meaning |
 |---|---|
-| `chat` | a live query. Local model, Rule 1. |
+| `chat` | a live query on a local model. **The production path.** |
+| `chat_cloud` | a live query the operator pointed at a cloud model — a marked evaluation override. |
 | `benchmark` | a Forge run on this machine's hardware. |
 | `benchmark_cloud` | a Forge run against a cloud tag. Measures someone else's hardware. |
+
+Four values rather than two plus a flag, for one reason: **every Objective 3
+query filters `source = 'chat'` and keeps describing the local production path
+without being rewritten.** Pooling a datacentre's latency into the figure that
+argues a laptop is fast enough would invert the result.
+
+`host` (migration `004`) records which machine served a run — `ollama.com` for a
+cloud row, NULL for local. Host only, never a full URL: a base URL can carry a
+key or a private hostname, and these rows are exported.
 
 Failed runs are written too, with `status = 'error'` and the daemon's own
 message. A benchmark that could not run is evidence, not an absence.
@@ -243,10 +253,12 @@ whatever retrieval actually returned. Do not pool them without saying so.
 `prompt.source` on every row makes the split recoverable after the fact.
 
 **9.4 Cloud rows measure a moving target.** Ollama may change the hardware
-behind `gpt-oss:120b` at any time, and `model_logs` has no column recording
-which hardware served a run. Two cloud rows months apart may not be comparable
-and nothing in the data would reveal it. Treat cloud numbers as a
-*contemporaneous* reference point, not a stable baseline.
+behind `gpt-oss:120b` at any time. `model_logs.host` records *which service*
+served a run, so runs can at least be grouped and a comparison can require the
+same host — but it does not identify the GPU behind that host, which Ollama does
+not disclose. Two `ollama.com` rows months apart may still differ by a factor.
+Treat cloud numbers as a *contemporaneous* reference point, not a stable
+baseline, and quote the date.
 
 **9.5 Reasoning-model TTFT includes thinking time** (§6). Fair within a model,
 and a caveat that must be stated when comparing a reasoning model against a
@@ -291,6 +303,12 @@ the ordered rows. `services/model_usage.py` already does this per model and is
 what the Forge displays.
 
 Store: `logs/ai_logs.db` in dev, `DAEDALUS_LOG_DIR` otherwise.
+
+> **Run backend code through `host_py`**, not `.venv/bin/python` directly.
+> `paths.py` creates its tree on import and falls back to `backend/data/` when
+> the env vars are absent, so a hand-run benchmark writes to a store nothing
+> reads. One measurement quoted in §2 was produced that way and had to be
+> copied across. `sync.sh` section 7 reports it if it happens.
 
 ---
 

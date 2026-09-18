@@ -451,6 +451,9 @@ def run_stream(
         generation_ms=generation_ms,
         load_ms=load_ms,
         source="benchmark_cloud" if remote else "benchmark",
+        # Which machine produced these milliseconds. NULL for local runs; see
+        # migration 004 for why that is not 'localhost'.
+        host=ollama_client.serving_host(tag),
         status=status,
         error_message=error,
     )

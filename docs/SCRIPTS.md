@@ -133,8 +133,16 @@ It runs eight checks in order:
 | 4 | **Frontend dependencies** | `pnpm-lock.yaml` is newer than `node_modules` |
 | 5 | **Database schema** | A pulled migration has not been applied |
 | 6 | **Database integrity** | `PRAGMA quick_check` on every store |
-| 7 | **Orphaned databases** | Stale copies under `backend/data/` from before the host-path fix |
+| 7 | **Orphaned databases** | Stale stores and directories under `backend/data/`, whether from before the host-path fix or recreated since |
 | 8 | **Containers** | The built image is older than your source |
+
+**Section 7 catches a trap that is still live.** The original stale copies came
+from before `scripts/common.sh` mapped host paths, and those are a one-off. But
+`paths.py` *creates* its directories on import, so running any backend script by
+hand from `backend/` — without the env vars `host_py` sets — recreates the same
+tree and writes to it. A measurement can land in a store nothing reads, and the
+only sign is this section. Use `host_py` (see below) rather than calling
+`.venv/bin/python` directly.
 
 **Section 2 is the one that earns its keep.** `.env` is git-ignored, so a pull
 never updates it. When someone adds a setting, your app silently falls back to

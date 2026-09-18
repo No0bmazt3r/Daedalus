@@ -193,9 +193,15 @@ def list_models() -> dict[str, Any]:
       384-byte pointer at ollama.com, not weights), and the configured
       benchmark endpoints. These are evaluation baselines and may never answer.
 
-    Cloud entries are returned rather than hidden so the console can show the
-    boundary instead of pretending the model does not exist. `note` says why
-    each one cannot be selected; the picker renders it on a disabled row.
+    Both are selectable. A cloud model answering a live query is an explicitly
+    marked evaluation override, not the production path: the turn is logged as
+    `chat_cloud` and the transcript says so. `note` carries that warning and the
+    picker shows it on the row.
+
+    `capabilities` comes from Ollama's `/api/show` — `thinking`, `tools`,
+    `vision` and friends. It is worth having in the picker because the choice
+    is not only about speed: a reasoning model answers a troubleshooting
+    question differently, and structurally slower, than one that cannot.
 
     The local half goes through `ollama_client.list_models()` rather than
     calling `/api/tags` here. That client owns the base-URL fallback and the
@@ -208,14 +214,23 @@ def list_models() -> dict[str, Any]:
     try:
         for m in ollama_client.list_models():
             remote = bool(m.get("remote"))
+            # One `/api/show` per model, served from the Forge's cache after the
+            # first call. Failing soft: a model with unknown capabilities shows
+            # no badges, which is better than no model.
+            try:
+                capabilities = ollama_client.show(m["name"]).get("capabilities") or []
+            except Exception:
+                capabilities = []
             models.append({
                 "id": f"ollama:{m['name']}",
                 "name": m["name"],
                 "provider": "ollama",
                 "type": "cloud" if remote else "local",
+                "capabilities": capabilities,
                 "note": (
-                    "Hosted by Ollama's cloud, not on this machine. "
-                    "Benchmark reference only — Rule 1 keeps it off the chat path."
+                    "Runs on Ollama's cloud, not this machine. Rule 1 keeps it "
+                    "out of the production path: choosing it logs the turn as "
+                    "chat_cloud and excludes it from the local latency figures."
                     if remote
                     else None
                 ),
@@ -237,6 +252,7 @@ def list_models() -> dict[str, Any]:
                 "name": ep["label"],
                 "provider": ep["provider"],
                 "type": "cloud",
+                "capabilities": [],
                 "note": (
                     "A configured benchmark endpoint. Rule 1 allows it as an "
                     "offline evaluation baseline, never as a runtime model."

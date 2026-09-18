@@ -79,41 +79,81 @@ class NoModelAvailable(RuntimeError):
     """
 
 
-def _installed_tags() -> set[str]:
+def _known_tags() -> tuple[set[str], set[str]]:
+    """Tags Ollama will serve, split by where they run: (local, remote)."""
+    local: set[str] = set()
+    remote: set[str] = set()
     try:
-        return {
-            m["name"]
-            for m in ollama_client.list_models()
-            if m.get("name") and not m.get("remote")
-        }
+        for m in ollama_client.list_models():
+            name = m.get("name")
+            if not name:
+                continue
+            (remote if m.get("remote") else local).add(name)
     except Exception:
-        return set()
+        pass
+    return local, remote
+
+
+def _installed_tags() -> set[str]:
+    """Local tags only. What `auto` mode and the default path may pick from."""
+    return _known_tags()[0]
 
 
 def choose_model(requested: str | None = None) -> dict[str, Any]:
-    """Which model answers this request, and why.
+    """Which model answers this request, where it runs, and why.
 
-    An override is honoured only when the model is actually installed locally.
-    Anything else falls back to the configured choice and says so — quietly
-    running a different model than the caller asked for would be worse, but so
-    would letting a cloud endpoint serve a live query (Rule 1).
+    ## Rule 1, and where the line actually sits
+
+    The default path is local and nothing changes that: `model_config.resolve()`
+    only ever names a local tag, and `auto` ranks installed models on this disk.
+
+    A caller may nonetheless override to a cloud tag, and that override is
+    honoured. This is a deliberate narrowing of Rule 1 from *prevented* to
+    *recorded*: the console is an evaluation instrument as well as an operator
+    surface, and comparing the local answer with a hosted one is the comparison
+    §5 exists to make. Refusing outright pushed that comparison outside the
+    system, where nothing logged it at all.
+
+    What makes it defensible is that the choice is never silent. `remote` rides
+    on the result, `answer_stream` logs the turn as `source='chat_cloud'`
+    instead of `'chat'`, and the transcript marks it. Every Objective 3 query
+    filters `source = 'chat'` and therefore keeps describing the local
+    production path exactly as before, without being rewritten.
+
+    An override naming a tag Ollama does not have at all still falls back to the
+    configured model and says so — quietly answering from something other than
+    what was asked for would be worse than refusing.
     """
     resolved = model_config.resolve()
-    installed = _installed_tags()
+    local, remote = _known_tags()
 
     if requested and requested != resolved.get("tag"):
-        if requested in installed:
+        if requested in local:
             return {
                 "tag": requested,
                 "source": "override",
+                "remote": False,
                 "reason": f"per-request override to {requested}",
+                "config_tag": resolved.get("tag"),
+            }
+        if requested in remote:
+            return {
+                "tag": requested,
+                "source": "override",
+                "remote": True,
+                "reason": (
+                    f"per-request override to {requested}, which runs on Ollama's "
+                    f"cloud. Logged as chat_cloud and excluded from the local "
+                    f"latency figures"
+                ),
                 "config_tag": resolved.get("tag"),
             }
         return {
             "tag": resolved.get("tag"),
             "source": "config",
+            "remote": False,
             "reason": (
-                f"requested {requested}, which is not installed locally; "
+                f"requested {requested}, which Ollama does not have; "
                 f"using the configured model instead"
             ),
             "config_tag": resolved.get("tag"),
@@ -123,6 +163,7 @@ def choose_model(requested: str | None = None) -> dict[str, Any]:
     return {
         "tag": resolved.get("tag"),
         "source": resolved["mode"],
+        "remote": False,
         "reason": resolved["reason"],
         "config_tag": resolved.get("tag"),
     }
@@ -279,7 +320,8 @@ def answer_stream(
                 # What separates these rows from the Forge's `bench_` ones in the
                 # same table. §2.3 wants both here; this is how the analysis tells
                 # them apart.
-                source="chat",
+                source="chat_cloud" if choice.get("remote") else "chat",
+                host=ollama_client.serving_host(tag),
                 status="error" if error else "ok",
                 error_message=error,
             )

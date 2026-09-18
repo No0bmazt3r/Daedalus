@@ -12,6 +12,12 @@ This name communicates: **Local-first** (no cloud), **Conversational** (NL inter
 
 ### Rule 1: Production system must be 100% local
 No cloud APIs are allowed in the runtime system.
+
+> **Superseded in detail by `PROJECT.md` §3 Rule 1.** The console permits an
+> explicitly-marked per-turn override to a cloud model, logged as
+> `source='chat_cloud'` and excluded from every production metric. The
+> production configuration remains local-only. See `PROJECT.md` for the
+> enforcement layers.
 * **Forbidden in Runtime:** OpenAI, Anthropic, Google Gemini API, Cloud vector DBs (Pinecone, MongoDB Atlas), Cloud logging, Cloud dashboards, Google Sheets, Hosted embedding APIs, Hugging Face hosted inference.
 * **Allowed:** Cloud LLMs may *only* appear as external benchmark baselines in the evaluation layer, never as production components.
 

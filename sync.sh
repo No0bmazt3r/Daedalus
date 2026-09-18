@@ -197,15 +197,25 @@ head_ "Orphaned databases"
 # who ran the dev servers back then has a second, stale copy of each database.
 # They are harmless and git-ignored, but they are not what the app reads now,
 # and finding them later is confusing.
+# Also caught: running a backend script by hand from `backend/` without the
+# env vars `host_py` sets. `paths.py` then falls back to these same locations
+# and *recreates* them, silently writing a measurement to a store nothing reads.
 STRAYS=()
-for stray in backend/data/logs/ai_logs.db backend/data/sqlite/chat.db              backend/data/sqlite/sensor_readings.db; do
+for stray in backend/data/logs/ai_logs.db backend/data/sqlite/chat.db \
+             backend/data/sqlite/sensor_readings.db; do
   [ -f "$stray" ] && STRAYS+=("$stray")
+done
+for stray in backend/data/chroma backend/data/documents backend/data/logs \
+             backend/data/sqlite; do
+  [ -d "$stray" ] && STRAYS+=("$stray/")
 done
 if [ ${#STRAYS[@]} -gt 0 ]; then
   warn "${#STRAYS[@]} database(s) left by the pre-fix dev path — not read any more:"
   for stray in "${STRAYS[@]}"; do info "$stray"; done
-  info "The live ones are data/sqlite/ and logs/. Delete the above when you are"
+  info "The live ones are data/ and logs/. Delete the above when you are"
   info "sure nothing in them is wanted; ./sync.sh will not touch them."
+  info "Run backend scripts through 'host_py' (scripts/common.sh) to avoid"
+  info "recreating them: without its env vars, paths.py falls back here."
 else
   ok "no stale database copies"
 fi

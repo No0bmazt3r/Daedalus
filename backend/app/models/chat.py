@@ -76,6 +76,12 @@ class MessageOut(BaseModel):
     evidence: Any = None
     token_estimate: int
     created_at: str
+    # Which model produced this turn. Declared here because `response_model`
+    # drops anything it does not name: the store wrote `model_tag` and the
+    # store read it back, but the API silently stripped it, so the transcript
+    # could never say what answered — and a cloud-answered turn could not be
+    # told apart from a local one after the fact.
+    model_tag: str | None = None
 
 
 class SessionOut(BaseModel):

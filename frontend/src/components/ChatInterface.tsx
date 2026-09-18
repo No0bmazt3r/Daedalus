@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud } from 'lucide-react'
+import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, Brain, Wrench, Eye } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -18,6 +18,31 @@ import {
 
 import { useSettings } from '../contexts/SettingsContext'
 import { useSessions } from '../contexts/SessionsContext'
+
+/** The capabilities worth showing. Anything else Ollama reports is ignored. */
+const CAPABILITY_BADGES = [
+  { id: 'thinking', icon: Brain, label: 'Reasoning', hint: 'Works through the problem before answering. Slower to first token by design.' },
+  { id: 'tools', icon: Wrench, label: 'Tools', hint: 'Can call tools — what Rule 3 needs for sensor readings to come from the DB rather than the weights.' },
+  { id: 'vision', icon: Eye, label: 'Vision', hint: 'Accepts images as well as text.' },
+] as const
+
+function CapabilityBadges({ capabilities }: { capabilities?: string[] }) {
+  const shown = CAPABILITY_BADGES.filter((c) => capabilities?.includes(c.id))
+  if (!shown.length) return null
+  return (
+    <span className="flex items-center gap-1 shrink-0">
+      {shown.map((c) => (
+        <span
+          key={c.id}
+          title={`${c.label} — ${c.hint}`}
+          className="p-0.5 rounded theme-text-muted"
+        >
+          <c.icon size={11} />
+        </span>
+      ))}
+    </span>
+  )
+}
 
 function TypewriterText({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
@@ -44,7 +69,7 @@ function TypewriterText({ text }: { text: string }) {
   )
 }
 
-function MessageActions({ text, modelTag }: { text: string, modelTag?: string }) {
+function MessageActions({ text, modelTag, fromCloud }: { text: string, modelTag?: string, fromCloud?: boolean }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -80,7 +105,18 @@ function MessageActions({ text, modelTag }: { text: string, modelTag?: string })
         <RefreshCw size={14} />
       </button>
       {modelTag && (
-        <span className="text-[11px] theme-text-muted ml-1 select-none">
+        <span
+          className={`text-[11px] ml-1 select-none flex items-center gap-1 ${
+            fromCloud ? 'status-warn' : 'theme-text-muted'
+          }`}
+          title={
+            fromCloud
+              ? 'Answered off this machine. Logged as chat_cloud and excluded from '
+                + 'the local latency figures — this turn is not the production path.'
+              : undefined
+          }
+        >
+          {fromCloud && <Cloud size={10} />}
           {modelTag}
         </span>
       )}
@@ -96,16 +132,21 @@ export function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
 
-  let modelOptions = [{ value: '', label: 'Loading models…' }]
+  let modelOptions: { value: string; label: string; capabilities?: string[] }[] =
+    [{ value: '', label: 'Loading models…' }]
   if (!modelsLoading) {
     if (modelsError) {
       modelOptions = [{ value: '', label: modelsError }]
     } else if (models.length > 0) {
-      modelOptions = models.map(m => ({ value: m.name, label: m.name }))
+      modelOptions = models.map(m => ({ value: m.name, label: m.name, capabilities: m.capabilities }))
     } else {
       modelOptions = [{ value: '', label: 'No local models — pull one in The Forge' }]
     }
   }
+
+  // Which of the two halves the current pick came from. The composer says so
+  // before you send, not only afterwards in the transcript.
+  const selectedIsCloud = referenceModels.some((m) => m.name === selectedModel)
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -209,11 +250,13 @@ export function ChatInterface() {
               <div className="flex items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center text-xs theme-text-muted mr-2 cursor-pointer hover:theme-text outline-none data-[state=open]:theme-text">
-                    <Zap size={14} className="mr-1 theme-accent" /> 
+                    {selectedIsCloud
+                      ? <Cloud size={14} className="mr-1 status-warn" />
+                      : <Zap size={14} className="mr-1 theme-accent" />}
                     {selectedModel}
                     <ChevronDown size={14} className="ml-1 opacity-50" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72 z-50 theme-card theme-border theme-text border">
+                  <DropdownMenuContent align="end" className="w-80 z-50 theme-card theme-border theme-text border">
                     {modelOptions.map(opt => (
                       <DropdownMenuItem
                         key={opt.value}
@@ -226,6 +269,7 @@ export function ChatInterface() {
                         }`}
                       >
                         <span className="truncate">{opt.label}</span>
+                        <CapabilityBadges capabilities={opt.capabilities} />
                         {deployedModel?.tag === opt.value && (
                           <span
                             className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0"
@@ -237,28 +281,34 @@ export function ChatInterface() {
                       </DropdownMenuItem>
                     ))}
 
-                    {/* Cloud models are listed but never selectable. Rule 1
-                        allows them as evaluation baselines only, and omitting
-                        them entirely just makes an operator wonder why the tag
-                        they installed is missing. Shown, labelled, disabled. */}
+                    {/* Selectable, under their own heading and their own
+                        warning. Rule 1 is recorded rather than prevented here:
+                        the turn is logged `chat_cloud` and the transcript marks
+                        it, so the production figures stay clean while the
+                        comparison stays inside the system where it is logged. */}
                     {referenceModels.length > 0 && (
                       <>
                         <DropdownMenuSeparator className="theme-border" />
                         {/* Label and rows inside a Group: Base UI's GroupLabel
                             reads its context and throws without one. */}
                         <DropdownMenuGroup>
-                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide theme-text-muted font-normal">
-                            Benchmark only · Rule 1
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide status-warn font-normal">
+                            Evaluation only · not Rule&nbsp;1 safe
                           </DropdownMenuLabel>
                           {referenceModels.map(m => (
                             <DropdownMenuItem
                               key={m.id}
-                              disabled
+                              onClick={() => setSelectedModel(m.name)}
                               title={m.note ?? undefined}
-                              className="flex items-center gap-2 opacity-50 cursor-not-allowed"
+                              className={`cursor-pointer flex items-center gap-2 ${
+                                selectedModel === m.name
+                                  ? 'status-warn bg-[color-mix(in_srgb,var(--status-warn)_16%,transparent)]'
+                                  : 'theme-text-muted'
+                              }`}
                             >
                               <Cloud size={12} className="shrink-0" />
                               <span className="truncate">{m.name}</span>
+                              <CapabilityBadges capabilities={m.capabilities} />
                               <span className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0">
                                 cloud
                               </span>
@@ -311,7 +361,14 @@ export function ChatInterface() {
                     )}
 
                     {msg.role === 'assistant' && msg.persisted && msg.content !== '' && (
-                      <MessageActions text={msg.content} modelTag={msg.modelTag} />
+                      <MessageActions
+                        text={msg.content}
+                        modelTag={msg.modelTag}
+                        // Resolved against the live list rather than stored on
+                        // the turn: a tag's locality is a property of the
+                        // machine, and it can change under a saved transcript.
+                        fromCloud={referenceModels.some((m) => m.name === msg.modelTag)}
+                      />
                     )}
 
                     {/* A failed send is kept on screen so the text is not lost,

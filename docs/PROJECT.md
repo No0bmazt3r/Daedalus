@@ -143,6 +143,28 @@ so a row describing a cloud model for runtime use cannot be stored, and no
 module on the chat path imports the service that reads them. The rule is
 structural rather than remembered, exactly like Rule 2's `mode=ro`.
 
+**One narrowing, added deliberately: *recorded* rather than *prevented*.** The
+console lets an operator point a single chat turn at an Ollama cloud tag. The
+production configuration is unaffected — `model_config.resolve()` only ever
+names a local tag, and `auto` ranks installed models on this disk — but the
+override exists because comparing the local answer against a hosted one is the
+comparison §5 is built to make, and refusing outright pushed that comparison
+outside the system, where nothing logged it.
+
+What keeps it defensible is that the choice is never silent, at three layers:
+
+| layer | what it does |
+|---|---|
+| picker | cloud models sit under **"Evaluation only · not Rule 1 safe"**, and the composer shows a cloud icon before you send |
+| transcript | the turn is badged with the tag that answered it |
+| `model_logs` | written as `source='chat_cloud'`, never `'chat'`, with `host` recording which machine served it |
+
+So every query that asks about the production path filters `source = 'chat'`
+and keeps excluding cloud turns without being rewritten. The claim the report
+can make is therefore **"no cloud model serves the production configuration,
+and any deviation is recorded and separable"** — which is a stronger, checkable
+claim than an unenforced absolute. See [`BENCHMARK.md`](BENCHMARK.md) §8.
+
 ### Rule 2 — The AI layer is read-only toward the plant
 It may read the sensor SQLite DB and its own knowledge stores. It may **never**
 write to SCADA, actuators, ABVs, sensor hardware, or a teammate's subsystem.

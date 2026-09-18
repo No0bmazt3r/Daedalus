@@ -35,6 +35,7 @@ import os
 import threading
 from collections.abc import Iterator
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     import httpx
@@ -235,6 +236,33 @@ def error_from(response: Any) -> OllamaError:
     return OllamaError(_error_detail(response), signin_url=_signin_url(response))
 
 
+def _host_only(url: str | None) -> str | None:
+    """`https://ollama.com:443/x` -> `ollama.com`. None for anything unparseable."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url if "//" in url else f"//{url}")
+    except ValueError:
+        return None
+    return parsed.hostname or None
+
+
+def serving_host(tag: str) -> str | None:
+    """Where `tag` runs, as a bare hostname. None when it is this machine.
+
+    Local runs are left NULL rather than written as 'localhost': the column
+    exists to tell two *remote* measurements apart, and a column that is the
+    same string on every local row carries no information.
+    """
+    try:
+        for model in list_models():
+            if model.get("name") == tag:
+                return model.get("remote_host")
+    except Exception:
+        pass
+    return None
+
+
 def _error_detail(response: Any) -> str:
     """Ollama's own message, which is almost always the actionable one.
 
@@ -283,6 +311,10 @@ def list_models() -> list[dict[str, Any]]:
             # they are not on this disk and must never be scored as if they
             # were, nor offered as a local deployment target.
             "remote": bool(model.get("remote_host") or model.get("remote_model")),
+            # Which machine actually serves it, for `model_logs.host`. Host
+            # only, never the full URL: a base URL can carry a key or a private
+            # hostname, and these rows are exported.
+            "remote_host": _host_only(model.get("remote_host")),
         })
     return out
 

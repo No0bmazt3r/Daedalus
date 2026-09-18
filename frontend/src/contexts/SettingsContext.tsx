@@ -5,7 +5,7 @@ import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
 /**
  * Per-session UI state, including which model the composer will use.
  *
- * ## Why the list is split rather than filtered
+ * ## Why the list is split rather than filtered (but both halves are usable)
  *
  * `/api/system/models` returns local Ollama models *and* cloud ones — both
  * Ollama's own `*-cloud` tags and the configured benchmark endpoints. Only the
@@ -13,12 +13,16 @@ import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
  * live reactor question is what Rule 1 forbids outright, and `choose_model`
  * rejects such an override anyway.
  *
- * They are kept and handed over as `referenceModels` rather than dropped. A
- * picker that silently omits `gpt-oss:120b-cloud` invites the question this
- * comment exists to answer — "is it broken, or did I imagine installing it?" —
- * whereas one that lists it greyed out, with the reason attached, shows the
- * boundary being enforced. That is the more useful thing for the evaluation
- * chapter to be able to point at, too.
+ * They are handed over as `referenceModels` and are selectable, under their own
+ * heading and their own warning. Rule 1 is narrowed from *prevented* to
+ * *recorded*: `choose_model` honours the override, the turn is logged
+ * `source='chat_cloud'` rather than `'chat'`, and the transcript marks which
+ * answers came from off the machine. Every Objective 3 query filters
+ * `source = 'chat'` and keeps describing the local production path unchanged.
+ *
+ * The split stays because the two are not interchangeable and the picker must
+ * not imply they are — one is what ships, the other is what it is measured
+ * against.
  *
  * ## Why the default comes from the server
  *
@@ -34,9 +38,9 @@ interface SettingsContextType {
   setIsIncognito: (val: boolean) => void;
   selectedModel: string;
   setSelectedModel: (val: string) => void;
-  /** Local, installed models. The only ones that may answer a query. */
+  /** Local, installed models. The production path. */
   models: SystemModel[];
-  /** Cloud models: shown, never selectable. Each carries its own `note`. */
+  /** Cloud models. Selectable, but an evaluation override — see each `note`. */
   referenceModels: SystemModel[];
   modelsLoading: boolean;
   modelsError: string | null;
@@ -79,7 +83,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setModelsLoading(false);
 
         setSelectedModel((prev) => {
-          if (prev && local.some((m) => m.name === prev)) return prev;
+          // A cloud pick is honoured on reselect, but never becomes the
+          // default: the default has to be the thing that ships.
+          if (prev && listed.value.some((m) => m.name === prev)) return prev;
           // The committed model first, so the composer agrees with the Forge.
           if (deployed?.tag && local.some((m) => m.name === deployed.tag)) {
             return deployed.tag;
