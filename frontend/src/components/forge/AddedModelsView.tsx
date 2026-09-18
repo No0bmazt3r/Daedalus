@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Cloud, Cpu, FlaskConical, Loader2, RefreshCw, Trash2, X,
-  CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity,
+  AlertTriangle, ArrowLeft, Cloud, Cpu, FlaskConical, Loader2, Plus, RefreshCw,
+  Trash2, X, CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Settings2,
 } from 'lucide-react'
 import {
   modelTable, modelUsage, deleteModel, runBenchmark,
   type ModelRow, type BenchmarkResult, type BenchmarkProgress, type ModelUsage,
 } from '../../lib/forgeClient'
 import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
+import { listEndpoints, type ModelEndpoint } from '../../lib/systemClient'
 import { SkeletonList } from '../ui/skeleton'
 
 /**
@@ -96,6 +97,125 @@ function Stat({ label, value, title }: { label: string; value: string; title?: s
     <div className="min-w-0" title={title}>
       <div className="text-[10px] uppercase tracking-wide theme-text-muted truncate">{label}</div>
       <div className="text-xs font-mono tabular-nums truncate">{value}</div>
+    </div>
+  )
+}
+
+/** One Ollama cloud tag: usable as a baseline, never as a deployment target. */
+function CloudModel({
+  row, usage, busy, benchProgress, onBenchmark,
+}: {
+  row: ModelRow
+  usage: ModelUsage | undefined
+  busy: string | null
+  benchProgress?: BenchmarkProgress | null
+  onBenchmark: (row: ModelRow) => void
+}) {
+  const isBusy = busy === row.tag
+  const measured = row.measured
+
+  return (
+    <div className="rounded-xl border theme-border theme-surface overflow-hidden">
+      <div className="flex items-start gap-3 p-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium truncate">{row.label}</span>
+            <Pill title="Served from Ollama's cloud. Not on this disk.">cloud</Pill>
+            {row.quantization && <Pill>{row.quantization}</Pill>}
+          </div>
+          <code className="text-[10px] theme-text-muted break-all">{row.tag}</code>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onBenchmark(row)}
+            disabled={!!busy}
+            title={
+              'Measure as an evaluation baseline. Runs on Ollama\'s servers, so it is '
+              + 'logged as benchmark_cloud and never compared against local hardware. '
+              + 'Uses the synthetic fixture prompt, never real retrieved documents.'
+            }
+            className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+          >
+            {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-2 px-3 pb-3">
+        <Stat label="Parameters" value={row.params_b ? `${row.params_b}B` : '—'} />
+        <Stat label="On disk" value="—" title="Nothing is stored locally: the tag is a pointer." />
+        <Stat label="Runs" value={usage ? count(usage.runs) : '0'} />
+        <Stat label="Last used" value={usage ? since(usage.last_used) : 'never'} />
+      </div>
+
+      {isBusy && benchProgress ? (
+        <div className="border-t theme-border px-3 py-2.5 text-[11px] font-mono theme-text-muted animate-pulse">
+          {benchProgress.phase === 'building_prompt' && 'Building fixture prompt...'}
+          {benchProgress.phase === 'warming_up' && 'Warming up...'}
+          {benchProgress.phase === 'generating' && `Measuring: ${benchProgress.tokens ?? 0} tokens`}
+          {benchProgress.phase === 'error' && <span className="status-bad">Failed</span>}
+          {benchProgress.phase === 'done' && 'Saving...'}
+        </div>
+      ) : measured?.tokens_per_sec ? (
+        <div className="border-t theme-border px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Activity size={11} className="theme-accent" />
+            <span className="text-[10px] uppercase tracking-wide theme-text-muted">
+              Baseline — Ollama's hardware, not this machine
+            </span>
+          </div>
+          <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-2">
+            <Stat label="TTFT" value={ms(measured.time_to_first_token_ms)} />
+            <Stat label="End-to-end" value={ms(measured.total_inference_ms)} />
+            <Stat label="Generation" value={`${measured.tokens_per_sec} tok/s`} />
+            <Stat label="Measured" value={since(measured.at ?? null)} />
+          </div>
+        </div>
+      ) : (
+        <div className="border-t theme-border px-3 py-2.5 text-[11px] theme-text-muted italic">
+          Not benchmarked yet. Needs <code>ollama signin</code>.
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One configured API provider. Listed here, edited in the endpoints panel. */
+function ApiEndpoint({ ep, onManage }: { ep: ModelEndpoint; onManage: () => void }) {
+  const ok = ep.last_test_ok
+  return (
+    <div className="rounded-xl border theme-border theme-surface p-3">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium truncate">{ep.label}</span>
+            <Pill>{ep.provider}</Pill>
+            {!ep.enabled && <Pill title="Configured but switched off.">disabled</Pill>}
+            <span
+              className={`text-[11px] flex items-center gap-1 ${
+                ok === null ? 'theme-text-muted' : ok ? 'status-ok' : 'status-bad'
+              }`}
+              title={ep.last_test_detail ?? 'Never tested.'}
+            >
+              {ok === null ? <HelpCircle size={11} /> : ok ? <CircleCheck size={11} /> : <CircleAlert size={11} />}
+              {ok === null ? 'untested' : ok ? 'reachable' : 'failed'}
+            </span>
+          </div>
+          <code className="text-[10px] theme-text-muted break-all">{ep.base_url}</code>
+        </div>
+        <button
+          onClick={onManage}
+          title="Test, edit or remove this endpoint."
+          className="shrink-0 p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+        >
+          <Settings2 size={13} />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 @lg:grid-cols-3 gap-x-4 gap-y-2 mt-3">
+        <Stat label="Key" value={ep.has_key ? (ep.key_hint ?? 'set') : 'none'} />
+        <Stat label="Purpose" value={ep.purpose} title="The store rejects any value but 'benchmark'." />
+        <Stat label="Last tested" value={since(ep.last_tested_at)} />
+      </div>
     </div>
   )
 }
@@ -248,17 +368,32 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [result, setResult] = useState<BenchmarkResult | null>(null)
   const [benchProgress, setBenchProgress] = useState<BenchmarkProgress | null>(null)
+  // Cloud tags Ollama serves, and the API providers configured for benchmarks.
+  // Two different kinds of "a model you may use as a baseline"; both belong in
+  // the cloud pane, and neither is a deployment target.
+  const [cloudRows, setCloudRows] = useState<ModelRow[]>([])
+  const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([])
+  const [endpointsLoaded, setEndpointsLoaded] = useState(false)
+  // The add/manage form is a destination, not the pane itself. You arrive at
+  // the inventory first and go there only when you want to change something.
+  const [managingApi, setManagingApi] = useState(false)
 
   const load = useCallback(async () => {
     // Settled, not all: usage is derived from the audit log and the inventory
     // from Ollama. Either can fail without the other being useless.
-    const [table, used] = await Promise.allSettled([modelTable(), modelUsage()])
+    const [table, used, eps] = await Promise.allSettled([
+      modelTable(), modelUsage(), listEndpoints(),
+    ])
     if (used.status === 'fulfilled') setUsage(used.value.models)
+    if (eps.status === 'fulfilled') setEndpoints(eps.value)
+    setEndpointsLoaded(true)
     if (table.status === 'fulfilled') {
       setRows(table.value.rows.filter((r) => r.installed && !r.remote))
+      setCloudRows(table.value.rows.filter((r) => r.remote))
       setError(table.value.ollama.available ? null : table.value.ollama.error)
     } else {
       setRows([])
+      setCloudRows([])
       setError(table.reason instanceof Error ? table.reason.message : 'request failed')
     }
   }, [])
@@ -342,7 +477,7 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
       <div className="flex items-center gap-1 flex-wrap border-b theme-border pb-2">
         {([
           { id: 'local' as const, label: 'Local models', icon: Cpu, n: (rows ?? []).length },
-          { id: 'cloud' as const, label: 'Cloud models', icon: Cloud, n: null },
+          { id: 'cloud' as const, label: 'Cloud models', icon: Cloud, n: cloudRows.length + endpoints.length },
         ]).map((entry) => (
           <button
             key={entry.id}
@@ -447,10 +582,79 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
               </div>
             </>
           )
+        ) : managingApi ? (
+          <>
+            <button
+              onClick={() => { setManagingApi(false); void load() }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg theme-text-muted hover:theme-text transition-colors"
+            >
+              <ArrowLeft size={12} />
+              Back to cloud models
+            </button>
+            {/* ModelEndpointsPanel carries its own Rule 1 warning, so nothing
+                is added here: two warnings stacked reads as boilerplate. */}
+            <ModelEndpointsPanel isPeek={isPeek} />
+          </>
         ) : (
-          // ModelEndpointsPanel carries its own Rule 1 warning, so this pane
-          // adds none: two warnings stacked reads as boilerplate.
-          <ModelEndpointsPanel isPeek={isPeek} />
+          <div className="flex flex-col gap-5">
+            <p className="text-xs theme-text-muted">
+              Reference baselines for the evaluation chapter. None of these can answer a
+              live query — Rule 1 keeps the chat path on local models, and the store
+              enforces it.
+            </p>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Cloud size={12} className="theme-text-muted" />
+                <span className="text-[10px] uppercase tracking-wide theme-text-muted">
+                  Via Ollama · {cloudRows.length}
+                </span>
+              </div>
+              {cloudRows.length ? (
+                cloudRows.map((row) => (
+                  <CloudModel
+                    key={row.id}
+                    row={row}
+                    usage={usage[row.tag]}
+                    busy={busy}
+                    benchProgress={busy === row.tag ? benchProgress : null}
+                    onBenchmark={handleBenchmark}
+                  />
+                ))
+              ) : (
+                <p className="text-xs theme-text-muted italic px-3 py-5 rounded-xl border border-dashed theme-border">
+                  No cloud tags. Pull one with <code>ollama pull gpt-oss:120b-cloud</code>.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Settings2 size={12} className="theme-text-muted" />
+                <span className="text-[10px] uppercase tracking-wide theme-text-muted">
+                  API endpoints · {endpoints.length}
+                </span>
+                <button
+                  onClick={() => setManagingApi(true)}
+                  className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+                >
+                  <Plus size={12} />
+                  Add API model
+                </button>
+              </div>
+              {!endpointsLoaded ? (
+                <SkeletonList rows={2} />
+              ) : endpoints.length ? (
+                endpoints.map((ep) => (
+                  <ApiEndpoint key={ep.id} ep={ep} onManage={() => setManagingApi(true)} />
+                ))
+              ) : (
+                <p className="text-xs theme-text-muted italic px-3 py-5 rounded-xl border border-dashed theme-border">
+                  None configured. Add one to benchmark against a hosted model.
+                </p>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

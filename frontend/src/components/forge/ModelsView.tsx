@@ -373,8 +373,18 @@ function Row({
                   {benchProgress.phase === 'done' && 'saving...'}
                 </div>
               ) : measured?.tokens_per_sec ? (
-                <div className="text-xs font-mono theme-text" title={`Benchmarked ${measured.at ?? ''}`}>
+                <div
+                  className="text-xs font-mono theme-text"
+                  title={
+                    row.remote
+                      ? `Benchmarked ${measured.at ?? ''} on Ollama's cloud — not this machine's hardware.`
+                      : `Benchmarked ${measured.at ?? ''}`
+                  }
+                >
                   {measured.time_to_first_token_ms}ms · {measured.tokens_per_sec} tok/s
+                  {/* Without this the figure reads as a property of this
+                      machine, which is the one thing it is not. */}
+                  {row.remote && <span className="theme-text-muted"> · cloud</span>}
                 </div>
               ) : (
                 <div className="text-xs theme-text-muted italic">not benchmarked</div>
@@ -414,7 +424,26 @@ function Row({
               </button>
             </>
           ) : row.remote ? (
-            <Pill title={PLACEMENT_HELP.cloud}>cloud</Pill>
+            <>
+              <Pill title={PLACEMENT_HELP.cloud}>cloud</Pill>
+              {/* Benchmarked but never pulled or deployed. Rule 1 allows a
+                  cloud model as an evaluation baseline, which is exactly what
+                  a measurement of one is. There is no Delete here on purpose:
+                  nothing of it is on this disk to remove. */}
+              <button
+                onClick={() => onBenchmark(row)}
+                disabled={!!busy}
+                title={
+                  'Measure as an evaluation baseline. Runs on Ollama\'s servers, not this '
+                  + 'machine, so it is logged separately and never compared against local '
+                  + 'hardware. Uses the synthetic fixture prompt, never real retrieved '
+                  + 'documents. Needs `ollama signin`.'
+                }
+                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
+              >
+                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
+              </button>
+            </>
           ) : (
             <button
               onClick={() => onPull(row)}

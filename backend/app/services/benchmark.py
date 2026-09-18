@@ -180,9 +180,21 @@ def _rag_pack(target_tokens: int) -> tuple[str, dict[str, Any]] | None:
     }
 
 
-def build_prompt(target_tokens: int = DEFAULT_PROMPT_TOKENS) -> tuple[str, dict[str, Any]]:
-    """A RAG-context-sized prompt, and provenance for it."""
-    real = _rag_pack(target_tokens)
+def build_prompt(
+    target_tokens: int = DEFAULT_PROMPT_TOKENS,
+    *,
+    allow_real: bool = True,
+) -> tuple[str, dict[str, Any]]:
+    """A RAG-context-sized prompt, and provenance for it.
+
+    `allow_real=False` forces the synthetic fixture even when a real retrieval
+    is available. That is not a quality setting — it is what keeps a cloud
+    benchmark from posting genuine plant documents to someone else's server.
+    The real pack is chunks fetched back out of the vector store: actual SOP
+    and manual text. Fine for a model running on this machine, an export off
+    it otherwise. `run_stream` sets this from the tag, not the caller.
+    """
+    real = _rag_pack(target_tokens) if allow_real else None
     if real:
         pack, meta = real
     else:
@@ -241,6 +253,24 @@ def _warm_up(tag: str) -> bool:
         return False
 
 
+def _is_remote(tag: str) -> bool:
+    """Whether Ollama serves this tag from its cloud rather than this disk.
+
+    Asked of Ollama rather than matched against the `-cloud` suffix: the suffix
+    is a naming convention and `remote_host` is the fact. A tag that cannot be
+    found is treated as local, which is the conservative answer — it keeps a
+    real retrieval out of a prompt only when the destination is known remote,
+    and mislabels nothing as measured-on-this-machine that was not.
+    """
+    try:
+        for model in ollama_client.list_models():
+            if model.get("name") == tag:
+                return bool(model.get("remote"))
+    except Exception:
+        pass
+    return False
+
+
 def run_stream(
     tag: str,
     *,
@@ -260,18 +290,37 @@ def run_stream(
     TTFT)`. The subtraction looks equivalent and is not: it silently charges the
     model for any client-side delay, which is how the first version of this
     benchmark reported a model at less than half its real speed.
+
+    ## A cloud tag is measured, and logged, as a different thing
+
+    Ollama lists its cloud-hosted tags beside local ones and will happily serve
+    one. Benchmarking it is legitimate — Rule 1 allows cloud models as
+    evaluation baselines — but the number means something else: it measures
+    ollama.com's hardware, not this machine. Two things follow, and both are
+    set here from the tag rather than trusted to the caller:
+
+    - the row is written with `source='benchmark_cloud'`, so every query that
+      asks what *this* machine can do keeps filtering on `'benchmark'` and
+      stays correct without being rewritten;
+    - the prompt is forced to the synthetic fixture, because the real pack is
+      plant documents and this one leaves the building.
+
+    Warm-up is skipped too. It exists to take the weight-load off the clock,
+    and there are no weights here to load.
     """
     if ollama_client.httpx is None:
         yield {"phase": "error", "error": "httpx is not installed"}
         return
 
+    remote = _is_remote(tag)
+
     yield {"phase": "building_prompt"}
-    prompt, provenance = build_prompt(prompt_tokens)
+    prompt, provenance = build_prompt(prompt_tokens, allow_real=not remote)
     query_id = "bench_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S%f")
 
-    if warmup:
+    if warmup and not remote:
         yield {"phase": "warming_up"}
-    warmed_up = _warm_up(tag) if warmup else False
+    warmed_up = _warm_up(tag) if (warmup and not remote) else False
 
     yield {"phase": "generating", "tokens": 0, "piece": ""}
 
@@ -376,7 +425,7 @@ def run_stream(
         prefill_ms=prefill_ms,
         generation_ms=generation_ms,
         load_ms=load_ms,
-        source="benchmark",
+        source="benchmark_cloud" if remote else "benchmark",
         status=status,
         error_message=error,
     )
@@ -391,6 +440,9 @@ def run_stream(
                 "query_id": query_id,
                 "at": _now(),
                 "status": status,
+                # Where it ran. A reader comparing two rows needs this before
+                # the milliseconds mean anything.
+                "remote": remote,
                 "error": error,
                 "time_to_first_token_ms": ttft_ms,
                 "total_inference_ms": total_ms,
