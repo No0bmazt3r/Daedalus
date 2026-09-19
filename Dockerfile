@@ -61,3 +61,28 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:8000/api/health || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3 — development: the same runtime, with the source bind-mounted over it
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Built `FROM runtime` on purpose. A dev image assembled separately drifts from
+# the one that ships — a different Python patch version, a dependency installed
+# in one and not the other — and the whole reason to develop in a container is
+# that "works on my machine" and "works in the image" stop being two questions.
+#
+# The `COPY backend/app` from the runtime stage is still in this image and is
+# still shadowed by the bind mount in docker-compose.dev.yml. That is deliberate
+# too: the image runs on its own without a mount, so a broken compose override
+# fails loudly rather than starting an empty container.
+#
+# `uvicorn --reload` needs watchfiles, which arrives with `uvicorn[standard]`.
+FROM runtime AS dev
+
+# Vite serves the UI in this mode, so FastAPI must not also serve a stale bundle
+# built into the image — it would be served at the same path and win.
+ENV DAEDALUS_STATIC_DIR=/app/static-disabled
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--reload", "--reload-dir", "/app/app"]

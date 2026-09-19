@@ -130,7 +130,12 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
 
   panel({
     id: 'tools', label: 'Agent Tools', group: 'administration', icon: Wrench, adminOnly: true,
-    keywords: ['agent', 'tools', 'sensor', 'trend', 'anomaly', 'retrieve'],
+    implemented: true,
+    keywords: [
+      'agent', 'tools', 'sensor', 'trend', 'anomaly', 'retrieve', 'capability',
+      'effects', 'citable', 'evidence', 'graph', 'traverse', 'corpus', 'session',
+      'clock', 'ask', 'permissions', 'gate',
+    ],
   }),
   panel({
     id: 'users', label: 'Users', group: 'administration', icon: Users, adminOnly: true,

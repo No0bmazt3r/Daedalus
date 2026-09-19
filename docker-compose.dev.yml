@@ -1,0 +1,85 @@
+# Development overlay — hot reload, in the container.
+#
+#   ./daedalus.sh dev              # this file, layered over docker-compose.yml
+#   ./daedalus.sh dev --host       # the older path: two processes on the host
+#
+# ## Why develop in the container
+#
+# The host path works, and it costs a category of bug that is hard to see. Every
+# address in `.env` is written from the container's point of view —
+# `http://chromadb:8000`, `http://searxng:8080`, `http://host.docker.internal:11434`
+# — and none of those resolve on the host, so `scripts/common.sh` carries three
+# functions whose entire job is rewriting them back to published ports. That
+# machinery is correct and it is also a translation layer between two versions of
+# reality, which is the thing that eventually disagrees with itself.
+#
+# In here, `chromadb:8000` is simply the address. So are the paths: `/data`,
+# `/logs` and `/config` mean the same thing in development as in the image that
+# ships, instead of being mapped to repository directories by a shell function.
+#
+# It also puts the `execute_code` tools (agent_tools/extended) behind a kernel
+# boundary rather than a regular expression, which is what that module's own
+# documentation recommends.
+#
+# ## What still runs on the host
+#
+# Ollama. GPU passthrough is far simpler there and the model cache survives
+# rebuilds — `OLLAMA_BASE_URL` already points at `host.docker.internal`, and the
+# base file's `extra_hosts` is what makes that resolve.
+
+services:
+  daedalus:
+    build:
+      target: dev
+    # Its own tag: `daedalus:latest` is the shipping image, and quietly
+    # overwriting it with a dev build is how `./daedalus.sh start` ends up
+    # serving something that was never built for it.
+    image: daedalus:dev
+    container_name: daedalus-dev
+    # Appended to the base file's mounts, which is the wanted behaviour here:
+    # dev needs ./data, ./logs and ./config exactly as the shipping stack does.
+    volumes:
+      # The source, mounted over the copy baked into the image. Read-only —
+      # nothing in the app writes to its own package directory, and a container
+      # that could edit the repository is a container that can edit the
+      # repository.
+      - ./backend/app:/app/app:ro
+    environment:
+      # Vite serves the UI in this mode; FastAPI must not also serve a stale
+      # bundle from the image at the same paths.
+      DAEDALUS_STATIC_DIR: /app/static-disabled
+    # `!override` replaces the base file's list instead of appending to it.
+    # Compose merges `ports` by concatenation, so without this the service tries
+    # to publish DAEDALUS_PORT *and* BACKEND_PORT and fails on whichever is
+    # already taken — which, when they are both 8000, is itself.
+    ports: !override
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+
+  # Vite, in its own container, proxying /api to the service above. A plain node
+  # image rather than a stage in the Dockerfile: this never ships, it exists to
+  # run `pnpm dev`, and a build stage for it would be a second place for the
+  # frontend's dependencies to be described.
+  frontend:
+    image: node:24-slim
+    container_name: daedalus-frontend-dev
+    working_dir: /app
+    command: >
+      sh -c "corepack enable &&
+             pnpm install --frozen-lockfile &&
+             pnpm dev --host 0.0.0.0 --port 5173"
+    environment:
+      # What vite.config.ts proxies /api to. The service name, because that is
+      # what resolves in here.
+      DAEDALUS_API_URL: http://daedalus:8000
+    volumes:
+      - ./frontend:/app
+      # An anonymous volume so the container's node_modules is not shadowed by
+      # the host's. They are not interchangeable: native builds (rollup, esbuild,
+      # tailwind's oxide binary) are compiled per platform, and a Linux container
+      # loading a host-built binary fails in a way that reads as a Vite bug.
+      - /app/node_modules
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - daedalus
+    restart: unless-stopped

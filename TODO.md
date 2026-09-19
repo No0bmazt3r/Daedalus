@@ -191,6 +191,89 @@ the Forge while M5 was in flight.
 
 ## M3 — Deterministic tool layer  ▸ Layer 8
 
+### The registry and the five non-sensor categories  ▸ built
+
+- [x] `services/agent_tools/` — 13 tools across `search` · `knowledge` ·
+      `session` · `system` · `other`, and a dispatcher that validates three
+      declarations before the function is entered. Informed by Odysseus'
+      `src/agent_tools/` + `tool_capabilities.py`, not ported from them: the
+      effect vocabulary differs because the two systems are afraid of different
+      things — Odysseus guards a workspace and a mailbox, this guards a rule
+      that no number may be invented and nothing may leave the machine
+- [x] **The surface gate is Rule 1 and Rule 5 in code.** A tool declaring
+      `network_egress`, `write` or `admin` is refused on the runtime surface,
+      so a web search tool cannot reach the chat path however the prompt is
+      worded. Verified against a tool that raises on entry: refused without
+      running
+- [x] **Arguments are validated, not coerced.** `Param` carries type, enum and
+      bounds; an unknown argument name is an error rather than a silent drop,
+      because `sensor_name` for `sensor` is a misunderstanding worth surfacing.
+      §7.2's "whitelisted, parameterized" at the boundary
+- [x] **`citable` is Rule 3 at the tool boundary.** Session tools return
+      `transcript` integrity and are never citable: §7.4's hazard is that turn 3
+      said "CO₂ is 470.2 ppm" and turn 9 can still see it. Marking it here is the
+      only moment the distinction exists — later, both are just strings
+- [x] **`render_for_prompt()` fences untrusted content** with a nonce-tagged
+      marker naming what it is. A RAG system's shape is "read text somebody else
+      wrote, put it in front of a model", and a fixed delimiter is one a hostile
+      document can contain and close. Tested with a passage carrying a forged
+      closing marker
+- [x] Every dispatch writes a `tool_logs` row with arguments, status and
+      latency — §7.1 step 11, which nothing wrote before
+- [x] Settings → Agent Tools renders the catalogue, runs any tool with a person
+      watching, and lists what is **deliberately** not offered with the rule
+      that excludes it
+- [x] **All of it offered, and lockable.** `tool_policy` now ships all four
+      effects open (migration 005): single-operator console, operator is the
+      admin, and four confirmation clicks between somebody and their own tools
+      protect nobody. The gate still decides, *Lock all* still restores §3's
+      configuration in one click, and `unlocked_at` + `note` still answer what
+      the system was allowed to do when a benchmark was recorded
+- [x] The rest of the "not offered" list built: `manage_endpoints`' write half
+      (keys write-only — no action returns a credential), `chat_with_model`
+      (local tags only, model recorded), `pipeline` (each step re-enters the
+      gate and gets its own log row), `manage_memory` (writes to `memory_logs`
+      in the audit DB, which neither retrieval track reads; `forget` expires
+      rather than deletes), and `ui_control` (`open_panel` returns an intent the
+      UI may decline). 26 tools
+- [x] `manage_mcp` / `manage_webhooks` / `manage_tokens` stay on the excluded
+      list — flagged rather than built, because the subsystems they manage do
+      not exist here. The entry is the record of the difference
+- [x] **Extended capabilities — built, and gated.** The web,
+      session-write, configuration and execution tools now exist
+      (`agent_tools/extended/`), locked behind four effects: `network_egress`,
+      `write`, `admin`, `execute_code`. All four closed is the default and the
+      configuration §3 describes
+      - [x] The reasoning: a rule you have never tested is a belief. "The agent
+            could have searched the web and here is what it did to groundedness"
+            is a result; "we never built it" is an assumption. The requirement is
+            that the capability never arrives *quietly* — so an unlock is
+            deliberate, carries a stored reason, is stamped onto every catalogue
+            response, and the panel warns while anything is open
+      - [x] An unlock lifts the refusal and nothing else. Validation still runs,
+            `tool_logs` still records every call, and the containment inside each
+            tool has no switch: a workspace root resolved *after* symlinks, an
+            environment scrubbed to PATH/HOME/LANG, a timeout that kills the
+            process group, output and size caps, and an SSRF guard that re-checks
+            the host after every redirect
+      - [x] Session writes are labelled rather than prevented — the transcript
+            stays honest by attribution. `manage_settings` is a whitelist of one
+            key and still refuses a frozen track. `manage_endpoints` is read-only
+      - [x] The denylist is documented as what it is: a list of the ways somebody
+            already thought of. It is not a sandbox, and the module says so — the
+            real boundaries are the lock and the container
+      - [x] Verified: locked tools refuse before entry · an unlock with no reason
+            is rejected · eight composed denylist probes blocked, ordinary
+            commands pass · six `../` segments refused · the child sees six env
+            vars and no credentials · `web_fetch` refuses loopback, localhost,
+            link-local metadata and non-HTTP schemes · the advertised schema list
+            grows 13 → 16 only when `write` is unlocked
+- [ ] The sensor tools (`get_live_reading` · `get_trend` ·
+      `get_anomaly_summary`) are still the rest of this milestone. They read the
+      telemetry of record and want their own module and review; the registry
+      already carries a `READ_SENSOR` effect so adding them is a registration
+      rather than a redesign
+
 The anti-hallucination mechanism. **Highest-value milestone.**
 
 - [ ] `get_live_reading(sensor, timestamp?)`
@@ -745,9 +828,11 @@ Layer 9 below for the per-step detail.
 - [ ] The chat path has no retrieval or tool-calling yet: it replays conversation
       history and answers. `evidence` is threaded through `inference.answer()`
       unused, so the prompt is already in its final shape for M5/M6
-- [ ] Five `setState`-in-effect lint warnings (`SessionsContext`, `ModelsView` ×2,
-      `AddedModelsView`, `SearchPanel`) — all the legitimate kind: an effect
-      synchronising with the backend on mount
+- [ ] 24 oxlint warnings across `src/`, zero errors: 16 `set-state-in-effect`
+      (the legitimate kind — an effect synchronising with the backend on mount)
+      and 8 `react(refs)`, nine of the latter in `GraphCanvas`, which drives a
+      D3 simulation and holds refs on purpose. Counted over the whole tree
+      rather than the handful of files a previous entry had checked
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
@@ -779,8 +864,38 @@ Layer 9 below for the per-step detail.
 - [ ] A cloud search provider's key is stored in plain text in `prefs.db`,
       exactly as the benchmark API keys are, and with the same caveat: fine for
       a single-user local deployment on a git-ignored file, not a secret store
+- [x] **`./daedalus.sh dev` runs in containers**, with the source bind-mounted
+      and uvicorn/Vite reloading in place. `--host` keeps the old two-process
+      path for attaching a debugger. The reason is not tidiness: every address in
+      `.env` is written from the container's point of view, so the host path
+      needs three functions in `common.sh` that rewrite them back to published
+      ports — a translation layer between two versions of reality. In the
+      container they are just the addresses, and `/data`, `/logs`, `/config`
+      mean what they mean in the image that ships
+      - [x] `ports: !override` — compose merges `ports` by concatenation, so
+            without it the dev service publishes DAEDALUS_PORT *and*
+            BACKEND_PORT and collides with itself at 8000. Found by it failing
+      - [x] `image: daedalus:dev`, so a dev build never overwrites the shipping
+            tag; an anonymous volume over `/app/node_modules`, because
+            rollup/esbuild/oxide binaries are per-platform; `--remove-orphans`
+            on `stop`, so one stop covers both stacks
+      - [x] Verified: container healthy, `/app/data/prefs.db` (container paths,
+            not remapped host ones), `chromadb:8000` and `searxng:8080` resolve
+            unmapped, and a `touch` on a backend file restarts uvicorn in place
 - [ ] Settings panels other than Add Models, Added Models, Hardware, Databases,
-      Knowledge Base, Search, Appearance and Shortcuts are still placeholders
+      Knowledge Base, Search, Agent Tools, Appearance and Shortcuts are still
+      placeholders
+- [ ] `bash` and `python` are contained, not sandboxed. On a machine that
+      matters, unlock `execute_code` only with Daedalus running in its container,
+      where the process is confined by a kernel rather than by a regular
+      expression
+- [ ] Unlocking any extended effect invalidates a groundedness measurement taken
+      while it was open. There is no automatic guard for this — the panel warns,
+      and `tool_policy.unlocked_at` is what lets a reviewer check afterwards
+- [ ] `render_for_prompt()` has no consumer yet — M5's prompt builder is what
+      will call it. Until then the integrity fence is tested but not in the
+      path, which is the right order (the marking has to exist before anything
+      can honour it) but is worth not forgetting
 - [ ] Two Font selector options are not actually bundled — `mono` names Fira Code
       and `opendyslexic` names OpenDyslexic, but only Monocraft and Geist ship
       with the app, so both silently fall back (to the system monospace and to

@@ -61,9 +61,15 @@ fail()  { err "$*"; exit 1; }
 have()  { command -v "$1" >/dev/null 2>&1; }
 
 # Support both `docker compose` (v2) and the legacy `docker-compose`.
+# COMPOSE_FILES — extra `-f` arguments, set by a command that needs an overlay.
+# `dev` sets it to layer docker-compose.dev.yml; everything else leaves it empty
+# and gets the shipping stack.
+COMPOSE_FILES=${COMPOSE_FILES:-}
+
 compose() {
-  if docker compose version >/dev/null 2>&1; then docker compose "$@"
-  elif have docker-compose; then docker-compose "$@"
+  # shellcheck disable=SC2086 — COMPOSE_FILES is a deliberate word-split list.
+  if docker compose version >/dev/null 2>&1; then docker compose $COMPOSE_FILES "$@"
+  elif have docker-compose; then docker-compose $COMPOSE_FILES "$@"
   else err "docker compose is not installed or not on PATH."; exit 1
   fi
 }
