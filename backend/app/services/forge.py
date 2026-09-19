@@ -224,6 +224,22 @@ def _row(
             "ratio": round(measured_tps / estimated_tps, 2),
         }
 
+    # An embedding model is not a candidate to answer anything.
+    #
+    # Tiering is `slm` under 4B params and `llm` over, which was correct while
+    # every installed model was generative. `nomic-embed-text` is 137M, so it
+    # would land in `slm` — the tier the deployment actually picks from — and be
+    # offered as a chat model with a fit verdict, a speed estimate and a quality
+    # score computed on a scale that does not apply to it. On a machine where it
+    # was the only model pulled, `model_config.resolve()` in auto mode would
+    # select it and the chat path would ask an embedder for a completion.
+    #
+    # Capability comes from Ollama's own `/api/show`, so this holds for anything
+    # pulled, not just the four in the embedding catalogue.
+    if "embedding" in capabilities:
+        tier = "embedding"
+        kind = "embedding"
+
     return {
         "id": row_id,
         "model_id": model_id,
@@ -242,6 +258,15 @@ def _row(
         "params_b": params_b,
         "context_length": measured_context or context_length,
         "context_source": "measured" if measured_context else "declared",
+        # The architecture the memory estimate was computed from. Already read
+        # for the KV-cache arithmetic; carried to the UI so §8.2's numbers can
+        # be checked rather than trusted — `estimate.formula` states the sum,
+        # and these are its inputs.
+        #
+        # Note `embedding_length` here is the model's hidden size, not a
+        # retrieval vector width. Same GGUF key as an embedding model's output
+        # dimension, different meaning, so it is never labelled "dimensions".
+        "arch": arch,
         "notes": notes,
         "capabilities": capabilities,
         "installed": bool(installed) and not (installed or {}).get("remote"),

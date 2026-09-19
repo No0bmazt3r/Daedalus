@@ -45,6 +45,83 @@ Offline pipeline. Never runs during a live query.
 - [ ] Freeze `corpus_chunks.json` — **the same chunks and embeddings must feed both tracks**, or the comparison measures chunking instead of architecture
 - [ ] Target ≥80 chunks (200+ is stronger)
 
+### Embedding model selection  ▸ Layer 4 prerequisite
+
+Built ahead of M2 because it needs no documents — the same reasoning that built
+the Forge while M5 was in flight.
+
+- [x] `services/embedding_models.py` — catalogue of the four local models from
+      `architecture/04` Step 5 with the two figures ingestion needs (vector
+      width, context window), plus detection of what is installed. Capability
+      comes from Ollama's own `/api/show`, not from name-matching, so a model
+      pulled outside the catalogue is still found
+- [x] Pull via SSE — an embedding model is an Ollama model, so this is the
+      Forge's existing mechanism on a surface that suits the decision
+- [x] **The one-way door.** The config records which model actually built the
+      index (`indexed_with`), so selecting a different one reports `stale`
+      rather than silently returning results ranked by comparing vectors from
+      two different spaces. Verified across empty → current → stale → current
+- [x] **Cloud embeddings are quarantined, not offered as a peer.** Rule 1 allows
+      cloud models as offline baselines; embeddings expose far more than a chat
+      turn, because the corpus goes out at ingest *and* every later query must
+      be embedded by the same model to be comparable. So a cloud selection
+      writes a separate collection and `resolve_for_runtime()` refuses it
+- [x] **Embedding models are their own tier in the Forge.** Tiering was `slm`
+      under 4B params and `llm` over, which was correct while every installed
+      model was generative. `nomic-embed-text` is 137M, so it landed in `slm` —
+      the tier the deployment picks from — carrying a fit verdict and a quality
+      score computed on a scale that does not apply to it
+- [x] **`model_config.resolve()` filters on capability.** auto mode ranked every
+      installed model with no capability check, so on a machine holding only an
+      embedding model it would have selected it and the chat path would have
+      asked an embedder for a completion. Filters on the *presence* of
+      `completion` rather than the absence of `embedding`, so a model reporting
+      neither is excluded rather than assumed usable. Verified across four
+      cases, including an embedder out-scoring a chat model
+- [x] The three auto-resolve failures now read differently — nothing installed,
+      nothing fits, and "fits but cannot generate text" sent the reader to the
+      wrong fix when they shared one message
+- [x] **Embedding models live in the Forge, not in Settings.** They were first
+      put beside the retrieval-track switch, on the reasoning that the choice is
+      inseparable from the index it produced. True, and still the wrong home:
+      the Forge is the model console and this is a model, so splitting "models
+      you pull" across two windows by what the model is *for* left neither
+      window able to answer "what is on this machine". The Forge now owns the
+      lifecycle — Models → Embeddings discovers and pulls, Added Models →
+      Embedding models is the inventory and the selection
+- [x] Settings → Knowledge Base keeps only the corpus fact: whether the stored
+      vectors were produced by the selected model. Read-only, because a stale
+      index is fixed by re-ingesting rather than by changing a setting
+- [x] **Embedding figures are measured, not declared, once pulled.** The
+      catalogue's dimensions and context window were shown bare, which broke the
+      rule `model_fit.py` already follows for weight size: a claim about a
+      published tag and a fact read off the file on this disk must not look
+      alike (`MODULES.md` §2.2). `local_models()` now reads
+      `<arch>.embedding_length` and `<arch>.context_length` from Ollama's
+      `/api/show` for anything installed, falls back to the catalogue otherwise,
+      and every row reports which source answered. Family, parameter size and
+      quantization come the same way
+- [x] A consequence worth having: an embedding model the catalogue never
+      declared still gets complete figures, because they are read from the file
+      rather than looked up
+- [x] **Verified dimensions.** `POST /api/embeddings/verify` embeds a fixed
+      probe string and records the width that actually comes back — the only
+      figure that is ground truth for what a vector store receives, because
+      `/api/show` reports what the *architecture* declares and a model with
+      Matryoshka truncation or an unusual pooling config can emit something
+      narrower. Three tiers now, never conflated: `declared` < `measured` <
+      `verified`. A disagreement is shown, not silently resolved, and every
+      derived figure recomputes from the verified width
+- [x] `ollama_client.embed()` — the only call in that client that runs a model
+      rather than reading metadata about one. Handles both the current
+      `/api/embed` response shape and the older flat `embedding` key, because
+      the failure is otherwise an empty vector reported as 0 dimensions
+- [ ] Ingestion must call `record_index()` when it finishes, or `stale` can
+      never become `current`
+- [ ] Warn when a chunk exceeds the selected model's context window. The UI
+      flags a narrow window against M2's 300-500 token chunks, but only
+      ingestion can know whether a chunk actually overran
+
 ## M3 — Deterministic tool layer  ▸ Layer 8
 
 The anti-hallucination mechanism. **Highest-value milestone.**
@@ -342,6 +419,15 @@ Layer 9 below for the per-step detail.
           the simulation runs 300 ticks then **stops** rather than idling. Two
           views of the same filtered query: diagram for structure, table for
           inventory
+    - [x] **Fit, zoom and pan.** The canvas hard-coded a 720x460 viewBox, but a
+          force layout spreads to whatever the forces imply and has no idea a
+          frame exists — measured on the real graph shape, **16 of 37 nodes fell
+          outside it** and were silently clipped. The viewBox is now computed
+          from the nodes' own bounding box, padded for labels and corrected to
+          the drawing area's aspect ratio; wheel zooms about the cursor, the
+          background pans, and Fit returns to the whole graph. Zoom is clamped
+          to 0.2x-3x of the fitted width so a scroll gesture cannot end on an
+          empty screen
     - [x] Stepped replay — the walk's subgraph with a hop-by-hop highlighter,
           which is §3.2's "highlighting each node and edge in sequence"
     - [x] **Hops record their real edge pairs.** The first format stored only
@@ -354,6 +440,13 @@ Layer 9 below for the per-step detail.
           `config/rag_config.json`, read on the chat path, recorded per query in
           `rag_logs.track`. Honours §5's freeze: `frozen: true` makes the API
           refuse writes so unfreezing is a visible commit
+    - [x] **Blueprints is organised by retrieval track**, not as a flat row of
+          four tabs. Track 1 · Vector holds Corpus; Track 2 · Graph holds Graph,
+          Coverage and Replay. The window opens on whichever track is live and
+          marks it, and the other stays reachable — the graph is *authored*
+          while Track 1 is live, so hiding it would make Track 2 impossible to
+          prepare from inside the app. Corpus is filed under Track 1 but says it
+          is shared, because the graph track indexes the same chunks
     - [x] Blueprints reflects the live track — dot on the tabs describing the
           running arm, track named in the subtitle, and a banner on a tab that
           describes the other one. Replay is the case that needed it: with Track

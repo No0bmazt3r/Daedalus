@@ -19,7 +19,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, forge, graph, health, logs, prefs, providers, sessions, system
+from .api import (
+    chat, embeddings, forge, graph, health, logs, prefs, providers, sessions, system,
+)
 from .db import migrations, paths, sqlite_util
 # Aliased: `api.forge` is already imported above under that name, and the two
 # shadowing each other broke router registration at import time.
@@ -117,6 +119,7 @@ app.include_router(providers.router)
 app.include_router(system.router)
 app.include_router(forge.router)
 app.include_router(graph.router)
+app.include_router(embeddings.router)
 app.include_router(chat.router)
 
 

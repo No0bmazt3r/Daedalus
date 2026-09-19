@@ -76,7 +76,20 @@ to it.
 | `POST` | `/api/chat` | Answer a message, **streamed as SSE**. Resolves the model, replays history, logs the call as `chat` or `chat_cloud` |
 | `GET` | `/api/chat/model` | Which model would answer right now, and why |
 | `GET` | `/api/chat/{id}/status` | Whether a generation is still running for that session. A generation outlives the request that started it, so a reconnecting client polls this |
+| `GET` | `/api/graph/schema` | Node and edge types with live counts — drives the Blueprints legend |
+| `GET` | `/api/graph/nodes` | Search and filter the knowledge graph; returns the edges among the returned nodes so the diagram draws the same set the table lists |
+| `GET` | `/api/graph/nodes/{id}` | One node with its neighbours, both directions |
+| `GET` | `/api/graph/coverage` | Orphans and authoring gaps — every row is a question the graph cannot answer |
+| `GET` | `/api/graph/traversals` | Recent graph-track retrievals, newest first — the replay picker |
+| `GET` | `/api/graph/traversal/{query_id}` | The recorded walk for one query, hop by hop |
+| `GET` | `/api/corpus/documents` | Ingested documents. **Blocked on M2** — answers with `available: false` and the milestone |
+| `GET` | `/api/corpus/documents/{id}/chunks` | Chunks with metadata. Same honest empty state |
+| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can. `PUT` is refused with 409 while the comparison is frozen |
+| `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
+| `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
+| `POST` | `/api/embeddings/verify` | Embed a probe string and record the width the model actually returns. The only call here that runs a model |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
+| `POST`/`DELETE` | `/api/system/seed-graph-traces` | Record real graph traversals into `rag_logs` so Blueprints' replay can be built before the orchestrator exists. **Dev only**; rows marked `vector_db_used='seed'` |
 
 Writable preference keys (anything else is rejected with 404):
 
@@ -405,6 +418,61 @@ compose service), **embedded mode** otherwise (a persistent client under
 
 Chroma is an **optional import**. A machine without it still boots the
 dashboard and preference API; absence is reported as a status, not raised.
+
+Two collections, kept apart by name rather than by a flag somebody has to
+remember to check:
+
+| Collection | Written by |
+|---|---|
+| `daedalus_knowledge` | The selected **local** embedding model — the production index |
+| `daedalus_knowledge_cloud_baseline` | A cloud embedding model, if one is configured as an offline baseline |
+
+**`./daedalus.sh dev` starts the `chromadb` container.** It previously started
+neither Docker nor Chroma, and `.env`'s `CHROMA_URL` names the compose service
+(`http://chromadb:8000`), which does not resolve on the host — so the vector
+store read as *unreachable* rather than as *not running*. `scripts/common.sh`
+now rewrites it to the published port via `host_chroma_url`, the same cure
+`host_ollama_url` already applied to Ollama, and `ensure_chroma` starts the one
+container. Non-fatal when Docker is absent: Track 2, chat, the Forge and every
+SQLite store work without a vector store.
+
+> Note `requirements.txt` ships `chromadb-client`, which is HTTP-only. So on a
+> default install an unset `CHROMA_URL` is not a working fallback to embedded
+> mode — it is no vector store at all. Embedded mode needs the full `chromadb`.
+
+### The embedding model — `services/embedding_models.py`
+
+Which model turns chunks into vectors. **Not the chat model**: `nomic-embed-text`
+embeds the corpus once at ingest, and Qwen3 answers at query time and never sees
+a vector — so changing the chat model, including mid-conversation, does not touch
+the index.
+
+Three tiers of provenance, in increasing authority, and never conflated:
+
+| Source | Means |
+|---|---|
+| `declared` | From the catalogue — a claim about a published tag |
+| `measured` | Read from the GGUF header via `/api/show`. **No model is run** |
+| `verified` | The width an actual embedding came back with |
+
+Only `verified` is ground truth for what the vector store receives: a header
+states what the architecture declares, and a model with Matryoshka truncation or
+an unusual pooling config can emit something narrower. The Ollama registry
+manifest carries size and existence but **no architecture**, which is why nothing
+can be measured before a pull.
+
+**Changing the embedding model is a one-way door.** An embedding is only
+comparable to embeddings from the same model — different model, different vector
+space, and cosine similarity across two spaces is not a worse ranking but a
+meaningless one. The config records which model actually built the index, so a
+mismatch surfaces as `index_state: stale` instead of as silently wrong results.
+
+**Cloud embedding models are quarantined.** Rule 1 permits cloud models as
+offline evaluation baselines, and the exposure here is worse than for a chat
+turn: embedding the corpus sends every document out, and every later query must
+be embedded by the same model to be comparable, so every question follows. A
+cloud selection therefore writes the separate collection above and
+`resolve_for_runtime()` refuses it.
 The container installs `chromadb-client` rather than full `chromadb` — it only
 talks HTTP, and the full package drags in onnxruntime for embedded mode the
 image never uses.

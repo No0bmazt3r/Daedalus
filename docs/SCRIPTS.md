@@ -76,6 +76,17 @@ Refuses to start if `backend/.venv` or `frontend/node_modules` is missing, and
 runs migrations first so a schema failure is reported before two dev servers
 start writing to the terminal.
 
+**It also starts the `chromadb` container.** ChromaDB is a server the app talks
+to rather than part of the app, and there is no host equivalent short of
+installing the full `chromadb` package — `requirements.txt` ships
+`chromadb-client`, which is HTTP-only, so an unset `CHROMA_URL` is not a working
+fallback to embedded mode but no vector store at all.
+
+Not fatal when it cannot start: Track 2 (GraphRAG), the chat path, the Forge and
+every SQLite store work without a vector store, and refusing to run the whole
+stack because the RAG half is unavailable would be the wrong trade. It says so
+and carries on.
+
 > **Host paths.** This is where the container/host mapping matters — see
 > [Host and container paths](#host-and-container-paths) below.
 
@@ -311,6 +322,8 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 | `wait_for_api [port]` | Poll `/api/health` for 60s |
 | `check_ollama` | Warn, never fail — only inference needs it. Tries to start it, and offers to install it when interactive |
 | `host_ollama_url` | `OLLAMA_BASE_URL` as seen *from the host*: rewrites `host.docker.internal`, leaves a real remote alone, and stays unset rather than becoming `""` |
+| `host_chroma_url` | `CHROMA_URL` as seen *from the host*: rewrites the compose service name `http://chromadb:8000` to `127.0.0.1:${CHROMA_PORT:-8001}`, the published port of the same container |
+| `ensure_chroma` | Start the `chromadb` container for `dev`, waiting for its heartbeat. Warns and continues when Docker is absent — a missing vector store must not block the rest of the stack |
 | `stack_running` | Is the app container up? |
 | `image_is_stale` | Is any source file newer than the last successful build? |
 | `mark_build` | Touch `.daedalus-build-stamp` after a successful build |
@@ -341,6 +354,20 @@ daemon on this machine instead would attribute a benchmark to the wrong
 hardware. And an unset variable stays unset rather than becoming the empty
 string, which the backend would read literally and end up with no candidate URL
 at all.
+
+`CHROMA_URL` has the identical problem and the identical cure, via
+`host_chroma_url`. `.env` holds `http://chromadb:8000` — a **compose service
+name**, which does not resolve on the host — so the dev servers reported the
+vector store as *unreachable* rather than as *not running*, which sends you
+looking for the wrong fault. `docker-compose.yml` publishes the service on
+`127.0.0.1:${CHROMA_PORT:-8001}`, and that is the host's address for the same
+container.
+
+> Leaving `CHROMA_URL` unset is **not** a working fallback on a default install.
+> The docs say unset means embedded mode, and embedded mode needs the full
+> `chromadb` package; `requirements.txt` ships `chromadb-client`, which is
+> HTTP-only. So unset means no vector store at all, which is why `dev` starts the
+> container rather than relying on the fallback.
 
 The mapping is applied **per command, never exported**, because
 `docker compose` reads the shell environment in preference to `.env`:

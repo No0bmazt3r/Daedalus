@@ -36,6 +36,17 @@ export function CorpusView() {
     <div className="space-y-4">
       <Unavailable reason={data.reason} blockedBy={data.blocked_by} />
       <div className="rounded-lg border theme-border theme-card p-3">
+        <h4 className="text-xs theme-text">Shared by both tracks</h4>
+        <p className="mt-1.5 text-[11px] leading-relaxed theme-text-muted">
+          Filed under Track 1 because it is the vector track's primary artefact, but the graph
+          track indexes the same chunks — traversal identifies which documents are relevant, then
+          pulls their text by <code className="theme-text">source_file</code> rather than by
+          similarity. One corpus for both arms is what keeps the comparison about architecture
+          instead of about chunking.
+        </p>
+      </div>
+
+      <div className="rounded-lg border theme-border theme-card p-3">
         <h4 className="text-xs theme-text">What lands here</h4>
         <ul className="mt-2 space-y-1 text-[11px] leading-relaxed theme-text-muted">
           <li>· Every ingested document — source file, type, version, pages, chunks, embedding status</li>

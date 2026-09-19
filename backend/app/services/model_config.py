@@ -215,21 +215,43 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         }
 
     # auto — rank what is installed and take the best that actually fits.
+    #
+    # The capability filter is not decoration. `installed_rows()` returns every
+    # Ollama model on the machine, and since the Knowledge Base can pull
+    # embedding models, that now includes things that cannot complete a prompt at
+    # all. An embedder is small, so it scores "safe" and enters the ranking; on a
+    # machine where it is the only model pulled it would win, and the chat path
+    # would ask `nomic-embed-text` for a completion.
+    #
+    # Filtered on the presence of `completion` rather than the absence of
+    # `embedding`, so a model reporting neither — a capability Ollama adds later,
+    # or a tag whose `/api/show` failed — is excluded rather than assumed usable.
     runnable = [
         row
         for row in installed
-        if row["verdict"]["fit"] in {"safe", "marginal"} and not row.get("remote")
+        if row["verdict"]["fit"] in {"safe", "marginal"}
+        and not row.get("remote")
+        and "completion" in (row.get("capabilities") or [])
     ]
     if not runnable:
+        # Three different problems, and saying "nothing fits" for all of them
+        # sends the reader to the wrong fix. A machine holding only an embedding
+        # model has plenty of room; what it lacks is anything that can answer.
+        fits = [r for r in installed if r["verdict"]["fit"] in {"safe", "marginal"}]
+        if not installed:
+            reason = "no models are installed. Pull one from the Models tab."
+        elif not fits:
+            reason = "no installed model fits this machine"
+        else:
+            reason = (
+                f"{len(fits)} installed model(s) fit this machine, but none can generate text "
+                "— an embedding model cannot answer a query. Pull a chat model in the Forge."
+            )
         return {
             "mode": "auto",
             "tag": None,
             "resolved": False,
-            "reason": (
-                "no installed model fits this machine"
-                if installed
-                else "no models are installed. Pull one from the Models tab."
-            ),
+            "reason": reason,
             "row": None,
             "candidates_considered": len(installed),
             "config": config,

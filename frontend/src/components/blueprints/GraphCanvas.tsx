@@ -4,6 +4,7 @@ import {
   forceX, forceY,
   type Simulation, type SimulationNodeDatum,
 } from 'd3-force'
+import { Maximize2, Plus, Minus } from 'lucide-react'
 import type { GraphNode, NodeType } from '../../lib/blueprintsClient'
 import { NODE_STYLE, shortId } from './nodeStyles'
 
@@ -47,6 +48,29 @@ import { NODE_STYLE, shortId } from './nodeStyles'
  * Homing also buys stability that plain re-equilibrium does not: a force layout
  * has many local minima, so releasing without a home target settles somewhere
  * valid but different, and the figure reshuffles every time it is touched.
+ *
+ * ## The viewport is fitted to the graph, not fixed to the box
+ *
+ * A force layout spreads to whatever size the forces imply — it has no idea a
+ * 720x460 frame exists. The first version hard-coded that frame as the viewBox,
+ * so any node the simulation pushed outside it was simply clipped, with nothing
+ * on screen to say part of the graph was missing.
+ *
+ * So the viewBox is computed from the nodes' own bounding box after layout,
+ * padded for labels, and corrected to the drawing area's aspect ratio so the
+ * diagram is never stretched. Everything is on screen by construction.
+ *
+ * Fitting happens once, after the initial layout, and again only when asked.
+ * Refitting on every tick would make the whole diagram breathe in and out while
+ * a node is dragged, which is far worse than a node briefly leaving the frame.
+ *
+ * ## Zoom and pan
+ *
+ * Fitting alone is not enough once a graph is dense: everything is visible but
+ * the labels are too small to read. Wheel zooms about the cursor, dragging the
+ * background pans, and Fit returns to the whole graph. All three work on the
+ * viewBox rather than a CSS transform, so stroke widths and text stay crisp at
+ * any zoom and hit-testing needs no correction.
  *
  * ## What the layout does and does not mean
  *
@@ -112,6 +136,20 @@ const HOME_PULL = 0.6
  * alpha does. So this is set to stop the animation frames promptly rather than
  * to buy accuracy it cannot buy.
  */
+/** Padding around the fitted bounding box, in graph units. */
+const FIT_PADDING = 28
+
+/**
+ * How far the viewport may zoom, as a multiple of the fitted width.
+ *
+ * Bounded in both directions for the same reason: an unbounded viewBox is how a
+ * scroll gesture ends on an empty screen with no way back except Fit. 0.2 is
+ * close enough to read one node's label; 3 still shows the whole graph with room
+ * around it.
+ */
+const ZOOM_MIN = 0.2
+const ZOOM_MAX = 3
+
 const ALPHA_DRAG = 0.25
 const ALPHA_RELEASE = 0.5
 const ALPHA_REST = 0.015
@@ -142,6 +180,13 @@ export function GraphCanvas({
   const simRef = useRef<Simulation<SimNode, undefined> | null>(null)
   const homesRef = useRef<Map<string, { x: number; y: number }>>(new Map())
   const rafRef = useRef<number | null>(null)
+  // The viewport, in graph coordinates. A ref rather than state because the
+  // wheel and pan handlers are non-React listeners that must read the current
+  // value, not the one captured when they were attached; `setFrame` is what
+  // turns a mutation into a repaint.
+  const viewRef = useRef({ x: 0, y: 0, w: WIDTH, h: height })
+  const fittedRef = useRef({ w: WIDTH, h: height })
+  const panRef = useRef<{ x: number; y: number; view: { x: number; y: number } } | null>(null)
   const [, setFrame] = useState(0)
   const [hovered, setHovered] = useState<string | null>(null)
   const dragRef = useRef<{ id: string } | null>(null)
@@ -165,6 +210,73 @@ export function GraphCanvas({
         .map<SimLink>((e) => ({ source: e.from, target: e.to, type: e.type })),
     }
   }, [nodes, edges])
+
+  /**
+   * Size the viewport to the graph's own bounding box.
+   *
+   * Labels are the reason this is not just the node extents: text is centred
+   * under each node and extends past it on both sides, so a node at the right
+   * edge would have its caption clipped even though the circle fits. The
+   * half-width estimate below is deliberately rough — it only has to be an
+   * over-estimate, and `FIT_PADDING` absorbs the error.
+   */
+  const fit = useCallback(() => {
+    const sim = simRef.current
+    const laid = sim?.nodes() ?? []
+    if (!laid.length) return
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const n of laid) {
+      const r = radius(n.degree)
+      // ~2.6px per character at font-size 9, halved because the text is centred.
+      const halfLabel = Math.min(n.label.length, 22) * 2.6
+      const reach = Math.max(r, halfLabel)
+      minX = Math.min(minX, (n.x ?? 0) - reach)
+      maxX = Math.max(maxX, (n.x ?? 0) + reach)
+      minY = Math.min(minY, (n.y ?? 0) - r)
+      maxY = Math.max(maxY, (n.y ?? 0) + r + 14) // the caption line below
+    }
+
+    const boxW = Math.max(maxX - minX + FIT_PADDING * 2, 100)
+    const boxH = Math.max(maxY - minY + FIT_PADDING * 2, 100)
+
+    // Match the drawing area's aspect ratio, or the browser letterboxes the
+    // viewBox for us and the padding stops being symmetric.
+    const aspect = WIDTH / height
+    let w = boxW
+    let h = boxH
+    if (boxW / boxH > aspect) h = boxW / aspect
+    else w = boxH * aspect
+
+    viewRef.current = {
+      x: minX - FIT_PADDING - (w - boxW) / 2,
+      y: minY - FIT_PADDING - (h - boxH) / 2,
+      w,
+      h,
+    }
+    fittedRef.current = { w, h }
+    setFrame((f) => f + 1)
+  }, [height])
+
+  /** Zoom about a point given in 0..1 of the drawing area. */
+  const zoomBy = useCallback((factor: number, px = 0.5, py = 0.5) => {
+    const view = viewRef.current
+    const fitted = fittedRef.current
+    const next = Math.min(
+      Math.max(view.w * factor, fitted.w * ZOOM_MIN),
+      fitted.w * ZOOM_MAX,
+    )
+    const scale = next / view.w
+    const nh = view.h * scale
+    // Keep whatever is under the cursor under the cursor.
+    viewRef.current = {
+      x: view.x + (view.w - next) * px,
+      y: view.y + (view.h - nh) * py,
+      w: next,
+      h: nh,
+    }
+    setFrame((f) => f + 1)
+  }, [])
 
   /**
    * Tick the simulation on animation frames until it settles, then stop.
@@ -222,6 +334,7 @@ export function GraphCanvas({
       .force('homeY', forceY<SimNode>((d) => homes.get(d.id)?.y ?? d.y ?? 0).strength(HOME_PULL))
 
     simRef.current = sim
+    fit()
     setFrame((f) => f + 1)
 
     return () => {
@@ -232,7 +345,7 @@ export function GraphCanvas({
         rafRef.current = null
       }
     }
-  }, [simNodes, simLinks])
+  }, [simNodes, simLinks, fit])
 
   // Drag: the held node follows the cursor, neighbours yield, and on release
   // everything eases home.
@@ -240,15 +353,34 @@ export function GraphCanvas({
     const svg = svgRef.current
     if (!svg) return
 
+    // Through the live viewBox, not the fixed box: once the viewport can zoom
+    // and pan, screen position and graph position are no longer the same thing,
+    // and a dragged node would otherwise jump away from the cursor.
     const toLocal = (e: PointerEvent) => {
       const rect = svg.getBoundingClientRect()
+      const view = viewRef.current
       return {
-        x: ((e.clientX - rect.left) / rect.width) * WIDTH,
-        y: ((e.clientY - rect.top) / rect.height) * HEIGHT,
+        x: view.x + ((e.clientX - rect.left) / rect.width) * view.w,
+        y: view.y + ((e.clientY - rect.top) / rect.height) * view.h,
       }
     }
 
     const move = (e: PointerEvent) => {
+      const pan = panRef.current
+      if (pan) {
+        const rect = svg.getBoundingClientRect()
+        const view = viewRef.current
+        // Screen pixels to graph units, so the background tracks the cursor at
+        // one-to-one however far it is zoomed in.
+        viewRef.current = {
+          ...view,
+          x: pan.view.x - ((e.clientX - pan.x) / rect.width) * view.w,
+          y: pan.view.y - ((e.clientY - pan.y) / rect.height) * view.h,
+        }
+        setFrame((f) => f + 1)
+        return
+      }
+
       const drag = dragRef.current
       const sim = simRef.current
       if (!drag || !sim) return
@@ -264,6 +396,7 @@ export function GraphCanvas({
     }
 
     const up = () => {
+      panRef.current = null
       const sim = simRef.current
       const drag = dragRef.current
       dragRef.current = null
@@ -283,15 +416,29 @@ export function GraphCanvas({
       run()
     }
 
+    // Non-passive, because a passive listener may not preventDefault and the
+    // page would scroll behind the diagram on every zoom.
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = svg.getBoundingClientRect()
+      zoomBy(
+        e.deltaY > 0 ? 1.12 : 1 / 1.12,
+        (e.clientX - rect.left) / rect.width,
+        (e.clientY - rect.top) / rect.height,
+      )
+    }
+
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
+    svg.addEventListener('wheel', wheel, { passive: false })
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
+      svg.removeEventListener('wheel', wheel)
     }
-  }, [run])
+  }, [run, zoomBy])
 
   const sim = simRef.current
   const laidOut = sim?.nodes() ?? []
@@ -322,9 +469,20 @@ export function GraphCanvas({
     <div className="rounded-lg border theme-border theme-card">
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="w-full touch-none select-none"
+        viewBox={`${viewRef.current.x} ${viewRef.current.y} ${viewRef.current.w} ${viewRef.current.h}`}
+        className="w-full cursor-grab touch-none select-none active:cursor-grabbing"
         style={{ height }}
+        onPointerDown={(e) => {
+          // Only the background pans. A node's own handler stops propagation,
+          // so reaching here means the press was not on a node.
+          const rect = svgRef.current?.getBoundingClientRect()
+          if (!rect) return
+          panRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            view: { x: viewRef.current.x, y: viewRef.current.y },
+          }
+        }}
       >
         <defs>
           <marker
@@ -378,6 +536,9 @@ export function GraphCanvas({
                 className="cursor-pointer"
                 onPointerDown={(e) => {
                   e.preventDefault()
+                  // Or the background's pan handler fires too and the node drags
+                  // while the whole view slides under it.
+                  e.stopPropagation()
                   dragRef.current = { id: n.id }
                 }}
                 onClick={() => onSelect(n.id)}
@@ -414,10 +575,33 @@ export function GraphCanvas({
         </g>
       </svg>
 
+      <div className="flex items-center gap-1 border-t theme-border px-2 py-1.5">
+        <button
+          onClick={() => zoomBy(1 / 1.25)}
+          title="Zoom in"
+          className="rounded border theme-border p-1 theme-text-muted transition-colors hover:theme-text"
+        >
+          <Plus size={11} />
+        </button>
+        <button
+          onClick={() => zoomBy(1.25)}
+          title="Zoom out"
+          className="rounded border theme-border p-1 theme-text-muted transition-colors hover:theme-text"
+        >
+          <Minus size={11} />
+        </button>
+        <button
+          onClick={fit}
+          title="Fit the whole graph"
+          className="inline-flex items-center gap-1 rounded border theme-border px-2 py-1 text-[10px] theme-text-muted transition-colors hover:theme-text"
+        >
+          <Maximize2 size={10} /> Fit
+        </button>
+      </div>
       <p className="border-t theme-border px-3 py-1.5 text-[10px] theme-text-muted">
         {caption ??
-          "Drag a node to pull it out — it eases back when you let go · hover to isolate a " +
-            "node's neighbours · click to open it. Position carries no meaning: the layout " +
+          'Scroll to zoom · drag the background to pan · drag a node to pull it out, it eases ' +
+            "back when you let go · click to open it. Position carries no meaning: the layout " +
             'shows connectedness, not measurement.'}
       </p>
     </div>

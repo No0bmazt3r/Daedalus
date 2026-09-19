@@ -1,0 +1,17 @@
+{
+  "provider": "local",
+  "model": "nomic-embed-text",
+  "endpoint_id": null,
+  "dimensions": 768,
+  "indexed_with": null,
+  "indexed_at": "2026-09-19T05:33:11+00:00",
+  "collection": "daedalus_knowledge",
+  "verified": {
+    "nomic-embed-text": {
+      "dimensions": 512,
+      "verified_at": "2026-09-19T09:58:20+00:00",
+      "probe": "reactor temperature threshold",
+      "elapsed_ms": 0
+    }
+  }
+}

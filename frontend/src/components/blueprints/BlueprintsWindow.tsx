@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Map, Network, ListChecks, Route, Library } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Map, Network, ListChecks, Route, Library, Boxes } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
 import {
   fetchTraversals, fetchRagConfig,
@@ -16,68 +16,71 @@ import { TrackBanner } from './TrackBanner'
  *
  * > *"What does this system actually know, and how is it connected?"*
  *
- * Daedalus's plans for the maze. Four tabs across the module's two halves:
+ * Daedalus's plans for the maze, organised the way `PROJECT.md` §5 organises
+ * the system: **by retrieval track**, because that is the real seam in this
+ * module and pretending otherwise is what made it confusing.
  *
- * | tab      | half             | state |
- * |---|---|---|
- * | Graph    | Layer 5, Track 2 | built — the hand-authored knowledge graph |
- * | Coverage | Layer 5, Track 2 | built — what the graph cannot answer |
- * | Replay   | Layer 5 + 10     | built, fed by recorded walks |
- * | Corpus   | Layer 4          | **blocked on M2** — honest empty state |
+ * ```
+ * Track 1 — vector          Track 2 — graph
+ *   Corpus                    Graph · Coverage · Replay
+ * ```
  *
- * ## The window knows which track is live
+ * The window opens on whichever track is answering queries (Settings →
+ * Knowledge Base), and marks it. Switching tracks in Settings changes what this
+ * opens on; it does not remove the other one.
  *
- * Three of these tabs describe Track 2 and one describes Track 1, and only one
- * track answers queries at a time (Settings → Knowledge Base). A diagram on
- * screen reads as a description of how the answer was produced, so the window
- * marks the half that is actually running — a dot on its tabs, the track in the
- * subtitle, and a banner on a tab belonging to the other one.
+ * ## Why the other track stays reachable
  *
- * It marks rather than hides, because the graph has to be inspectable *before*
- * it goes live: completing it is what Coverage is for, and a window that hid the
- * graph until the graph was selected would make Track 2 impossible to prepare.
+ * Because the graph is *authored* while Track 1 is live. Coverage is the to-do
+ * list you work through before switching, so a window that hid the graph until
+ * the graph was selected would make Track 2 impossible to prepare from inside
+ * the app. Grouping the tabs says which track a view belongs to, which is the
+ * part that was actually unclear — the earlier flat row of four tabs implied
+ * all four described one system.
  *
- * ## Why this is a floating window and not a route
+ * ## Corpus sits under Track 1, and is shared
  *
- * MODULES.md §0 rule 1: all three glass-box modules open in the shared
- * `FloatingWindow` shell, because all three are things you consult *while*
- * looking at something else. Blueprints in particular gets read against the
- * answer that cited a document, and a full-screen takeover would hide the thing
- * being checked.
+ * It is Track 1's primary artefact, so that is where it lives. But the graph
+ * track indexes the same chunks — traversal identifies which documents are
+ * relevant, then pulls their text by `source_file` rather than by similarity —
+ * so this is not a Track-1-only asset, and the view says so. That shared corpus
+ * is what keeps the comparison about architecture instead of about chunking
+ * (TODO.md M2).
  *
  * ## Read-only, and off the chat path
  *
- * Rule 2 and MODULES.md §0: this window reads what was already recorded and
- * never re-derives it. It cannot send a query, and the orchestrator cannot
- * reach it.
- *
- * ## Not built here: the force-directed canvas
- *
- * MODULES.md §3.6 allows one, bundled rather than CDN-loaded, and pairs it with
- * a table view "for everything else". The table half is here and carries the
- * browsing; the replay renders its walk as an ordered hop list, which is the
- * shape §3.2's own example uses and which stays readable at any hop count. A
- * node-link canvas would add a bundled layout library for a visual that a
- * four-hop walk does not yet need.
+ * MODULES.md §0: this window reads what was already recorded and never
+ * re-derives it. Ingesting documents, chunking and embedding all *write*, so
+ * they belong in a setup surface under Rule 5, not here.
  */
 
-// `track` is which retrieval arm the tab describes, so the window can mark the
-// half that is live. Tab order never changes with the setting: these are the
-// module's four views, and reordering them under the reader to reflect a
-// setting elsewhere would cost more in muscle memory than it buys in clarity.
-const TABS = [
-  { id: 'graph', label: 'Graph', icon: Network, track: 'graph', hint: 'The hand-authored knowledge graph: 7 node types, 7 edge types' },
-  { id: 'coverage', label: 'Coverage', icon: ListChecks, track: 'graph', hint: 'Orphans and gaps — every row is a question the graph cannot answer' },
-  { id: 'replay', label: 'Replay', icon: Route, track: 'graph', hint: 'The walk a graph-track query actually took, hop by hop' },
-  { id: 'corpus', label: 'Corpus', icon: Library, track: 'vector', hint: 'Ingested documents and chunks — blocked on M2' },
-] as const
+const TRACKS = [
+  {
+    id: 'vector' as const,
+    label: 'Track 1 · Vector',
+    hint: 'Traditional vector RAG — the corpus, chunked and embedded',
+    tabs: [
+      { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Ingested documents and chunks — blocked on M2' },
+    ],
+  },
+  {
+    id: 'graph' as const,
+    label: 'Track 2 · Graph',
+    hint: 'Agentic GraphRAG — the hand-authored knowledge graph',
+    tabs: [
+      { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 7 node types, 7 edge types' },
+      { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: 'Orphans and gaps — every row is a question the graph cannot answer' },
+      { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
+    ],
+  },
+]
 
-type TabId = (typeof TABS)[number]['id']
+type TabId = 'corpus' | 'graph' | 'coverage' | 'replay'
+
+const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'corpus', graph: 'graph' }
 
 function TracePicker({
-  traces,
-  selected,
-  onSelect,
+  traces, selected, onSelect,
 }: {
   traces: TraversalSummary[]
   selected: string | null
@@ -118,17 +121,16 @@ function TracePicker({
 }
 
 export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [activeTrack, setActiveTrack] = useState<RagTrack | null>(null)
+  const [viewing, setViewing] = useState<RagTrack>('graph')
   const [tab, setTab] = useState<TabId>('graph')
   const [traces, setTraces] = useState<TraversalSummary[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-  const [activeTrack, setActiveTrack] = useState<RagTrack | null>(null)
 
   const loadTraces = useCallback(() => {
     fetchTraversals()
       .then((r) => {
         setTraces(r.traversals)
-        // Select the newest replayable walk so the tab opens onto something
-        // rather than onto a picker the reader has to act on first.
         setSelected((current) =>
           current && r.traversals.some((t) => t.query_id === current)
             ? current
@@ -138,22 +140,31 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
       .catch(() => setTraces([]))
   }, [])
 
-  // Only while open, so a closed window costs nothing. Re-read on every open
-  // rather than once: the track is changed in Settings, a different window, and
-  // a stale badge here would assert the opposite of what is running.
+  // Re-read on every open rather than once: the track is changed in Settings, a
+  // different window, and a stale badge here would assert the opposite of what
+  // is running. Opening on the live track is the whole point of knowing it.
   useEffect(() => {
     if (!open) return
     loadTraces()
     fetchRagConfig()
-      .then((c) => setActiveTrack(c.track))
+      .then((c) => {
+        setActiveTrack(c.track)
+        setViewing(c.track)
+        setTab(DEFAULT_TAB[c.track])
+      })
       .catch(() => setActiveTrack(null))
   }, [open, loadTraces])
 
-  // The Replay tab's empty state can seed traces, which changes what the picker
-  // should list — so re-read when returning to it.
   useEffect(() => {
     if (open && tab === 'replay') loadTraces()
   }, [open, tab, loadTraces])
+
+  const group = useMemo(() => TRACKS.find((t) => t.id === viewing)!, [viewing])
+
+  const chooseTrack = (id: RagTrack) => {
+    setViewing(id)
+    setTab(DEFAULT_TAB[id])
+  }
 
   return (
     <FloatingWindow
@@ -171,17 +182,54 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
       height={720}
     >
       <div className="@container flex-1 flex flex-col min-h-0">
-        <div className="px-6 pt-4 border-b theme-border shrink-0">
-          <div className="relative flex items-center">
-            {TABS.map((entry) => {
+        <div className="shrink-0 border-b theme-border px-6 pt-4">
+          {/* Which track's views you are looking at. Separate from the tab row
+              because it is a different kind of choice: the track is the system
+              you are inspecting, the tab is which view of it. */}
+          <div className="flex items-center gap-1.5">
+            {TRACKS.map((t) => {
+              const Icon = t.id === 'vector' ? Boxes : Network
+              const isViewing = viewing === t.id
+              const isLive = activeTrack === t.id
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => chooseTrack(t.id)}
+                  title={t.hint}
+                  className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-colors ${
+                    isViewing
+                      ? 'theme-accent-border theme-surface-strong theme-text'
+                      : 'theme-border theme-text-muted hover:theme-text'
+                  }`}
+                >
+                  <Icon size={11} className={isViewing ? 'theme-accent' : ''} />
+                  {t.label}
+                  {isLive && (
+                    <span
+                      title="this track is answering queries"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                    />
+                  )}
+                </button>
+              )
+            })}
+            {activeTrack && (
+              <span className="ml-auto text-[10px] theme-text-muted">
+                ● live = answering queries
+              </span>
+            )}
+          </div>
+
+          <div className="relative mt-3 flex items-center">
+            {group.tabs.map((entry) => {
               const selectedTab = tab === entry.id
               return (
                 <button
                   key={entry.id}
-                  onClick={() => setTab(entry.id)}
+                  onClick={() => setTab(entry.id as TabId)}
                   title={entry.hint}
-                  style={{ flexBasis: `${100 / TABS.length}%` }}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-t-lg transition-colors duration-200 ${
+                  style={{ flexBasis: `${100 / group.tabs.length}%` }}
+                  className={`flex items-center justify-center gap-1.5 rounded-t-lg px-3 py-2 text-xs transition-colors duration-200 ${
                     selectedTab ? 'theme-accent' : 'theme-text-muted hover:theme-text'
                   }`}
                 >
@@ -191,15 +239,6 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
                     className={`tab-icon ${selectedTab ? 'tab-icon-active' : ''}`}
                   />
                   {entry.label}
-                  {/* A dot, not a colour change on the label: the tab already
-                      uses colour for selection, and two meanings on one channel
-                      is how a reader learns to trust neither. */}
-                  {activeTrack && entry.track === activeTrack && (
-                    <span
-                      title="this view describes the track currently answering queries"
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
-                    />
-                  )}
                 </button>
               )
             })}
@@ -207,8 +246,8 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
               aria-hidden
               className="absolute bottom-0 h-0.5 rounded-full theme-bg-primary transition-transform duration-300 ease-out"
               style={{
-                width: `${100 / TABS.length}%`,
-                transform: `translateX(${TABS.findIndex((t) => t.id === tab) * 100}%)`,
+                width: `${100 / group.tabs.length}%`,
+                transform: `translateX(${group.tabs.findIndex((t) => t.id === tab) * 100}%)`,
               }}
             />
           </div>
@@ -216,16 +255,13 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
 
         <div className="flex-1 overflow-y-auto no-scrollbar p-6">
           <div
-            key={tab}
+            key={`${viewing}-${tab}`}
             className="mx-auto w-full @4xl:max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
           >
             {activeTrack && (
-              <TrackBanner
-                tabTrack={TABS.find((t) => t.id === tab)!.track}
-                activeTrack={activeTrack}
-                isReplay={tab === 'replay'}
-              />
+              <TrackBanner tabTrack={viewing} activeTrack={activeTrack} isReplay={tab === 'replay'} />
             )}
+            {tab === 'corpus' && <CorpusView />}
             {tab === 'graph' && <GraphView />}
             {tab === 'coverage' && <CoverageView />}
             {tab === 'replay' && (
@@ -238,7 +274,6 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
                 </div>
               )
             )}
-            {tab === 'corpus' && <CorpusView />}
           </div>
         </div>
       </div>

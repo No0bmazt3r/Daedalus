@@ -373,6 +373,30 @@ def show(name: str) -> dict[str, Any]:
     }
 
 
+def embed(name: str, text: str, *, timeout: float = 30.0) -> list[float]:
+    """Embed one string and return the vector.
+
+    The only call in this client that runs a model rather than reading metadata
+    about one. It exists for a single purpose: `/api/show` reports the
+    architecture's declared `embedding_length`, and what a vector store actually
+    holds is whatever this returns. They normally agree, and a model with
+    Matryoshka truncation or an unusual pooling config is exactly the case where
+    they do not — so the width that matters is measured here, not read there.
+
+    One short string, so the cost is a model load and a single forward pass.
+    """
+    data = _request("POST", "/api/embed", timeout=timeout, json={"model": name, "input": text})
+    embeddings = data.get("embeddings")
+    if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], list):
+        return [float(x) for x in embeddings[0]]
+    # Older Ollama answered `/api/embeddings` with a flat `embedding` key. Kept
+    # because the failure is otherwise an empty vector reported as 0 dimensions.
+    flat = data.get("embedding")
+    if isinstance(flat, list):
+        return [float(x) for x in flat]
+    raise OllamaError(f"{name} returned no embedding")
+
+
 def delete(name: str) -> bool:
     """Remove a local model. Ollama 404s for one that is not there."""
     _request("DELETE", "/api/delete", timeout=LIST_TIMEOUT, json={"model": name})

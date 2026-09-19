@@ -444,6 +444,13 @@ resolved to.
 
 > *"What does this system actually know, and how is it connected?"*
 
+> **Status: the graph half is built; the corpus half waits on M2.** The window is
+> organised by retrieval track rather than as a flat row of tabs — Track 1 ·
+> Vector holds Corpus, Track 2 · Graph holds Graph, Coverage and Replay — and it
+> opens on whichever track is answering queries, marking it. The other track
+> stays reachable, because the graph is *authored* while Track 1 is live and
+> hiding it would make Track 2 impossible to prepare from inside the app.
+
 ### 3.1 What it is
 
 Daedalus's plans for the maze. Two halves, both answering "what is in the
@@ -510,11 +517,20 @@ That is worth a paragraph in the report on its own: the comparison is only fair
 if Track 2's corpus is as complete as Track 1's, and this is how that gets
 checked rather than assumed.
 
-### 3.4 Open decision — where the graph lives
+### 3.4 Decided — where the graph lives
 
-`research/03-agentic-graphrag-spec.md` discusses storage options and this is
-**not yet decided**. It gates the module's API, so it needs deciding before
-building:
+**NetworkX over a git-tracked YAML source of truth**, as recommended below. The
+graph is authored in `backend/app/data/graph/knowledge_graph.yaml` — 37 nodes
+and 48 edges across all 7 node and 7 edge types — and loaded by
+`services/knowledge_graph.py`, which validates it against the declared schema
+and **refuses a graph that does not validate** rather than serving a subtly
+broken one. A typo'd edge type is not a crash; it is a silent retrieval failure,
+which is the failure mode §3.3 is about.
+
+`python -m app.services.knowledge_graph` prints the same schema and coverage
+report in the terminal, so the graph can be authored without the UI open.
+
+The options as they were weighed:
 
 | Option | For | Against |
 |---|---|---|
@@ -522,11 +538,25 @@ building:
 | NetworkX in memory, authored from JSON/YAML on disk | Traversal is a library call; the authored file is diffable in git | Another representation to keep in sync; rebuilt at every boot |
 | An embedded graph DB | Purpose-built traversal | A sixth engine to justify against §6.4's store-separation argument, and a dependency Rule 1 must vet |
 
-My recommendation is **NetworkX over a git-tracked YAML source of truth.** The
-graph is small (tens of nodes), hand-authored, and changes by editing rather
-than by insert — so the file *is* the authoring surface, it reviews in a pull
-request, and Blueprints renders it. It also keeps the store count at five,
-which §6.4 spends real effort defending.
+The reasoning that decided it: the graph is small (tens of nodes),
+hand-authored, and changes by editing rather than by insert — so the file *is*
+the authoring surface, it reviews in a pull request, and Blueprints renders it.
+It also keeps the store count at five, which §6.4 spends real effort defending.
+
+**Track 2 is deliberately embedding-free.** `research/03` §7 specified
+`graph_query_natural` as a vector search over node descriptions; it is authored
+aliases plus a stdlib fuzzy fallback instead. If both tracks depend on an
+embedding model, the comparison cannot separate "the graph structure helped"
+from "the embeddings helped", and a reviewer is entitled to ask which one moved
+the number. `rag_logs.entry_strategy` records which strategy found the entry
+nodes per query, so the report can state this from the data rather than from
+this paragraph.
+
+The honest framing is *not* "the graph track needs no model" — it needs a more
+capable one, since the model drives traversal (`research/03` §10). It is that
+**Track 1 is pinned to an embedding model and Track 2 is pinned to none**:
+swapping the embedding model invalidates Track 1's whole index and costs Track 2
+nothing, because there is no index.
 
 ### 3.5 API
 
@@ -535,23 +565,64 @@ which §6.4 spends real effort defending.
 | `GET` | `/api/graph/schema` | Node and edge types with counts — drives the legend |
 | `GET` | `/api/graph/nodes` | Search and filter by type |
 | `GET` | `/api/graph/nodes/{id}` | One node with its neighbours |
+| `GET` | `/api/graph/traversals` | Recent graph-track retrievals — the replay picker |
 | `GET` | `/api/graph/traversal/{query_id}` | The walk taken for that query, hop by hop |
 | `GET` | `/api/graph/coverage` | Orphans and unresolved types |
 | `GET` | `/api/corpus/documents` | Ingested documents with chunk and embedding counts |
 | `GET` | `/api/corpus/documents/{id}/chunks` | Chunks with metadata and text |
 
+All read-only, and the audit store is opened `read_only=True` so the contract is
+enforced rather than merely intended. There is deliberately **no "run a
+traversal" endpoint**: replay renders a walk that was *recorded*, and performing
+one on demand would make this module a second retrieval path with none of Layer
+10's logging.
+
+`/api/graph/nodes` returns the edges among the returned nodes alongside them, so
+the diagram draws the same set the table lists and the filtering is not done
+twice in two places.
+
+The corpus endpoints are wired now against the honest empty state rather than
+left unrouted: a 404 reads as a frontend bug, and the point of §0 rule 4 is that
+the panel can name *which milestone* it is waiting on.
+
 ### 3.6 Rendering, under Rule 1
 
-A force-directed graph needs a layout library. **It must be bundled, not loaded
-from a CDN** — Rule 1, and the same reasoning that put Monocraft in
-`src/assets/fonts/` rather than on `fonts.googleapis.com`. `d3-force` or
-`cytoscape` from npm is fine; Vite bundles it into `/assets` and it works
-air-gapped.
+`d3-force` from npm, **bundled by Vite, never loaded from a CDN** — Rule 1, and
+the same reasoning that put Monocraft in `src/assets/fonts/` rather than on
+`fonts.googleapis.com`. Drawn as SVG rather than canvas: at tens of nodes the
+render cost is irrelevant and SVG gives hover, focus and text selection for
+free.
 
-Provide a **table view alongside the canvas.** A node-link diagram of 60 nodes
-is a hairball, and for "show me every `AnomalyType` with no resolving SOP" a
-table is simply the better answer. The graph is for the traversal replay; the
-table is for everything else.
+**Table alongside the canvas**, as specified — a toggle, not a preference. They
+answer different questions: the diagram shows structure (two Thresholds
+converging on one AnomalyType is a shape you see in one glance), the table shows
+inventory ("every AnomalyType with no resolving SOP" is a list). Both filter the
+same query, so narrowing to one node type narrows the diagram to that type's
+subgraph, which is also the cure for the hairball.
+
+Three behaviours worth recording, each fixing something that was wrong:
+
+- **The viewport is fitted to the graph, not fixed to a frame.** A force layout
+  spreads to whatever the forces imply and has no idea a frame exists; measured
+  on the real graph shape, **16 of 37 nodes fell outside a hard-coded 720x460
+  viewBox** and were silently clipped. The viewBox is now computed from the
+  nodes' own bounding box, padded for labels and corrected to the drawing area's
+  aspect ratio. Wheel zooms about the cursor, the background pans, and Fit
+  returns to the whole graph; zoom is clamped to 0.2x-3x of the fitted width so
+  a scroll gesture cannot end on an empty screen.
+- **The simulation stops.** A force layout that never settles is a screensaver.
+  The initial layout runs 300 ticks synchronously, paints once and stops;
+  interaction reheats it and a `requestAnimationFrame` loop drives ticks until
+  alpha decays. d3's own timer is never used — it would advance the simulation
+  without telling React, so neighbours would move in the data and not on screen.
+- **Released nodes return home.** Each node's settled position is captured and
+  weak `forceX`/`forceY` pull it back, at strength 0.6 — measured against the
+  alternatives: 0.3 leaves the layout 20px off, 1.0 makes it rigid enough that
+  neighbours stop yielding during a drag. Twelve successive 360px drags left the
+  maximum drift at 12.4px after every one, so it does not creep. Pinning a
+  released node where it was dropped is the common d3 idiom and wrong here: this
+  is a reference figure, not a workspace, so a dropped node is permanent damage
+  to a layout somebody is reading.
 
 ### 3.7 Dependencies and risks
 
@@ -560,7 +631,8 @@ table is for everything else.
 | **Blocked by** | M2 (ingestion) for the corpus half; M6 Track 2 for the graph half. **The most blocked of the three** |
 | **Unblocks** | The comparison chapter's qualitative figure; graph-authoring coverage checks |
 | **Risk** | Depends on a track that may be descoped. If Track 2 slips, the corpus half still stands alone and is still worth having |
-| **Risk** | Traversal replay needs the agent to *record* its path. `rag_logs.hop_count` exists but the path itself does not have a column — **add one to the `rag_logs` schema now**, while it is a migration nobody has to coordinate, rather than after rows exist |
+| ~~**Risk**~~ | ~~Traversal replay needs the agent to record its path~~ — **done.** Migration `005` adds `traversal_path` and `entry_strategy`, landed before the orchestrator wrote its first row, which was the point: a path is not derivable after the fact. `graph_tools.TraversalPath` records every hop regardless of caller, so the viewer had real replay data before any agent existed |
+| **Note** | A hop stores its `from`/`to` node *sets* **and** the pairs actually joined. The sets do not imply the pairings — a hop spanning two Sensors and two Thresholds has four possible pairs and two real ones — so a renderer given only the sets draws edges the graph does not contain. Fixed in the recorder, not guessed at in the renderer |
 
 ---
 
@@ -572,17 +644,15 @@ Build in value order, which is also dependency order:
 |---|---|---|---|
 | 1 | **Ariadne's Thread** | **Yes** — against a trace seeder | Schema exists and is correct. It is the demonstration of the project's central claim, and the orchestrator lands into a ready-made inspector |
 | 2 | **The Forge** | **Partly** — detect/estimate/score need no model | Self-contained, no dependency on retrieval, and produces the measured numbers Objective 3 needs. Good work to do while M5 is in flight |
-| 3 | **Labyrinth Blueprints** | **No** — needs M2, and Track 2 for the graph half | Most blocked, and most likely to change shape as Track 2 is built. Building it early means building it twice |
+| 3 | **Labyrinth Blueprints** | ~~**No**~~ — **built, graph half** | This ranking assumed the viewer would be built against a seeder. Building the graph layer *first* unblocked half of it, and the Coverage view turned out to be the tool you author the graph *with* — §3.3 calls a coverage table "a to-do list for graph authoring", which is exactly how it was used. The corpus half still waits on M2 |
 
-**One thing to do immediately, regardless of order:** add a traversal-path
-column to `rag_logs`. It costs one migration today and is a data-loss problem
-later — traces written before the column exists can never be replayed.
+~~**One thing to do immediately, regardless of order:** add a traversal-path
+column to `rag_logs`.~~ **Done** — migration `005`. It cost one migration and
+would have been a data-loss problem later: traces written before the column
+existed could never have been replayed.
 
-**And one small thing now:** the three buttons should stop lying. The settings
-registry already has an `implemented` flag that renders a dot and says "not
-built yet" rather than opening a dead page. Applying the same treatment to these
-three costs very little and means nobody — examiner included — clicks a button
-that does nothing.
+~~**And one small thing now:** the three buttons should stop lying.~~ **Done** —
+and now two of the three open. Only Ariadne's Thread still carries the dot.
 
 ---
 

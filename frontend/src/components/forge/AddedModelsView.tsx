@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ArrowLeft, Cloud, Cpu, ExternalLink, FlaskConical, Loader2, Plus,
   RefreshCw, Trash2, X, CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity,
-  Settings2,
+  Settings2, Binary,
 } from 'lucide-react'
 import {
   modelTable, modelUsage, deleteModel, runBenchmark,
@@ -11,6 +11,7 @@ import {
 import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
 import { listEndpoints, type ModelEndpoint } from '../../lib/systemClient'
 import { CapabilityBadges } from '../ui/capability-badges'
+import { EmbeddingModelsPane } from './EmbeddingModelsPane'
 import { SkeletonList } from '../ui/skeleton'
 
 /**
@@ -289,6 +290,7 @@ function LocalModel({
   const VerdictIcon = verdict.icon
   const isBusy = busy === row.tag
   const isSlm = row.tier === 'slm'
+  const isEmbedding = row.tier === 'embedding'
 
   return (
     <div className="rounded-xl border theme-border theme-surface overflow-hidden">
@@ -299,20 +301,33 @@ function LocalModel({
             <Pill
               tone="accent"
               title={
-                isSlm
-                  ? 'Small language model, 4B parameters and under. Fast enough for interactive use on modest hardware.'
-                  : 'Larger local model, above 4B. More accurate, slower, and equally available to the assistant.'
+                isEmbedding
+                  ? 'Embedding model — turns document chunks into vectors for Track 1 retrieval. It cannot answer a query, so it is never offered to the assistant.'
+                  : isSlm
+                    ? 'Small language model, 4B parameters and under. Fast enough for interactive use on modest hardware.'
+                    : 'Larger local model, above 4B. More accurate, slower, and equally available to the assistant.'
               }
             >
-              {isSlm ? 'SLM' : 'LLM'}
+              {isEmbedding ? 'EMBEDDING' : isSlm ? 'SLM' : 'LLM'}
             </Pill>
             <Pill>{row.quantization}</Pill>
             <CapabilityBadges capabilities={row.capabilities} />
-            <span className={`text-[11px] flex items-center gap-1 ${verdict.tone}`}>
-              <VerdictIcon size={11} />
-              {verdict.label}
-              <span className="theme-text-muted text-[10px]">{row.verdict.placement}</span>
-            </span>
+            {isEmbedding ? (
+              /* No fit verdict: the scorer weighs quality, speed and context
+                 pressure for a model that generates text, and none of those
+                 describe an embedder. A number here would be meaningless while
+                 looking exactly as authoritative as the real ones — which is
+                 what MODULES.md §2.2 exists to prevent. */
+              <span className="text-[11px] theme-text-muted">
+                not scored — different job
+              </span>
+            ) : (
+              <span className={`text-[11px] flex items-center gap-1 ${verdict.tone}`}>
+                <VerdictIcon size={11} />
+                {verdict.label}
+                <span className="theme-text-muted text-[10px]">{row.verdict.placement}</span>
+              </span>
+            )}
           </div>
           <code className="text-[10px] theme-text-muted break-all">{row.tag}</code>
         </div>
@@ -411,7 +426,15 @@ function LocalModel({
   )
 }
 
-type PaneId = 'local' | 'cloud'
+// Three panes rather than a filter chip inside "Local models", because an
+// embedding model is not a kind of answering model that happens to be small —
+// it is a different job. It never appears in the composer's picker, it is never
+// benchmarked for tokens/sec, and it has no fit verdict. Filing it beside the
+// SLM and LLM tiers would say the opposite.
+type PaneId = 'local' | 'embedding' | 'cloud'
+// Only the two answering tiers. Embedding models have their own pane, and the
+// `llm` bucket is defined as "neither" rather than "not slm" so they can never
+// fall into the tier the deployment picks from.
 type TierFilter = 'all' | 'slm' | 'llm'
 
 export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
@@ -460,14 +483,20 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
     void load()
   }, [load])
 
-  const { slm, llm, visible } = useMemo(() => {
+  const { slm, llm, embedding, localRows, visible } = useMemo(() => {
     const all = rows ?? []
-    const s = all.filter((r) => r.tier === 'slm')
-    const l = all.filter((r) => r.tier !== 'slm')
+    const e = all.filter((r) => r.tier === 'embedding')
+    // "Local models" means models that can answer, so embedders are excluded
+    // from it entirely rather than filtered out of a sub-view.
+    const answering = all.filter((r) => r.tier !== 'embedding')
+    const s = answering.filter((r) => r.tier === 'slm')
+    const l = answering.filter((r) => r.tier !== 'slm')
     return {
       slm: s,
       llm: l,
-      visible: tier === 'slm' ? s : tier === 'llm' ? l : all,
+      embedding: e,
+      localRows: answering,
+      visible: tier === 'slm' ? s : tier === 'llm' ? l : answering,
     }
   }, [rows, tier])
 
@@ -539,15 +568,19 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
         </button>
       </div>
 
-      <div className="flex items-center gap-1 flex-wrap border-b theme-border pb-2">
+      {/* Scrolls sideways rather than wrapping, matching the Models tab: a tab
+          bar that changes height as the window narrows shifts everything below
+          it for no reason. */}
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b theme-border pb-2">
         {([
-          { id: 'local' as const, label: 'Local models', icon: Cpu, n: (rows ?? []).length },
+          { id: 'local' as const, label: 'Local models', icon: Cpu, n: localRows.length },
+          { id: 'embedding' as const, label: 'Embedding models', icon: Binary, n: embedding.length },
           { id: 'cloud' as const, label: 'Cloud models', icon: Cloud, n: cloudRows.length + endpoints.length },
         ]).map((entry) => (
           <button
             key={entry.id}
             onClick={() => setPane(entry.id)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
               pane === entry.id
                 ? 'theme-accent theme-surface-strong'
                 : 'theme-text-muted hover:theme-text'
@@ -600,7 +633,9 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
       )}
 
       <div key={pane} className="animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out space-y-3">
-        {pane === 'local' ? (
+        {pane === 'embedding' ? (
+          <EmbeddingModelsPane />
+        ) : pane === 'local' ? (
           rows === null ? (
             <SkeletonList rows={2} label="Reading what is installed" />
           ) : (
@@ -619,7 +654,9 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
                     }
                     className={chip(tier === t)}
                   >
-                    {t === 'all' ? `All ${(rows ?? []).length}` : `${t.toUpperCase()} ${t === 'slm' ? slm.length : llm.length}`}
+                    {t === 'all'
+                      ? `All ${localRows.length}`
+                      : `${t.toUpperCase()} ${t === 'slm' ? slm.length : llm.length}`}
                   </button>
                 ))}
               </div>

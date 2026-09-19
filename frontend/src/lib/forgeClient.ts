@@ -84,17 +84,46 @@ export interface Measurement {
   rate_source: 'engine' | 'wall_clock' | null;
 }
 
+/**
+ * The architecture the memory estimate was computed from — read from the pulled
+ * file, absent before that.
+ *
+ * `embedding_length` is the model's **hidden size**, not a retrieval vector
+ * width. It comes from the same GGUF key as an embedding model's output
+ * dimension and means something different, so it is never labelled
+ * "dimensions": comparing a chat model's 2048 against nomic-embed's 768 is
+ * comparing two unrelated quantities.
+ */
+export interface ModelArch {
+  layers?: number;
+  heads?: number;
+  kv_heads?: number;
+  head_dim?: number;
+  context_length?: number;
+  embedding_length?: number;
+  /** False when a field had to be inferred rather than read. */
+  measured?: boolean;
+}
+
 export interface ModelRow {
   id: string;
   /** From Ollama's `/api/show`. Empty for a model that is not pulled. */
   capabilities?: string[];
+  /** Null until the model is on disk. */
+  arch?: ModelArch | null;
   model_id: string;
   label: string;
   vendor: string | null;
   tag: string;
   /** False when nobody has confirmed this tag exists in Ollama's registry. */
   tag_verified: boolean;
-  tier: 'slm' | 'llm' | 'discovered';
+  /**
+   * `embedding` is assigned from Ollama's reported capabilities, not from
+   * parameter count — so it overrides the size tiers. It matters because the
+   * deployment picks from `slm`/`llm`, and an embedding model at 137M params
+   * would otherwise land in `slm` and be offered as something that can answer.
+   */
+  tier: 'slm' | 'llm' | 'discovered' | 'embedding';
   /** Rough capability, for filtering. */
   kind: 'general' | 'coding' | 'reasoning' | 'vision';
   /** One of PROJECT.md §8.1's six report candidates, as opposed to the wider library. */
@@ -126,6 +155,7 @@ export interface ModelRow {
   verdict: Verdict;
   speed: SpeedEstimate | null;
   quality: QualityScore | null;
+  /** The four *scoring* dimensions — not a vector width. See `arch` for shape. */
   dimensions: { fit: number; speed: number; quality: number; context: number } | null;
   weights: Record<string, number> | null;
   score: number | null;

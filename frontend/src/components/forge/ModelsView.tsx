@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ChevronDown, Download, FlaskConical, Loader2, RefreshCw, Trash2,
   CircleCheck, CircleAlert, CircleSlash, Cloud, HelpCircle, X, Search, Cpu, ExternalLink,
-  Star, Library, HardDrive, Globe, Terminal, Layers,
+  Star, Library, HardDrive, Globe, Terminal, Layers, Binary,
 } from 'lucide-react'
 import {
   modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark,
   type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type BenchmarkProgress, type ModelSource,
 } from '../../lib/forgeClient'
 import { CapabilityBadges } from '../ui/capability-badges'
+import { EmbeddingCatalogue } from './EmbeddingCatalogue'
+import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
 
 /**
@@ -79,7 +81,7 @@ const PROVENANCE_HELP: Record<string, string> = {
 }
 
 const SOURCES: {
-  id: ModelSource | 'all'
+  id: ModelSource | 'all' | 'embedding'
   label: string
   icon: typeof Star
   hint: string
@@ -89,7 +91,8 @@ const SOURCES: {
   { id: 'installed', label: 'Installed', icon: HardDrive, hint: 'On this disk right now' },
   { id: 'huggingface', label: 'Hugging Face', icon: Globe, hint: 'Live GGUF search. Pull any of these with hf.co/{repo}:{quant}' },
   { id: 'custom', label: 'Custom', icon: Terminal, hint: 'Score a tag you already know: an Ollama tag, or hf.co/{repo}:{quant}' },
-  { id: 'all', label: 'All', icon: Layers, hint: 'Everything except the live search' },
+  { id: 'embedding', label: 'Embeddings', icon: Binary, hint: 'Models that turn chunks into vectors for Track 1. Not answering models — no fit score, because fit measures something that generates text' },
+  { id: 'all', label: 'All', icon: Layers, hint: 'Everything except the live search and embeddings' },
 ]
 
 function Pill({ children, title, tone = 'muted' }: {
@@ -157,6 +160,64 @@ function Section({ title, children, right }: {
   )
 }
 
+/**
+ * The architecture behind the memory estimate.
+ *
+ * `estimate.formula` states the sum; these are its inputs. `MODULES.md` §2.2 is
+ * about a reader being able to check a number rather than trust it, and the
+ * KV-cache term is the half that is pure arithmetic — it is computed from
+ * layers x kv_heads x head_dim, so those belong on screen next to it.
+ *
+ * Absent before a model is pulled, and rendered as nothing rather than as
+ * dashes: there is no architecture to report for a file that is not here.
+ */
+function Architecture({ row }: { row: ModelRow }) {
+  const arch = row.arch
+  if (!arch || !arch.layers) return null
+
+  const facts: [string, string, string?][] = [
+    ['layers', String(arch.layers), 'Transformer blocks. The KV cache scales linearly with this.'],
+    ['attn heads', arch.heads ? String(arch.heads) : '—'],
+    [
+      'KV heads',
+      arch.kv_heads ? String(arch.kv_heads) : '—',
+      'Fewer than attention heads means grouped-query attention, which is what makes the KV cache affordable.',
+    ],
+    ['head dim', arch.head_dim ? String(arch.head_dim) : '—'],
+    [
+      'hidden size',
+      arch.embedding_length ? String(arch.embedding_length) : '—',
+      "The model's internal width. Not a retrieval vector width — an embedding model's dimensions are a different quantity that happens to share a GGUF key.",
+    ],
+  ]
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[10px] uppercase tracking-wide theme-text-muted">architecture</span>
+        <span
+          title={
+            arch.measured
+              ? 'Read from the pulled file.'
+              : 'Partly inferred: this family did not publish every field, so head_dim or kv_heads were derived from the standard relations.'
+          }
+          className={`text-[9px] uppercase tracking-wide ${arch.measured ? 'status-ok' : 'theme-text-muted opacity-70'}`}
+        >
+          {arch.measured ? 'measured' : 'partly inferred'}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 @lg:grid-cols-5 gap-x-4 gap-y-1.5">
+        {facts.map(([label, value, hint]) => (
+          <div key={label} className="min-w-0" title={hint}>
+            <div className="text-[10px] uppercase tracking-wide theme-text-muted">{label}</div>
+            <div className="text-xs font-mono theme-text">{value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Detail({ row }: { row: ModelRow }) {
   const est = row.estimate
 
@@ -207,6 +268,11 @@ function Detail({ row }: { row: ModelRow }) {
               ` · ${bytes(row.verdict.headroom_bytes)} spare`}
           </p>
         )}
+        {/* Directly under the estimate, because it is the estimate's inputs —
+            the KV term above is layers x kv_heads x head_dim x 2 x bytes. */}
+        <div className="mt-3 pt-3 border-t theme-border">
+          <Architecture row={row} />
+        </div>
       </Section>
 
       <Section
@@ -488,10 +554,19 @@ export function ModelsView() {
   const [notice, setNotice] = useState<string | null>(null)
 
   // ── filters ──
-  const [source, setSource] = useState<ModelSource | 'all'>('shortlist')
+  const [source, setSource] = useState<ModelSource | 'all' | 'embedding'>('shortlist')
   const [search, setSearch] = useState('')
   const [tier, setTier] = useState<'all' | 'slm' | 'llm'>('all')
   const [runnableOnly, setRunnableOnly] = useState(false)
+
+  // Held here rather than only inside EmbeddingCatalogue so the tab's count is
+  // real. A chip reading 0 above a list of four is worse than no chip: it is the
+  // UI contradicting itself, and the reader has no way to know which half lies.
+  const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(null)
+  const loadEmbeddings = useCallback(() => {
+    fetchEmbeddingConfig().then(setEmbeddingConfig).catch(() => setEmbeddingConfig(null))
+  }, [])
+  useEffect(() => { loadEmbeddings() }, [loadEmbeddings])
 
   // ── Hugging Face is its own fetch: it needs the network and can fail ──
   const [hfRows, setHfRows] = useState<ModelRow[] | null>(null)
@@ -594,8 +669,12 @@ export function ModelsView() {
       all: rows.length,
       huggingface: hfRows?.length ?? 0,
       custom: customRow ? 1 : 0,
+      // Installed count, not catalogue size: every other chip here counts
+      // things you have or could have, and "4" would claim four embedding
+      // models exist on a machine with none.
+      embedding: (embeddingConfig?.local_models ?? []).filter((e) => e.installed).length,
     } as Record<string, number>
-  }, [table?.rows, hfRows, customRow])
+  }, [table?.rows, hfRows, customRow, embeddingConfig])
 
   const handlePull = useCallback(async (row: ModelRow) => {
     setBusy(row.tag)
@@ -726,7 +805,10 @@ export function ModelsView() {
       </div>
 
       {/* ── source tabs ── */}
-      <div className="flex items-center gap-1 flex-wrap border-b theme-border pb-2">
+      {/* Scrolls sideways instead of wrapping. Seven chips wrapped onto a second
+          row inside a floating window, and a tab bar that changes height as the
+          window resizes pushes the content below it around for no reason. */}
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b theme-border pb-2">
         {SOURCES.map((entry) => {
           const selected = source === entry.id
           return (
@@ -734,7 +816,7 @@ export function ModelsView() {
               key={entry.id}
               onClick={() => setSource(entry.id)}
               title={entry.hint}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
                 selected ? 'theme-accent theme-surface-strong' : 'theme-text-muted hover:theme-text'
               }`}
             >
@@ -753,7 +835,10 @@ export function ModelsView() {
       </div>
 
       {/* ── filters ── */}
-      {source === 'custom' ? (
+      {/* Embeddings skip the filter row: size tiers, "Runnable only" and the
+          search box all describe a catalogue of forty answering models, and
+          there are four of these with no ranking to filter. */}
+      {source === 'embedding' ? null : source === 'custom' ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <input
@@ -913,6 +998,9 @@ export function ModelsView() {
 
       {/* Keyed on the source so switching lists replays the entry animation
           instead of swapping rows in place. */}
+      {source === 'embedding' ? (
+        <EmbeddingCatalogue config={embeddingConfig} onChanged={loadEmbeddings} />
+      ) : (
       <div key={source} className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out">
         {hfLoading && source === 'huggingface' && (
           <>
@@ -943,6 +1031,7 @@ export function ModelsView() {
           </p>
         )}
       </div>
+      )}
     </div>
   )
 }

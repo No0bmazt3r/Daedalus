@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Network, Boxes, Check, AlertCircle, Lock } from 'lucide-react'
+import { Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, ArrowUpRight } from 'lucide-react'
 import {
   fetchRagConfig, setRagTrack, type RagConfig, type RagTrack, type TrackStatus,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
+import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 
 /**
  * Settings → Knowledge Base — which retrieval track answers a knowledge query.
@@ -171,6 +172,71 @@ export function KnowledgeBasePanel() {
         knowledge query and recorded per query in <code className="theme-text">rag_logs.track</code>,
         so a result can always be traced to the track that produced it. Each query's walk is visible
         in Labyrinth Blueprints → Replay.
+      </p>
+
+      {/* The index, not the model. Choosing and pulling an embedding model is
+          the Forge's job — it is a model, and the Forge is the model console.
+          What belongs here is the corpus fact: whether the vectors currently
+          stored were produced by the model that is currently selected. */}
+      <div className="border-t theme-border pt-4">
+        <IndexSummary />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Whether the index matches the selected embedding model.
+ *
+ * Read-only on purpose. A `stale` index is not fixed by changing a setting here
+ * — it is fixed by re-ingesting, so offering a control would imply otherwise.
+ *
+ * It is worth stating at all because the failure is invisible from the results:
+ * an index built by one model and queried through another still returns rows,
+ * ranked by comparing vectors from two different spaces. That is not a worse
+ * ranking, it is a meaningless one, and nothing in the answer says so.
+ */
+function IndexSummary() {
+  const [config, setConfig] = useState<EmbeddingConfig | null>(null)
+
+  useEffect(() => {
+    fetchEmbeddingConfig().then(setConfig).catch(() => setConfig(null))
+  }, [])
+
+  if (!config) return <Skeleton className="h-20 w-full" />
+
+  const stale = config.index_state === 'stale'
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm theme-text">Vector index</h3>
+      <div
+        className={`flex items-start gap-2 rounded-lg border p-2.5 ${
+          stale ? 'border-rose-400/40 bg-rose-400/10' : 'theme-border'
+        }`}
+      >
+        {stale ? (
+          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-rose-400" />
+        ) : (
+          <Check size={13} className="mt-0.5 shrink-0 theme-text-muted" />
+        )}
+        <div className="min-w-0 space-y-1">
+          <p className="text-[11px] leading-relaxed theme-text">
+            <span className="theme-text-muted">index {config.index_state} — </span>
+            {config.index_detail}
+          </p>
+          <p className="text-[10px] theme-text-muted">
+            embedding model: <code className="theme-text">{config.model}</code>
+            {config.dimensions ? ` · ${config.dimensions}d` : ''}
+            {!config.production_safe && (
+              <span className="text-amber-400"> · cloud baseline, not production-safe</span>
+            )}
+          </p>
+        </div>
+      </div>
+      <p className="flex items-center gap-1 text-[11px] theme-text-muted">
+        <ArrowUpRight size={11} />
+        Pull or change the embedding model in The Forge → Added Models → Embedding models.
       </p>
     </div>
   )
