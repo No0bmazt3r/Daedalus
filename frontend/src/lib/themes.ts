@@ -384,24 +384,10 @@ export const THEME_DEFAULT_FROSTED: Record<string, boolean> = {
  * that ships with an animated effect, since a still background has nothing to
  * react with.
  */
-export const THEME_DEFAULT_REACTIVE: Record<string, boolean> = {
-  oled: true,
-  dark: true,
-  light: true,
-  paper: true,
-  midnight: true,
-  cyberpunk: true,
-  retrowave: true,
-  forest: true,
-  ocean: true,
-  terminal: true,
-  organs: true,
-  ume: true,
-  lavender: true,
-  copper: true,
-  gpt: true,
-  cute: true,
-};
+// Pointer reactivity was removed — see `lib/pointerField.ts`. Kept as an empty
+// record so the shape of `ThemeState` and every stored theme stays valid, and
+// so a reader finds this note rather than a missing symbol.
+export const THEME_DEFAULT_REACTIVE: Record<string, boolean> = {};
 
 // ── Colour maths ──────────────────────────────────────────────────────────
 
@@ -1015,7 +1001,7 @@ export function defaultStateFor(
     effectIntensity: THEME_DEFAULT_INTENSITY[id] ?? 1,
     effectSize: 1,
     frosted: THEME_DEFAULT_FROSTED[id] === true,
-    reactive: THEME_DEFAULT_REACTIVE[id] === true,
+    reactive: false,
     skeleton: DEFAULT_SKELETON,
   };
 }
@@ -1086,7 +1072,9 @@ export function coerceState(raw: unknown, fallbackId = DEFAULT_THEME_ID): ThemeS
         ? Math.max(0.3, Math.min(2.5, o.effectSize))
         : 1,
     frosted: typeof o.frosted === 'boolean' ? o.frosted : THEME_DEFAULT_FROSTED[id] === true,
-    reactive: typeof o.reactive === 'boolean' ? o.reactive : THEME_DEFAULT_REACTIVE[id] === true,
+    // Coerced rather than read: a theme saved while the feature existed
+    // should not bring it back.
+    reactive: false,
     // Absent on anything saved before this existed, which is every stored
     // theme and every exported file, so it has to fall back rather than fail.
     skeleton: o.skeleton === 'smooth' || o.skeleton === 'pixel' ? o.skeleton : DEFAULT_SKELETON,

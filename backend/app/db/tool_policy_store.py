@@ -1,30 +1,29 @@
-"""Which forbidden effects the runtime tool surface may use, and why.
+"""Which of the four extended effects are closed. Empty means everything is open.
 
-The gate in `services/agent_tools/registry` refuses `network_egress`, `write`,
-`admin` and `execute_code` on the runtime surface. This store is the only thing
-that can lift one of those refusals, and it is empty by default.
+The gate in `services/agent_tools/registry` can refuse `network_egress`,
+`write`, `admin` and `execute_code` on the runtime surface. This store is what
+tells it to, and it is empty by default.
 
-## Open by default, and why the machinery still exists
+## Why it records locks rather than unlocks
 
-005 seeds all four effects open. Daedalus is a single-operator console: the
-person who would unlock these is the person who built them, and four
-confirmation clicks between them and their own tools protect nobody.
+It used to be the other way round, with a migration seeding four rows to make
+the default open. That works exactly once: *lock all* deletes the rows, and a
+migration runs a single time, so the default never comes back — the console
+silently reverts to fully-refused and stays there. A default that depends on a
+one-time seed is not a default, it is an initial condition.
 
-What the table is still for:
+Recording locks makes "open" the meaning of an empty table, which is the right
+default for a single-operator console where the operator is the admin, and it
+makes restoring that default a delete — idempotent, and impossible to get
+half-done.
 
-1. **The gate is exercised rather than theoretical.** Locking an effect is one
-   click, it takes effect on the next call, and the refusal path runs in
-   production rather than only in a test.
-2. **`PROJECT.md` §3's configuration is reachable.** *Lock all* returns the
-   system to the fully-offline, read-only shape the report describes — which is
-   what to do before recording a groundedness number intended to be cited.
-3. **`unlocked_at` and `note` answer the question that mattered:** what was this
-   system allowed to do when that benchmark was recorded? A code flag or an
-   environment variable cannot be read back off a running instance months later;
-   a row can, and the catalogue stamps it onto every response.
+## What is still worth recording
 
-An absent row still means locked, so a database restored from before 004 or a
-half-applied migration fails closed rather than open.
+Closing an effect is now the event, and `locked_at` plus `note` capture it.
+That is the direction that matters for the write-up anyway: before recording a
+groundedness number you lock everything, and the rows are the evidence that you
+did. `services/agent_tools` stamps the resulting policy onto every catalogue
+response, so a screenshot of the panel carries the state it was taken in.
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ from .paths import PREFS_DB
 DB_PATH = PREFS_DB
 STORE = "prefs"
 
-# Mirrors the CHECK in 004. Kept here as well so a bad value is rejected with a
+# Mirrors the CHECK in 006. Kept here as well so a bad value is rejected with a
 # readable message instead of an IntegrityError from the driver.
 UNLOCKABLE: Final[tuple[str, ...]] = ("network_egress", "write", "admin", "execute_code")
 
@@ -50,7 +49,7 @@ _initialised = False
 
 
 class ToolPolicyError(RuntimeError):
-    """An unlock that cannot be written — maps to 400."""
+    """A policy change that cannot be written — maps to 400."""
 
 
 def init_db() -> None:
@@ -66,51 +65,85 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def unlocked() -> dict[str, dict[str, Any]]:
-    """Currently unlocked effects, keyed by effect. Empty is the default."""
+def locked() -> dict[str, dict[str, Any]]:
+    """Effects currently refused at runtime, keyed by effect. Empty by default."""
     init_db()
     with sqlite_util.connect(DB_PATH) as conn:
-        rows = conn.execute("SELECT * FROM tool_policy").fetchall()
+        rows = conn.execute("SELECT * FROM tool_locks").fetchall()
     return {
-        row["effect"]: {"effect": row["effect"], "unlocked_at": row["unlocked_at"], "note": row["note"]}
+        row["effect"]: {
+            "effect": row["effect"],
+            "locked_at": row["locked_at"],
+            "note": row["note"],
+        }
         for row in rows
     }
 
 
-def unlock(effect: str, note: str) -> dict[str, Any]:
-    """Permit one effect on the runtime surface, with a reason."""
-    if effect not in UNLOCKABLE:
-        raise ToolPolicyError(f"{effect!r} is not an unlockable effect; expected one of {', '.join(UNLOCKABLE)}")
-    note = (note or "").strip()
-    if not note:
-        raise ToolPolicyError("an unlock needs a reason — it is what makes it reviewable later")
+def unlocked() -> dict[str, dict[str, Any]]:
+    """Effects permitted at runtime — the complement of `locked()`.
 
+    Derived rather than stored, which is the point of 006: there is one fact in
+    the database and both views are computed from it, so they cannot disagree.
+    """
+    closed = locked()
+    return {
+        effect: {"effect": effect, "unlocked_at": None, "note": "open by default"}
+        for effect in UNLOCKABLE
+        if effect not in closed
+    }
+
+
+def lock(effect: str, note: str | None = None) -> dict[str, Any]:
+    """Refuse one effect at runtime."""
+    if effect not in UNLOCKABLE:
+        raise ToolPolicyError(
+            f"{effect!r} is not a lockable effect; expected one of {', '.join(UNLOCKABLE)}"
+        )
     init_db()
     with sqlite_util.connect(DB_PATH) as conn:
         conn.execute(
             """
-            INSERT INTO tool_policy (effect, unlocked_at, note) VALUES (?, ?, ?)
-            ON CONFLICT(effect) DO UPDATE SET unlocked_at = excluded.unlocked_at, note = excluded.note
+            INSERT INTO tool_locks (effect, locked_at, note) VALUES (?, ?, ?)
+            ON CONFLICT(effect) DO UPDATE SET locked_at = excluded.locked_at, note = excluded.note
             """,
-            (effect, _now(), note[:MAX_NOTE_CHARS]),
+            (effect, _now(), (note or "").strip()[:MAX_NOTE_CHARS] or None),
         )
         conn.commit()
-    return unlocked()[effect]
+    return locked()[effect]
 
 
-def lock(effect: str) -> bool:
-    """Take the permission away again. True when something was actually removed."""
+def lock_all(note: str | None = None) -> int:
+    """Close all four — the fully-offline, read-only shape §3 describes."""
+    for effect in UNLOCKABLE:
+        lock(effect, note or "locked all from Settings → Agent Tools")
+    return len(UNLOCKABLE)
+
+
+def unlock(effect: str, note: str | None = None) -> bool:
+    """Permit one effect again. True when something was actually reopened.
+
+    `note` is accepted and ignored: unlocking is a delete, and there is nowhere
+    for a reason to live on a row that no longer exists. The parameter stays so
+    callers that want to explain themselves are not made to care where the
+    explanation goes — the `tool_logs` row for whatever they run next is the
+    record that matters.
+    """
+    if effect not in UNLOCKABLE:
+        raise ToolPolicyError(
+            f"{effect!r} is not a lockable effect; expected one of {', '.join(UNLOCKABLE)}"
+        )
     init_db()
     with sqlite_util.connect(DB_PATH) as conn:
-        cursor = conn.execute("DELETE FROM tool_policy WHERE effect = ?", (effect,))
+        cursor = conn.execute("DELETE FROM tool_locks WHERE effect = ?", (effect,))
         conn.commit()
         return cursor.rowcount > 0
 
 
-def lock_all() -> int:
-    """Back to the project's default. Returns how many were open."""
+def unlock_all() -> int:
+    """Back to the default. Returns how many were closed."""
     init_db()
     with sqlite_util.connect(DB_PATH) as conn:
-        cursor = conn.execute("DELETE FROM tool_policy")
+        cursor = conn.execute("DELETE FROM tool_locks")
         conn.commit()
         return cursor.rowcount

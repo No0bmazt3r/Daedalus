@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Check, ExternalLink, Globe, Loader2, Play, Plus, Search, Trash2, X,
+  AlertTriangle, Check, ExternalLink, Globe, Loader2, Play, Plus, Power, Search,
+  Trash2, X,
 } from 'lucide-react'
 import { ThemeSelect } from '../ui/theme-select'
+import {
+  containerAction,
+  fetchContainers,
+  type ManagedContainer,
+} from '../../lib/maintenanceClient'
 import { Skeleton } from '../ui/skeleton'
 import {
   DISABLED,
@@ -59,6 +65,89 @@ function relativeTime(iso: string | null): string {
   if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`
   return `${Math.round(seconds / 86400)}d ago`
+}
+
+/**
+ * The SearXNG container's state, and a switch for it when one is available.
+ *
+ * Present only when SearXNG is the selected provider — a control for a service
+ * nobody chose is noise. When the backend has no Docker socket (the default) it
+ * shows the command instead of a button, because the honest thing to offer is
+ * the thing that actually works.
+ */
+function ContainerControl({ onChanged }: { onChanged: () => void }) {
+  const [state, setState] = useState<ManagedContainer | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const status = await fetchContainers()
+      setState(status.containers.find((c) => c.name === 'searxng') ?? null)
+    } catch {
+      setState(null)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const toggle = useCallback(async () => {
+    if (!state) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await containerAction('searxng', state.running ? 'stop' : 'start')
+      setState(result.containers.find((c) => c.name === 'searxng') ?? null)
+      // The provider's readiness probe now has a different answer.
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'that did not work')
+    } finally {
+      setBusy(false)
+    }
+  }, [onChanged, state])
+
+  if (!state) return null
+
+  return (
+    <div className="mt-3 pt-3 border-t theme-border">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] theme-text-muted">Container</span>
+        <code className="text-[11px] theme-text">{state.container}</code>
+        <span className={`text-[11px] ${state.running ? 'status-ok' : 'theme-text-muted'}`}>
+          {state.running ? 'running' : state.exists ? (state.state ?? 'stopped') : 'not created'}
+        </span>
+
+        {state.control_available ? (
+          <button
+            onClick={toggle}
+            disabled={busy}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border theme-border text-[11px] theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
+          >
+            {busy ? <Loader2 size={11} className="animate-spin" /> : <Power size={11} />}
+            {state.running ? 'Stop' : 'Start'}
+          </button>
+        ) : (
+          <code className="ml-auto text-[10px] theme-text-muted">{state.compose_hint}</code>
+        )}
+      </div>
+
+      {!state.control_available && (
+        <p className="text-[10px] theme-text-muted mt-1.5 leading-relaxed">
+          Starting it from here needs a Docker socket mounted into the backend
+          (<code>DOCKER_SOCKET</code> in <code>.env</code>), which is off by default: a
+          process that can reach that socket can do anything Docker can on this machine,
+          and the agent's <code>bash</code> tool runs in the same container. If you turn
+          it on, lock <code>execute_code</code> in Agent Tools.
+        </p>
+      )}
+      {error && (
+        <p className="flex items-center gap-1.5 text-[11px] status-warn mt-1.5">
+          <AlertTriangle size={11} /> {error}
+        </p>
+      )}
+    </div>
+  )
 }
 
 export function SearchPanel({ isPeek }: { isPeek: boolean }) {
@@ -434,6 +523,8 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
             )}
           </p>
         )}
+
+        {selected?.needs_url && <ContainerControl onChanged={() => void load()} />}
 
         {provider === DISABLED && (
           <p className="text-[11px] theme-text-muted mt-3">

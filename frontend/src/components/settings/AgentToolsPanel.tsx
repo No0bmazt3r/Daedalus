@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Ban, Check, ChevronDown, Loader2, Lock, LockOpen, Play, ShieldCheck,
-  Wrench, X,
+  AlertTriangle, Check, ChevronDown, Loader2, Play, ShieldCheck, X,
 } from 'lucide-react'
 import { Skeleton } from '../ui/skeleton'
 import {
@@ -20,22 +19,28 @@ import {
  *
  * Layer 8, made inspectable. The list is generated on the backend from the same
  * declarations the dispatcher gates on, so this panel cannot show a permission
- * the runtime does not actually enforce — which is the only way a screen like
- * this is worth anything.
+ * the runtime does not actually enforce.
  *
- * Three things it shows that a plain tool list would not:
+ * ## Why this is compact
  *
- * 1. **Effects**, per tool. `network_egress` at runtime is refused by code, not
- *    by a sentence in a prompt, and the refusal is rendered with its reason.
- * 2. **Citability.** A result marked `transcript` may inform an answer and can
- *    never be its source (Rule 3, `PROJECT.md` §7.4). The badge is the same flag
- *    the orchestrator reads.
- * 3. **What is deliberately missing.** The tools Odysseus has and this does not,
- *    each with the rule that excludes it — because "we did not think of it" and
- *    "the rule forbids it" look identical in an absence.
+ * An earlier version explained the capability model in three paragraphs above
+ * the thing it described, and carried a standing warning about every capability
+ * being open. Both were written when the four extended effects shipped *closed*
+ * and opening one was an event. They ship open now, so the warning fired
+ * permanently — and a warning that is always on is decoration.
  *
- * Try runs a tool for real, with a person watching, and logs it under a `try_`
- * query id so an experiment is distinguishable from an answer's evidence.
+ * What is left is the part that changes: which effects are on, what each tool
+ * may touch, and whether its result may be cited. The reasoning lives in
+ * `services/agent_tools/registry.py` and `docs/FEATURES.md`, where it can be
+ * read once rather than on every visit.
+ *
+ * ## The one claim it must not get wrong
+ *
+ * "Refused on the runtime surface" has to mean *refused right now*. The header
+ * reads `catalogue.locked`, which is the same row the gate consults, rather
+ * than the static `forbidden_at_runtime` set — printing the latter is how the
+ * panel ended up announcing a refusal that had not happened since the default
+ * changed.
  */
 
 const EFFECT_TONE: Record<ToolEffect, string> = {
@@ -53,24 +58,21 @@ const EFFECT_TONE: Record<ToolEffect, string> = {
   admin: 'status-bad',
 }
 
+/** What opening each one actually allows. Tooltips, not body copy. */
+const EFFECT_CONSEQUENCE: Record<string, string> = {
+  network_egress: 'Web search and page fetches during an answer. Breaks Rule 1 while open.',
+  write: 'Create conversations, post into them, remember facts, write files in the agent workspace.',
+  admin: 'Manage benchmark endpoints and the active retrieval track. Never reads a credential.',
+  execute_code: 'Run shell commands and Python in the workspace, with a timeout and a denylist. Containment, not a sandbox.',
+}
+
 const INTEGRITY_HINT = {
   system: "Daedalus' own output, from its own stores. Trusted.",
   corpus:
-    'Text out of an ingested document. Quotable as evidence, never obeyed as instruction — a document can contain anything, including instructions aimed at a model reading it.',
+    'Text from a document, page or program output this system did not write. Quotable as evidence, never obeyed as instruction.',
   transcript:
-    'Something the model said in an earlier turn. Untrusted and stale: the number in it was true then and was never re-fetched.',
+    'Something said in an earlier turn. Untrusted and stale: the number in it was true then and was never re-checked.',
 } as const
-
-const EFFECT_CONSEQUENCE: Record<string, string> = {
-  network_egress:
-    'Lets the assistant search and fetch the web mid-answer. Breaks Rule 1 for as long as it is open, and any groundedness measured while it is open is measuring a different system.',
-  write:
-    'Lets the assistant create conversations and post into them, and write files inside its workspace directory. Writes are labelled as tool-authored.',
-  admin:
-    'Lets the assistant read the benchmark endpoint list and change the active retrieval track. It can never read a credential, and the track is still refused while the comparison is frozen.',
-  execute_code:
-    'Lets the assistant run shell commands and Python on this machine, inside its workspace, with a timeout and a pattern denylist. That is containment, not a sandbox — run Daedalus in its container if the boundary needs to be real.',
-}
 
 function Badge({ children, tone = 'muted', title }: {
   children: React.ReactNode; tone?: string; title?: string
@@ -87,7 +89,68 @@ function Badge({ children, tone = 'muted', title }: {
   )
 }
 
-function ToolRow({ tool, card }: { tool: AgentTool; card: string }) {
+/** The four extended effects as toggles. One line each, consequence on hover. */
+function Capabilities({ catalogue, onChange }: {
+  catalogue: ToolCatalogue
+  onChange: (next: ToolCatalogue) => void
+}) {
+  const [busy, setBusy] = useState<ToolEffect | null>(null)
+  const closed = new Set(catalogue.locked.map((l) => l.effect))
+
+  const toggle = useCallback(async (effect: ToolEffect, isOpen: boolean) => {
+    setBusy(effect)
+    try {
+      onChange(isOpen
+        ? await lockEffect(effect, 'Locked from Settings → Agent Tools')
+        : await unlockEffect(effect))
+    } finally {
+      setBusy(null)
+    }
+  }, [onChange])
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {catalogue.unlockable.map((effect) => {
+        const isOpen = !closed.has(effect)
+        return (
+          <button
+            key={effect}
+            onClick={() => toggle(effect, isOpen)}
+            disabled={busy === effect}
+            title={`${EFFECT_CONSEQUENCE[effect]}\n\nClick to turn ${isOpen ? 'off' : 'on'}.`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] transition-colors disabled:opacity-40 ${
+              isOpen
+                ? 'status-ok-border status-ok-bg theme-text'
+                : 'theme-border theme-text-muted hover:theme-text'
+            }`}
+          >
+            {busy === effect
+              ? <Loader2 size={11} className="animate-spin" />
+              : isOpen ? <Check size={11} className="status-ok" /> : <X size={11} />}
+            <code>{effect}</code>
+          </button>
+        )
+      })}
+      <button
+        onClick={async () => {
+          onChange(closed.size === catalogue.unlockable.length
+            ? await unlockEffect()
+            : await lockEffect(undefined, 'Locked all from Settings → Agent Tools'))
+        }}
+        title={
+          closed.size === catalogue.unlockable.length
+            ? 'Reopen all four — the default for a single-operator console.'
+            : 'Close all four: the fully-offline, read-only shape PROJECT.md §3 describes. Do this before recording a result you intend to cite.'
+        }
+        className="text-[11px] px-2 py-1 rounded-lg theme-text-muted hover:theme-text transition-colors"
+      >
+        {closed.size === catalogue.unlockable.length ? 'unlock all' : 'lock all'}
+      </button>
+    </div>
+  )
+}
+
+function ToolRow({ tool }: { tool: AgentTool }) {
   const [open, setOpen] = useState(false)
   const [args, setArgs] = useState<Record<string, string>>({})
   const [running, setRunning] = useState(false)
@@ -98,9 +161,8 @@ function ToolRow({ tool, card }: { tool: AgentTool; card: string }) {
     setResult(null)
     try {
       // Everything arrives from a text input as a string. The backend validator
-      // is the authority on types, so this converts only what it can prove —
-      // a number-ish string for a number-ish param, a comma list for a list —
-      // and lets the declaration reject anything else with a readable reason.
+      // is the authority on types, so this converts only what it can prove and
+      // lets the declaration reject anything else with a readable reason.
       const typed: Record<string, unknown> = {}
       for (const param of tool.params) {
         const raw = (args[param.name] ?? '').trim()
@@ -123,237 +185,85 @@ function ToolRow({ tool, card }: { tool: AgentTool; card: string }) {
   }, [args, tool])
 
   return (
-    <div className="rounded-xl border theme-border overflow-hidden">
-      <div className="flex items-start gap-3 p-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <code className="text-sm theme-text">{tool.name}</code>
-            {tool.effects.map((e) => (
-              <Badge key={e} tone={EFFECT_TONE[e]} title={`Effect: ${e}`}>
-                {e.replace('read_', '')}
-              </Badge>
-            ))}
-            {!tool.citable && (
-              <Badge tone="status-warn" title="Rule 3: may inform an answer, never be its source.">
-                not evidence
-              </Badge>
-            )}
-            {!tool.available && (
-              <Badge tone="status-bad" title={tool.refused_because ?? tool.blocked_by ?? ''}>
-                unavailable
-              </Badge>
-            )}
-          </div>
-          <p className="text-[11px] theme-text-muted leading-relaxed mt-1">{tool.summary}</p>
-          {(tool.refused_because || tool.blocked_by) && (
-            <p className="text-[11px] status-warn mt-1">
-              {tool.refused_because ?? `waiting on ${tool.blocked_by}`}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          title="Arguments, and a way to run it."
-          className="p-1.5 rounded-lg theme-text-muted hover:theme-text transition-colors shrink-0"
-        >
-          <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-        </button>
-      </div>
+    <div className="border-b theme-border last:border-b-0">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 py-1.5 text-left hover:opacity-80 transition-opacity"
+      >
+        <ChevronDown
+          size={12}
+          className={`shrink-0 theme-text-muted transition-transform ${open ? 'rotate-180' : '-rotate-90'}`}
+        />
+        <code className="text-[11px] theme-text shrink-0">{tool.name}</code>
+        <span className="text-[11px] theme-text-muted truncate flex-1">{tool.summary}</span>
+        {!tool.citable && (
+          <Badge tone="status-warn" title="Rule 3: may inform an answer, never be its source.">
+            not evidence
+          </Badge>
+        )}
+        {tool.effects.map((e) => (
+          <Badge key={e} tone={EFFECT_TONE[e]} title={`Effect: ${e}`}>
+            {e.replace('read_', '')}
+          </Badge>
+        ))}
+        {!tool.available && (
+          <Badge tone="status-bad" title={tool.refused_because ?? tool.blocked_by ?? ''}>
+            off
+          </Badge>
+        )}
+      </button>
 
       {open && (
-        <div className={`border-t theme-border p-3 space-y-3 ${card}`}>
-          <div className="flex items-center gap-2 text-[10px] theme-text-muted">
-            <ShieldCheck size={11} />
-            <span title={INTEGRITY_HINT[tool.integrity]}>
-              returns <code className="theme-text">{tool.integrity}</code> ·{' '}
-              {tool.citable ? 'citable as evidence' : 'never citable'}
-            </span>
-          </div>
+        <div className="pb-3 pl-6 space-y-2">
+          <p className="text-[10px] theme-text-muted" title={INTEGRITY_HINT[tool.integrity]}>
+            returns <code className="theme-text">{tool.integrity}</code> ·{' '}
+            {tool.citable ? 'citable as evidence' : 'never citable'}
+            {tool.refused_because && <span className="status-warn"> · {tool.refused_because}</span>}
+          </p>
 
-          {tool.params.length === 0 ? (
-            <p className="text-[11px] theme-text-muted">Takes no arguments.</p>
-          ) : (
-            <div className="space-y-2">
-              {tool.params.map((p) => (
-                <div key={p.name} className="flex flex-col gap-1">
-                  <label className="text-[11px] theme-text-muted">
-                    <code className="theme-text">{p.name}</code>
-                    <span className="opacity-60">
-                      {' '}· {p.type}{p.required ? ' · required' : ''}
-                      {p.enum ? ` · one of ${p.enum.join(', ')}` : ''}
-                      {p.maximum !== null ? ` · max ${p.maximum}` : ''}
-                    </span>
-                  </label>
-                  <input
-                    value={args[p.name] ?? ''}
-                    onChange={(e) => setArgs((a) => ({ ...a, [p.name]: e.target.value }))}
-                    placeholder={p.description}
-                    className="w-full px-2.5 py-1.5 rounded-lg border theme-border theme-surface-strong theme-text text-xs outline-none placeholder:opacity-40"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          {tool.params.map((p) => (
+            <input
+              key={p.name}
+              value={args[p.name] ?? ''}
+              onChange={(e) => setArgs((a) => ({ ...a, [p.name]: e.target.value }))}
+              placeholder={
+                `${p.name}${p.required ? '*' : ''} · ${p.enum ? p.enum.join(' | ') : p.type}`
+              }
+              title={p.description}
+              className="w-full px-2.5 py-1.5 rounded-lg border theme-border theme-surface-strong theme-text text-xs outline-none placeholder:opacity-40"
+            />
+          ))}
 
           <button
             onClick={run}
             disabled={running || !tool.available}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border theme-border text-xs theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border theme-border text-[11px] theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
           >
-            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+            {running ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
             Run
           </button>
 
           {result && (
             <div
-              className={`rounded-lg border p-2.5 text-[11px] ${
+              className={`rounded-lg border p-2 text-[11px] ${
                 result.ok ? 'status-ok-border status-ok-bg' : 'status-warn-border status-warn-bg'
               }`}
             >
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {result.ok ? (
-                  <Check size={12} className="status-ok" />
-                ) : (
-                  <X size={12} className="status-warn" />
-                )}
-                <code className="theme-text">{result.status}</code>
+              <div className="flex items-center gap-1.5">
+                {result.ok
+                  ? <Check size={11} className="status-ok" />
+                  : <X size={11} className="status-warn" />}
+                <span className="theme-text">{result.detail}</span>
                 <span className="theme-text-muted">· {result.elapsed_ms}ms</span>
-                {!result.citable && result.ok && (
-                  <Badge tone="status-warn" title="This result may not be cited.">
-                    not evidence
-                  </Badge>
-                )}
               </div>
-              <p className="theme-text mt-1 leading-relaxed">{result.detail}</p>
               {result.data !== null && result.data !== undefined && (
-                <pre className="mt-2 max-h-52 overflow-auto text-[10px] theme-text-muted whitespace-pre-wrap break-words">
+                <pre className="mt-1.5 max-h-44 overflow-auto text-[10px] theme-text-muted whitespace-pre-wrap break-words">
                   {JSON.stringify(result.data, null, 2)}
                 </pre>
               )}
             </div>
           )}
         </div>
-      )}
-    </div>
-  )
-}
-
-function PolicyCard({ catalogue, onChange, card }: {
-  catalogue: ToolCatalogue
-  onChange: (next: ToolCatalogue) => void
-  card: string
-}) {
-  const [pending, setPending] = useState<ToolEffect | null>(null)
-  const [note, setNote] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const open = new Map(catalogue.unlocked.map((u) => [u.effect, u]))
-
-  const submit = async (effect: ToolEffect) => {
-    setError(null)
-    try {
-      onChange(await unlockEffect(effect, note))
-      setPending(null)
-      setNote('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'could not unlock')
-    }
-  }
-
-  return (
-    <div className={card}>
-      <div className="flex items-start justify-between gap-3 mb-1">
-        <h4 className="text-sm font-medium flex items-center gap-1.5">
-          <LockOpen size={13} className={open.size ? 'status-warn' : 'theme-text-muted'} />
-          Extended capabilities
-        </h4>
-        {open.size > 0 && (
-          <button
-            onClick={async () => onChange(await lockEffect())}
-            className="text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors"
-          >
-            <Lock size={11} /> Lock all
-          </button>
-        )}
-      </div>
-      <p className="text-xs theme-text-muted mb-3 leading-relaxed">
-        The four effects the runtime gate gets to refuse. All four ship <em>open</em>:
-        this is a single-operator console and the operator is the admin, so four
-        confirmation clicks between you and your own tools would protect nobody. Closing
-        one takes effect on the next call, and the reason is stored either way — it is
-        what answers “what was this system allowed to do when that benchmark was
-        recorded?” months later. <span className="theme-text">Lock all</span> returns the
-        system to the fully-offline, read-only shape <code>PROJECT.md</code> §3 describes,
-        which is what to do before recording a number you intend to cite.
-      </p>
-
-      <div className="space-y-2">
-        {catalogue.unlockable.map((effect) => {
-          const unlocked = open.get(effect)
-          return (
-            <div key={effect} className="rounded-lg border theme-border p-2.5">
-              <div className="flex items-start gap-2">
-                {unlocked ? (
-                  <LockOpen size={12} className="status-warn mt-0.5 shrink-0" />
-                ) : (
-                  <Lock size={12} className="theme-text-muted mt-0.5 shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <code className="text-[11px] theme-text">{effect}</code>
-                  <p className="text-[11px] theme-text-muted leading-relaxed mt-0.5">
-                    {EFFECT_CONSEQUENCE[effect]}
-                  </p>
-                  {unlocked && (
-                    <p className="text-[10px] status-warn mt-1">
-                      open since {new Date(unlocked.unlocked_at).toLocaleString()} ·{' '}
-                      <span className="theme-text-muted">“{unlocked.note}”</span>
-                    </p>
-                  )}
-                </div>
-                {unlocked ? (
-                  <button
-                    onClick={async () => onChange(await lockEffect(effect))}
-                    className="text-[11px] px-2 py-1 rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors shrink-0"
-                  >
-                    Lock
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => { setPending(pending === effect ? null : effect); setNote('') }}
-                    className="text-[11px] px-2 py-1 rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors shrink-0"
-                  >
-                    Unlock
-                  </button>
-                )}
-              </div>
-
-              {pending === effect && (
-                <div className="mt-2 flex gap-2">
-                  <input
-                    autoFocus
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && note.trim()) void submit(effect) }}
-                    placeholder="Why — e.g. “measuring what web access does to groundedness”"
-                    className="flex-1 px-2.5 py-1.5 rounded-lg border theme-border theme-surface-strong theme-text text-xs outline-none placeholder:opacity-40"
-                  />
-                  <button
-                    onClick={() => submit(effect)}
-                    disabled={!note.trim()}
-                    className="text-[11px] px-2.5 rounded-lg border theme-border theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
-                  >
-                    Confirm
-                  </button>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      {error && (
-        <p className="flex items-center gap-1.5 text-xs status-warn mt-2">
-          <AlertTriangle size={12} /> {error}
-        </p>
       )}
     </div>
   )
@@ -377,7 +287,15 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
     return map
   }, [catalogue])
 
-  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
+  // What the gate would actually refuse right now, not the static forbidden set.
+  // Printing the latter is how a panel ends up announcing a refusal that stopped
+  // happening when the default changed.
+  const refusedNow = useMemo(
+    () => (catalogue?.locked ?? []).map((l) => l.effect),
+    [catalogue],
+  )
+
+  const card = `p-4 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
   if (error) {
     return (
@@ -396,96 +314,52 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-4 animate-in fade-in duration-200">
       <div>
         <h3 className="text-xl font-medium mb-1">Agent Tools</h3>
         <p className="text-sm theme-text-muted">
-          What the orchestrator may call, what each call is allowed to touch, and what
-          its result may be used for.
+          {catalogue.tools.length} tools. Each declares what it may touch and whether its
+          result can be cited; dispatch checks that before the call and logs every one.
         </p>
       </div>
 
-      {/* The gate, stated once. This is the panel's actual claim: the list below
-          is generated from the code that enforces it, not written beside it. */}
-      <div className="flex gap-3 p-4 rounded-xl border theme-border">
-        <ShieldCheck size={16} className="shrink-0 mt-0.5 theme-accent" />
-        <div className="text-xs leading-relaxed theme-text-muted">
-          <span className="font-medium theme-text">Checked before the call, not after.</span>{' '}
-          Every tool declares its effects, its parameters and the integrity of what it
-          returns, and dispatch verifies all three before the function is entered. A tool
-          declaring{' '}
-          {catalogue.forbidden_at_runtime.map((e, i) => (
-            <span key={e}>
-              {i > 0 && ', '}
-              <code className="status-bad">{e}</code>
-            </span>
-          ))}{' '}
-          is refused on the runtime surface — that is Rule 1 and Rule 5 in code rather
-          than in a prompt. Every call is logged to <code>tool_logs</code> with its
-          arguments, status and latency.
+      <div className={card}>
+        <div className="flex items-center gap-2 mb-2">
+          <ShieldCheck size={13} className="theme-accent shrink-0" />
+          <span className="text-xs theme-text">Extended capabilities</span>
+          <span className="text-[11px] theme-text-muted">
+            {refusedNow.length === 0
+              ? 'all on — nothing is refused at runtime'
+              : `${refusedNow.length} off · tools needing ${refusedNow.join(', ')} are refused`}
+          </span>
         </div>
+        <Capabilities catalogue={catalogue} onChange={setCatalogue} />
       </div>
-
-      {catalogue.unlocked.length > 0 && (
-        <div className="flex gap-3 p-4 rounded-xl border status-warn-border status-warn-bg">
-          <AlertTriangle size={16} className="shrink-0 mt-0.5 status-warn" />
-          <div className="text-xs leading-relaxed theme-text-muted">
-            <span className="font-medium theme-text">
-              {catalogue.unlocked.length} extended{' '}
-              {catalogue.unlocked.length === 1 ? 'capability is' : 'capabilities are'} open.
-            </span>{' '}
-            Convenient, and not the configuration <code>PROJECT.md</code> §3 describes.
-            Anything measured in this state — groundedness especially — describes a
-            system with web access and a shell, so lock them before recording a result
-            you intend to cite.
-          </div>
-        </div>
-      )}
-
-      <PolicyCard catalogue={catalogue} onChange={setCatalogue} card={card} />
 
       {catalogue.categories.map((category) => {
         const tools = byCategory.get(category.id) ?? []
         if (!tools.length) return null
         return (
-          <div key={category.id} className="space-y-2">
-            <div className="flex items-baseline gap-2">
-              <h4 className="text-sm font-medium flex items-center gap-1.5">
-                <Wrench size={13} className="theme-accent" />
-                {category.id}
-              </h4>
-              <span className="text-[11px] theme-text-muted">{category.description}</span>
+          <div key={category.id}>
+            <div className="flex items-baseline gap-2 mb-2">
+              <h4 className="text-xs font-medium theme-text">{category.id}</h4>
+              <span className="text-[10px] theme-text-muted truncate">{category.description}</span>
             </div>
-            <div className="space-y-2">
+            <div className="rounded-xl border theme-border px-3">
               {tools.map((tool) => (
-                <ToolRow key={tool.name} tool={tool} card={card} />
+                <ToolRow key={tool.name} tool={tool} />
               ))}
             </div>
           </div>
         )
       })}
 
-      {/* An absence is not self-explaining. */}
-      <div className={card}>
-        <h4 className="text-sm font-medium flex items-center gap-1.5 mb-1">
-          <Ban size={13} className="theme-text-muted" />
-          Not implemented
-        </h4>
-        <p className="text-xs theme-text-muted mb-3">
-          This list has shrunk twice, both times because a capability refused by the gate
-          is a better record than one that was never built. What is left is not withheld —
-          there is genuinely nothing behind it.
+      {/* An absence is not self-explaining, but it does not need a card either. */}
+      {catalogue.excluded.map((e) => (
+        <p key={e.name} className="text-[10px] theme-text-muted leading-relaxed">
+          <span className="theme-text">Not implemented:</span> <code>{e.name}</code> — {e.reason}
         </p>
-        <div className="space-y-2.5">
-          {catalogue.excluded.map((e) => (
-            <div key={e.name} className="min-w-0">
-              <code className="text-[11px] theme-text">{e.name}</code>
-              <span className="text-[10px] theme-text-muted"> · {e.category}</span>
-              <p className="text-[11px] theme-text-muted leading-relaxed">{e.reason}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   )
 }

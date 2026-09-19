@@ -20,14 +20,19 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
-    chat, embeddings, forge, graph, health, logs, prefs, providers, search, sessions,
-    system, tools,
+    chat, embeddings, forge, graph, health, logs, maintenance, mcp, prefs, providers,
+    search, sessions, system, tools,
 )
 from .db import migrations, paths, sqlite_util
+from .services import app_logs
 # Aliased: `api.forge` is already imported above under that name, and the two
 # shadowing each other broke router registration at import time.
 from .services import forge as forge_service
 from .services import chat_service, hardware
+
+# The same records that go to stdout also go to a rotating file, so Settings →
+# System can read them back without a second terminal and a container name.
+app_logs.install()
 
 log = logging.getLogger("daedalus.startup")
 
@@ -123,6 +128,8 @@ app.include_router(graph.router)
 app.include_router(embeddings.router)
 app.include_router(search.router)
 app.include_router(tools.router)
+app.include_router(mcp.router)
+app.include_router(maintenance.router)
 app.include_router(chat.router)
 
 

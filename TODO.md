@@ -223,12 +223,19 @@ the Forge while M5 was in flight.
 - [x] Settings → Agent Tools renders the catalogue, runs any tool with a person
       watching, and lists what is **deliberately** not offered with the rule
       that excludes it
-- [x] **All of it offered, and lockable.** `tool_policy` now ships all four
-      effects open (migration 005): single-operator console, operator is the
-      admin, and four confirmation clicks between somebody and their own tools
-      protect nobody. The gate still decides, *Lock all* still restores §3's
-      configuration in one click, and `unlocked_at` + `note` still answer what
-      the system was allowed to do when a benchmark was recorded
+- [x] **All of it offered, and lockable.** All four effects ship open:
+      single-operator console, the operator is the admin, and four confirmation
+      clicks between somebody and their own tools protect nobody
+      - [x] **The default is now schema, not a seed (006).** 005 seeded four
+            "unlocked" rows, which works exactly once — *lock all* deletes them,
+            a migration runs a single time, and the console silently reverts to
+            fully-refused. Caught by the running stack reporting 0 unlocked
+            after an earlier test had locked everything. `tool_locks` stores what
+            is **closed**, so empty means open and restoring the default is an
+            idempotent delete
+      - [x] The panel's header reads `catalogue.locked` rather than the static
+            `forbidden_at_runtime` set — it was announcing "admin, execute_code,
+            network_egress, write are refused" while all four were open
 - [x] The rest of the "not offered" list built: `manage_endpoints`' write half
       (keys write-only — no action returns a credential), `chat_with_model`
       (local tags only, model recorded), `pipeline` (each step re-enters the
@@ -236,9 +243,30 @@ the Forge while M5 was in flight.
       in the audit DB, which neither retrieval track reads; `forget` expires
       rather than deletes), and `ui_control` (`open_panel` returns an intent the
       UI may decline). 26 tools
-- [x] `manage_mcp` / `manage_webhooks` / `manage_tokens` stay on the excluded
-      list — flagged rather than built, because the subsystems they manage do
-      not exist here. The entry is the record of the difference
+- [x] **MCP implemented** — stdio and http transports, written in-house
+      (`services/mcp_client.py`) because the three methods needed are three
+      JSON-RPC calls and the dependency would not get them more right; the care
+      went into process handling instead. One session per call: no pooling, no
+      orphans, every failure attributable
+      - [x] **Pinning is the answer to §7.2 and §5.** A server declares its own
+            tools and can change them; `pin` writes the list down and hashes it,
+            every connection compares, drift is named (*"added
+            delete_everything"*), an unpinned server cannot be called at all,
+            and a tool outside the snapshot is refused
+      - [x] **One proxy, not N registered tools.** `mcp_call` declares the honest
+            worst case — `network_egress` + `execute_code` + `write` — so a
+            runtime-discovered tool never bypasses a gate that reviews effects
+            beforehand. Locking any one of the three closes MCP entirely
+      - [x] Adding a server is an operator action in Settings → Integrations,
+            never a tool: a model able to write that row could name any
+            executable on the machine
+      - [x] Settings → Integrations built (was a placeholder), following the
+            Odysseus panel's shape — one list, one add button — with test, pin,
+            enable and delete per server, and drift called out where it happens
+      - [x] Verified against a real stdio server: handshake · pin · call ·
+            unpinned refused · drift detected and the new tool refused · bad JSON
+            rejected · unknown label lists what exists · disabled refused ·
+            `execute_code` lock closes MCP while `mcp_list_servers` still answers
 - [x] **Extended capabilities — built, and gated.** The web,
       session-write, configuration and execution tools now exist
       (`agent_tools/extended/`), locked behind four effects: `network_egress`,
@@ -893,9 +921,84 @@ Layer 9 below for the per-step detail.
             beats the environment. `DAEDALUS_PORT=9000 ./daedalus.sh start`
             silently published 8000. It now saves the pre-set values and
             restores them over the file's
-- [ ] Settings panels other than Add Models, Added Models, Hardware, Databases,
-      Knowledge Base, Search, Agent Tools, Appearance and Shortcuts are still
-      placeholders
+- [x] Settings → Agent Tools rewritten compact: 491 → 360 lines, three
+      explanatory cards collapsed into one line of subtitle, the four
+      capabilities reduced to toggle chips with the consequence on hover, and
+      the tool list to one row each. The removed copy was written when the
+      effects shipped closed and opening one was an event; with open as the
+      default the standing warning fired permanently, and a warning that is
+      always on is decoration
+- [x] **Email and Reminders removed.** Both were placeholders for features
+      Daedalus has no use for — a reactor monitoring console does not send mail,
+      and "reminders" was never more than a word borrowed from the assistant
+      this settings shell was ported from. A placeholder for something nobody
+      intends to build is a promise in the navigation
+      - [x] That emptied the Communications group, and Integrations was never a
+            communications feature anyway: an MCP server is the external half of
+            the tool layer. It moved next to Agent Tools, and the group went with
+            the two panels. 13 panels, five groups, none orphaned
+- [x] **Search readiness meant "configured", not "working".** `SEARXNG_URL` is
+      in the container's environment whether or not the search container is
+      running, so the panel reported the provider ready while every query failed
+      with a DNS error. Readiness is now a 1.5s probe of the configured address,
+      and an unreachable instance names the command that fixes it
+- [x] **`dev` and `start` now start SearXNG when it is the selected provider.**
+      Called after `wait_for_api`, since the selection lives in `prefs.db`.
+      Choosing it in Settings is enough; nothing starts for a provider nobody
+      picked. The earlier "deliberately no `ensure_searxng`" reasoning was about
+      starting one *quietly*, which this is not
+- [x] **Settings → System built** — process log, backup, Danger Zone, following
+      the Odysseus panel of the same name
+      - [x] The backend had no file logging at all, so there was nothing to tail.
+            A rotating handler on the **root** logger (5 MB × 3) now mirrors
+            stdout to `daedalus.log`; uvicorn's records and library warnings are
+            exactly what a log viewer is opened for. Format fixed and parseable,
+            unparseable lines kept — a traceback is several lines matching no
+            format and is the most useful thing in the file
+      - [x] The tail seeks from the end, and filtering is server-side: Odysseus
+            sends the whole tail and filters in the browser, which is fine for a
+            click and wasteful for a three-second poll
+      - [x] **Backups carry no credentials.** Odysseus exports everything; a
+            backup gets emailed and left in a downloads folder, so keys are
+            recorded as set/unset and re-entered after a restore. Import is
+            additive, and transcripts are deliberately not restored — new session
+            ids would leave audit rows pointing at ids that no longer exist
+      - [x] Nine wipe categories plus *everything*. The **sensor database is not
+            one** and cannot be (Rule 2); the audit log is, with heavier copy,
+            because it is the evidence §9.2's figures come from
+- [x] **Danger Zone confirmation is a real dialog.** Buttons say *Delete*, not a
+      bin glyph, and confirmation is a themed `ui/confirm-dialog.tsx` instead of
+      `window.confirm` — which ignores the theme, cannot describe what is about
+      to happen, and cannot ask for anything to be typed. The audit log and
+      *everything* require typing `DELETE`: two clicks can be muscle memory
+      - [ ] The Forge's two `window.confirm` calls (delete a pulled model) could
+            adopt the same dialog. Left alone for now — they were not in scope
+- [x] **SearXNG can be started and stopped from Settings → Search**, when a
+      Docker socket is mounted into the backend. **Off by default**, and that is
+      a position: a process that can reach the socket can do anything Docker can
+      on the host, and `bash`/`python` run in the same container with
+      `execute_code` unlocked. Either leave it off and run one command, or turn
+      it on and lock `execute_code`
+      - [x] Scoped to an allowlist of container names — verified that
+            `chromadb`, `daedalus` and the neighbouring project's
+            `odysseus-searxng-1` are all refused, and that stopping Daedalus'
+            SearXNG left Odysseus' running
+      - [x] Stop, never remove: re-creating a container needs the image,
+            entrypoint, volume and network, which `docker-compose.yml` already
+            describes
+      - [x] Two things found by it failing: `available()` now means *usable*
+            rather than *configured* (the socket is root:docker 660 and the image
+            is uid 1000, so it can be present and unopenable), and
+            `group_add: ${DOCKER_GID:-999}` is what makes it readable. An EACCES
+            now names the variable to set
+- [ ] Two placeholders left: **Account** and **Users**. `Users` is the doubtful
+      one — there is one operator and they are the admin, which is the reasoning
+      that opened the tool policy by default. It probably follows Email and
+      Reminders out; left for now because removing it is a decision about
+      whether this ever grows a second user
+- [ ] MCP `resources` and `prompts` are not implemented — only `tools`. Nothing
+      in Daedalus has anywhere to put them yet, and a half-wired capability is
+      worse than an absent one
 - [ ] `bash` and `python` are contained, not sandboxed. On a machine that
       matters, unlock `execute_code` only with Daedalus running in its container,
       where the process is confined by a kernel rather than by a regular

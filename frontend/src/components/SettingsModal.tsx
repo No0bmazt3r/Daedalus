@@ -24,6 +24,8 @@ import { KnowledgeBasePanel } from './settings/KnowledgeBasePanel'
 import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
 import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
+import { IntegrationsPanel } from './settings/IntegrationsPanel'
+import { SystemPanel } from './settings/SystemPanel'
 import { AddedModelsView } from './forge/AddedModelsView'
 
 interface SettingsModalProps {
@@ -204,6 +206,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {activeTab === 'knowledge' && <KnowledgeBasePanel />}
             {activeTab === 'search' && <SearchPanel isPeek={isPeek} />}
             {activeTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
+            {activeTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
+            {activeTab === 'system' && <SystemPanel isPeek={isPeek} />}
 
             {activeTab === 'appearance' && (
               <div className="space-y-6 animate-in fade-in duration-200">

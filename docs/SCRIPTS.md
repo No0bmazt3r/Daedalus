@@ -108,6 +108,22 @@ Three implementation details that are easy to get wrong:
 | `image: daedalus:dev` | A dev build must not overwrite the `daedalus:latest` tag `start` serves |
 | An anonymous volume over `/app/node_modules` | Rollup, esbuild and Tailwind's oxide binary are compiled per platform; a Linux container loading host-built binaries fails in a way that reads as a Vite bug |
 
+#### Starting SearXNG
+
+`dev` and `start` both call `ensure_searxng` once the API is healthy. It asks
+`/api/search/config` which provider is selected and whether it is reachable, and
+starts the `with-search` container only when the answer is *SearXNG, and no*.
+
+This was deliberately absent at first, on the reasoning that a project whose
+first rule is "the runtime is offline" should not quietly start a search engine.
+That still holds for *quietly* — and stops holding once somebody has gone into
+Settings and chosen SearXNG. At that point not starting it ignores a stated
+choice, and the symptom is a Search panel that looks configured and fails on
+every query. Nothing starts for a provider nobody picked.
+
+The check is only trustworthy because `ready` now means **reachable** rather
+than **configured** — see the note in `services/web_search.py`.
+
 ### `dev --host`
 
 The older path, kept rather than deprecated: two processes on your machine,
@@ -368,7 +384,8 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 | `host_ollama_url` | `OLLAMA_BASE_URL` as seen *from the host*: rewrites `host.docker.internal`, leaves a real remote alone, and stays unset rather than becoming `""` |
 | `host_chroma_url` | `CHROMA_URL` as seen *from the host*: rewrites the compose service name `http://chromadb:8000` to `127.0.0.1:${CHROMA_PORT:-8001}`, the published port of the same container |
 | `ensure_chroma` | Start the `chromadb` container for `dev --host`, waiting for its heartbeat. Warns and continues when Docker is absent — a missing vector store must not block the rest of the stack |
-| `host_searxng_url` | Same mapping for the optional search container. There is deliberately no `ensure_searxng`: Track 1 cannot work without a vector store, so `dev` starts one, but nothing in Daedalus needs a search engine to run and a project whose first rule is "the runtime is offline" should not quietly start one |
+| `host_searxng_url` | Same mapping for the optional search container |
+| `ensure_searxng` | Start the search container — **only** when SearXNG is the selected provider and is not answering. Called after `wait_for_api`, because the selection lives in `prefs.db` and the API is what reads it |
 | `COMPOSE_FILES` | Extra `-f` arguments. `dev` sets it to layer `docker-compose.dev.yml`; everything else leaves it empty and gets the shipping stack |
 | `stack_running` | Is the app container up? |
 | `image_is_stale` | Is any source file newer than the last successful build? |

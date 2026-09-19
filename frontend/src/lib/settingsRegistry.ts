@@ -6,14 +6,12 @@
 // between the nav list and the search index.
 
 import {
-  Bell,
   Cpu,
   Database,
   Globe,
   Keyboard,
   Link as LinkIcon,
   List,
-  Mail,
   Palette,
   Plus,
   Search,
@@ -45,7 +43,6 @@ export interface SettingsPanel {
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
   { id: 'models', label: 'Models & AI' },
   { id: 'data', label: 'Data & Knowledge' },
-  { id: 'communications', label: 'Communications' },
   { id: 'experience', label: 'Experience' },
   { id: 'account', label: 'Account' },
   { id: 'administration', label: 'Administration', adminOnly: true },
@@ -102,19 +99,6 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   }),
 
   panel({
-    id: 'integrations', label: 'Integrations', group: 'communications', icon: LinkIcon,
-    keywords: ['integrations', 'connections', 'services', 'scada'],
-  }),
-  panel({
-    id: 'email', label: 'Email', group: 'communications', icon: Mail,
-    keywords: ['email', 'imap', 'smtp', 'notifications'],
-  }),
-  panel({
-    id: 'reminders', label: 'Reminders', group: 'communications', icon: Bell,
-    keywords: ['reminders', 'notifications', 'alerts', 'anomaly'],
-  }),
-
-  panel({
     id: 'appearance', label: 'Appearance', group: 'experience', icon: Palette, implemented: true,
     keywords: ['appearance', 'theme', 'colour', 'color', 'font', 'density', 'effects', 'peek'],
   }),
@@ -128,6 +112,17 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: ['account', 'profile', 'password', 'logout'],
   }),
 
+  // Integrations sits beside Agent Tools rather than in a group of its own: an
+  // MCP server is the external half of the tool layer, and the two screens are
+  // read together — one lists what can be called, the other what it can reach.
+  panel({
+    id: 'integrations', label: 'Integrations', group: 'administration', icon: LinkIcon,
+    adminOnly: true, implemented: true,
+    keywords: [
+      'integrations', 'connections', 'services', 'mcp', 'server', 'external',
+      'model context protocol', 'stdio', 'http', 'tools', 'pin', 'drift',
+    ],
+  }),
   panel({
     id: 'tools', label: 'Agent Tools', group: 'administration', icon: Wrench, adminOnly: true,
     implemented: true,
@@ -143,7 +138,12 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   }),
   panel({
     id: 'system', label: 'System', group: 'administration', icon: Settings2, adminOnly: true,
-    keywords: ['system', 'server', 'version', 'diagnostics', 'health'],
+    implemented: true,
+    keywords: [
+      'system', 'server', 'version', 'diagnostics', 'health', 'logs', 'terminal',
+      'console', 'backup', 'export', 'import', 'restore', 'danger', 'wipe',
+      'delete', 'reset', 'clear',
+    ],
   }),
 ]);
 

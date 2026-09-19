@@ -107,16 +107,20 @@ _FORBIDDEN_AT_RUNTIME: Final = frozenset({
 
 
 def _unlocked_effects() -> frozenset[Effect]:
-    """Effects an operator has deliberately permitted at runtime.
+    """Effects permitted at runtime — everything except what is locked.
 
     Read on every gate check rather than cached: an operator locking an effect
     expects the next call to be refused, not the next restart.
+
+    An unreadable policy is treated as fully locked. That is the one place this
+    module fails *closed* rather than open: if the database cannot be consulted,
+    the honest answer to "may this run?" is no.
     """
     from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
 
     try:
         return frozenset(Effect(e) for e in tool_policy_store.unlocked())
-    except Exception:  # noqa: BLE001 — an unreadable policy is a locked policy
+    except Exception:  # noqa: BLE001 — see above
         return frozenset()
 
 
@@ -218,28 +222,18 @@ def register(
     return decorate
 
 
-# The one thing the reference implementation has that this does not.
+# Nothing from the reference implementation is missing any more.
 #
-# This list has shrunk twice, and both times for the same reason: a capability
-# that is refused by the gate is a better record than a capability that was never
-# built. Everything that used to be here — the web tools, session writes,
-# configuration, execution, memory, model chaining, UI control — is implemented
-# in `agent_tools/extended` and governed by `tool_policy`, which ships open on a
-# single-operator console and can be closed in one click.
+# This list has shrunk three times, each time because a capability refused by the
+# gate is a better record than one that was never built. The last entry was MCP,
+# and `agent_tools/extended/mcp.py` now implements it — proxied through one tool
+# so that a server declaring its own capabilities at runtime still passes a gate
+# that knew about it beforehand.
 #
-# What is left is not withheld. There is genuinely nothing behind it.
-EXCLUDED: Final[tuple[dict[str, str], ...]] = (
-    {
-        "name": "manage_mcp / manage_webhooks / manage_tokens",
-        "category": "system",
-        "reason": (
-            "Daedalus has no MCP servers, no webhooks and no API tokens — the "
-            "subsystems these manage do not exist here. Nothing to expose rather than "
-            "something withheld, and the entry stays so that the difference is on the "
-            "record. If MCP is ever added, this is the line that becomes a tool."
-        ),
-    },
-)
+# Kept as an empty tuple rather than deleted. The panel renders it, and an
+# explicit "nothing" is a statement; a missing section is an absence somebody has
+# to interpret.
+EXCLUDED: Final[tuple[dict[str, str], ...]] = ()
 
 
 def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
@@ -274,9 +268,9 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
     from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
 
     try:
-        policy = tool_policy_store.unlocked()
+        closed = tool_policy_store.locked()
     except Exception:  # noqa: BLE001
-        policy = {}
+        closed = {}
 
     return {
         "surface": surface.value,
@@ -284,9 +278,10 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
         "tools": tools,
         "excluded": list(EXCLUDED),
         "forbidden_at_runtime": sorted(e.value for e in _FORBIDDEN_AT_RUNTIME),
-        # Stamped onto every catalogue response so a screenshot of this screen
-        # carries what the system was allowed to do at the time it was taken.
-        "unlocked": sorted(policy.values(), key=lambda p: p["effect"]),
+        # The locks, not the permissions — one fact, and every view derived from
+        # it. Stamped onto every catalogue response so a screenshot of this
+        # screen carries the state it was taken in.
+        "locked": sorted(closed.values(), key=lambda p: p["effect"]),
         "unlockable": list(tool_policy_store.UNLOCKABLE),
     }
 

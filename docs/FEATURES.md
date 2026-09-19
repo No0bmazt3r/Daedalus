@@ -98,6 +98,13 @@ to it.
 | `GET` | `/api/tools/policy` | Which normally-forbidden effects are unlocked, and the reason given |
 | `POST` | `/api/tools/policy/unlock` | Permit one forbidden effect at runtime. The reason is required |
 | `POST` | `/api/tools/policy/lock` | Take a permission back; with no effect named, locks everything |
+| `GET` | `/api/system/logs` | Tail the process log, filtered by level and substring |
+| `GET` | `/api/system/export` | Download a backup. **Never contains a credential** |
+| `POST` | `/api/system/import` | Restore one. Additive — nothing is deleted first |
+| `GET` | `/api/system/containers` | State of the optional side-car containers, and whether the socket is usable |
+| `POST` | `/api/system/containers/{name}/{action}` | Start or stop one managed container. Never create or remove |
+| `GET` | `/api/system/wipe` | The Danger Zone's categories and what each one costs |
+| `DELETE` | `/api/system/wipe/{kind}` | Empty one category, or `everything` |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 | `POST`/`DELETE` | `/api/system/seed-graph-traces` | Record real graph traversals into `rag_logs` so Blueprints' replay can be built before the orchestrator exists. **Dev only**; rows marked `vector_db_used='seed'` |
 
@@ -582,6 +589,20 @@ Three things about the bundled instance are measured rather than assumed:
 `SEARXNG_URL` is only a default. A URL saved in the panel wins, so pointing at
 an instance you already run stays a matter of typing an address.
 
+**Readiness means reachable.** `SEARXNG_URL` is set in the container's
+environment whether or not the `with-search` profile is running, so a check that
+only looked for a URL reported the provider *ready* while every search failed
+with a DNS error. The status probe now makes a 1.5-second request to the
+configured address, and an unreachable instance says so and names the command
+that starts it. A setup surface whose readiness light is wrong is worse than one
+with no light.
+
+That honest flag is what lets `daedalus.sh` do something useful with it:
+`ensure_searxng` starts the container after the API comes up, but only when
+SearXNG is the *selected* provider and is not answering. Choosing it in Settings
+is therefore enough — no flag to remember — while nothing starts for a provider
+nobody picked.
+
 Ported from the Odysseus Search tab, with three deliberate differences:
 
 | | Odysseus | Daedalus |
@@ -651,12 +672,21 @@ model-chaining and UI tools live in `agent_tools/extended/` and are governed by
 four effects — `network_egress`, `write`, `admin`, `execute_code` — which the
 runtime gate can refuse.
 
-**All four ship open.** Daedalus is a single-operator console and the operator
-is the admin; four confirmation clicks between them and their own tools protect
-nobody. The gate is still what decides, `tool_policy` is still the record, and
-**Lock all** returns the system to the fully-offline, read-only shape
-`PROJECT.md` §3 describes — which is what to do before recording a groundedness
-number intended to be cited.
+**All four ship open**, and the schema is what makes that true. `tool_locks`
+records what is **closed**, so an empty table means everything is permitted —
+the right default for a single-operator console where the operator is the admin.
+
+That inversion was a bug fix, not a preference. The first version stored the
+*unlocks* and a migration seeded four rows to open them, which works exactly
+once: *lock all* deletes the rows, a migration runs a single time, and the
+console silently reverts to fully-refused with no way back but re-unlocking by
+hand. A default that depends on a one-time seed is an initial condition. Storing
+the locks makes restoring the default a delete — idempotent, and impossible to
+get half-done.
+
+**Lock all** therefore returns the system to the fully-offline, read-only shape
+`PROJECT.md` §3 describes, which is what to do before recording a groundedness
+number intended to be cited, and `locked_at` is the evidence that it was done.
 
 What the machinery earns by existing anyway: the refusal path runs in production
 rather than only in a test; §3's configuration is one click away instead of a
@@ -696,10 +726,70 @@ unlocked — a model is only told about tools it can actually call.
 
 #### What is not implemented at all
 
-One entry left, and it is not a refusal: Daedalus has no MCP servers, no
-webhooks and no API tokens, so `manage_mcp` / `manage_webhooks` /
-`manage_tokens` have nothing behind them. The entry stays on the record so the
-difference between "withheld" and "absent" is visible.
+Nothing, now. The list has emptied three times over, most recently when MCP
+was implemented — see below. It is kept as an explicit empty rather than
+deleted, because a stated "nothing" is a claim and a missing section is an
+absence somebody has to interpret.
+
+### MCP — `services/mcp_client.py` · `services/mcp_servers.py`
+
+Daedalus can connect to external MCP servers, over **stdio** (a program it
+spawns) or **http** (JSON-RPC, including `text/event-stream` replies). The three
+methods used are `initialize`, `tools/list` and `tools/call`, written here rather
+than pulled from the SDK: `requirements.txt` justifies every line it holds, and
+three JSON-RPC calls over a pipe is not something a dependency would get more
+right. What *would* be got wrong is the process handling, so that is where the
+care went — scrubbed environment, own session so a timeout kills the group,
+stderr captured, banner lines on stdout tolerated.
+
+**One session per call.** No pooling: a call starts the server, handshakes,
+calls, and stops it. That costs a spawn and buys no state carried between calls,
+no orphan after a crash, and a failure always attributable to the call that
+caused it.
+
+#### Pinning, and why MCP would otherwise break two rules
+
+Every other tool here is declared in Python and reviewed in a diff. An MCP
+server declares its own tools at connect time and may declare different ones
+tomorrow — the point of the protocol, and in tension with §7.2 (deterministic
+and whitelisted) and §5 (both tracks frozen during the comparison).
+
+The resolution is a **snapshot**. `pin` writes the tool list down and hashes it
+(names and input schemas only — a reworded description is not a capability
+change). Every connection compares against it:
+
+| State | Behaviour |
+|---|---|
+| Not pinned | No tool on that server can be called at all |
+| Pinned, matching | Calls proceed |
+| Pinned, drifted | Reported by name — *"added delete_everything"* — and anything outside the snapshot is refused |
+
+Pinning is never automatic, including on first connect: a snapshot that followed
+whatever the server last said would be no snapshot.
+
+#### One proxy, not N registered tools
+
+The obvious design registers each discovered tool individually. That breaks the
+property the registry exists for — every tool declares its effects *before*
+dispatch, and a runtime-discovered tool has no reviewed declaration, so the
+effects would have to be guessed from a name.
+
+So there is one proxy, `mcp_call`, declaring the honest worst case:
+`network_egress` (an HTTP server), `execute_code` (a stdio server is a process
+this backend starts) and `write`. Locking **any** of those three in Agent Tools
+closes MCP entirely — a single switch for "no external tools", which is what a
+reproducible evaluation needs. `mcp_list_tools` finds the names; `mcp_list_servers`
+reads configuration without contacting anything.
+
+Adding a server is an operator action in **Settings → Integrations**, never a
+tool. A model able to write that row could name any executable on the machine —
+`execute_code` with none of its containment.
+
+Verified against a stdio server: handshake, pin, call, an unpinned server
+refused, a tool added after pinning caught as drift and refused by name, bad
+JSON arguments rejected, an unknown label listing what is configured, a disabled
+server refused, and locking `execute_code` closing all of it while
+`mcp_list_servers` still answers.
 
 Recorded in `registry.EXCLUDED` and rendered in the panel, because "we did not
 think of it" and "the rule forbids it" look identical in an empty list:
@@ -713,6 +803,115 @@ it), `manage_settings` / `manage_endpoints` (Rule 5), and `bash` / `python` /
 telemetry of record and deserve their own module and review; the registry
 already carries a `READ_SENSOR` effect so adding them is a registration rather
 than a redesign.
+
+### System maintenance — `services/app_logs.py` · `services/maintenance.py`
+
+Settings → System, in three cards, following the Odysseus panel of the same
+name. Every difference from it comes out of a rule this project already has.
+
+#### The process log
+
+Daedalus logged to stdout only, which in the container stack means `docker logs`
+and a second terminal. The same records now also go to a rotating file
+(`$DAEDALUS_LOG_DIR/daedalus.log`, 5 MB × 3) that the panel reads back. Both
+handlers, one logger — `./daedalus.sh logs` keeps working unchanged.
+
+The handler is attached to the **root** logger deliberately: uvicorn's records
+and any library's warnings are exactly what somebody opening a log viewer is
+looking for, and a log containing only what this project remembered to emit is
+the least useful kind.
+
+Two details the viewer depends on. The format is fixed and parseable, because a
+viewer that guesses at levels eventually colours an `ERROR` as `INFO`. And
+unparseable lines are *kept*, not dropped — a traceback is several lines that
+match no format and is the most useful thing in the file; they come back with a
+null level and render as a continuation of the line above.
+
+The tail seeks from the end rather than reading the file: 5 MB read in full to
+show 200 lines works on a laptop and stalls a panel on a machine that has been
+up a month. Filtering happens server-side, where Odysseus filters in the
+browser — fine for a click, wasteful for a three-second poll.
+
+#### Backup
+
+Preferences, the committed model and embedding choices, search and MCP
+configuration, the tool policy. **No credentials.** Odysseus exports everything
+it holds; here the benchmark keys, search provider keys and MCP headers are
+left out and recorded only as set/unset. A backup is the most copied and least
+guarded artefact a system produces — it gets emailed, committed by accident and
+left in a downloads folder, and that is the wrong place for an API key.
+
+Import is **additive**: nothing is deleted first, so "try importing this" is not
+an irreversible experiment. Chat transcripts are exported but not restored, and
+that is not an oversight — session ids are primary keys the store assigns, and
+re-inserting a transcript under a new id would leave audit rows pointing at an
+id that no longer exists. A broken trace is worse than an absent one.
+
+#### Starting SearXNG from the UI — and the socket it costs
+
+Settings → Search can start and stop the SearXNG container, **when a Docker
+socket is mounted into the backend**. It is off by default, and that default is
+a position rather than an oversight.
+
+A process that can reach the Docker socket can do anything Docker can do on the
+host: start a privileged container, mount `/`, read another project's volumes.
+Daedalus' own code is scoped hard — an allowlist of container names, checked
+before every call, so it will touch `daedalus-searxng` and nothing else (tested:
+`chromadb`, `daedalus` and a neighbouring project's `odysseus-searxng-1` are all
+refused). That limit binds *this module*. It binds nothing else on the other side
+of the socket — and `agent_tools/extended` runs `bash` and `python` in the same
+container with `execute_code` unlocked by default. Mounting the socket without
+locking `execute_code` hands an agent control of the host's Docker.
+
+So: leave it off and run one command, or turn it on and lock `execute_code`. The
+panel says so where the button would be.
+
+Two implementation notes, both found by it failing:
+
+- **`available()` means usable, not configured.** The socket is `root:docker`
+  mode 660 and the image runs as uid 1000, so the file can be present and
+  unopenable. The first version reported the feature available and failed on
+  every click; it now pings `/_ping` and an `EACCES` says to set `DOCKER_GID`.
+- **`group_add: ${DOCKER_GID:-999}`** in compose is what makes the mounted
+  socket readable. Harmless when nothing is mounted — the container belongs to
+  one more group that owns nothing.
+
+The container is **stopped, not removed**. Re-creating one needs the image,
+entrypoint, volume and network, all of which `docker-compose.yml` already
+describes; duplicating them here would make that file stop being the answer. A
+stopped container costs nothing and starts in under a second.
+
+Unset, the mount resolves to `/dev/null` — a file that exists and is not a
+socket — so the feature reports itself unavailable and nothing else changes.
+
+#### Danger zone
+
+Nine categories — chats, audit, vector, prefs, endpoints, search, MCP,
+workspace, logs — plus *everything*, which runs each in turn and reports
+per-category results rather than stopping at the first failure.
+
+Each row's button says **Delete**, not just a bin glyph: on the row that empties
+the evaluation evidence, the control should be a word. Confirmation is a themed
+`ConfirmDialog` rather than `window.confirm` — the browser's own dialog ignores
+the theme, cannot describe what is about to happen, and cannot ask for anything
+to be typed. The graver categories (the audit log, *everything*) keep the
+confirm button disabled until `DELETE` is typed: two clicks in a row can be
+muscle memory, typing a word cannot.
+
+**The sensor database is not a category and cannot be added as one.** Rule 2
+gives that file to the SCADA subsystem and this application opens it read-only;
+`reset.sh --sensor` is the one route, at a terminal, having typed the word.
+
+**The audit log is a category, with heavier copy.** It is the evidence §9.2's
+latency figures and the groundedness scoring are computed from. Clearing it is
+sometimes right — a development machine full of test traffic before a real
+run — and never casual.
+
+This does not duplicate `reset.sh`. The script wipes whole databases and re-runs
+migrations, from a terminal, snapshotting first and refusing while the stack is
+up; this empties tables in a running system. Different operations for different
+moments, and the script stays the one to reach for when the schema is the
+problem.
 
 ---
 

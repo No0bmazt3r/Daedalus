@@ -55,6 +55,9 @@ services:
       # is running one. Only a default: a URL saved in Settings → Search wins,
       # and with neither, SearXNG is simply unconfigured.
       SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+      # Where the Docker socket is *inside* this container, when one is mounted.
+      # Empty unless the mount below is real — see the volume's note.
+      DOCKER_SOCKET: ${DOCKER_SOCKET:+/var/run/docker.sock}
     volumes:
       # Sensor SQLite + documents. Mount the SCADA machine's real database
       # here (read-only at the driver level regardless).
@@ -66,11 +69,27 @@ services:
       - ./config:/config
       # UI preferences.
       - ./backend/data:/app/data
+      # Optional, and off by default. Setting DOCKER_SOCKET in .env to
+      # /var/run/docker.sock lets Settings → Search start and stop the SearXNG
+      # container from the UI. Unset, this mounts /dev/null, which is a file
+      # that exists and is not a socket, so the feature reports itself
+      # unavailable and nothing else changes.
+      #
+      # Read `services/containers.py` before turning it on. A process that can
+      # reach this socket can do anything Docker can do on this host, and the
+      # agent's `bash` tool runs in this same container.
+      - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
     depends_on:
       # service_started, not service_healthy: the dashboard and preference API
       # must boot even when the vector store is down, and vector_store.py
       # reports that as a status rather than failing. See the Databases panel.
       - chromadb
+    # The socket is root:docker mode 660 and this image runs as uid 1000, so a
+    # mounted socket is unopenable without membership of the host's docker
+    # group. Harmless when no socket is mounted — the container simply belongs
+    # to one more group that owns nothing.
+    group_add:
+      - "${DOCKER_GID:-999}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

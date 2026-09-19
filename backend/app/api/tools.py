@@ -77,41 +77,46 @@ def try_tool(
 
 @router.get("/policy")
 def get_policy() -> dict[str, Any]:
-    """Which normally-forbidden effects are unlocked, and the reason given."""
+    """Which effects are closed, and when. Empty is the default: all open."""
     return {
-        "unlocked": sorted(tool_policy_store.unlocked().values(), key=lambda p: p["effect"]),
+        "locked": sorted(tool_policy_store.locked().values(), key=lambda p: p["effect"]),
         "unlockable": list(tool_policy_store.UNLOCKABLE),
     }
 
 
-@router.post("/policy/unlock")
-def unlock_effect(
-    effect: str = Body(..., embed=True),
-    note: str = Body(..., embed=True),
+@router.post("/policy/lock")
+def lock_effect(
+    effect: str | None = Body(default=None, embed=True),
+    note: str | None = Body(default=None, embed=True),
 ) -> dict[str, Any]:
-    """Permit one forbidden effect on the runtime surface.
+    """Refuse one effect at runtime. With no effect named, locks everything.
 
-    The note is required by the store rather than by this handler, because the
-    reason is the part that makes the unlock reviewable six weeks later and a
-    validation living here could be bypassed by any other caller.
+    The "lock everything" path exists because that is the button somebody
+    reaches for before recording a result, and making them name four effects one
+    at a time is how one gets left open.
     """
     try:
-        tool_policy_store.unlock(effect, note)
+        if effect is None:
+            tool_policy_store.lock_all(note)
+        else:
+            tool_policy_store.lock(effect, note)
     except tool_policy_store.ToolPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return agent_tools.catalogue()
 
 
-@router.post("/policy/lock")
-def lock_effect(effect: str | None = Body(default=None, embed=True)) -> dict[str, Any]:
-    """Take a permission back. With no effect named, locks everything.
+@router.post("/policy/unlock")
+def unlock_effect(effect: str | None = Body(default=None, embed=True)) -> dict[str, Any]:
+    """Permit an effect again. With none named, restores the default.
 
-    The "lock everything" path exists because that is the button somebody
-    reaches for in a hurry, and making them name four effects one at a time is
-    how one gets left open.
+    Restoring the default is a delete, so it is idempotent — which is the whole
+    reason 006 stores locks rather than permissions.
     """
-    if effect is None:
-        tool_policy_store.lock_all()
-    else:
-        tool_policy_store.lock(effect)
+    try:
+        if effect is None:
+            tool_policy_store.unlock_all()
+        else:
+            tool_policy_store.unlock(effect)
+    except tool_policy_store.ToolPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return agent_tools.catalogue()

@@ -272,17 +272,55 @@ ensure_chroma() {
 # does not resolve on the host. docker-compose.yml publishes it on
 # 127.0.0.1:${SEARXNG_PORT:-8081}.
 #
-# No `ensure_searxng` to match `ensure_chroma`, and that is deliberate. Track 1
-# cannot work without a vector store, so `dev` starts one; nothing in Daedalus
-# needs a search engine to run, and a project whose first rule is "the runtime
-# is offline" should not quietly start one every time somebody runs the dev
-# servers. Start it when you want it: `./daedalus.sh start --with-search`.
+# `ensure_searxng` below starts it, but only when it has been selected as the
+# search provider — see the note there for why that is different from starting
+# one every time somebody runs the dev servers.
 host_searxng_url() {
   case "${SEARXNG_URL:-}" in
     "") return 0 ;;
     "http://searxng:8080") printf 'http://127.0.0.1:%s' "${SEARXNG_PORT:-8081}" ;;
     *) printf '%s' "$SEARXNG_URL" ;;
   esac
+}
+
+# ensure_searxng — start the search container, but only if it is the choice.
+#
+# There deliberately was no equivalent of `ensure_chroma`, on the reasoning that
+# a project whose first rule is "the runtime is offline" should not quietly
+# start a search engine. That reasoning still holds for *quietly*. It stops
+# holding once an operator has gone into Settings and selected SearXNG as their
+# provider: at that point refusing to start it is ignoring a stated choice, and
+# the symptom is a Search panel that looks configured and fails on every query.
+#
+# So this reads the selection back from the running API and acts on it. Nothing
+# starts for a provider nobody picked, and nothing starts when the instance is
+# already answering — the API's `ready` flag now means *reachable*, not merely
+# *configured*, which is what makes this check trustworthy.
+#
+# Requires the API to be up, so it is called after `wait_for_api`.
+ensure_searxng() {
+  local api="http://localhost:${1:-$PORT}"
+  local state
+  state="$(curl -fsS --max-time 5 "${api}/api/search/config" 2>/dev/null)" || return 0
+
+  # Exit 0 — "please start it" — only when SearXNG is selected and unreachable.
+  printf '%s' "$state" | python3 -c 'import json,sys; c=json.load(sys.stdin); sys.exit(0 if c.get("provider") == "searxng" and not c.get("ready") else 1)' 2>/dev/null || return 0
+
+  info "SearXNG is the selected search provider but is not answering — starting it"
+  if compose --profile with-search up -d searxng >/dev/null 2>&1; then
+    local url; url="$(host_searxng_url)"
+    for _ in $(seq 1 30); do
+      if curl -fsS --max-time 2 "${url}/" >/dev/null 2>&1; then
+        ok "searxng   ${url}"
+        return 0
+      fi
+      sleep 1
+    done
+    warn "searxng started but did not answer at ${url} within 30s."
+  else
+    warn "could not start searxng — web search will be unavailable."
+    warn "Everything else works: it is a setup surface, not the answer path."
+  fi
 }
 
 host_py() {

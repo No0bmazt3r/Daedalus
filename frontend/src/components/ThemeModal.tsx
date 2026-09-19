@@ -733,24 +733,6 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] theme-text-muted">Reactive</span>
-                    <span className="text-[10px] theme-text-muted">
-                      {slidersDisabled
-                        ? 'Pick an animated effect to enable'
-                        : 'Background responds to your cursor'}
-                    </span>
-                  </div>
-                  <Switch
-                    checked={state.reactive && !slidersDisabled}
-                    onChange={theme.setReactive}
-                    disabled={slidersDisabled}
-                    label="Background responds to the pointer"
-                    className={slidersDisabled ? 'cursor-not-allowed' : ''}
-                  />
-                </div>
-
                 {!slidersDisabled && (
                   <div className="flex gap-4 mt-3">
                     <Slider

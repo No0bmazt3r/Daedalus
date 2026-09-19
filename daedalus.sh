@@ -134,6 +134,7 @@ cmd_start() {
   if wait_for_api; then
     ok "dashboard   http://localhost:${PORT}"
     ok "API docs    http://localhost:${PORT}/docs"
+    ensure_searxng "$PORT"
     say ""
     say "  ${DIM}Logs:${RESET} ./daedalus.sh logs   ${DIM}Stop:${RESET} ./daedalus.sh stop"
     say ""
@@ -167,11 +168,23 @@ cmd_dev() {
   head_ "Starting dev stack"
   say "  ${DIM}source is bind-mounted; uvicorn and vite both reload in place${RESET}"
   say ""
-  compose "${PROFILE_ARGS[@]}" up -d --build daedalus chromadb >/dev/null 2>&1 \
-    || fail "could not start the backend — try: COMPOSE_FILES='-f docker-compose.yml -f docker-compose.dev.yml' docker compose up --build daedalus"
+  # Compose writes build progress *and* build errors to stderr, so it is held in
+  # a file rather than discarded: a quiet success, and the actual reason on a
+  # failure. Discarding it turned every cause — a TypeScript error, a missing
+  # file, no disk — into the same one-line message with nothing to act on.
+  local build_log
+  build_log="$(mktemp)"
+  if ! compose "${PROFILE_ARGS[@]}" up -d --build daedalus chromadb >/dev/null 2>"$build_log"; then
+    tail -40 "$build_log" >&2
+    rm -f "$build_log"
+    fail "could not start the backend — the build output above says why. To iterate on it: COMPOSE_FILES='-f docker-compose.yml -f docker-compose.dev.yml' docker compose up --build daedalus"
+  fi
+  rm -f "$build_log"
 
   if wait_for_api; then
     ok "backend   http://localhost:${BACKEND_PORT}"
+    # After the API is up: the selection lives in prefs.db and the API reads it.
+    ensure_searxng "$BACKEND_PORT"
   else
     err "the API did not become healthy in 60s. Recent logs:"
     compose logs --tail=40 daedalus >&2

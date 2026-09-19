@@ -40,6 +40,6 @@ confined by something that is not a regular expression.
 
 from __future__ import annotations
 
-from . import execute, orchestration, state, web, workspace  # noqa: F401 — registration
+from . import execute, mcp, orchestration, state, web, workspace  # noqa: F401 — registration
 
-__all__ = ["execute", "orchestration", "state", "web", "workspace"]
+__all__ = ["execute", "mcp", "orchestration", "state", "web", "workspace"]

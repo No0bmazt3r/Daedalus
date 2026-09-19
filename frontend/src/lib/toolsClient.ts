@@ -68,11 +68,11 @@ export interface ExcludedTool {
   reason: string;
 }
 
-/** One forbidden effect an operator has deliberately permitted, and why. */
-export interface UnlockedEffect {
+/** One effect an operator has deliberately closed, and when. */
+export interface LockedEffect {
   effect: ToolEffect;
-  unlocked_at: string;
-  note: string;
+  locked_at: string;
+  note: string | null;
 }
 
 export interface ToolCatalogue {
@@ -82,10 +82,12 @@ export interface ToolCatalogue {
   excluded: ExcludedTool[];
   forbidden_at_runtime: ToolEffect[];
   /**
-   * Effects currently open. Empty is the project's default, and is what a fresh
-   * install has — see `PROJECT.md` §3's Rule 1 and Rule 5.
+   * Effects currently closed. **Empty is the default** — everything open, which
+   * is the right shape for a single-operator console where the operator is the
+   * admin. The backend stores the locks rather than the permissions so that
+   * "restore the default" is a delete and cannot get half-done.
    */
-  unlocked: UnlockedEffect[];
+  locked: LockedEffect[];
   unlockable: ToolEffect[];
 }
 
@@ -103,21 +105,21 @@ export interface ToolResult {
 }
 
 /**
- * Permit one normally-forbidden effect at runtime.
+ * Refuse one effect at runtime. With none named, locks all four.
  *
- * The note is not optional and not decorative: it is what answers "was the agent
- * able to run shell commands when this benchmark was recorded?" months later,
- * and the backend refuses an unlock without one.
+ * Closing is the recorded event now that open is the default — `locked_at` and
+ * the optional note are what answer "was the agent able to run shell commands
+ * when this benchmark was taken?" months later.
  */
-export const unlockEffect = (effect: ToolEffect, note: string) =>
-  request<ToolCatalogue>('/api/tools/policy/unlock', {
+export const lockEffect = (effect?: ToolEffect, note?: string) =>
+  request<ToolCatalogue>('/api/tools/policy/lock', {
     method: 'POST',
-    body: JSON.stringify({ effect, note }),
+    body: JSON.stringify({ effect: effect ?? null, note: note ?? null }),
   });
 
-/** Take a permission back. With no effect named, locks everything. */
-export const lockEffect = (effect?: ToolEffect) =>
-  request<ToolCatalogue>('/api/tools/policy/lock', {
+/** Permit an effect again. With none named, restores the default (all open). */
+export const unlockEffect = (effect?: ToolEffect) =>
+  request<ToolCatalogue>('/api/tools/policy/unlock', {
     method: 'POST',
     body: JSON.stringify({ effect: effect ?? null }),
   });

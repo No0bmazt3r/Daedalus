@@ -194,6 +194,33 @@ def catalogue() -> list[dict[str, Any]]:
     ]
 
 
+# How long to wait when checking that a configured SearXNG is actually there.
+# Short: this runs while a settings panel renders, and an instance that needs
+# more than a second to answer a HEAD is not one a search will succeed against.
+_REACHABILITY_TIMEOUT: Final = 1.5
+
+
+def _reachable(base_url: str) -> tuple[bool, str]:
+    """Whether a SearXNG instance answers at all.
+
+    Added because "configured" and "working" were the same field, and they are
+    not the same thing. `SEARXNG_URL` is set in the container's environment
+    whether or not the `with-search` profile is running, so a panel that only
+    checked for a URL reported the provider **ready** while every search failed
+    with a DNS error. A setup surface whose readiness light is wrong is worse
+    than one with no light.
+    """
+    try:
+        response = _get(base_url, timeout=_REACHABILITY_TIMEOUT)
+    except httpx.ConnectError:
+        return False, f"nothing is listening at {base_url}"
+    except httpx.RequestError as exc:
+        return False, f"{base_url} did not answer ({exc.__class__.__name__})"
+    # Any HTTP answer means something is there; SearXNG's own quirks (a 403 from
+    # the limiter, a redirect) are the search path's problem, not reachability's.
+    return True, f"answering at {base_url} (HTTP {response.status_code})"
+
+
 def _configured(provider_id: str, row: dict[str, Any] | None) -> tuple[bool, str]:
     """Whether a provider could run, and what it is waiting for if not."""
     spec = _BY_ID.get(provider_id)
@@ -201,8 +228,17 @@ def _configured(provider_id: str, row: dict[str, Any] | None) -> tuple[bool, str
         return False, "unknown provider"
     if spec.needs_key and not (row and row["has_key"]):
         return False, f"needs {spec.key_label or 'an API key'}"
-    if spec.needs_url and not searxng_url((row or {}).get("base_url")):
-        return False, "needs the URL of a SearXNG instance"
+    if spec.needs_url:
+        base_url = searxng_url((row or {}).get("base_url"))
+        if not base_url:
+            return False, "needs the URL of a SearXNG instance"
+        alive, detail = _reachable(base_url)
+        if not alive:
+            return False, (
+                f"{detail} — start it with `./daedalus.sh dev --with-search` "
+                "(or `start --with-search`)"
+            )
+        return True, detail
     if spec.needs_engine_id and not (row and row["engine_id"]):
         return False, "needs a Programmable Search Engine id"
     return True, "ready"
@@ -270,7 +306,8 @@ def _result(title: str, url: str, snippet: str, age: str = "") -> dict[str, str]
 
 def _get(url: str, **kwargs: Any) -> httpx.Response:
     headers = {"User-Agent": USER_AGENT, **kwargs.pop("headers", {})}
-    return httpx.get(url, headers=headers, timeout=REQUEST_TIMEOUT, **kwargs)
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+    return httpx.get(url, headers=headers, **kwargs)
 
 
 def _post(url: str, **kwargs: Any) -> httpx.Response:
