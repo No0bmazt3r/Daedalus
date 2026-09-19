@@ -121,13 +121,31 @@ ensure_env() {
 }
 
 # load_env — export .env into this shell. Anything already exported wins, so
-# `DAEDALUS_PORT=9000 ./daedalus.sh dev` still works.
+# `DAEDALUS_PORT=9000 ./daedalus.sh start` still works.
+#
+# The "already exported wins" half needs the save/restore below and did not have
+# it. `set -a; . ./.env` is a plain assignment per line, and a plain assignment
+# always beats the environment — so `DAEDALUS_PORT=9000 ./daedalus.sh start`
+# silently published 8000 instead, and the only symptom was the app appearing on
+# the wrong port while the script printed the one you asked for.
 load_env() {
   [ -f .env ] || return 0
+  local preserved=() key
+  # Remember the values of any .env key that is already set in this environment.
+  while IFS='=' read -r key _; do
+    key="${key%%[[:space:]]*}"
+    case "$key" in ''|'#'*) continue ;; esac
+    [ -n "${!key+x}" ] && preserved+=("$key=${!key}")
+  done < .env
+
   set -a
   # shellcheck disable=SC1091
   . ./.env
   set +a
+
+  # …and put them back over whatever the file just wrote.
+  local kv
+  for kv in ${preserved[@]+"${preserved[@]}"}; do export "${kv?}"; done
 }
 
 # ── runtime state ────────────────────────────────────────────────────────────
@@ -208,10 +226,11 @@ host_chroma_url() {
   esac
 }
 
-# ensure_chroma — start just the vector store, for `dev`.
+# ensure_chroma — start just the vector store, for `dev --host`.
 #
-# `dev` deliberately runs the app without Docker, but ChromaDB is a server the
-# app talks to rather than part of the app, and there is no host equivalent
+# `dev --host` deliberately runs the app without Docker, but ChromaDB is a
+# server the app talks to rather than part of the app, and there is no host
+# equivalent
 # short of installing the full package. So the one container starts, and the
 # dev servers point at its published port.
 #

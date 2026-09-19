@@ -78,6 +78,9 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 # fails loudly rather than starting an empty container.
 #
 # `uvicorn --reload` needs watchfiles, which arrives with `uvicorn[standard]`.
+# NOTE: this is the last stage in the file, which makes it the *default* build
+# target. docker-compose.yml names `target: runtime` explicitly so that the
+# shipping image is never this one by accident.
 FROM runtime AS dev
 
 # Vite serves the UI in this mode, so FastAPI must not also serve a stale bundle

@@ -62,6 +62,25 @@ git clone <repo> && cd Daedalus
 
 Open **<http://localhost:8000>**.
 
+Two ways to run it, and both are containers:
+
+| | Command | What you get |
+|---|---|---|
+| **Run it** | `./daedalus.sh start` | One image serving the API and the built dashboard on **:8000** |
+| **Work on it** | `./daedalus.sh dev` | Same image, source bind-mounted, `uvicorn --reload` on **:8000** and Vite on **:5173** |
+
+`dev` is the one to use while editing — saving a file reloads the backend in
+place, and Vite hot-reloads the UI. Ctrl-C stops Vite; `./daedalus.sh stop`
+stops everything.
+
+Optional extras, off by default:
+
+```bash
+./daedalus.sh start --with-ollama    # run Ollama in a container too
+./daedalus.sh start --with-search    # run SearXNG, for sourcing corpus documents
+./daedalus.sh dev   --host           # dev the old way: two processes, no containers
+```
+
 `setup` is safe to re-run. It never overwrites your `.env` and never touches a
 database that already has data — re-running just tops up any settings added to
 `.env.example` since.
@@ -72,14 +91,18 @@ database that already has data — re-running just tops up any settings added to
 |---|---|
 | `./daedalus.sh setup` | One-time: verify prerequisites, install deps, create `.env`, make runtime dirs |
 | `./daedalus.sh start` | Build (if needed) and start the container stack |
-| `./daedalus.sh dev` | Hot-reload dev servers instead, no Docker. Ctrl-C stops both |
+| `./daedalus.sh dev` | Hot-reload dev stack in containers — source bind-mounted, uvicorn and Vite reload in place |
 | `./daedalus.sh stop` | Stop the stack |
 | `./daedalus.sh logs` | Follow logs |
 | `./daedalus.sh rebuild` | Force a clean image rebuild, then start |
 | `./daedalus.sh status` | What's running, plus health of all five databases |
 | `./daedalus.sh migrate` | Apply pending schema migrations (`status`, `check`, `backup`, `new`) |
 
-Add `--with-ollama` to `start` to run Ollama as a container instead of on the host.
+| Flag | On | Does |
+|---|---|---|
+| `--with-ollama` | `start`, `dev` | Run Ollama as a container instead of on the host |
+| `--with-search` | `start`, `dev` | Run SearXNG — a self-hosted search engine for finding corpus documents. Off by default: Rule 1 says the runtime is offline, so it is started while sourcing and stopped afterwards |
+| `--host` | `dev` | Run the two dev servers on your machine instead of in containers. Quickest way to attach a debugger |
 
 Two more scripts sit alongside it:
 
@@ -112,7 +135,7 @@ the path handling reaches all three scripts at once.
 |---|---|
 | **Docker** | The container stack. `setup` checks the daemon is reachable |
 | **Node 20+** and **pnpm** | Frontend. `setup` enables pnpm via corepack if missing |
-| **Python 3.11+** | Backend virtualenv for `dev` mode |
+| **Python 3.11+** | Only for `./daedalus.sh dev --host` and the `migrate`/`sync`/`reset` scripts. The container path does not need it |
 | **Ollama** *(optional)* | Model inference. The dashboard runs fine without it |
 
 Ollama runs on the **host** by default — GPU passthrough is far simpler there
@@ -243,6 +266,8 @@ plausible run offline. It refuses if data already exists.
 ├── Dockerfile           Multi-stage: builds frontend, served by backend
 ├── docker-compose.yml   App + ChromaDB (+ optional Ollama)
 ├── daedalus.sh          Entry point — setup, start, dev, migrate
+├── docker-compose.dev.yml  Dev overlay — bind-mounted source, hot reload
+├── config/searxng/      Settings template for the optional search container
 ├── sync.sh              Get a checkout working after a pull (safe)
 ├── reset.sh             Wipe and rebuild the databases (destructive)
 ├── ACKNOWLEDGMENTS.md   What this project borrowed, and from whom
@@ -283,11 +308,13 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Chat** | `POST /api/chat` resolves the committed model, replays conversation history, streams the answer from Ollama and logs the call. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged `chat_cloud` and kept out of every production figure |
 | **Accessible theming** | Every colour derives from the selected theme and is floored to WCAG AA: body, muted, accent-as-text, on-accent labels and the three status colours. All 16 shipped themes pass on every role, and custom themes run through the same derivation |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Databases panel reports health only |
+| **Web search** | Six providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper) with an ordered fallback chain, per-provider credentials and a live probe. A **setup** surface for sourcing corpus documents — SearXNG ships as an optional container tuned for technical literature |
+| **Agent tools** | 26 tools in five categories behind a dispatcher that checks declared effects, validates arguments and stamps result integrity before the function is entered. Every call writes a `tool_logs` row. Untrusted output is fenced with a per-call nonce before it reaches a prompt |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
 | **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |
 | **Data stores** | All five wired, containerised, health-reported, each with a versioned schema |
 | **Migrations** | Numbered SQL files, applied in a transaction at startup, with drift and gap detection |
-| **Deployment** | Single-image build + ChromaDB, one-command startup |
+| **Deployment** | Single-image build + ChromaDB, one-command startup, and a dev overlay that runs the same image with hot reload |
 
 ### Not built yet
 
@@ -363,17 +390,35 @@ Zone 4  Presentation ─ React dashboard                  ← this project
 ./daedalus.sh dev
 ```
 
-Runs uvicorn with `--reload` on :8000 and Vite on :5173 proxying `/api` to it.
-Ctrl-C stops both.
+Layers `docker-compose.dev.yml` over the base stack: the same image at its `dev`
+stage with `backend/app` bind-mounted read-only, `uvicorn --reload` watching it
+on :8000, and Vite in its own container on :5173 proxying `/api` across. Saving a
+file reloads the backend in place; the UI hot-reloads. Ctrl-C ends the Vite
+session and leaves the backend running — `./daedalus.sh stop` stops everything.
+
+**Why the container rather than your machine.** Every address in `.env` is
+written from the container's point of view — `http://chromadb:8000`,
+`http://searxng:8080` — and none of them resolve on the host, so the host path
+needs three helpers in `scripts/common.sh` whose only job is rewriting them back
+to published ports. In here they are simply the addresses, and `/data`, `/logs`
+and `/config` mean what they mean in the image that ships. It also puts the
+agent's `bash` and `python` tools behind a kernel boundary instead of a pattern
+denylist.
 
 <details>
-<summary>Driving the two servers yourself</summary>
+<summary>Running the dev servers on your machine instead</summary>
 
 ```bash
-# Terminal 1 — backend
-backend/.venv/bin/uvicorn app.main:app --reload --port 8000 --app-dir backend
+./daedalus.sh dev --host
+```
 
-# Terminal 2 — frontend
+Kept because a debugger attaches to a local process in one step, and a container
+that will not start should not stop you working. Needs `backend/.venv` and
+`frontend/node_modules`, both created by `setup`.
+
+```bash
+# Or drive the two yourself
+backend/.venv/bin/uvicorn app.main:app --reload --port 8000 --app-dir backend
 cd frontend && pnpm dev
 ```
 

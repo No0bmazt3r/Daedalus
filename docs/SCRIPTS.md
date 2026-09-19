@@ -6,6 +6,7 @@ Three entry points at the repo root, sharing one helper library:
 
 ```
 daedalus.sh    run it            setup · start · dev · stop · logs · rebuild · status · migrate
+               flags             --with-ollama · --with-search · --host (dev only)
 sync.sh        fix it            after a git pull — safe, re-runnable, destroys nothing
 reset.sh       start over        wipe and rebuild the databases — destructive
 scripts/
@@ -20,6 +21,8 @@ scripts/
 | Just pulled / switched branch | `./sync.sh` |
 | Want to see what a pull broke, without changing anything | `./sync.sh --check` |
 | Day-to-day development | `./daedalus.sh dev` |
+| Same, but you need a debugger attached | `./daedalus.sh dev --host` |
+| Sourcing documents for the corpus | `./daedalus.sh dev --with-search` |
 | Running it like production | `./daedalus.sh start` |
 | Added a migration | `./daedalus.sh migrate` |
 | Database is a mess | `./reset.sh` |
@@ -29,8 +32,13 @@ scripts/
 
 ## `daedalus.sh`
 
-The entry point. Every command loads `.env` (anything already exported wins),
-so `DAEDALUS_PORT=9000 ./daedalus.sh dev` works.
+The entry point. Every command loads `.env`, and anything already exported
+wins — so `DAEDALUS_PORT=9000 ./daedalus.sh start` publishes on 9000.
+
+> That override is newer than the sentence describing it. `load_env` used to run
+> `set -a; . ./.env`, and a plain assignment in a sourced file beats the
+> environment, so the variable you set on the command line was silently replaced
+> by the file's. It now records the pre-set values and restores them afterwards.
 
 ### `setup`
 
@@ -67,14 +75,50 @@ reuses it.
 
 ### `dev`
 
-Hot-reload development, no Docker. Two processes: `uvicorn --reload` on
-`BACKEND_PORT` (8000) and Vite on `FRONTEND_PORT` (5173), with Vite proxying
-`/api` to uvicorn. Ctrl-C stops both — the backend is killed by an `EXIT INT
-TERM` trap, so it cannot be orphaned.
+Hot-reload development **in containers**. Layers `docker-compose.dev.yml` over
+the base file and starts three services: `daedalus` at its `dev` stage with
+`backend/app` bind-mounted read-only and `uvicorn --reload` watching it on
+`BACKEND_PORT` (8000), `chromadb`, and `frontend` — a `node:24-slim` container
+running Vite on `FRONTEND_PORT` (5173), proxying `/api` across the compose
+network.
+
+Vite runs in the foreground, so Ctrl-C ends the session as it always has. The
+backend deliberately keeps running: it is a container now, `stop` owns its
+lifetime, and killing it on every UI restart would be a rebuild you did not ask
+for.
+
+**Why containers.** Every address in `.env` is written from the container's
+point of view — `http://chromadb:8000`, `http://searxng:8080`,
+`http://host.docker.internal:11434` — and none of them resolve on the host. The
+host path therefore carries `host_ollama_url`, `host_chroma_url` and
+`host_searxng_url`, three helpers whose entire job is rewriting those back to
+published ports. That machinery is correct, and it is a translation layer
+between two versions of reality. In the container they are simply the addresses,
+and `/data`, `/logs` and `/config` mean what they mean in the image that ships.
+
+It also puts the agent tool layer's `bash` and `python` behind a kernel boundary
+rather than a pattern denylist, which is what `agent_tools/extended` recommends
+for a machine that matters.
+
+Three implementation details that are easy to get wrong:
+
+| | Why |
+|---|---|
+| `ports: !override` | Compose merges `ports` by concatenation. Without the tag the dev service publishes `DAEDALUS_PORT` *and* `BACKEND_PORT` and fails on whichever is taken — which, when both are 8000, is itself |
+| `image: daedalus:dev` | A dev build must not overwrite the `daedalus:latest` tag `start` serves |
+| An anonymous volume over `/app/node_modules` | Rollup, esbuild and Tailwind's oxide binary are compiled per platform; a Linux container loading host-built binaries fails in a way that reads as a Vite bug |
+
+### `dev --host`
+
+The older path, kept rather than deprecated: two processes on your machine,
+`uvicorn --reload` and Vite, with the URL rewriting described above. A debugger
+attaches to a local process in one step, and a container that will not start is
+not a reason to be unable to work.
 
 Refuses to start if `backend/.venv` or `frontend/node_modules` is missing, and
 runs migrations first so a schema failure is reported before two dev servers
-start writing to the terminal.
+start writing to the terminal. Ctrl-C stops both — the backend is killed by an
+`EXIT INT TERM` trap, so it cannot be orphaned.
 
 **It also starts the `chromadb` container.** ChromaDB is a server the app talks
 to rather than part of the app, and there is no host equivalent short of
@@ -323,7 +367,9 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 | `check_ollama` | Warn, never fail — only inference needs it. Tries to start it, and offers to install it when interactive |
 | `host_ollama_url` | `OLLAMA_BASE_URL` as seen *from the host*: rewrites `host.docker.internal`, leaves a real remote alone, and stays unset rather than becoming `""` |
 | `host_chroma_url` | `CHROMA_URL` as seen *from the host*: rewrites the compose service name `http://chromadb:8000` to `127.0.0.1:${CHROMA_PORT:-8001}`, the published port of the same container |
-| `ensure_chroma` | Start the `chromadb` container for `dev`, waiting for its heartbeat. Warns and continues when Docker is absent — a missing vector store must not block the rest of the stack |
+| `ensure_chroma` | Start the `chromadb` container for `dev --host`, waiting for its heartbeat. Warns and continues when Docker is absent — a missing vector store must not block the rest of the stack |
+| `host_searxng_url` | Same mapping for the optional search container. There is deliberately no `ensure_searxng`: Track 1 cannot work without a vector store, so `dev` starts one, but nothing in Daedalus needs a search engine to run and a project whose first rule is "the runtime is offline" should not quietly start one |
+| `COMPOSE_FILES` | Extra `-f` arguments. `dev` sets it to layer `docker-compose.dev.yml`; everything else leaves it empty and gets the shipping stack |
 | `stack_running` | Is the app container up? |
 | `image_is_stale` | Is any source file newer than the last successful build? |
 | `mark_build` | Touch `.daedalus-build-stamp` after a successful build |

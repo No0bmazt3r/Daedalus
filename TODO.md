@@ -882,6 +882,17 @@ Layer 9 below for the per-step detail.
       - [x] Verified: container healthy, `/app/data/prefs.db` (container paths,
             not remapped host ones), `chromadb:8000` and `searxng:8080` resolve
             unmapped, and a `touch` on a backend file restarts uvicorn in place
+      - [x] **Two bugs the end-to-end check caught, both mine:**
+            `docker-compose.yml` did not name a build target, and a Dockerfile's
+            default target is its *last* stage — so adding `dev` at the bottom
+            made `./daedalus.sh start` build the development image, which points
+            `DAEDALUS_STATIC_DIR` away from the bundle. The API worked and the
+            dashboard 404'd. `target: runtime` is now explicit
+      - [x] `load_env` claimed "anything already exported wins" and did the
+            opposite: `set -a; . ./.env` is a plain assignment per line, which
+            beats the environment. `DAEDALUS_PORT=9000 ./daedalus.sh start`
+            silently published 8000. It now saves the pre-set values and
+            restores them over the file's
 - [ ] Settings panels other than Add Models, Added Models, Hardware, Databases,
       Knowledge Base, Search, Agent Tools, Appearance and Shortcuts are still
       placeholders

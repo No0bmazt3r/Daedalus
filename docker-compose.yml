@@ -19,6 +19,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Named explicitly. A Dockerfile's default target is its *last* stage, so
+      # adding the `dev` stage at the bottom silently made `docker compose up`
+      # build the development image — which sets DAEDALUS_STATIC_DIR away from
+      # the bundle and serves a working API with no dashboard behind it.
+      target: runtime
     image: daedalus:latest
     pull_policy: build
     container_name: daedalus

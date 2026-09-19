@@ -1070,6 +1070,11 @@ Three details worth knowing:
   fails on whichever is taken — which, when both are 8000, is itself.
 - **`image: daedalus:dev`.** The shipping tag is not reused, or
   `./daedalus.sh start` ends up serving an image built for development.
+- **`target: runtime`, named explicitly in the base file.** A Dockerfile's
+  default build target is its *last* stage, so adding `dev` at the bottom made
+  `docker compose up` build the development image — an API that worked and a
+  dashboard that 404'd, because the dev stage points `DAEDALUS_STATIC_DIR` away
+  from the bundle.
 - **An anonymous volume over `/app/node_modules`.** Rollup, esbuild and
   Tailwind's oxide binary are compiled per platform, and a Linux container
   loading host-built binaries fails in a way that reads as a Vite bug.
