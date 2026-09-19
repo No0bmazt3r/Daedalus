@@ -1,0 +1,38 @@
+# GPU passthrough — layered on when the host has an NVIDIA GPU.
+#
+#   ./daedalus.sh dev            auto: on when `nvidia-smi` lists a GPU here
+#   ./daedalus.sh dev --gpu      insist, and fail loudly if Docker cannot
+#   ./daedalus.sh dev --no-gpu   never
+#
+# ## Why it is a separate file
+#
+# `gpus: all` is not a preference, it is a requirement: Docker refuses to create
+# the container at all when no NVIDIA device driver is available. Putting it in
+# the base file would mean this project only starts on a machine with a GPU,
+# which is the opposite of what the base file is for. An overlay is added on the
+# machines it is true of and absent on the rest.
+#
+# ## What it fixes
+#
+# Without it the container sees no `/dev/dxg`, no `/usr/lib/wsl/lib` and no
+# `nvidia-smi`, so `services/hardware.py` correctly reports no GPU — and
+# Settings → Hardware reads as broken detection on a laptop whose GPU is sitting
+# right there. Worse, the Forge sizes models against 0 bytes of VRAM, which is
+# the wrong answer rather than a missing one.
+#
+# Under WSL2 there is nothing to install: Docker Desktop injects the driver
+# libraries and `nvidia-smi` from the Windows host. On a native Linux host this
+# needs the NVIDIA Container Toolkit.
+#
+# Ollama still runs on the host by default, and this changes nothing about that.
+# It is the *detection* that was wrong: the panel is describing the machine the
+# backend is running in, and a container that cannot see the GPU cannot describe
+# one honestly.
+services:
+  daedalus:
+    gpus: all
+
+  # Only exists under `--profile with-ollama`, and this is the whole reason
+  # somebody would run that profile on a GPU machine.
+  ollama:
+    gpus: all

@@ -15,6 +15,8 @@
 #   --with-search            run SearXNG as a container too (corpus sourcing only)
 #   --host                   dev only: run the two servers on the host, not in
 #                            containers (faster to attach a debugger to)
+#   --gpu / --no-gpu         force GPU passthrough on or off. The default is
+#                            auto: on when this host has an NVIDIA GPU
 #
 # Related scripts:
 #   ./sync.sh                after a git pull: deps, .env, migrations  (safe)
@@ -52,6 +54,8 @@ CMD="${1:-start}"
 PROFILE_ARGS=()
 MIGRATE_ARGS=()
 DEV_ON_HOST=0
+# auto | on | off. Auto asks the host once, in `gpu_overlay`.
+GPU_MODE=auto
 
 # `migrate` forwards its arguments to the Python CLI, which owns their meaning
 # (including its own --help). Every other command accepts only known flags.
@@ -63,11 +67,76 @@ else
       --with-ollama) PROFILE_ARGS+=(--profile with-ollama) ;;
       --with-search) PROFILE_ARGS+=(--profile with-search) ;;
       --host)        DEV_ON_HOST=1 ;;
+      --gpu)         GPU_MODE=on ;;
+      --no-gpu)      GPU_MODE=off ;;
       -h|--help)     usage; exit 0 ;;
       *) err "unknown option '$arg' (try --help)"; exit 1 ;;
     esac
   done
 fi
+
+# ── GPU passthrough ──────────────────────────────────────────────────────────
+# A container cannot see the host's GPU unless it is asked for, and asking for
+# one that is not there is a hard failure to create the container. So: added
+# when the host says it has one, forced with --gpu, skipped with --no-gpu.
+#
+# The detection is `nvidia-smi -L` rather than a probe container, because it is
+# the same question with none of the cost, and being wrong about it is handled —
+# `compose_up` retries without the overlay when Docker rejects the device.
+gpu_overlay() {
+  case "$GPU_MODE" in
+    off) return 1 ;;
+    on)  printf -- '-f docker-compose.gpu.yml'; return 0 ;;
+  esac
+  if have nvidia-smi && nvidia-smi -L 2>/dev/null | grep -q '^GPU '; then
+    printf -- '-f docker-compose.gpu.yml'
+    return 0
+  fi
+  return 1
+}
+
+# `compose up`, with two things the bare call does not do: the GPU overlay is
+# dropped rather than fatal when Docker will not honour it, and a failing build
+# says why.
+#
+# COMPOSE_UP_QUIET=1 buffers the output instead of streaming it. `dev` wants
+# that — build progress is noise on a run that usually rebuilds nothing — and
+# `start`/`rebuild` do not, because a first build takes minutes and silence for
+# minutes reads as a hang. Either way the output is captured, because compose
+# writes build *errors* to the same stream as build progress: discarding it
+# turned every cause (a TypeScript error, a missing file, no disk) into one
+# message with nothing to act on.
+_compose_up_once() {
+  local log="$1"; shift
+  if [ "${COMPOSE_UP_QUIET:-0}" = "1" ]; then
+    compose "${PROFILE_ARGS[@]}" up "$@" >/dev/null 2>"$log"
+    return $?
+  fi
+  compose "${PROFILE_ARGS[@]}" up "$@" 2>&1 | tee "$log"
+  return "${PIPESTATUS[0]}"
+}
+
+compose_up() {
+  local log rc
+  log="$(mktemp)"
+  _compose_up_once "$log" "$@"
+  rc=$?
+  # Only when the overlay was this script's idea. `--gpu` is somebody stating a
+  # requirement, and quietly starting without it would be answering a different
+  # question than the one they asked.
+  if [ $rc -ne 0 ] && [ -n "${GPU_FILES:-}" ] && [ "$GPU_MODE" != "on" ] \
+     && grep -qiE 'nvidia|could not select device driver|gpu' "$log"; then
+    warn "this host advertises a GPU but Docker will not pass it through — continuing without it"
+    say "  ${DIM}install the NVIDIA Container Toolkit, or pass --no-gpu to stop asking${RESET}"
+    GPU_FILES=""
+    export COMPOSE_FILES="$BASE_COMPOSE_FILES"
+    _compose_up_once "$log" "$@"
+    rc=$?
+  fi
+  [ $rc -eq 0 ] || [ "${COMPOSE_UP_QUIET:-0}" != "1" ] || tail -40 "$log" >&2
+  rm -f "$log"
+  return $rc
+}
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
@@ -126,8 +195,11 @@ cmd_start() {
   ensure_env
   ensure_dirs
   [ ${#PROFILE_ARGS[@]} -gt 0 ] || check_ollama
+  BASE_COMPOSE_FILES="${COMPOSE_FILES:--f docker-compose.yml}"
+  GPU_FILES="$(gpu_overlay || true)"
+  export COMPOSE_FILES="$BASE_COMPOSE_FILES${GPU_FILES:+ $GPU_FILES}"
   head_ "Starting Daedalus"
-  compose "${PROFILE_ARGS[@]}" up -d "$@"
+  compose_up -d "$@" || fail "the stack did not start — the output above says why"
   # Record that a build happened, so the staleness check in sync.sh knows the
   # source has been through a build even when Docker served it from cache.
   mark_build
@@ -164,22 +236,18 @@ cmd_dev() {
   ensure_dirs
   check_ollama
 
-  export COMPOSE_FILES="-f docker-compose.yml -f docker-compose.dev.yml"
+  BASE_COMPOSE_FILES="-f docker-compose.yml -f docker-compose.dev.yml"
+  GPU_FILES="$(gpu_overlay || true)"
+  export COMPOSE_FILES="$BASE_COMPOSE_FILES${GPU_FILES:+ $GPU_FILES}"
+
   head_ "Starting dev stack"
   say "  ${DIM}source is bind-mounted; uvicorn and vite both reload in place${RESET}"
+  [ -n "$GPU_FILES" ] \
+    && say "  ${DIM}GPU passed through — Settings → Hardware describes the real card${RESET}" \
+    || say "  ${DIM}no GPU passthrough; hardware detection will say so rather than report none${RESET}"
   say ""
-  # Compose writes build progress *and* build errors to stderr, so it is held in
-  # a file rather than discarded: a quiet success, and the actual reason on a
-  # failure. Discarding it turned every cause — a TypeScript error, a missing
-  # file, no disk — into the same one-line message with nothing to act on.
-  local build_log
-  build_log="$(mktemp)"
-  if ! compose "${PROFILE_ARGS[@]}" up -d --build daedalus chromadb >/dev/null 2>"$build_log"; then
-    tail -40 "$build_log" >&2
-    rm -f "$build_log"
-    fail "could not start the backend — the build output above says why. To iterate on it: COMPOSE_FILES='-f docker-compose.yml -f docker-compose.dev.yml' docker compose up --build daedalus"
-  fi
-  rm -f "$build_log"
+  COMPOSE_UP_QUIET=1 compose_up -d --build daedalus chromadb \
+    || fail "could not start the backend — the build output above says why. To iterate on it: COMPOSE_FILES='$COMPOSE_FILES' docker compose \$COMPOSE_FILES up --build daedalus"
 
   if wait_for_api; then
     ok "backend   http://localhost:${BACKEND_PORT}"

@@ -6,7 +6,7 @@ Three entry points at the repo root, sharing one helper library:
 
 ```
 daedalus.sh    run it            setup · start · dev · stop · logs · rebuild · status · migrate
-               flags             --with-ollama · --with-search · --host (dev only)
+               flags             --with-ollama · --with-search · --host (dev only) · --gpu / --no-gpu
 sync.sh        fix it            after a git pull — safe, re-runnable, destroys nothing
 reset.sh       start over        wipe and rebuild the databases — destructive
 scripts/
@@ -179,7 +179,21 @@ runs `up`. `./daedalus.sh migrate --help` reaches the CLI's own help.
 | Flag | Applies to | Effect |
 |---|---|---|
 | `--with-ollama` | `start`, `stop`, `logs`, `rebuild` | Run Ollama as a container instead of using the host |
+| `--gpu` / `--no-gpu` | `start`, `dev`, `rebuild` | Force GPU passthrough on or off. Default: on when `nvidia-smi` lists a GPU on this host |
 | `-h`, `--help` | any | Usage |
+
+**GPU passthrough** layers `docker-compose.gpu.yml`, which is a separate file
+because `gpus: all` is a requirement rather than a preference — Docker refuses to
+create the container at all where no NVIDIA driver is available, so putting it in
+the base file would mean the project only starts on machines that have one.
+
+It is detection this fixes, not inference: Ollama still runs on the host by
+default. Without it the container sees no driver, `services/hardware.py` reports
+no GPU — correctly, for the container — and Settings → Hardware reads as broken
+detection on a laptop with the card sitting right there, while the Forge sizes
+models against zero VRAM. With `--gpu` the passthrough is a requirement and a
+failure is fatal; on the automatic path the overlay is dropped with a warning
+and the stack comes up without it.
 
 `migrate` is exempt from flag parsing — its arguments belong to the Python CLI.
 

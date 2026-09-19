@@ -62,11 +62,14 @@ _SCALES = ("100", "125")
     citable=False,
     params=(
         Param("action", str, "What to do.", required=True, enum=("remember", "recall", "forget")),
-        Param("content", str, "The fact, for `remember`.", default=None, max_length=1000),
+        Param("content", str, "The fact, for `remember`.", default=None, max_length=1000,
+              example="The operator prefers readings in °C."),
         Param("kind", str, "What sort of memory.", default="fact", enum=_MEMORY_KINDS),
         Param("session_id", str, "Scope it to one conversation.", default=None, max_length=100),
-        Param("query", str, "Substring to match, for `recall`.", default=None, max_length=200),
-        Param("memory_id", str, "Which memory, for `forget`.", default=None, max_length=100),
+        Param("query", str, "Substring to match, for `recall`.", default=None, max_length=200,
+              example="operator"),
+        Param("memory_id", str, "Which memory, for `forget` — an id from `recall`.",
+              default=None, max_length=100),
     ),
 )
 def manage_memory(

@@ -43,6 +43,13 @@ export interface ToolParam {
   enum: string[] | null;
   minimum: number | null;
   maximum: number | null;
+  /**
+   * A value that actually works, written as the string you would type. Null
+   * where no literal is honest — a `session_id` has to come from
+   * `list_sessions` first, and a made-up one would only teach a value that
+   * cannot work.
+   */
+  example: string | null;
 }
 
 export interface AgentTool {
@@ -56,8 +63,14 @@ export interface AgentTool {
   available: boolean;
   /** Registered but not usable yet, e.g. waiting on M2's ingestion. */
   blocked_by: string | null;
-  /** Why the surface refused it — the Rule 1 / Rule 5 gate, in words. */
+  /** Why it may not run — the effect gate, or the per-tool switch below. */
   refused_because: string | null;
+  /**
+   * Switched off by hand. Its own field, not something to read out of
+   * `refused_because`: "I turned this off" and "the gate refuses this" are
+   * different sentences, and only the first one has a switch to flip back.
+   */
+  disabled: boolean;
   params: ToolParam[];
 }
 
@@ -66,6 +79,13 @@ export interface ExcludedTool {
   name: string;
   category: string;
   reason: string;
+}
+
+/** One tool an operator has switched off, and when. */
+export interface DisabledTool {
+  tool: string;
+  disabled_at: string;
+  note: string | null;
 }
 
 /** One effect an operator has deliberately closed, and when. */
@@ -89,6 +109,12 @@ export interface ToolCatalogue {
    */
   locked: LockedEffect[];
   unlockable: ToolEffect[];
+  /**
+   * Tools taken off the list the model is offered. A different axis from
+   * `locked`: that one is what this machine is permitted to do, this one is
+   * which tools the model should be choosing between. Empty is the default.
+   */
+  disabled: DisabledTool[];
 }
 
 /** What a dispatched tool hands back. Never the raw value — see `citable`. */
@@ -122,6 +148,27 @@ export const unlockEffect = (effect?: ToolEffect) =>
   request<ToolCatalogue>('/api/tools/policy/unlock', {
     method: 'POST',
     body: JSON.stringify({ effect: effect ?? null }),
+  });
+
+/**
+ * Stop offering one tool: out of the model's schema list, and refused if it asks
+ * for it anyway from a name it remembers.
+ *
+ * Not the same thing as locking an effect. Closing `network_egress` to quiet one
+ * tool also closes the three that share it, and switching one tool off says
+ * nothing about the safety envelope a recorded result is cited under.
+ */
+export const disableTool = (tool: string, note?: string) =>
+  request<ToolCatalogue>('/api/tools/policy/disable', {
+    method: 'POST',
+    body: JSON.stringify({ tool, note: note ?? null }),
+  });
+
+/** Offer it again. With no name, turns every switched-off tool back on. */
+export const enableTool = (tool?: string) =>
+  request<ToolCatalogue>('/api/tools/policy/enable', {
+    method: 'POST',
+    body: JSON.stringify({ tool: tool ?? null }),
   });
 
 export const fetchToolCatalogue = (surface = 'runtime') =>

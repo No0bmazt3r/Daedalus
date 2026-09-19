@@ -51,8 +51,10 @@ _TIMEOUT = 120.0
     integrity=Integrity.CORPUS,
     citable=False,
     params=(
-        Param("model", str, "The local model tag, e.g. qwen3:1.7b.", required=True, max_length=120),
-        Param("prompt", str, "What to ask it.", required=True, max_length=8000),
+        Param("model", str, "The local model tag, e.g. qwen3:1.7b.", required=True, max_length=120,
+              example="qwen3:1.7b"),
+        Param("prompt", str, "What to ask it.", required=True, max_length=8000,
+              example="Say hello in one sentence."),
         Param("max_tokens", int, "Cap on the reply length.",
               default=256, minimum=1, maximum=_MAX_TOKENS),
     ),
@@ -120,6 +122,7 @@ def chat_with_model(model: str, prompt: str, max_tokens: int) -> dict[str, Any]:
     effects=set(),
     params=(
         Param("steps", list, "Steps as `tool_name` or `tool_name {\"arg\": \"value\"}`.",
+              example="get_current_time, knowledge_status",
               required=True),
     ),
 )

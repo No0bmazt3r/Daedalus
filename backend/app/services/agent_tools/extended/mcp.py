@@ -99,7 +99,8 @@ def mcp_list_servers() -> dict[str, Any]:
     integrity=Integrity.CORPUS,
     citable=False,
     params=(
-        Param("server", str, "The server's label.", required=True, max_length=120),
+        Param("server", str, "The server's label, as `mcp_list_servers` reports it.",
+              required=True, max_length=120),
     ),
 )
 def mcp_list_tools(server: str) -> dict[str, Any]:
@@ -144,7 +145,8 @@ def mcp_list_tools(server: str) -> dict[str, Any]:
     integrity=Integrity.CORPUS,
     citable=False,
     params=(
-        Param("server", str, "The server's label.", required=True, max_length=120),
+        Param("server", str, "The server's label, as `mcp_list_servers` reports it.",
+              required=True, max_length=120),
         Param("tool", str, "The tool to call, as `mcp_list_tools` named it.",
               required=True, max_length=200),
         Param("arguments", str, "Its arguments, as a JSON object.",

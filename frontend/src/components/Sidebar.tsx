@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, PanelLeftClose, Search, Circle, Settings, LogOut, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
 import { Skeleton } from './ui/skeleton'
 import {
   DropdownMenu,
@@ -158,8 +158,10 @@ function DataStores({
   }, [])
 
   return (
-    <div className="mb-6">
-      <div className="flex items-center justify-between px-2 mb-1">
+    // Its own scroll region, sized by the sidebar. The heading stays put so an
+    // expanded store scrolls *under* its own label rather than pushing it away.
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="flex items-center justify-between px-2 mb-1 shrink-0">
         <span className="text-[11px] font-medium theme-text-muted">Data stores</span>
       </div>
 
@@ -177,6 +179,7 @@ function DataStores({
         </div>
       )}
 
+      <ScrollArea className="flex-1 min-h-0" hideScrollbar>
       <div className="flex flex-col gap-0.5">
         {stores?.map((store) => {
           const isOpen = !!open[store.store]
@@ -240,6 +243,7 @@ function DataStores({
           )
         })}
       </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -283,9 +287,10 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
         </Button>
       </div>
 
-      <ScrollArea className="flex-1" viewportClassName="px-3">
-        {/* Core Modules (Top Navigation) */}
-        <div className="flex flex-col gap-0.5 mb-6">
+      {/* The three core modules never scroll — three rows that are always there.
+          Scrolling is for the two lists below, and each does its own. */}
+      <div className="px-3 shrink-0">
+        <div className="flex flex-col gap-0.5 mb-4">
           {/* The three core modules — designed in docs/MODULES.md. Two are
               built; Ariadne's Thread carries a dot and says so rather than
               being a button that silently does nothing. */}
@@ -310,11 +315,23 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             </Button>
           ))}
         </div>
+      </div>
 
+      {/* Two lists, two scroll regions, one shared column of space.
+          `min-h-0` on every flex parent down to each viewport is what makes them
+          scroll rather than grow: a flex item's min-height is `auto`, so `flex-1`
+          alone is only a *preferred* height and tall content overrides it — which
+          is how expanding a data store used to push the account row off-screen,
+          where the shell's `overflow-hidden` clipped it.
+
+          Chats take what is left; the stores cap at 45% and shrink to their
+          content below that, so a collapsed list costs nothing and an expanded one
+          cannot eat the chat list. */}
+      <div className="flex-1 min-h-0 flex flex-col px-3 gap-3">
         {/* Chats and tasks */}
-        <div className="mb-6">
+        <div className="flex-1 min-h-0 flex flex-col">
           <div
-            className="flex items-center justify-between px-2 mb-1 group cursor-pointer"
+            className="flex items-center justify-between px-2 mb-1 group cursor-pointer shrink-0"
             onClick={() => setSearching((v) => !v)}
           >
             <span className="text-[11px] font-medium theme-text-muted">Chats and tasks</span>
@@ -328,10 +345,11 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               onChange={(e) => setFilter(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') { setFilter(''); setSearching(false) } }}
               placeholder="Filter chats…"
-              className="w-full h-8 px-2 mb-1 text-sm rounded-md theme-card border theme-border theme-text outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-50"
+              className="w-full h-8 px-2 mb-1 text-sm rounded-md theme-card border theme-border theme-text outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-50 shrink-0"
             />
           )}
 
+          <ScrollArea className="flex-1 min-h-0" hideScrollbar>
           <div className="flex flex-col gap-0.5">
             {/* Incognito chats are deliberately absent from this list — that is
                 what makes them incognito — so the current one is shown here as
@@ -377,10 +395,15 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               />
             ))}
           </div>
+          </ScrollArea>
         </div>
 
-        <DataStores onOpenStore={onOpenStore} activeStore={activeStore} />
-      </ScrollArea>
+        {/* Separated by a rule, because two lists that scroll independently need
+            to look like two things rather than one list with a gap in it. */}
+        <div className="min-h-0 max-h-[45%] flex flex-col border-t theme-border pt-3 pb-1">
+          <DataStores onOpenStore={onOpenStore} activeStore={activeStore} />
+        </div>
+      </div>
 
       {/* Bottom Section */}
       <div className="p-3 border-t theme-border mt-auto flex flex-col gap-1">
@@ -401,10 +424,6 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onOpenSettings} className="py-2.5 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md">
               <Settings size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Settings</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="theme-border my-1 border-b" />
-            <DropdownMenuItem className="py-2.5 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md">
-              <LogOut size={16} className="mr-3 theme-text-muted" /> <span className="font-medium text-sm">Sign out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

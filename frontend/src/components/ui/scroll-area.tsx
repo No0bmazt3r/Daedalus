@@ -13,13 +13,23 @@ import { cn } from "cn"
  * and rendered with its left edge sliced off.
  *
  * Padding belongs on the Viewport, which is what this forwards.
+ *
+ * `hideScrollbar` drops the scrollbar and keeps the scrolling — wheel, trackpad,
+ * touch, and keyboard once something inside has focus. It is for the places
+ * where the track is the only thing wide enough to notice in a narrow column,
+ * like the sidebar's two lists. Everywhere else, leave it: a scrollbar is how
+ * somebody knows there is more, and hiding it is a trade, not an improvement.
  */
 function ScrollArea({
   className,
   viewportClassName,
+  hideScrollbar = false,
   children,
   ...props
-}: ScrollAreaPrimitive.Root.Props & { viewportClassName?: string }) {
+}: ScrollAreaPrimitive.Root.Props & {
+  viewportClassName?: string
+  hideScrollbar?: boolean
+}) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
@@ -35,7 +45,7 @@ function ScrollArea({
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      {!hideScrollbar && <ScrollBar />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )

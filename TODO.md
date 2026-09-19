@@ -991,11 +991,11 @@ Layer 9 below for the per-step detail.
             is uid 1000, so it can be present and unopenable), and
             `group_add: ${DOCKER_GID:-999}` is what makes it readable. An EACCES
             now names the variable to set
-- [ ] Two placeholders left: **Account** and **Users**. `Users` is the doubtful
-      one — there is one operator and they are the admin, which is the reasoning
-      that opened the tool policy by default. It probably follows Email and
-      Reminders out; left for now because removing it is a decision about
-      whether this ever grows a second user
+- [x] Both placeholders removed: **Account** and **Users**, and the sidebar's
+      dead `Sign out` item with them. There is one operator, they are the admin,
+      and there is nothing to sign out of — the same reasoning that opened the
+      tool policy by default. Settings has no unimplemented panels left; the
+      `account` group went with its only member
 - [ ] MCP `resources` and `prompts` are not implemented — only `tools`. Nothing
       in Daedalus has anywhere to put them yet, and a half-wired capability is
       worse than an absent one

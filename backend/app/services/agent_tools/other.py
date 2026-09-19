@@ -70,7 +70,8 @@ def get_current_time() -> dict[str, Any]:
     ),
     effects={Effect.USER_INTERACTION},
     params=(
-        Param("question", str, "The single question to ask.", required=True, max_length=300),
+        Param("question", str, "The single question to ask.", required=True, max_length=300,
+              example="Which reactor unit do you mean?"),
         Param("options", list, "Up to five suggested answers, if there is a short list.",
               default=None),
     ),

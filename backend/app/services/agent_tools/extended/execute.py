@@ -160,7 +160,8 @@ def _run(argv: list[str], *, timeout: int) -> dict[str, Any]:
     effects={Effect.EXECUTE_CODE},
     integrity=Integrity.CORPUS,
     params=(
-        Param("command", str, "The command to run.", required=True, max_length=2000),
+        Param("command", str, "The command to run.", required=True, max_length=2000,
+              example="ls -la"),
         Param("timeout", int, "Seconds before it is killed.",
               default=_DEFAULT_TIMEOUT, minimum=1, maximum=_MAX_TIMEOUT),
     ),
@@ -197,7 +198,8 @@ def bash(command: str, timeout: int) -> dict[str, Any]:
     effects={Effect.EXECUTE_CODE},
     integrity=Integrity.CORPUS,
     params=(
-        Param("code", str, "The script to run.", required=True, max_length=8000),
+        Param("code", str, "The script to run.", required=True, max_length=8000,
+              example="print(2 + 2)"),
         Param("timeout", int, "Seconds before it is killed.",
               default=_DEFAULT_TIMEOUT, minimum=1, maximum=_MAX_TIMEOUT),
     ),
@@ -237,8 +239,10 @@ def python(code: str, timeout: int) -> dict[str, Any]:
     ),
     effects={Effect.WRITE},
     params=(
-        Param("path", str, "Path relative to the workspace.", required=True, max_length=300),
-        Param("content", str, "What to write.", required=True, max_length=_MAX_FILE_BYTES),
+        Param("path", str, "Path relative to the workspace.", required=True, max_length=300,
+              example="notes/trial.txt"),
+        Param("content", str, "What to write.", required=True, max_length=_MAX_FILE_BYTES,
+              example="written from a tool trial"),
         Param("append", bool, "Append instead of replacing.", default=False),
     ),
 )

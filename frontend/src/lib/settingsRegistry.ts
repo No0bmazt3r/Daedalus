@@ -16,8 +16,6 @@ import {
   Plus,
   Search,
   Settings2,
-  User,
-  Users,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -44,7 +42,6 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
   { id: 'models', label: 'Models & AI' },
   { id: 'data', label: 'Data & Knowledge' },
   { id: 'experience', label: 'Experience' },
-  { id: 'account', label: 'Account' },
   { id: 'administration', label: 'Administration', adminOnly: true },
 ]);
 
@@ -107,11 +104,6 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: ['shortcuts', 'keyboard', 'hotkeys', 'incognito', 'toggles'],
   }),
 
-  panel({
-    id: 'account', label: 'Account', group: 'account', icon: User,
-    keywords: ['account', 'profile', 'password', 'logout'],
-  }),
-
   // Integrations sits beside Agent Tools rather than in a group of its own: an
   // MCP server is the external half of the tool layer, and the two screens are
   // read together — one lists what can be called, the other what it can reach.
@@ -131,10 +123,6 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
       'effects', 'citable', 'evidence', 'graph', 'traverse', 'corpus', 'session',
       'clock', 'ask', 'permissions', 'gate',
     ],
-  }),
-  panel({
-    id: 'users', label: 'Users', group: 'administration', icon: Users, adminOnly: true,
-    keywords: ['users', 'accounts', 'roles', 'admin'],
   }),
   panel({
     id: 'system', label: 'System', group: 'administration', icon: Settings2, adminOnly: true,

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Check, ChevronDown, Loader2, Play, ShieldCheck, X,
+  AlertTriangle, Check, ChevronDown, Loader2, Play, ShieldCheck, Wand2, X,
 } from 'lucide-react'
 import { Skeleton } from '../ui/skeleton'
+import { Switch } from '../ui/switch'
 import {
+  disableTool,
+  enableTool,
   fetchToolCatalogue,
   lockEffect,
   tryTool,
@@ -33,6 +36,24 @@ import {
  * may touch, and whether its result may be cited. The reasoning lives in
  * `services/agent_tools/registry.py` and `docs/FEATURES.md`, where it can be
  * read once rather than on every visit.
+ *
+ * ## Two switches, on purpose
+ *
+ * The capability chips answer "what is this machine permitted to do while a
+ * result is being recorded". The per-tool switch answers "which tools should
+ * the model be choosing between". They are not interchangeable: closing
+ * `network_egress` to quiet one tool also closes the three that share the
+ * effect, and hiding one tool says nothing about the safety envelope. A
+ * switched-off tool leaves the schema list the model is given and is refused if
+ * it asks by name anyway.
+ *
+ * ## Nothing here needs testing
+ *
+ * Expanding a row offers a trial run. It is inspection, not setup — no state is
+ * recorded, nothing gates on it, and the orchestrator never takes that path. It
+ * exists so a reader can see what a tool actually returns instead of trusting a
+ * table. The copy says so, because a list of 29 rows each with a Run button
+ * reads as a checklist somebody is expected to work through.
  *
  * ## The one claim it must not get wrong
  *
@@ -150,11 +171,57 @@ function Capabilities({ catalogue, onChange }: {
   )
 }
 
-function ToolRow({ tool }: { tool: AgentTool }) {
+function ToolRow({ tool, onChange }: {
+  tool: AgentTool
+  onChange: (next: ToolCatalogue) => void
+}) {
   const [open, setOpen] = useState(false)
   const [args, setArgs] = useState<Record<string, string>>({})
   const [running, setRunning] = useState(false)
+  const [switching, setSwitching] = useState(false)
   const [result, setResult] = useState<ToolResult | null>(null)
+
+  // Declared alongside each parameter on the backend, so an example is a value
+  // the validator actually accepts rather than a line of prose about one.
+  const examples = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const p of tool.params) {
+      // A required enum needs no example to *read* — the placeholder prints the
+      // permitted set — but it does need one to fill, or the trial it produces
+      // fails validation on a parameter the panel was already showing you.
+      const filler = p.example ?? (p.required && p.enum?.length ? p.enum[0] : null)
+      if (filler) out[p.name] = filler
+    }
+    return out
+  }, [tool.params])
+  const hasExamples = Object.keys(examples).length > 0
+
+  // A trial that only reads is filled in for you; one that changes something
+  // makes you ask for it. Both are one click from running — the difference is
+  // whether the click that *opened* a row is also the one that loaded a command
+  // into `bash`.
+  const changesSomething = tool.effects.some(
+    (e) => e === 'write' || e === 'admin' || e === 'execute_code' || e === 'network_egress'
+  )
+
+  const toggleOpen = useCallback(() => {
+    const next = !open
+    setOpen(next)
+    if (next && hasExamples && !changesSomething && Object.keys(args).length === 0) {
+      setArgs(examples)
+    }
+  }, [open, args, examples, hasExamples, changesSomething])
+
+  const toggleEnabled = useCallback(async () => {
+    setSwitching(true)
+    try {
+      onChange(tool.disabled
+        ? await enableTool(tool.name)
+        : await disableTool(tool.name, 'Switched off from Settings → Agent Tools'))
+    } finally {
+      setSwitching(false)
+    }
+  }, [onChange, tool.disabled, tool.name])
 
   const run = useCallback(async () => {
     setRunning(true)
@@ -186,9 +253,12 @@ function ToolRow({ tool }: { tool: AgentTool }) {
 
   return (
     <div className="border-b theme-border last:border-b-0">
+      <div className="flex items-center gap-2">
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 py-1.5 text-left hover:opacity-80 transition-opacity"
+        onClick={toggleOpen}
+        className={`flex-1 min-w-0 flex items-center gap-2 py-1.5 text-left hover:opacity-80 transition-opacity ${
+          tool.disabled ? 'opacity-45' : ''
+        }`}
       >
         <ChevronDown
           size={12}
@@ -206,12 +276,28 @@ function ToolRow({ tool }: { tool: AgentTool }) {
             {e.replace('read_', '')}
           </Badge>
         ))}
-        {!tool.available && (
+        {!tool.available && !tool.disabled && (
           <Badge tone="status-bad" title={tool.refused_because ?? tool.blocked_by ?? ''}>
             off
           </Badge>
         )}
       </button>
+      <div
+        className="shrink-0 scale-[0.72] origin-right"
+        title={
+          tool.disabled
+            ? `${tool.name} is OFF: not offered to the model, and refused if it asks anyway.`
+            : `${tool.name} is ON: in the model's tool list. Turning it off does not change what it may touch — that is the capability row above.`
+        }
+      >
+        <Switch
+          checked={!tool.disabled}
+          onChange={() => void toggleEnabled()}
+          disabled={switching}
+          label={`${tool.name} — on or off`}
+        />
+      </div>
+      </div>
 
       {open && (
         <div className="pb-3 pl-6 space-y-2">
@@ -227,21 +313,37 @@ function ToolRow({ tool }: { tool: AgentTool }) {
               value={args[p.name] ?? ''}
               onChange={(e) => setArgs((a) => ({ ...a, [p.name]: e.target.value }))}
               placeholder={
-                `${p.name}${p.required ? '*' : ''} · ${p.enum ? p.enum.join(' | ') : p.type}`
+                `${p.name}${p.required ? '*' : ''} · ${
+                  p.enum ? p.enum.join(' | ') : p.example ? `e.g. ${p.example}` : p.type
+                }`
               }
               title={p.description}
               className="w-full px-2.5 py-1.5 rounded-lg border theme-border theme-surface-strong theme-text text-xs outline-none placeholder:opacity-40"
             />
           ))}
 
-          <button
-            onClick={run}
-            disabled={running || !tool.available}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border theme-border text-[11px] theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
-          >
-            {running ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
-            Run
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={run}
+              disabled={running || !tool.available}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border theme-border text-[11px] theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
+            >
+              {running ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+              Try it
+            </button>
+            {hasExamples && (
+              <button
+                onClick={() => setArgs(examples)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border theme-border text-[11px] theme-text-muted hover:theme-text transition-colors"
+              >
+                <Wand2 size={11} />
+                Use example
+              </button>
+            )}
+            <span className="text-[10px] theme-text-muted">
+              optional — runs once now and is logged as a trial. Nothing here needs testing.
+            </span>
+          </div>
 
           {result && (
             <div
@@ -295,6 +397,19 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
     [catalogue],
   )
 
+  // One line, and only when it is true. A permanent "0 tools are off" is the
+  // same decoration as the standing warning this panel already dropped.
+  const switchedOff = catalogue?.disabled ?? []
+
+  // Collapsed while nothing is locked, which is the default and the boring
+  // answer — the summary line already states it. Open when something *is*
+  // refused, because that is the state somebody needs to see without hunting
+  // for it, and it cannot be the initial `useState` value: the catalogue
+  // arrives after the first render. An explicit click outranks both.
+  const [capsOpenChoice, setCapsOpenChoice] = useState<boolean | null>(null)
+  const capsOpen = capsOpenChoice ?? refusedNow.length > 0
+  const setCapsOpen = (next: boolean) => setCapsOpenChoice(next)
+
   const card = `p-4 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
   if (error) {
@@ -321,19 +436,44 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
           {catalogue.tools.length} tools. Each declares what it may touch and whether its
           result can be cited; dispatch checks that before the call and logs every one.
         </p>
+        {switchedOff.length > 0 && (
+          <p className="flex items-center gap-2 text-xs theme-text-muted mt-1.5">
+            {switchedOff.length} switched off — not offered to the model.
+            <button
+              onClick={async () => setCatalogue(await enableTool())}
+              className="underline underline-offset-2 hover:theme-text transition-colors"
+            >
+              turn all back on
+            </button>
+          </p>
+        )}
       </div>
 
       <div className={card}>
-        <div className="flex items-center gap-2 mb-2">
+        <button
+          onClick={() => setCapsOpen(!capsOpen)}
+          aria-expanded={capsOpen}
+          className="w-full flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+        >
           <ShieldCheck size={13} className="theme-accent shrink-0" />
-          <span className="text-xs theme-text">Extended capabilities</span>
-          <span className="text-[11px] theme-text-muted">
+          <span className="text-xs theme-text shrink-0">Extended capabilities</span>
+          <span className="text-[11px] theme-text-muted truncate flex-1">
             {refusedNow.length === 0
               ? 'all on — nothing is refused at runtime'
               : `${refusedNow.length} off · tools needing ${refusedNow.join(', ')} are refused`}
           </span>
-        </div>
-        <Capabilities catalogue={catalogue} onChange={setCatalogue} />
+          <ChevronDown
+            size={12}
+            className={`shrink-0 theme-text-muted transition-transform ${
+              capsOpen ? 'rotate-180' : '-rotate-90'
+            }`}
+          />
+        </button>
+        {capsOpen && (
+          <div className="mt-3">
+            <Capabilities catalogue={catalogue} onChange={setCatalogue} />
+          </div>
+        )}
       </div>
 
       {catalogue.categories.map((category) => {
@@ -347,7 +487,7 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
             </div>
             <div className="rounded-xl border theme-border px-3">
               {tools.map((tool) => (
-                <ToolRow key={tool.name} tool={tool} />
+                <ToolRow key={tool.name} tool={tool} onChange={setCatalogue} />
               ))}
             </div>
           </div>

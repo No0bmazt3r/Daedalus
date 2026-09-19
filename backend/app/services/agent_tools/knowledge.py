@@ -35,7 +35,8 @@ from .registry import Effect, Integrity, Param, ToolError, register
     ),
     effects={Effect.READ_GRAPH},
     params=(
-        Param("entity", str, "The name or alias to look up.", required=True, max_length=200),
+        Param("entity", str, "The name or alias to look up.", required=True, max_length=200,
+              example="temperature"),
         Param(
             "entity_type", str, "Restrict to one node type.",
             default=None, enum=tuple(knowledge_graph.NODE_TYPES),
@@ -59,10 +60,16 @@ def graph_lookup(entity: str, entity_type: str | None) -> dict[str, Any]:
     ),
     effects={Effect.READ_GRAPH},
     params=(
-        Param("start_node_ids", list, "Node ids to start from.", required=True),
+        Param("start_node_ids", list, "Node ids to start from.", required=True,
+              example="Sensor:temp_c"),
         Param(
             "relationship", str, "The edge type to follow.",
             required=True, enum=tuple(knowledge_graph.EDGE_TYPES),
+            # An enum does not normally need an example — the panel prints the
+            # permitted set. This one does, because the first edge type is not
+            # the one that returns something from the example start node, and a
+            # filled-in trial that comes back empty reads as a broken tool.
+            example="HAS_THRESHOLD",
         ),
         Param("max_hops", int, "How far to walk.", default=1, minimum=1, maximum=4),
         Param(

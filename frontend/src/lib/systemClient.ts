@@ -120,7 +120,18 @@ export interface HostMachine {
 }
 
 export interface HardwareProfile {
-  host: { platform: string | null; release: string | null; python: string; wsl: boolean };
+  host: {
+    platform: string | null;
+    release: string | null;
+    python: string;
+    wsl: boolean;
+    /**
+     * True when the backend is in a container, which is what every figure below
+     * is describing: a cgroup's CPU allowance, and no GPU at all unless one was
+     * passed through. Named in the Platform stat for that reason.
+     */
+    container: boolean;
+  };
   cpu: {
     model: string | null;
     arch: string | null;

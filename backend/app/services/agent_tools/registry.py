@@ -124,6 +124,25 @@ def _unlocked_effects() -> frozenset[Effect]:
         return frozenset()
 
 
+def _disabled_tools() -> frozenset[str]:
+    """Tools an operator has switched off, by name. Empty by default.
+
+    A different question from `_unlocked_effects`, and answered differently when
+    the database will not open: that one fails *closed*, because "may this reach
+    the network?" has no safe optimistic answer. This one fails *open*. It is a
+    preference about which tools the model is offered, not a permission — the
+    effect gate still runs either way — and letting a transient read error
+    silently retire the whole tool layer is a worse outcome than offering a tool
+    somebody had hidden.
+    """
+    from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
+
+    try:
+        return frozenset(tool_policy_store.disabled())
+    except Exception:  # noqa: BLE001 — see above
+        return frozenset()
+
+
 class ToolError(RuntimeError):
     """A tool could not run, with a reason meant to be read by a model."""
 
@@ -156,6 +175,19 @@ class Param:
     minimum: int | None = None
     maximum: int | None = None
     max_length: int | None = None
+    # A value that actually works, for the trial run in Settings → Agent Tools.
+    #
+    # Always written as the string somebody would type, whatever the parameter's
+    # type, because that is what the panel puts in the input and what the
+    # validator then converts — an example that does not survive that round trip
+    # is not an example of anything. Left None where no literal is honest: a
+    # `session_id` has to come from `list_sessions` first, and inventing one
+    # would teach the reader a value that cannot work.
+    #
+    # Enums and defaults do not need one. The panel already shows the permitted
+    # set and the default in the placeholder, and a second copy here is a second
+    # thing to keep true.
+    example: str | None = None
 
 
 @dataclass(frozen=True)
@@ -238,9 +270,18 @@ EXCLUDED: Final[tuple[dict[str, str], ...]] = ()
 
 def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
     """Every tool, grouped, with what it may do and whether it can do it yet."""
+    from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
+
+    try:
+        closed = tool_policy_store.locked()
+        switched_off = tool_policy_store.disabled()
+    except Exception:  # noqa: BLE001 — a panel that cannot read the policy still renders
+        closed, switched_off = {}, {}
+    off = frozenset(switched_off)
+
     tools = []
     for tool in sorted(_REGISTRY.values(), key=lambda t: (t.category, t.name)):
-        refusal = _surface_refusal(tool, surface)
+        refusal = _refusal(tool, surface, switched_off=off)
         tools.append({
             "name": tool.name,
             "category": tool.category,
@@ -249,6 +290,10 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
             "integrity": tool.integrity.value,
             "citable": tool.citable,
             "available": refusal is None and tool.blocked_by is None,
+            # Its own field rather than something to infer from `refused_because`:
+            # "I turned this off" and "the gate refuses this" are different
+            # sentences, and the panel offers a switch for exactly one of them.
+            "disabled": tool.name in off,
             "blocked_by": tool.blocked_by,
             "refused_because": refusal,
             "params": [
@@ -261,17 +306,11 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
                     "enum": list(p.enum) if p.enum else None,
                     "minimum": p.minimum,
                     "maximum": p.maximum,
+                    "example": p.example,
                 }
                 for p in tool.params
             ],
         })
-    from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
-
-    try:
-        closed = tool_policy_store.locked()
-    except Exception:  # noqa: BLE001
-        closed = {}
-
     return {
         "surface": surface.value,
         "categories": [{"id": c, "description": d} for c, d in CATEGORIES],
@@ -283,6 +322,7 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
         # screen carries the state it was taken in.
         "locked": sorted(closed.values(), key=lambda p: p["effect"]),
         "unlockable": list(tool_policy_store.UNLOCKABLE),
+        "disabled": sorted(switched_off.values(), key=lambda t: t["tool"]),
     }
 
 
@@ -298,8 +338,9 @@ def schemas(*, surface: Surface = Surface.RUNTIME) -> list[dict[str, Any]]:
     produce a refusal, and teaches it that the tool list is negotiable.
     """
     out = []
+    off = _disabled_tools()
     for tool in sorted(_REGISTRY.values(), key=lambda t: t.name):
-        if tool.blocked_by or _surface_refusal(tool, surface):
+        if tool.blocked_by or _refusal(tool, surface, switched_off=off):
             continue
         properties: dict[str, Any] = {}
         required: list[str] = []
@@ -335,6 +376,20 @@ def get(name: str) -> Tool:
     if tool is None:
         raise ToolNotFound(f"no tool named {name!r}; available: {', '.join(sorted(_REGISTRY))}")
     return tool
+
+
+def _refusal(tool: Tool, surface: Surface, *, switched_off: frozenset[str] | None = None) -> str | None:
+    """Why this tool may not run, or None — the whole answer, both axes.
+
+    Order matters for the message, not the verdict: a tool that is both switched
+    off and effect-refused reads better as "you turned this off" than as a rule
+    the operator did not break. `switched_off` is passed in by callers that
+    check every tool at once, so a catalogue is one read rather than thirty.
+    """
+    off = _disabled_tools() if switched_off is None else switched_off
+    if tool.name in off:
+        return f"{tool.name} is switched off in Settings → Agent Tools."
+    return _surface_refusal(tool, surface)
 
 
 def _surface_refusal(tool: Tool, surface: Surface) -> str | None:
@@ -425,7 +480,9 @@ def call(
     tool = get(name)
     started = time.perf_counter()
 
-    refusal = _surface_refusal(tool, surface)
+    # Both axes, because a model that learned a tool name from an earlier turn
+    # can still ask for it after it has been taken off the list.
+    refusal = _refusal(tool, surface)
     if refusal:
         return _envelope(tool, ok=False, detail=refusal, started=started,
                          query_id=query_id, status="refused")

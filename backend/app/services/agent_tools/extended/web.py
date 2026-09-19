@@ -112,7 +112,8 @@ class _TextExtractor(HTMLParser):
     effects={Effect.NETWORK_EGRESS},
     integrity=Integrity.CORPUS,
     params=(
-        Param("query", str, "What to search for.", required=True, max_length=300),
+        Param("query", str, "What to search for.", required=True, max_length=300,
+              example="small modular reactor coolant pump vibration"),
         Param("count", int, "How many results.", default=5, minimum=1, maximum=10),
     ),
 )
@@ -150,7 +151,8 @@ def web_search_tool(query: str, count: int) -> dict[str, Any]:
     effects={Effect.NETWORK_EGRESS},
     integrity=Integrity.CORPUS,
     params=(
-        Param("url", str, "An http or https URL.", required=True, max_length=2000),
+        Param("url", str, "An http or https URL.", required=True, max_length=2000,
+              example="https://example.com"),
     ),
 )
 def web_fetch(url: str) -> dict[str, Any]:

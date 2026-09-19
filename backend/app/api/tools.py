@@ -77,10 +77,11 @@ def try_tool(
 
 @router.get("/policy")
 def get_policy() -> dict[str, Any]:
-    """Which effects are closed, and when. Empty is the default: all open."""
+    """What is closed and what is switched off. Empty is the default for both."""
     return {
         "locked": sorted(tool_policy_store.locked().values(), key=lambda p: p["effect"]),
         "unlockable": list(tool_policy_store.UNLOCKABLE),
+        "disabled": sorted(tool_policy_store.disabled().values(), key=lambda t: t["tool"]),
     }
 
 
@@ -117,6 +118,51 @@ def unlock_effect(effect: str | None = Body(default=None, embed=True)) -> dict[s
             tool_policy_store.unlock_all()
         else:
             tool_policy_store.unlock(effect)
+    except tool_policy_store.ToolPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return agent_tools.catalogue()
+
+
+@router.post("/policy/disable")
+def disable_tool(
+    tool: str = Body(embed=True),
+    note: str | None = Body(default=None, embed=True),
+) -> dict[str, Any]:
+    """Stop offering one tool: out of the model's schema list, refused at dispatch.
+
+    A different axis from lock/unlock above, which is why it is a different pair
+    of routes. Locking `network_egress` is a claim about what this machine may
+    do while a result is recorded; switching off `web_fetch` is an opinion about
+    which tools the model should be choosing between. Collapsing them would mean
+    hiding one noisy tool also took the other three that share its effect.
+
+    The name is resolved against the registry first, so a typo is a 404 here
+    rather than a row that quietly disables nothing.
+    """
+    try:
+        agent_tools.get(tool)
+    except agent_tools.ToolNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        tool_policy_store.disable(tool, note)
+    except tool_policy_store.ToolPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return agent_tools.catalogue()
+
+
+@router.post("/policy/enable")
+def enable_tool(tool: str | None = Body(default=None, embed=True)) -> dict[str, Any]:
+    """Offer a tool again. With none named, restores the default — all of them.
+
+    No registry check on the way back: enabling is a delete, and refusing to
+    clear the row for a tool that has since been renamed would leave a setting
+    nobody can reach. Unknown names simply delete nothing.
+    """
+    try:
+        if tool is None:
+            tool_policy_store.enable_all()
+        else:
+            tool_policy_store.enable(tool)
     except tool_policy_store.ToolPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return agent_tools.catalogue()

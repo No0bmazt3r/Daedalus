@@ -87,7 +87,8 @@ def list_sessions(limit: int) -> dict[str, Any]:
     integrity=Integrity.TRANSCRIPT,
     citable=False,
     params=(
-        Param("query", str, "The phrase to look for.", required=True, max_length=200),
+        Param("query", str, "The phrase to look for.", required=True, max_length=200,
+              example="temperature"),
         Param("limit", int, "How many turns to return.",
               default=5, minimum=1, maximum=_MAX_RESULTS),
     ),
@@ -149,7 +150,8 @@ def search_chats(query: str, limit: int) -> dict[str, Any]:
     integrity=Integrity.TRANSCRIPT,
     citable=False,
     params=(
-        Param("session_id", str, "Which conversation.", required=True, max_length=100),
+        Param("session_id", str, "Which conversation — an id from `list_sessions`.",
+              required=True, max_length=100),
     ),
 )
 def get_session_summary(session_id: str) -> dict[str, Any]:

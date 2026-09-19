@@ -147,3 +147,72 @@ def unlock_all() -> int:
         cursor = conn.execute("DELETE FROM tool_locks")
         conn.commit()
         return cursor.rowcount
+
+
+# ── per-tool on/off ──────────────────────────────────────────────────────────
+# A second axis, and deliberately not the same one as above. The locks are a
+# statement about this machine — what it is permitted to do while a result is
+# being recorded. These are a statement about the *tool list*: which of the
+# registered tools the model is offered at all. Closing `network_egress` to stop
+# the model reaching for one tool would also close the three that share the
+# effect, and turning one tool off says nothing about the safety envelope.
+#
+# Names are not validated here. The registry is the only authority on what a
+# tool is called, and importing it from the database layer is the import cycle
+# `registry._unlocked_effects` already goes out of its way to avoid — so the API
+# resolves the name against the registry first, and this stores a string.
+
+
+def disabled() -> dict[str, dict[str, Any]]:
+    """Tools switched off, keyed by name. Empty by default."""
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        rows = conn.execute("SELECT * FROM tool_disabled").fetchall()
+    return {
+        row["tool"]: {
+            "tool": row["tool"],
+            "disabled_at": row["disabled_at"],
+            "note": row["note"],
+        }
+        for row in rows
+    }
+
+
+def disable(tool: str, note: str | None = None) -> dict[str, Any]:
+    """Stop offering one tool. The caller has already checked the name exists."""
+    name = (tool or "").strip()
+    if not name:
+        raise ToolPolicyError("a tool name is required")
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO tool_disabled (tool, disabled_at, note) VALUES (?, ?, ?)
+            ON CONFLICT(tool) DO UPDATE SET
+                disabled_at = excluded.disabled_at, note = excluded.note
+            """,
+            (name, _now(), (note or "").strip()[:MAX_NOTE_CHARS] or None),
+        )
+        conn.commit()
+    return disabled()[name]
+
+
+def enable(tool: str) -> bool:
+    """Offer it again. True when something was actually switched back on."""
+    name = (tool or "").strip()
+    if not name:
+        raise ToolPolicyError("a tool name is required")
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        cursor = conn.execute("DELETE FROM tool_disabled WHERE tool = ?", (name,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def enable_all() -> int:
+    """Back to the default — every registered tool offered. Returns how many."""
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        cursor = conn.execute("DELETE FROM tool_disabled")
+        conn.commit()
+        return cursor.rowcount

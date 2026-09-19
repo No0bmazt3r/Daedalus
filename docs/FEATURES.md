@@ -98,6 +98,8 @@ to it.
 | `GET` | `/api/tools/policy` | Which normally-forbidden effects are unlocked, and the reason given |
 | `POST` | `/api/tools/policy/unlock` | Permit one forbidden effect at runtime. The reason is required |
 | `POST` | `/api/tools/policy/lock` | Take a permission back; with no effect named, locks everything |
+| `POST` | `/api/tools/policy/disable` | Switch one tool off: out of the schema list, refused at dispatch. 404 on an unknown name |
+| `POST` | `/api/tools/policy/enable` | Offer it again; with no tool named, turns every switched-off tool back on |
 | `GET` | `/api/system/logs` | Tail the process log, filtered by level and substring |
 | `GET` | `/api/system/export` | Download a backup. **Never contains a credential** |
 | `POST` | `/api/system/import` | Restore one. Additive — nothing is deleted first |
@@ -694,6 +696,36 @@ code change; and `unlocked_at` + `note` answer *"what was this system allowed to
 do when that benchmark was recorded?"*, stamped onto every catalogue response so
 a screenshot carries it.
 
+#### Per-tool switch — a different axis from the capability locks
+
+Every tool row carries an on/off switch, stored in `tool_disabled` (008) the
+same way round as the locks: the row records what is **off**, so an empty table
+means every registered tool is offered and *enable all* is a delete.
+
+It answers a different question from the capabilities above. A lock is a claim
+about what this machine is permitted to do while a result is being recorded; the
+switch is an opinion about which tools the model should be choosing between.
+Collapsing them would mean quieting one noisy tool also closed the other three
+that share its effect, and it would let a screenshot of a narrowed tool list be
+mistaken for a narrowed safety envelope.
+
+Every parameter can also declare an `example` — a value written as the string
+somebody would type, so it survives the same conversion and validation a typed
+argument does. The trial run fills them in on expand for tools that only read,
+and offers a **Use example** button for the ones that write, execute or leave the
+machine: both are one click from running, and the difference is whether opening a
+row is also what loads a command into `bash`. Parameters where no literal is
+honest — a `session_id` that has to come from `list_sessions` — declare none
+rather than teaching a value that cannot work.
+
+A switched-off tool leaves `/api/tools/schemas` entirely — offering a model
+something it cannot have spends a turn producing a refusal — and is still
+refused at dispatch, because a model that learned a name in an earlier turn can
+ask for it after it has left the list. Unlike the locks, this reads **open** when
+its table cannot be read: it is a preference, not a permission, the effect gate
+still fails closed either way, and a transient read error should not retire the
+whole tool layer.
+
 **An unlock lifts the refusal and nothing else.** Argument validation still
 runs, every dispatch still writes a `tool_logs` row, and the containment inside
 each tool has no switch:
@@ -1125,8 +1157,11 @@ flag once. Nav, groups and search all read from it, so they cannot drift apart.
 - Unbuilt panels carry a dot, and search says "not built yet" rather than
   opening a dead page silently.
 
-**Built panels:** Add Models · Databases · Shortcuts. Everything else is a
-placeholder.
+**Every panel is built.** Account and Users were the last two placeholders and
+were removed rather than filled: there is one operator, they are the admin, and
+there is nothing to sign out of — the same reasoning that opens the tool policy
+by default. The `implemented` flag and the dot stay, because the next panel to
+be declared will need them before it exists.
 
 ---
 

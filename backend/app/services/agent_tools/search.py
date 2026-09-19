@@ -38,7 +38,8 @@ SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "any")
     effects={Effect.READ_CORPUS},
     integrity=Integrity.CORPUS,
     params=(
-        Param("query", str, "What to look for, in plain words.", required=True, max_length=500),
+        Param("query", str, "What to look for, in plain words.", required=True, max_length=500,
+              example="reactor temperature limits"),
         Param("top_k", int, "How many passages to return.", default=5, minimum=1, maximum=_MAX_TOP_K),
         Param(
             "source_type", str, "Restrict to one kind of document.",
@@ -117,6 +118,7 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
     integrity=Integrity.SYSTEM,
     params=(
         Param("query", str, "The question or phrase to find entities for.",
+              example="reactor temperature",
               required=True, max_length=500),
         Param("limit", int, "How many entry points to return.",
               default=6, minimum=1, maximum=_MAX_TOP_K),

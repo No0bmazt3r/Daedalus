@@ -491,8 +491,14 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         <div className="grid grid-cols-2 @sm:grid-cols-4 gap-x-4 gap-y-2">
           <Stat
             label="Platform"
-            value={`${hw.host.platform ?? '—'}${hw.host.wsl ? ' (WSL)' : ''}`}
-            title={hw.host.release ?? undefined}
+            value={`${hw.host.platform ?? '—'}${hw.host.wsl ? ' (WSL)' : ''}${
+              hw.host.container ? ' · container' : ''
+            }`}
+            title={
+              hw.host.container
+                ? `${hw.host.release ?? ''} — in a container: the cores and memory below are this container's allowance, and a GPU is only visible if it was passed through`.trim()
+                : (hw.host.release ?? undefined)
+            }
           />
           <Stat label="Python" value={hw.host.python} />
           <Stat

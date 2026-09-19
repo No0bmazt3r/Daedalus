@@ -53,7 +53,8 @@ _SETTABLE = ("rag_track",)
     ),
     effects={Effect.WRITE},
     params=(
-        Param("title", str, "What the new conversation is about.", required=True, max_length=120),
+        Param("title", str, "What the new conversation is about.", required=True, max_length=120,
+              example="Trial from Settings"),
     ),
 )
 def create_session(title: str) -> dict[str, Any]:
@@ -75,8 +76,10 @@ def create_session(title: str) -> dict[str, Any]:
     integrity=Integrity.TRANSCRIPT,
     citable=False,
     params=(
-        Param("session_id", str, "Which conversation.", required=True, max_length=100),
-        Param("content", str, "What to write.", required=True, max_length=4000),
+        Param("session_id", str, "Which conversation — an id from `list_sessions`.",
+              required=True, max_length=100),
+        Param("content", str, "What to write.", required=True, max_length=4000,
+              example="Posted from a tool trial."),
     ),
 )
 def send_to_session(session_id: str, content: str) -> dict[str, Any]:
@@ -111,7 +114,8 @@ def send_to_session(session_id: str, content: str) -> dict[str, Any]:
     params=(
         Param("action", str, "What to do.", required=True, enum=("get", "set")),
         Param("setting", str, "Which setting.", required=True, enum=_SETTABLE),
-        Param("value", str, "The new value, for `set`.", default=None, max_length=100),
+        Param("value", str, "The new value, for `set`.", default=None, max_length=100,
+              example="graph"),
     ),
 )
 def manage_settings(action: str, setting: str, value: str | None) -> dict[str, Any]:
@@ -149,11 +153,12 @@ def manage_settings(action: str, setting: str, value: str | None) -> dict[str, A
         Param("action", str, "What to do.", required=True,
               enum=("list", "add", "update", "delete")),
         Param("provider", str, "Which provider, for `add`.", default=None, max_length=60),
-        Param("base_url", str, "Its API base URL, for `add`.", default=None, max_length=500),
+        Param("base_url", str, "Its API base URL, for `add`.", default=None, max_length=500,
+              example="https://openrouter.ai/api/v1"),
         Param("api_key", str, "The credential, for `add`. Never returned.",
               default=None, max_length=400),
         Param("label", str, "What to call it.", default=None, max_length=120),
-        Param("endpoint_id", str, "Which endpoint, for `update` and `delete`.",
+        Param("endpoint_id", str, "Which endpoint, for `update` and `delete` — an id from `list`.",
               default=None, max_length=100),
         Param("enabled", bool, "Enable or disable it, for `update`.", default=None),
     ),
