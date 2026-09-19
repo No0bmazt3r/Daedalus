@@ -144,6 +144,9 @@ cmd_dev() {
   # failure is reported before two dev servers start writing to the terminal.
   migrate_cli up >/dev/null || fail "migrations failed — run './daedalus.sh migrate status'"
   check_ollama
+  # ChromaDB is a server, not part of the app, so `dev` starts the one container
+  # rather than pretending the vector store exists. Non-fatal if it cannot.
+  ensure_chroma
 
   head_ "Starting dev servers"
   host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend &

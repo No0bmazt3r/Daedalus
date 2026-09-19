@@ -20,6 +20,7 @@ import {
 import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { HardwarePanel } from './settings/HardwarePanel'
+import { KnowledgeBasePanel } from './settings/KnowledgeBasePanel'
 import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
 import { AddedModelsView } from './forge/AddedModelsView'
 
@@ -198,6 +199,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 
             {activeTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
+            {activeTab === 'knowledge' && <KnowledgeBasePanel />}
 
             {activeTab === 'appearance' && (
               <div className="space-y-6 animate-in fade-in duration-200">

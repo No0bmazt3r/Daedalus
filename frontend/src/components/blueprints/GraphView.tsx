@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react'
+import { Search, ArrowRight, ArrowLeft, AlertCircle, Network, Table2 } from 'lucide-react'
 import {
   fetchGraphSchema, fetchNodes, fetchNode, NODE_TYPES,
-  type GraphSchema, type GraphNode, type NodeDetail, type NodeType,
+  type GraphSchema, type GraphNode, type GraphEdge, type NodeDetail, type NodeType,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
 import { NODE_STYLE, TypeBadge, NodeChip, EdgeLabel, shortId } from './nodeStyles'
+import { GraphCanvas } from './GraphCanvas'
 
 /**
  * The graph browser — MODULES.md §3.1 half B.
@@ -13,13 +14,18 @@ import { NODE_STYLE, TypeBadge, NodeChip, EdgeLabel, shortId } from './nodeStyle
  * Browse the hand-authored knowledge graph as a list, search it, and see any
  * node with its neighbours.
  *
- * ## Why this is a table and not a canvas
+ * ## Two views of the same set, which is MODULES.md §3.6's actual instruction
  *
- * MODULES.md §3.6 is explicit: provide a table view alongside the canvas,
- * because a node-link diagram of sixty nodes is a hairball, and for "show me
- * every AnomalyType with no resolving SOP" a table is simply the better answer.
- * The graph rendering is for traversal replay — one walk, a handful of nodes,
- * where the shape carries the meaning. Everything else reads better as rows.
+ * "Provide a table view alongside the canvas." Not instead of — alongside, and
+ * the reason is that they answer different questions. The diagram shows
+ * structure: that two Thresholds converge on one AnomalyType is a shape you see
+ * in one glance and would have to reconstruct from rows. The table shows
+ * inventory: "every AnomalyType with no resolving SOP" is a list, and a
+ * node-link diagram of sixty nodes is a hairball you would have to count.
+ *
+ * So the toggle is not a preference. Both filter the same query, so narrowing
+ * to one node type in the table narrows the diagram to that type's subgraph —
+ * which is also the cure for the hairball.
  *
  * ## Neighbours are shown in both directions
  *
@@ -143,6 +149,8 @@ function Detail({ detail, onNavigate }: { detail: NodeDetail; onNavigate: (id: s
 export function GraphView() {
   const [schema, setSchema] = useState<GraphSchema | null>(null)
   const [nodes, setNodes] = useState<GraphNode[] | null>(null)
+  const [edges, setEdges] = useState<GraphEdge[]>([])
+  const [view, setView] = useState<'diagram' | 'table'>('diagram')
   const [query, setQuery] = useState('')
   const [type, setType] = useState<NodeType | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -159,7 +167,10 @@ export function GraphView() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       fetchNodes({ q: query, type })
-        .then((r) => setNodes(r.nodes))
+        .then((r) => {
+          setNodes(r.nodes)
+          setEdges(r.edges)
+        })
         .catch((e: Error) => setError(e.message))
     }, 180)
     return () => window.clearTimeout(timer)
@@ -222,10 +233,42 @@ export function GraphView() {
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
+        <div className="flex shrink-0 overflow-hidden rounded-md border theme-border">
+          {([['diagram', Network], ['table', Table2]] as const).map(([id, Icon]) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              title={id === 'diagram' ? 'Node-link diagram — structure' : 'Grouped list — inventory'}
+              className={`px-2 py-1.5 transition-colors ${
+                view === id ? 'theme-bg-primary theme-text-on-primary' : 'theme-text-muted hover:theme-text'
+              }`}
+            >
+              <Icon size={13} />
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <div className="space-y-3">
+      {view === 'diagram' && (
+        nodes === null ? (
+          <Skeleton className="h-[460px] w-full" />
+        ) : nodes.length === 0 ? (
+          <p className="rounded border border-dashed theme-border p-8 text-center text-xs theme-text-muted">
+            No node matches. The graph holds {schema?.total_nodes ?? '—'} nodes.
+          </p>
+        ) : (
+          <GraphCanvas nodes={nodes} edges={edges} selected={selected} onSelect={setSelected} />
+        )
+      )}
+
+      <div
+        className={
+          view === 'table'
+            ? 'grid gap-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]'
+            : 'grid gap-4'
+        }
+      >
+        <div className={`space-y-3 ${view === 'diagram' ? 'hidden' : ''}`}>
           {nodes === null && <Skeleton className="h-40 w-full" />}
           {nodes !== null && nodes.length === 0 && (
             <p className="rounded border border-dashed theme-border p-4 text-center text-xs theme-text-muted">
@@ -268,15 +311,17 @@ export function GraphView() {
           ))}
         </div>
 
-        <div className="rounded-lg border theme-border theme-card p-4">
-          {detail ? (
-            <Detail detail={detail} onNavigate={setSelected} />
-          ) : (
-            <p className="py-8 text-center text-xs theme-text-muted">
-              {selected ? `Loading ${shortId(selected)}…` : 'Select a node to see its neighbours.'}
-            </p>
-          )}
-        </div>
+        {(view === 'table' || selected) && (
+          <div className="rounded-lg border theme-border theme-card p-4">
+            {detail ? (
+              <Detail detail={detail} onNavigate={setSelected} />
+            ) : (
+              <p className="py-8 text-center text-xs theme-text-muted">
+                {selected ? `Loading ${shortId(selected)}…` : 'Select a node to see its neighbours.'}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

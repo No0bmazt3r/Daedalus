@@ -181,10 +181,70 @@ host_ollama_url() {
   esac
 }
 
+# host_chroma_url — where ChromaDB is, as seen *from the host*.
+#
+# Same problem as Ollama above and the same cure. .env holds the container's
+# view, `http://chromadb:8000`, which is a compose service name: it does not
+# resolve on the host, so the dev servers report the vector store as
+# unreachable rather than as "not running". docker-compose.yml publishes the
+# service on 127.0.0.1:${CHROMA_PORT:-8001}, and that is the host's address for
+# the same container.
+#
+# Unset stays unset — but note that embedded mode needs the full `chromadb`
+# package, and requirements.txt ships `chromadb-client`, which is HTTP-only. So
+# on a default install an unset URL is not a working fallback; it is no vector
+# store at all. `ensure_chroma` below is what makes the URL true.
+host_chroma_url() {
+  case "${CHROMA_URL:-}" in
+    "") return 0 ;;
+    "http://chromadb:8000") printf 'http://127.0.0.1:%s' "${CHROMA_PORT:-8001}" ;;
+    *) printf '%s' "$CHROMA_URL" ;;
+  esac
+}
+
+# ensure_chroma — start just the vector store, for `dev`.
+#
+# `dev` deliberately runs the app without Docker, but ChromaDB is a server the
+# app talks to rather than part of the app, and there is no host equivalent
+# short of installing the full package. So the one container starts, and the
+# dev servers point at its published port.
+#
+# Not fatal when it cannot start: Track 2 (GraphRAG), the chat path, the Forge
+# and every SQLite store work without a vector store, and refusing to run the
+# whole stack because the RAG half is unavailable would be the wrong trade. It
+# says so and carries on.
+ensure_chroma() {
+  [ -n "${CHROMA_URL:-}" ] || { info "CHROMA_URL is unset — skipping the vector store."; return 0; }
+  local url; url="$(host_chroma_url)"
+  if curl -fsS --max-time 2 "${url}/api/v2/heartbeat" >/dev/null 2>&1; then
+    ok "chromadb  ${url}  (already running)"
+    return 0
+  fi
+  if ! have docker; then
+    warn "docker not found — the vector store will be unreachable at ${url}."
+    warn "Track 1 (vector RAG) needs it; Track 2 (GraphRAG) does not."
+    return 0
+  fi
+  info "starting chromadb"
+  if compose up -d chromadb >/dev/null 2>&1; then
+    for _ in $(seq 1 30); do
+      if curl -fsS --max-time 2 "${url}/api/v2/heartbeat" >/dev/null 2>&1; then
+        ok "chromadb  ${url}"
+        return 0
+      fi
+      sleep 1
+    done
+    warn "chromadb started but did not answer at ${url} within 30s."
+  else
+    warn "could not start chromadb — the vector store will be unreachable."
+  fi
+}
+
 host_py() {
   local root="$PWD"
   (cd backend && env \
       ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
+      ${CHROMA_URL:+CHROMA_URL="$(host_chroma_url)"} \
       DAEDALUS_DATA_DIR="$root/data" \
       DAEDALUS_LOG_DIR="$root/logs" \
       DAEDALUS_PREFS_DB="$root/backend/data/prefs.db" \
@@ -197,6 +257,7 @@ host_uvicorn() {
   local root="$PWD"
   env \
     ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
+    ${CHROMA_URL:+CHROMA_URL="$(host_chroma_url)"} \
     DAEDALUS_DATA_DIR="$root/data" \
     DAEDALUS_LOG_DIR="$root/logs" \
     DAEDALUS_PREFS_DB="$root/backend/data/prefs.db" \

@@ -84,8 +84,11 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: ['database', 'db', 'sqlite', 'chroma', 'vector', 'sensor', 'audit', 'logs', 'storage', 'health', 'rows', 'raw', 'browse', 'table', 'inspect'],
   }),
   panel({
-    id: 'knowledge', label: 'Knowledge Base', group: 'data', icon: Search,
-    keywords: ['rag', 'documents', 'sop', 'manual', 'ingestion', 'chunks', 'embedding'],
+    id: 'knowledge', label: 'Knowledge Base', group: 'data', icon: Search, implemented: true,
+    keywords: [
+      'rag', 'documents', 'sop', 'manual', 'ingestion', 'chunks', 'embedding',
+      'track', 'graphrag', 'graph', 'vector', 'retrieval', 'switch', 'compare',
+    ],
   }),
 
   panel({

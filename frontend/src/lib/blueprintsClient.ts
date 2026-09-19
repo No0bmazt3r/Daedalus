@@ -72,10 +72,19 @@ export interface GraphSchema {
   total_edges: number;
 }
 
+export interface GraphEdge {
+  from: string;
+  type: EdgeType;
+  to: string;
+}
+
 export interface NodeList {
   available: true;
   nodes: GraphNode[];
+  /** Only edges with both endpoints in `nodes` — what the diagram can draw. */
+  edges: GraphEdge[];
   total: number;
+  total_edges: number;
 }
 
 export interface Neighbour {
@@ -106,6 +115,13 @@ export interface Hop {
   from: string[];
   edge: string;
   to: string[];
+  /**
+   * Which of the from/to pairs were actually joined. Recorded separately
+   * because the sets do not imply the pairings — a hop spanning two Sensors and
+   * two Thresholds has four possible pairs and two real ones, and a renderer
+   * left to guess draws edges the graph does not contain.
+   */
+  edges: { from: string; to: string }[];
   /** The agent's own verdict between steps. null when it never assessed. */
   sufficient: boolean | null;
   reason: string | null;
@@ -215,3 +231,38 @@ export const seedTraversals = (force = false) =>
     `/api/system/seed-graph-traces${force ? '?force=true' : ''}`,
     { method: 'POST' },
   );
+
+
+// ── the retrieval track switch (PROJECT.md §5) ───────────────────────────────
+
+export type RagTrack = 'vector' | 'graph';
+
+export interface TrackStatus {
+  id: RagTrack;
+  label: string;
+  role: string;
+  /** Computed, not declared — whether this track can actually answer right now. */
+  ready: boolean;
+  detail: string;
+  blocked_by: string | null;
+}
+
+export interface RagConfig {
+  track: RagTrack;
+  /**
+   * PROJECT.md §5's freeze discipline. Once both arms are built the evaluation
+   * runs once without further tuning, so a frozen config refuses API writes and
+   * unfreezing is a deliberate hand edit of a committed file.
+   */
+  frozen: boolean;
+  note: string;
+  tracks: TrackStatus[];
+}
+
+export const fetchRagConfig = () => request<RagConfig>('/api/rag/config');
+
+export const setRagTrack = (track: RagTrack) =>
+  request<RagConfig>('/api/rag/config', {
+    method: 'PUT',
+    body: JSON.stringify({ track }),
+  });

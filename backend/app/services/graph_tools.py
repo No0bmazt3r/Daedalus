@@ -74,12 +74,24 @@ def _norm(text: str) -> str:
 
 @dataclass
 class Hop:
-    """One step of a walk, in the shape migration 005 documents."""
+    """One step of a walk.
+
+    `from`/`to` are the node *sets* the hop spanned; `edges` is which of them
+    were actually joined. Both are stored because neither implies the other: a
+    hop from two Sensors to two Thresholds has four possible pairings and only
+    two real ones, so a renderer given only the sets has to guess — and guessing
+    draws edges the graph does not contain.
+
+    Migration 005's example predates `edges` and shows the other five keys. It
+    is additive, and this docstring is the authoritative shape; the migration is
+    applied and checksummed, so it is not edited.
+    """
 
     hop: int
     from_nodes: list[str]
     edge: str
     to_nodes: list[str]
+    edges: list[dict[str, str]] = field(default_factory=list)
     sufficient: bool | None = None
     reason: str | None = None
 
@@ -89,6 +101,7 @@ class Hop:
             "from": self.from_nodes,
             "edge": self.edge,
             "to": self.to_nodes,
+            "edges": self.edges,
             "sufficient": self.sufficient,
             "reason": self.reason,
         }
@@ -115,10 +128,19 @@ class TraversalPath:
         edge: str,
         to_nodes: list[str],
         *,
+        edges: list[dict[str, str]] | None = None,
         sufficient: bool | None = None,
         reason: str | None = None,
     ) -> Hop:
-        hop = Hop(len(self.hops) + 1, sorted(from_nodes), edge, sorted(to_nodes), sufficient, reason)
+        hop = Hop(
+            len(self.hops) + 1,
+            sorted(from_nodes),
+            edge,
+            sorted(to_nodes),
+            edges or [],
+            sufficient,
+            reason,
+        )
         self.hops.append(hop)
         return hop
 
@@ -317,6 +339,7 @@ def graph_traverse(
         if not frontier:
             break
         reached: list[str] = []
+        crossed: list[dict[str, str]] = []
         for node_id in frontier:
             edges = (
                 graph.in_edges(node_id, keys=True) if reverse else graph.out_edges(node_id, keys=True)
@@ -327,11 +350,20 @@ def graph_traverse(
                 other = src if reverse else dst
                 sub.add_node(other)
                 sub.add_edge(src, key, dst)
+                # Stored in graph direction, not walk direction, so a replay
+                # draws the arrow the way the schema declares it even when the
+                # walk followed it backwards.
+                crossed.append({"from": src, "to": dst})
                 if other not in reached:
                     reached.append(other)
 
         if path is not None:
-            path.record(frontier, f"{relationship}{'↩' if reverse else ''}", reached)
+            path.record(
+                frontier,
+                f"{relationship}{'↩' if reverse else ''}",
+                reached,
+                edges=crossed,
+            )
 
         if not reached:
             break

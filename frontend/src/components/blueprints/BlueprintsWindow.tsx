@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Map, Network, ListChecks, Route, Library } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
-import { fetchTraversals, type TraversalSummary } from '../../lib/blueprintsClient'
+import {
+  fetchTraversals, fetchRagConfig,
+  type TraversalSummary, type RagTrack,
+} from '../../lib/blueprintsClient'
 import { GraphView } from './GraphView'
 import { CoverageView } from './CoverageView'
 import { TraversalView } from './TraversalView'
 import { CorpusView } from './CorpusView'
+import { TrackBanner } from './TrackBanner'
 
 /**
  * Labyrinth Blueprints — the knowledge map (MODULES.md §3).
@@ -20,6 +24,18 @@ import { CorpusView } from './CorpusView'
  * | Coverage | Layer 5, Track 2 | built — what the graph cannot answer |
  * | Replay   | Layer 5 + 10     | built, fed by recorded walks |
  * | Corpus   | Layer 4          | **blocked on M2** — honest empty state |
+ *
+ * ## The window knows which track is live
+ *
+ * Three of these tabs describe Track 2 and one describes Track 1, and only one
+ * track answers queries at a time (Settings → Knowledge Base). A diagram on
+ * screen reads as a description of how the answer was produced, so the window
+ * marks the half that is actually running — a dot on its tabs, the track in the
+ * subtitle, and a banner on a tab belonging to the other one.
+ *
+ * It marks rather than hides, because the graph has to be inspectable *before*
+ * it goes live: completing it is what Coverage is for, and a window that hid the
+ * graph until the graph was selected would make Track 2 impossible to prepare.
  *
  * ## Why this is a floating window and not a route
  *
@@ -45,11 +61,15 @@ import { CorpusView } from './CorpusView'
  * four-hop walk does not yet need.
  */
 
+// `track` is which retrieval arm the tab describes, so the window can mark the
+// half that is live. Tab order never changes with the setting: these are the
+// module's four views, and reordering them under the reader to reflect a
+// setting elsewhere would cost more in muscle memory than it buys in clarity.
 const TABS = [
-  { id: 'graph', label: 'Graph', icon: Network, hint: 'The hand-authored knowledge graph: 7 node types, 7 edge types' },
-  { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: 'Orphans and gaps — every row is a question the graph cannot answer' },
-  { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
-  { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Ingested documents and chunks — blocked on M2' },
+  { id: 'graph', label: 'Graph', icon: Network, track: 'graph', hint: 'The hand-authored knowledge graph: 7 node types, 7 edge types' },
+  { id: 'coverage', label: 'Coverage', icon: ListChecks, track: 'graph', hint: 'Orphans and gaps — every row is a question the graph cannot answer' },
+  { id: 'replay', label: 'Replay', icon: Route, track: 'graph', hint: 'The walk a graph-track query actually took, hop by hop' },
+  { id: 'corpus', label: 'Corpus', icon: Library, track: 'vector', hint: 'Ingested documents and chunks — blocked on M2' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -101,6 +121,7 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
   const [tab, setTab] = useState<TabId>('graph')
   const [traces, setTraces] = useState<TraversalSummary[]>([])
   const [selected, setSelected] = useState<string | null>(null)
+  const [activeTrack, setActiveTrack] = useState<RagTrack | null>(null)
 
   const loadTraces = useCallback(() => {
     fetchTraversals()
@@ -117,9 +138,15 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
       .catch(() => setTraces([]))
   }, [])
 
-  // Only while open, so a closed window costs nothing.
+  // Only while open, so a closed window costs nothing. Re-read on every open
+  // rather than once: the track is changed in Settings, a different window, and
+  // a stale badge here would assert the opposite of what is running.
   useEffect(() => {
-    if (open) loadTraces()
+    if (!open) return
+    loadTraces()
+    fetchRagConfig()
+      .then((c) => setActiveTrack(c.track))
+      .catch(() => setActiveTrack(null))
   }, [open, loadTraces])
 
   // The Replay tab's empty state can seed traces, which changes what the picker
@@ -134,7 +161,11 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
       open={open}
       onClose={onClose}
       title="Labyrinth Blueprints"
-      subtitle="the knowledge map"
+      subtitle={
+        activeTrack
+          ? `the knowledge map · ${activeTrack === 'graph' ? 'Track 2 (graph)' : 'Track 1 (vector)'} is live`
+          : 'the knowledge map'
+      }
       icon={<Map size={16} className="theme-accent" />}
       width={980}
       height={720}
@@ -160,6 +191,15 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
                     className={`tab-icon ${selectedTab ? 'tab-icon-active' : ''}`}
                   />
                   {entry.label}
+                  {/* A dot, not a colour change on the label: the tab already
+                      uses colour for selection, and two meanings on one channel
+                      is how a reader learns to trust neither. */}
+                  {activeTrack && entry.track === activeTrack && (
+                    <span
+                      title="this view describes the track currently answering queries"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                    />
+                  )}
                 </button>
               )
             })}
@@ -179,6 +219,13 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
             key={tab}
             className="mx-auto w-full @4xl:max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
           >
+            {activeTrack && (
+              <TrackBanner
+                tabTrack={TABS.find((t) => t.id === tab)!.track}
+                activeTrack={activeTrack}
+                isReplay={tab === 'replay'}
+              />
+            )}
             {tab === 'graph' && <GraphView />}
             {tab === 'coverage' && <CoverageView />}
             {tab === 'replay' && (

@@ -337,10 +337,36 @@ Layer 9 below for the per-step detail.
           when it lands. The four `filename:` values are authored to shape, not
           to any file that exists; `filename` is the join into `source_file`, so
           one that matches nothing retrieves nothing, silently
-    - [ ] Force-directed canvas (MODULES.md §3.6) — bundled, never CDN. The
-          table half carries browsing today and the replay renders as an ordered
-          hop list; a canvas is worth adding when a walk is big enough to need
-          one
+    - [x] Force-directed canvas (MODULES.md §3.6) — `d3-force` from npm,
+          bundled by Vite, never CDN (Rule 1). SVG not canvas at this size, and
+          the simulation runs 300 ticks then **stops** rather than idling. Two
+          views of the same filtered query: diagram for structure, table for
+          inventory
+    - [x] Stepped replay — the walk's subgraph with a hop-by-hop highlighter,
+          which is §3.2's "highlighting each node and edge in sequence"
+    - [x] **Hops record their real edge pairs.** The first format stored only
+          the `from` and `to` node *sets*, and the sets do not imply the
+          pairings — a hop spanning two Sensors and two Thresholds has four
+          possible pairs and two real ones, so the diagram drew edges the graph
+          does not contain. Fixed in the recorder rather than guessed at in the
+          renderer
+    - [x] Retrieval track switch — Settings → Knowledge Base, committed to
+          `config/rag_config.json`, read on the chat path, recorded per query in
+          `rag_logs.track`. Honours §5's freeze: `frozen: true` makes the API
+          refuse writes so unfreezing is a visible commit
+    - [x] Blueprints reflects the live track — dot on the tabs describing the
+          running arm, track named in the subtitle, and a banner on a tab that
+          describes the other one. Replay is the case that needed it: with Track
+          1 live nothing writes a traversal, so the tab would keep rendering old
+          walks with no sign they were recorded under a setting that no longer
+          holds. Marks rather than hides, because the graph must be inspectable
+          before it goes live
+    - [x] `./daedalus.sh dev` now starts the chromadb container. It previously
+          started neither Docker nor Chroma, and `.env`'s `CHROMA_URL` names the
+          compose service (`http://chromadb:8000`), which does not resolve on
+          the host — so the vector store read as unreachable rather than as not
+          running. `host_chroma_url` rewrites it to the published port, the same
+          cure `host_ollama_url` already applied
 - [x] Add a traversal-path column to `rag_logs` **now** — migration `005`
       adds `traversal_path` and `entry_strategy`. Landed before the orchestrator
       writes its first row, which was the whole point: a path is not derivable

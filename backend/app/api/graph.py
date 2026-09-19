@@ -30,11 +30,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from ..db import audit_store, paths, sqlite_util
 from ..services import graph_seed
 from ..services import knowledge_graph as kg
+from ..services import rag_config
 
 router = APIRouter(prefix="/api", tags=["blueprints"])
 
@@ -92,7 +93,26 @@ def graph_nodes(
         })
 
     rows.sort(key=lambda r: (r["type"], r["id"]))
-    return {"available": True, "nodes": rows[:limit], "total": len(rows)}
+    page = rows[:limit]
+
+    # Edges among the returned nodes, so the diagram can draw the same set the
+    # table lists. Filtered to the page rather than sent whole: a link whose
+    # endpoint is not on screen has nothing to attach to, and shipping it would
+    # push that filtering into the client where it would be done differently.
+    visible = {r["id"] for r in page}
+    edges = [
+        {"from": src, "type": key, "to": dst}
+        for src, dst, key in graph.edges(keys=True)
+        if src in visible and dst in visible
+    ]
+
+    return {
+        "available": True,
+        "nodes": page,
+        "edges": edges,
+        "total": len(rows),
+        "total_edges": len(edges),
+    }
 
 
 @router.get("/graph/nodes/{node_id:path}")
@@ -264,3 +284,37 @@ def corpus_documents() -> dict[str, Any]:
 def corpus_chunks(document_id: str) -> dict[str, Any]:
     """Chunks with metadata and the text as the retriever sees it."""
     return {**_CORPUS_BLOCKED, "document_id": document_id, "chunks": []}
+
+
+# ── the retrieval track switch ───────────────────────────────────────────────
+
+
+@router.get("/rag/config")
+def rag_track() -> dict[str, Any]:
+    """Which track answers a knowledge query, and whether each can.
+
+    Readiness is computed, not declared: a switch that silently selects an
+    unbuilt track is worse than one that says the track is not ready.
+    """
+    return rag_config.status()
+
+
+@router.put("/rag/config")
+def set_rag_track(track: str = Body(..., embed=True)) -> dict[str, Any]:
+    """Select a retrieval track.
+
+    Refuses while the comparison is frozen (`PROJECT.md` §5): after the two arms
+    are built, the evaluation runs once without further tuning, and unfreezing
+    is a deliberate hand edit of a committed file rather than a click.
+
+    Selecting a track that is not ready is allowed. The setting is a statement of
+    intent and the panel already reports readiness — refusing here would make the
+    switch unusable in exactly the window it is most useful, while Track 1 waits
+    on M2 and you want to demonstrate Track 2.
+    """
+    try:
+        return {**rag_config.write(track), **rag_config.status()}
+    except rag_config.ConfigFrozen as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Check, X, CornerDownRight, AlertCircle, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Check, X, CornerDownRight, AlertCircle, Sparkles, Play, SkipBack } from 'lucide-react'
 import {
   fetchTraversal, seedTraversals,
   type Traversal, type Unavailable as UnavailableShape, type Hop,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
 import { NodeChip, EdgeLabel } from './nodeStyles'
+import { GraphCanvas } from './GraphCanvas'
 import { Unavailable } from './Unavailable'
 
 /**
@@ -25,6 +26,15 @@ import { Unavailable } from './Unavailable'
  * Re-deriving the walk here would show what the graph *would* do today rather
  * than what produced that answer — and MODULES.md §0 rule 2 is that Layer 10
  * has one source of truth.
+ *
+ * ## The diagram is stepped, not animated
+ *
+ * §3.2 asks for the walk "highlighting each node and edge in sequence, hop by
+ * hop". A stepper rather than a play-through: the reader controls the pace, can
+ * hold on the hop that matters, and the same control works in a screenshot for
+ * the report. The subgraph shown is only what the walk actually touched — not
+ * the whole graph with a path drawn on it — because the claim being made is
+ * about what the traversal reached, and the rest of the graph is not evidence.
  *
  * ## The sufficiency verdicts are the argument
  *
@@ -89,10 +99,13 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
   const [data, setData] = useState<Traversal | UnavailableShape | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
+  /** 0 = entry only; n = through hop n. Reset whenever the trace changes. */
+  const [step, setStep] = useState(0)
 
   const load = useCallback(() => {
     if (!queryId) return
     setData(null)
+    setStep(0)
     fetchTraversal(queryId).then(setData).catch((e: Error) => setError(e.message))
   }, [queryId])
 
@@ -109,6 +122,41 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
       setSeeding(false)
     }
   }
+
+  // Only what the walk touched. Built from the recorded hops rather than from
+  // the live graph, for the same reason the replay itself is: this renders what
+  // happened, not what the graph would do now.
+  const traversal = data && data.available ? data : null
+  const walkNodes = useMemo(() => {
+    if (!traversal) return []
+    const ids = new Set<string>(traversal.path.entry_nodes)
+    for (const h of traversal.path.hops) {
+      for (const id of [...h.from, ...h.to]) ids.add(id)
+    }
+    return [...ids].map(
+      (id) => traversal.nodes[id] ?? { id, type: 'Sensor' as const, label: id, missing: true },
+    )
+  }, [traversal])
+
+  // The pairs the walk actually crossed. Deriving these from `from` × `to`
+  // would draw a cartesian product — for a hop spanning two Sensors and two
+  // Thresholds that is four edges where the graph has two.
+  const walkEdges = useMemo(() => {
+    if (!traversal) return []
+    return traversal.path.hops.flatMap((h) =>
+      (h.edges ?? []).map((e) => ({ ...e, type: h.edge.replace('↩', '') })),
+    )
+  }, [traversal])
+
+  const highlighted = useMemo(() => {
+    if (!traversal) return null
+    if (step === 0) return new Set(traversal.path.entry_nodes)
+    const ids = new Set<string>(traversal.path.entry_nodes)
+    for (const h of traversal.path.hops.filter((x) => x.hop <= step)) {
+      for (const id of [...h.from, ...h.to]) ids.add(id)
+    }
+    return ids
+  }, [traversal, step])
 
   if (!queryId) {
     return (
@@ -196,9 +244,60 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
               return n ? <NodeChip key={id} node={n} /> : <code key={id} className="text-[10px]">{id}</code>
             })}
           </div>
+
+          <GraphCanvas
+            nodes={walkNodes}
+            edges={walkEdges}
+            selected={null}
+            onSelect={() => {}}
+            highlight={highlighted}
+            height={340}
+            caption={
+              step === 0
+                ? `Entry: ${path.entry_nodes.length} starting node${path.entry_nodes.length === 1 ? '' : 's'}, found by ${path.entry_strategy}. Step through the hops below.`
+                : `Hop ${step} of ${path.hops.length}${path.hops[step - 1]?.reason ? ` — ${path.hops[step - 1].reason}` : ''}`
+            }
+          />
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setStep(0)}
+              disabled={step === 0}
+              title="back to entry"
+              className="rounded-md border theme-border px-2 py-1.5 theme-text-muted transition-opacity hover:theme-text disabled:opacity-30"
+            >
+              <SkipBack size={12} />
+            </button>
+            {/* One button per hop rather than a play control: a reader wants to
+                stop on the hop that carries the argument, not watch it go by. */}
+            {path.hops.map((h) => (
+              <button
+                key={h.hop}
+                onClick={() => setStep(h.hop)}
+                className={`rounded-md border px-2.5 py-1.5 text-[11px] transition-colors ${
+                  step === h.hop
+                    ? 'theme-accent-border theme-surface-strong theme-text'
+                    : 'theme-border theme-text-muted hover:theme-text'
+                }`}
+              >
+                {h.hop}
+              </button>
+            ))}
+            <button
+              onClick={() => setStep(path.hops.length)}
+              disabled={step === path.hops.length}
+              title="show the full walk"
+              className="ml-1 inline-flex items-center gap-1 rounded-md border theme-border px-2 py-1.5 text-[11px] theme-text-muted transition-opacity hover:theme-text disabled:opacity-30"
+            >
+              <Play size={11} /> all
+            </button>
+          </div>
+
           <ol className="space-y-4 border-l theme-border pl-3">
             {path.hops.map((h) => (
-              <HopRow key={h.hop} hop={h} nodes={data.nodes} />
+              <li key={h.hop} className={step !== 0 && h.hop > step ? 'opacity-30' : ''}>
+                <ol><HopRow hop={h} nodes={data.nodes} /></ol>
+              </li>
             ))}
           </ol>
         </>
