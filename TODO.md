@@ -996,6 +996,28 @@ Layer 9 below for the per-step detail.
       and there is nothing to sign out of — the same reasoning that opened the
       tool policy by default. Settings has no unimplemented panels left; the
       `account` group went with its only member
+- [x] **Shortcuts** built, ported from Odysseus' keybind layer: 11 actions, a
+      typed map so an action without a handler fails to compile, preview-then-
+      commit rebinding, conflicts shown with the rule that resolves them, and the
+      AltGr guard that stops an `@` on a German layout deleting a conversation.
+      Persisted to the `keybinds` preference, server-side like everything else
+- [x] **Appearance** built, ported from the same project's visibility column:
+      nine switches over the app's own furniture, grouped by region with a
+      per-section reset. Chrome only — nothing switchable can hide an answer, a
+      citation, a warning or a refusal. Colours and fonts stay in the Theme
+      window rather than being copied into a second screen that can disagree
+- [x] **GPU passthrough** — `docker-compose.gpu.yml`, layered on automatically
+      when the host has an NVIDIA GPU (`--gpu` / `--no-gpu` to force it either
+      way, and a dropped overlay rather than a failure when Docker declines).
+      Until now the container saw no driver, so Settings → Hardware read as
+      broken detection and the Forge sized models against zero VRAM. The panel
+      also says which machine it is describing now: `· container`, and a GPU
+      section that names the flag instead of reporting none
+- [x] **Per-tool switch** for the agent tool layer — a second axis beside the
+      four capability locks, stored the same way round (`tool_disabled`, 008).
+      A switched-off tool leaves `/api/tools/schemas` and is refused at dispatch.
+      Every parameter now declares a working `example`, filled in on expand for
+      read-only tools and behind a button for the ones that write or execute
 - [ ] MCP `resources` and `prompts` are not implemented — only `tools`. Nothing
       in Daedalus has anywhere to put them yet, and a half-wired capability is
       worse than an absent one

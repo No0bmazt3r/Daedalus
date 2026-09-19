@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { Sidebar } from '../components/Sidebar'
 import { Menu } from 'lucide-react'
@@ -10,9 +10,16 @@ import { BackgroundEffects } from '../components/BackgroundEffects'
 import { ForgeWindow } from '../components/forge/ForgeWindow'
 import { BlueprintsWindow } from '../components/blueprints/BlueprintsWindow'
 import { StoreWindow } from '../components/stores/StoreWindow'
-import { SettingsProvider } from '../contexts/SettingsContext'
-import { SessionsProvider } from '../contexts/SessionsContext'
+import { SettingsProvider, useSettings } from '../contexts/SettingsContext'
+import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import { UiPrefsProvider, useUiPrefs } from '../contexts/UiPrefsContext'
+import { ConfirmDialog } from '../components/ui/confirm-dialog'
+import {
+  focusComposer,
+  openChatSearch,
+  useGlobalShortcuts,
+} from '../hooks/useGlobalShortcuts'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -37,6 +44,28 @@ function openWindow(id: string, open: () => void) {
 }
 
 function RootLayout() {
+  return (
+    <ThemeProvider>
+      <SettingsProvider>
+        <SessionsProvider>
+          <UiPrefsProvider>
+            <AppShell />
+          </UiPrefsProvider>
+        </SessionsProvider>
+      </SettingsProvider>
+    </ThemeProvider>
+  )
+}
+
+/**
+ * Everything below the providers, because the shortcut layer needs what they
+ * hold: the session list to start and delete conversations, incognito to
+ * toggle, and the keybind map itself. Keeping this inside `RootLayout` would
+ * mean calling `useSessions` in the component that renders `SessionsProvider`,
+ * which React does not allow and which would be the wrong shape anyway — the
+ * windows and the shortcuts that open them belong together.
+ */
+function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
@@ -46,11 +75,53 @@ function RootLayout() {
   // inside it they would sit under `.attention-zone`, and inherit the sidebar's
   // idle opacity the moment the pointer moved onto the window itself.
   const [storeTarget, setStoreTarget] = useState<{ store: string; table: string } | null>(null)
+  // The shortcut deletes a conversation, so it asks first — through the app's
+  // own dialog rather than `window.confirm`, which ignores the theme and cannot
+  // say which conversation it means.
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null)
+
+  const { keybinds } = useUiPrefs()
+  const { isIncognito, setIsIncognito } = useSettings()
+  const { sessions, activeSessionId, newChat, remove } = useSessions()
+
+  /** Close whatever is in front, in the order the windows stack. */
+  const closeTopWindow = useCallback(() => {
+    if (confirmDelete) return setConfirmDelete(null)
+    if (storeTarget) return setStoreTarget(null)
+    if (blueprintsOpen) return setBlueprintsOpen(false)
+    if (forgeOpen) return setForgeOpen(false)
+    if (themeModalOpen) return setThemeModalOpen(false)
+    if (settingsModalOpen) return setSettingsModalOpen(false)
+  }, [blueprintsOpen, confirmDelete, forgeOpen, settingsModalOpen, storeTarget, themeModalOpen])
+
+  useGlobalShortcuts(keybinds, {
+    toggle_sidebar: () => setSidebarOpen((v) => !v),
+    // Searching a list that is not on screen is not a shortcut, it is a
+    // surprise — so this opens the column first.
+    search_chats: () => {
+      setSidebarOpen(true)
+      openChatSearch()
+    },
+    focus_input: focusComposer,
+    open_settings: () => openWindow('settings', () => setSettingsModalOpen(true)),
+    new_chat: newChat,
+    delete_chat: () => {
+      const session = sessions.find((s) => s.session_id === activeSessionId)
+      if (!session) return
+      setConfirmDelete({
+        id: session.session_id,
+        title: session.title?.trim() || 'this conversation',
+      })
+    },
+    toggle_incognito: () => setIsIncognito(!isIncognito),
+    open_theme: () => openWindow('theme', () => setThemeModalOpen(true)),
+    open_forge: () => openWindow('forge', () => setForgeOpen(true)),
+    open_blueprints: () => openWindow('blueprints', () => setBlueprintsOpen(true)),
+    close_window: closeTopWindow,
+  })
 
   return (
-    <ThemeProvider>
-      <SettingsProvider>
-        <SessionsProvider>
+    <>
         <div className="flex h-screen theme-bg theme-text relative overflow-hidden transition-colors duration-200">
           {/* Sidebar Container */}
           <div 
@@ -93,7 +164,11 @@ function RootLayout() {
           </main>
 
           <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
-          <SettingsModal open={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
+          <SettingsModal
+            open={settingsModalOpen}
+            onClose={() => setSettingsModalOpen(false)}
+            onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
+          />
           <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
           <BlueprintsWindow open={blueprintsOpen} onClose={() => setBlueprintsOpen(false)} />
           <StoreWindow
@@ -103,8 +178,25 @@ function RootLayout() {
             onClose={() => setStoreTarget(null)}
           />
         </div>
-        </SessionsProvider>
-      </SettingsProvider>
-    </ThemeProvider>
+
+        <ConfirmDialog
+          open={confirmDelete !== null}
+          title="Delete this conversation?"
+          body={
+            <>
+              <strong className="theme-text">{confirmDelete?.title}</strong> and every
+              message in it are removed. The audit log keeps its own record — this is the
+              conversation, not the evidence.
+            </>
+          }
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            if (confirmDelete) void remove(confirmDelete.id)
+            setConfirmDelete(null)
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+    </>
   )
 }

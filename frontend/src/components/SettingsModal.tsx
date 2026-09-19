@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
-import { Ghost, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { FloatingWindow } from './ui/floating-window'
-import { Switch } from './ui/switch'
 import {
   useResizableSidebar,
   SIDEBAR_MIN_WIDTH,
@@ -9,7 +8,6 @@ import {
   SIDEBAR_DESKTOP_MIN_CONTAINER,
 } from '../hooks/useResizableSidebar'
 import { useElementWidth } from '../hooks/useElementWidth'
-import { useSettings } from '../contexts/SettingsContext'
 import {
   DEFAULT_SETTINGS_PANEL_ID,
   getSettingsPanel,
@@ -26,15 +24,18 @@ import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
 import { IntegrationsPanel } from './settings/IntegrationsPanel'
 import { SystemPanel } from './settings/SystemPanel'
+import { AppearancePanel } from './settings/AppearancePanel'
+import { ShortcutsPanel } from './settings/ShortcutsPanel'
 import { AddedModelsView } from './forge/AddedModelsView'
 
 interface SettingsModalProps {
   open: boolean
   onClose: () => void
+  /** Appearance hands colours and fonts to the Theme window rather than copying them. */
+  onOpenTheme?: () => void
 }
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { isIncognito, setIsIncognito } = useSettings()
+export function SettingsModal({ open, onClose, onOpenTheme }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
 
   // The window is draggable and resizable, so its content can be narrow on a
@@ -69,11 +70,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   const groups = visibleGroups(isAdmin)
   const activePanel = getSettingsPanel(activeTab)
-  // Peek now comes from the window shell, so the card treatment is derived
-  // inside the render prop rather than from component state.
-  const cardFor = (isPeek: boolean) =>
-    `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
-
   return (
     <FloatingWindow
       id="settings"
@@ -210,66 +206,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {activeTab === 'system' && <SystemPanel isPeek={isPeek} />}
 
             {activeTab === 'appearance' && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div>
-                  <h3 className="text-xl font-medium mb-1">Appearance</h3>
-                  <p className="text-sm theme-text-muted mb-6">
-                    Themes, colours, typography and background effects.
-                  </p>
-                </div>
-                <div className={cardFor(isPeek)}>
-                  <p className="text-sm theme-text-muted">
-                    Appearance lives in its own window so you can see changes against
-                    the live app. Open it from the sidebar menu → <strong>Theme &amp; Appearance</strong>.
-                  </p>
-                </div>
-              </div>
+              <AppearancePanel isPeek={isPeek} onOpenTheme={onOpenTheme} />
             )}
 
-            {activeTab === 'shortcuts' && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div>
-                  <h3 className="text-xl font-medium mb-1">Shortcuts &amp; Toggles</h3>
-                  <p className="text-sm theme-text-muted mb-6">
-                    Configure keyboard shortcuts and quick toggles.
-                  </p>
-                </div>
-                <div className="space-y-4">
-                  <div
-                    className={`flex items-center justify-between p-5 rounded-xl border theme-border transition-colors ${
-                      isPeek ? 'bg-transparent' : 'theme-surface'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`p-3 rounded-lg ${
-                          isIncognito
-                            ? 'incognito-bg-soft incognito-text incognito-glow'
-                            : 'theme-surface-strong theme-text-muted'
-                        }`}
-                      >
-                        <Ghost size={22} />
-                      </div>
-                      <div>
-                        <div className="font-medium text-base">Incognito Mode</div>
-                        <div className="text-sm theme-text-muted mt-0.5">
-                          Pause history recording for this session. Your prompts will not be saved.
-                        </div>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={isIncognito}
-                      onChange={setIsIncognito}
-                      label="Incognito mode"
-                      // Incognito keeps its own accent rather than the theme's,
-                      // because the whole point of the mode is that it looks
-                      // different from every other state in the app.
-                      className={isIncognito ? 'incognito-bg' : ''}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeTab === 'shortcuts' && <ShortcutsPanel isPeek={isPeek} />}
 
             {activePanel && !activePanel.implemented && (
               <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-in fade-in duration-200">

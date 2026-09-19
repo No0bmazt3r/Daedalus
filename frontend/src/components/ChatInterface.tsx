@@ -18,6 +18,8 @@ import {
 
 import { CapabilityBadges } from './ui/capability-badges'
 import { useSettings } from '../contexts/SettingsContext'
+import { useUiPrefs } from '../contexts/UiPrefsContext'
+import { FOCUS_COMPOSER_EVENT } from '../lib/keybinds'
 import { useSessions } from '../contexts/SessionsContext'
 
 function TypewriterText({ text }: { text: string }) {
@@ -244,6 +246,21 @@ export function ChatInterface() {
   const { messages, sendMessage, sending, error, modelNotice } = useSessions()
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { show } = useUiPrefs()
+
+  // Settings → Appearance. `chat-fullwidth` is the one that is off by default:
+  // a measured column is easier to read, and the full window is the choice you
+  // make when a transcript is full of tables.
+  const columnWidth = show('chat-fullwidth') ? 'w-full' : 'max-w-3xl mx-auto w-full'
+
+  // The composer is focused by shortcut from the root, which cannot reach this
+  // ref. See `lib/keybinds.ts` for why this is an event rather than a ref
+  // threaded up through two contexts.
+  useEffect(() => {
+    const onFocus = () => textareaRef.current?.focus()
+    window.addEventListener(FOCUS_COMPOSER_EVENT, onFocus)
+    return () => window.removeEventListener(FOCUS_COMPOSER_EVENT, onFocus)
+  }, [])
   
 
   useEffect(() => {
@@ -282,6 +299,11 @@ export function ChatInterface() {
           id={MINIMIZED_DOCK_SLOT}
           className="flex flex-wrap items-center justify-end gap-2 max-w-[min(60vw,640px)]"
         />
+        {/* Hideable, but the mode is not: the shortcut and Settings → Shortcuts
+            both still toggle it, and the composer still says so in its
+            placeholder. A hidden control is one click fewer, never a silently
+            different state. */}
+        {show('chat-incognito') && (
         <Tooltip>
           <TooltipTrigger 
             render={
@@ -303,9 +325,11 @@ export function ChatInterface() {
             {isIncognito ? "Disable Incognito Mode" : "Enable Incognito Mode"}
           </TooltipContent>
         </Tooltip>
+        )}
       </div>
       {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full">
+        <div className={`flex-1 flex flex-col items-center justify-center px-4 ${columnWidth}`}>
+          {show('chat-welcome') && (
           <div className="flex items-center gap-3 mb-8">
             <LabyrinthIcon className={`w-10 h-10 transition-colors duration-300 ${isIncognito ? 'incognito-text incognito-drop-glow' : 'theme-accent'}`} />
             <h1 className={`text-3xl font-serif tracking-tight transition-colors duration-300 ${isIncognito ? 'incognito-text' : ''}`}>
@@ -314,6 +338,7 @@ export function ChatInterface() {
               />
             </h1>
           </div>
+          )}
           
           {/* The greeting view previously rendered no error, so a failed first
               message vanished without explanation. Anything that stops a send
@@ -343,7 +368,7 @@ export function ChatInterface() {
             {/* pt-20 clears the control cluster pinned at top-4: the incognito
                 toggle is always there, and minimized-window chips sit beside
                 it, so the first message has to start below both. */}
-            <div className="flex flex-col max-w-3xl mx-auto pt-20 px-4 gap-6 pb-32">
+            <div className={`flex flex-col pt-20 px-4 gap-6 pb-32 ${columnWidth}`}>
               {messages.map((msg) => (
                 <div key={msg.key} className={`flex w-full group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (
@@ -398,7 +423,7 @@ export function ChatInterface() {
           </ScrollArea>
           
           <div className="absolute bottom-0 left-0 right-0 p-4">
-            <div className="max-w-3xl mx-auto w-full">
+            <div className={columnWidth}>
               <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
                 <Textarea 
                   ref={textareaRef}

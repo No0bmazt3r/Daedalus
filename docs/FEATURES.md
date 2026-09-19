@@ -15,21 +15,24 @@ Everything below was read off the source, not from memory.
 |---|---|
 | React dashboard shell | Built |
 | Theme engine | Built — the most complete subsystem |
-| Background effects | Built, pointer-reactive — 13 options |
+| Background effects | Built — 13 options, 11 canvas-animated. Pointer reactivity was built and then removed; see §5 |
 | Typography | Built — Monocraft (the Minecraft typeface) as the default face, self-hosted |
-| Settings shell | Built — registry, search, resizable rail |
+| Settings shell | Built — registry, search, resizable rail. Every panel is implemented |
+| Keyboard shortcuts | Built — 11 rebindable actions, preview-then-commit, conflicts surfaced, AltGr guarded |
+| Appearance switches | Built — 9 chrome toggles by region, chrome only, stored as the difference |
 | Floating windows | Built — drag, resize, Peek, minimize (chips dock beside the incognito toggle), Escape. All four windows, including the non-modal theme palette |
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
-| Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge |
+| Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge. Container-aware, with GPU passthrough layered on where the host has one |
 | The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Three tabs: Hardware, Models, Added Models |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
 | Data stores (×5) | Built and containerised, each with a versioned schema |
-| Preference API | Built |
+| Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
 | Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
+| Agent tools | Built — 29 tools, two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration, tools, RAG | **Not started.** Chat answers from conversation history alone; there is no evidence pack and no tool-calling yet |
 
@@ -47,7 +50,7 @@ to it.
 | `GET` | `/api/prefs` | Every preference in one round trip — used on boot |
 | `GET` | `/api/prefs/{key}` | Read one preference |
 | `PUT` | `/api/prefs/{key}` | Write one, body `{"value": …}` |
-| `DELETE` | `/api/prefs/{key}` | Clear one |
+| `DELETE` | `/api/prefs/{key}` | Clear one. Six keys exist — see §7's storage note — and anything else is a 404 |
 | `GET` | `/api/prefs/theme.css` | The saved palette as a stylesheet — see §3 |
 | `POST` | `/api/sessions` | Open a chat. Body optional; `{}` is the normal call |
 | `GET` | `/api/sessions` | Sidebar list, most recently updated first |
@@ -1089,27 +1092,32 @@ Thirteen options; eleven canvas-animated. `frontend/src/lib/canvasEffects.ts` wa
 Odysseus (a reference app no longer vendored in this repo);
 `frontend/src/lib/pointerField.ts` is new.
 
-| Effect | Pointer reaction |
+| Effect | Kind |
 |---|---|
-| Synapse | Pulses brighten and swell; movement fires new pulses down nearby grid lines |
-| Rain | Drops part around the cursor and slow as they pass |
-| Constellations | The cursor becomes a star — nearby stars link to it and drift toward it |
-| Perlin Flow | The flow field bends into a vortex |
-| Petals | Sweeping acts as a gust, pushing and spinning petals away |
-| Sparkles | A sparkle trail follows the cursor; nearby ones brighten |
-| Embers | Acts as a draft, fanning embers outward and up |
-| Nexus | Nodes are pushed gently aside and link to the cursor itself |
-| Aurora | The curtains bend toward the cursor, like a draught through them |
-| Bubbles | An updraft — bubbles are pushed aside and hurried along, then settle |
-| Voxels | Blocks lift and swell near the cursor, as if a hand passed under the field |
-| Dots, Solid | Static — the Reactive toggle disables itself |
+| Synapse · Nexus | A grid or graph, with pulses travelling it |
+| Rain · Embers · Petals · Sparkles · Bubbles | Particles under a force |
+| Perlin Flow · Aurora | A field, drawn as flow lines or curtains |
+| Voxels | An isometric field of blocks |
+| Dots · Solid | Static |
 
-> Odysseus's effects are **not** reactive — all `pointer-events: none` with no
-> pointer handling. Cursor reactivity is new work here.
+### Pointer reactivity was built, then removed
 
-One window listener serves every effect; canvases stay click-through. `energy`
-decays ~1.2s after movement stops, so the background settles rather than
-staying deformed around a parked cursor.
+Every effect used to follow the cursor: particles leaning toward it, a ripple
+under it, motion that rose and fell with how fast it moved. It is gone, and the
+reason is not performance. A background that responds to the pointer is a
+background competing with whatever the pointer is actually doing, and on a
+monitoring console the only thing moving for a reason should be the answer on
+screen.
+
+The removal is a removal, not a flag: no `pointermove` listener is attached at
+all. `frontend/src/lib/pointerField.ts` is kept — `pointerFor()` returns an inert
+value, which is the path every effect already took before the cursor first moved
+and on touch devices, so the animations run exactly as they do at rest with no
+per-effect change and nothing to unpick if this is ever wanted back.
+
+Canvases stay click-through (`pointer-events: none`), which is what they always
+were in Odysseus — the reactivity above was the part that was new here, and it
+is the part that went.
 
 **Performance notes worth preserving.** CSS variable reads are cached and
 invalidated on `daedalus-theme-change` — `effectScale()` was originally called
@@ -1140,6 +1148,33 @@ Three decisions worth keeping:
 
 The transition is suppressed under `prefers-reduced-motion: reduce`.
 
+### 5.2 The sidebar scrolls in two places, and grows in none
+
+Four fixed parts and two scroll regions: the brand, New and the core modules
+stay put at the top, the account row stays pinned at the bottom, and **Chats and
+tasks** and **Data stores** each scroll independently between them. Each list
+keeps its own heading — and the chat filter — outside its scroll viewport, so an
+expanded store scrolls *under* its label rather than pushing it away.
+
+`min-h-0` on every flex parent down to each viewport is what makes them scroll
+rather than grow. A flex item's `min-height` is `auto`, so `flex-1` alone is only
+a *preferred* height and tall content overrides it: expanding a data store used
+to stretch the column past `h-screen` and push the account row out of the
+viewport, where the shell's `overflow-hidden` clipped it. The row was still
+rendered — just unreachable, along with the bottom of the list.
+
+Space is shared rather than split: chats take what is left, the stores cap at 45%
+and shrink to their content below that. A collapsed store list therefore costs
+nothing, and an expanded one cannot eat the chat list. When one of the two is
+hidden in Settings → Appearance the other takes the whole column, and the
+separating rule goes with it.
+
+Both viewports pass `hideScrollbar` to `ScrollArea`, which drops the track and
+keeps wheel, trackpad, touch and keyboard scrolling. It is opt-in for a reason
+— a scrollbar is how somebody knows there is more below — and is taken here
+because in a 256px column the track is the widest thing competing with the
+content.
+
 ---
 
 ## 6. Settings shell
@@ -1163,6 +1198,78 @@ there is nothing to sign out of — the same reasoning that opens the tool polic
 by default. The `implemented` flag and the dot stay, because the next panel to
 be declared will need them before it exists.
 
+### 6.1 Shortcuts — `lib/keybinds.ts` · `hooks/useGlobalShortcuts.ts`
+
+Eleven rebindable actions, ported from Odysseus' keybind layer with this
+codebase's two standing differences: the map is a typed table rather than a bag
+of strings, so an action without a handler fails to compile, and it persists to
+the `keybinds` preference rather than to `localStorage`.
+
+| Group | Actions | Default |
+|---|---|---|
+| Navigation | Toggle sidebar · Search chats · Focus composer | `Ctrl+Alt+B` · `Ctrl+K` · `Ctrl+/` |
+| Conversations | New chat · Delete this chat · Toggle incognito | `Ctrl+Alt+N` · `Ctrl+Alt+D` · `Ctrl+Alt+I` |
+| Windows | Settings · Theme · Forge · Blueprints · Close the open window | `Ctrl+,` · `Ctrl+Alt+T` · `Ctrl+Alt+G` · `Ctrl+Alt+P` · `Esc` |
+
+**Rebinding previews before it commits.** Click a chord, press keys, and the new
+combo is shown but not saved until Enter or the tick; Escape abandons it,
+Backspace unbinds the action entirely. A rebind that commits on the first
+keypress cannot be corrected, because the correction is also a keypress.
+
+**The recorder captures, and marks the event.** It listens in the capture phase
+and calls `preventDefault`, which is the flag the global handler checks before
+acting. Without it, choosing a new chord for *delete this chat* would delete the
+chat you are sitting in while you choose.
+
+**One listener, walked in declaration order.** Thirteen components each binding
+`keydown` is thirteen chances for two to answer the same chord in whatever order
+they mounted. Here the first match wins and returns, and a duplicate is something
+the panel *shows* — with the rule stated, first listed wins — rather than a
+feature that mysteriously stops working.
+
+**Typing wins, with two exceptions.** A chord that fires while somebody is in the
+composer steals the keystroke, so an unmodified combo is ignored inside an input.
+`Escape` is let through, because closing the window in front is what Escape means
+everywhere, and so is anything with Ctrl or Alt, which prose cannot produce.
+
+**AltGr is not Ctrl+Alt.** The right Alt on AZERTY and QWERTZ layouts — used to
+type `@ # { } [ ] | \ €` — is reported by browsers as Ctrl+Alt, so typing an `@`
+on a German keyboard would otherwise fire `ctrl+alt+q`, and one of these bindings
+deletes a conversation. `getModifierState('AltGraph')` distinguishes them, and is
+never consulted on macOS, where Option legitimately sets it. Inherited trade:
+on Windows a deliberate `Ctrl+Alt+<char>` typed with the *right* Alt is
+unreachable. Use the left one.
+
+Two actions are delivered as `CustomEvent`s — focusing the composer and opening
+the chat filter — because the alternative is threading a ref from two components
+up through two contexts to the root, which would make every component with a
+focusable thing in it part of the shortcut system.
+
+### 6.2 Appearance — `lib/uiChrome.ts`
+
+Nine switches over the app's own furniture: six in the sidebar (brand, New,
+core modules, chat list, data stores, bottom bar) and three in the chat area
+(welcome message, incognito button, full-width transcript). Ported from the
+column of toggles in Odysseus' appearance panel, and earning its place here for
+a different reason: this console is screenshotted for a report, and turning off
+what a figure is not about beats cropping it out.
+
+**Chrome only.** Nothing switchable can hide an answer, a citation, a warning or
+a refusal — the switches cover navigation and decoration, whose absence costs a
+click and never a fact. Hiding the incognito button does not disable incognito:
+the shortcut still toggles it and the composer still says so in its placeholder.
+
+**Stored as the difference.** Every key ships `true` except `chat-fullwidth`, and
+only what differs is written, so an untouched install stores nothing, *reset* is
+a delete, and a switch added in a later version appears rather than being absent
+because an old saved object never mentioned it. The same argument as `tool_locks`
+in the backend, for the same reason.
+
+**What it does not own.** Colours, font, density, text size and the background
+effect stay in the Theme window, which is judged against the live app rather than
+through a modal covering it. Appearance links to it instead of copying the
+controls, which is how two screens end up disagreeing about the current font.
+
 ---
 
 ## 7. Frontend structure
@@ -1174,6 +1281,10 @@ Paths are relative to `frontend/src/`.
 | `contexts/ThemeContext.tsx` | Owns all appearance state; applies and persists in one effect |
 | `contexts/SettingsContext.tsx` | Incognito and model selection |
 | `contexts/SessionsContext.tsx` | Conversation state — list, active chat, transcript, send |
+| `contexts/UiPrefsContext.tsx` | The shortcut map and the chrome switches — one read at boot, two keys on write |
+| `lib/keybinds.ts` | Combo parsing, matching, keycaps, conflicts, AltGr guard. Knows nothing about the app |
+| `lib/uiChrome.ts` | Which furniture is switchable, and what ships shown |
+| `hooks/useGlobalShortcuts.ts` | The single `keydown` listener and its handler table |
 | `hooks/useDraggable.ts` | Modal dragging |
 | `hooks/useResizableSidebar.ts` | Settings rail resize/collapse |
 | `lib/prefsClient.ts` | Preference API client — 350ms debounce, `keepalive` flush on `pagehide` |
@@ -1192,7 +1303,7 @@ Paths are relative to `frontend/src/`.
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
 | `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
 | `lib/systemClient.ts` | Log-browser, observability and provider API client |
-| `components/settings/` | `SettingsSearch`, `DatabasesPanel` (health only), `ModelEndpointsPanel` |
+| `components/settings/` | `SettingsSearch`, `DatabasesPanel` (health only), `ModelEndpointsPanel`, `AppearancePanel`, `ShortcutsPanel` |
 
 ### 7.1 Where a thing lives is decided by how often you reach for it
 
@@ -1264,6 +1375,22 @@ Deliberate. `localStorage` is touched in exactly one place —
 `migrateLegacyLocalStorage()` — which reads legacy keys once, pushes them to
 the backend, and **deletes** them.
 
+Six keys, all server-side (`api/prefs.py` rejects any other):
+
+| Key | Holds |
+|---|---|
+| `theme` | The active theme — colours, font, density, effect |
+| `custom-themes` | Themes made in the editor |
+| `ui-scale` | Interface scale |
+| `settings-ui` | The Settings rail's width and collapsed state |
+| `keybinds` | The shortcut map — only what was rebound |
+| `ui-chrome` | The appearance switches — only what was changed |
+
+A console whose keyboard map lives in one browser profile cannot be described in
+a write-up, restored from the backup Settings → System takes, or read back when
+somebody asks what the interface was when a figure was captured. That is the
+whole argument, and it applies to a keybinding exactly as it applies to a theme.
+
 ---
 
 ## 8. Deployment
@@ -1314,7 +1441,31 @@ Three details worth knowing:
   loading host-built binaries fails in a way that reads as a Vite bug.
 
 `./daedalus.sh stop` passes `--remove-orphans`, which is what makes one stop
-cover both stacks.
+cover both stacks. A bare `docker compose down` from the base file alone does
+not: the dev overlay's `frontend` service is an orphan from that file's point of
+view, so it is left running — and because it is still attached to the network,
+the `down` ends with *"Network daedalus_default: resource is still in use"*.
+
+**GPU passthrough is a third overlay.** `docker-compose.gpu.yml` adds `gpus: all`
+and is layered on automatically when `nvidia-smi` lists a GPU on the host;
+`--gpu` insists and `--no-gpu` refuses. It is a separate file because `gpus: all`
+is a requirement, not a preference — Docker declines to create the container at
+all where no NVIDIA driver is available — so in the base file it would mean the
+project starts only on machines that have one. On the automatic path a rejection
+is not fatal: the overlay is dropped with a warning and the stack comes up
+without it.
+
+What it fixes is *detection*, not inference — Ollama still runs on the host by
+default. Without it the container sees no driver, `services/hardware.py`
+correctly reports no GPU **for the container**, and Settings → Hardware reads as
+broken detection on a laptop with the card sitting in it, while the Forge sizes
+models against zero VRAM. `_in_container()` is why the panel now says which
+machine it is describing: with no driver visible it names the passthrough flag
+instead of reporting "No GPU detected", and the Runtime card appends
+`· container` with a note that the cores and memory below are a cgroup's
+allowance, not the machine's. It is the same argument `_wsl_host()` already
+makes one level up — a correct reading of the wrong machine is the thing to
+guard against.
 
 **Two gotchas worth remembering.** The chroma image is minimal (dash only, no
 curl/wget/python), so no healthcheck can run inside it — readiness is reported

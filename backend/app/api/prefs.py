@@ -19,7 +19,12 @@ router = APIRouter(prefix="/api/prefs", tags=["prefs"])
 
 # Only keys the UI actually owns are writable — an unknown key is a bug or an
 # abuse, not something to persist.
-ALLOWED_KEYS = {"theme", "custom-themes", "ui-scale", "settings-ui"}
+# `keybinds` is the shortcut map and `ui-chrome` the visibility of the app's own
+# furniture. Both belong here rather than in browser storage for the reason the
+# rest of this file exists: a console whose keyboard map lives in one machine's
+# localStorage cannot be described in a write-up, restored from a backup, or
+# read back when somebody asks what the interface was when a result was taken.
+ALLOWED_KEYS = {"theme", "custom-themes", "ui-scale", "settings-ui", "keybinds", "ui-chrome"}
 
 
 class PrefBody(BaseModel):

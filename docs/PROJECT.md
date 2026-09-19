@@ -632,9 +632,11 @@ Trust comes from visible reasoning, not a black box:
 | **Chat UI (mock)** | Message list, auto-growing composer, model selector, incognito mode, typewriter greeting — **no backend wired yet** |
 | **Theme system** | 16 themes; live customisation of 7 base + 14 per-zone colours; derived syntax ramps; complementary-harmony generator; font/density/text-scale; frosted glass; import/export; up to 8 saved custom themes |
 | **Typography** | Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted so the UI never reaches a font CDN; every font path in the app resolves through one CSS variable |
-| **Background effects** | 13 options (11 canvas-animated) with colour/intensity/size, and pointer-reactive behaviour |
+| **Background effects** | 13 options (11 canvas-animated) with colour/intensity/size. Pointer reactivity was built and then removed — a background that answers the cursor competes with whatever the cursor is doing (`FEATURES.md` §5) |
 | **Settings modal** | Sectioned nav, incognito toggle, model defaults |
-| **Settings** | Registry-driven nav, keyword search with keyboard navigation, drag-resizable + collapsible rail with full ARIA, layout persisted server-side |
+| **Settings** | Registry-driven nav, keyword search with keyboard navigation, drag-resizable + collapsible rail with full ARIA, layout persisted server-side. Every declared panel is implemented |
+| **Shortcuts** | 11 rebindable actions; the chord is previewed before it commits, duplicates are shown with the rule that resolves them, and AltGr is not mistaken for Ctrl+Alt. Stored server-side like every other preference |
+| **Appearance** | 9 switches over the app's own chrome, grouped by region with a per-section reset. Chrome only — nothing switchable can hide an answer, a citation, a warning or a refusal |
 | **FastAPI backend** | App skeleton, health endpoint, preference store, CORS, `theme.css` endpoint for flash-free first paint, `GET /api/system/databases`, chat session API |
 | **Data stores** | All five wired: read-only sensor accessor + dev seeder, 7-table audit log store with `query_id` tracing, chat transcript store, Chroma client (server + embedded), prefs |
 | **Conversation memory** | Sessions and transcripts with `seq`-ordered messages, auto-titling, archive, incognito; token-budgeted context assembly with a rolling summary (§7.4) |

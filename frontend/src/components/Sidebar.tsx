@@ -13,6 +13,8 @@ import {
 } from "./ui/dropdown-menu"
 import { useSessions } from '../contexts/SessionsContext'
 import { useSettings } from '../contexts/SettingsContext'
+import { useUiPrefs } from '../contexts/UiPrefsContext'
+import { SEARCH_CHATS_EVENT } from '../lib/keybinds'
 import { sessionLabel, type ChatSession } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
 
@@ -251,8 +253,17 @@ function DataStores({
 export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenStore, activeStore }: SidebarProps) {
   const { sessions, activeSessionId, status, newChat, selectSession, rename, remove } = useSessions()
   const { isIncognito } = useSettings()
+  const { show } = useUiPrefs()
   const [filter, setFilter] = useState('')
   const [searching, setSearching] = useState(false)
+
+  // The search shortcut is handled at the root, which owns the keyboard but not
+  // this state. See `lib/keybinds.ts` for why it arrives as an event.
+  useEffect(() => {
+    const onSearch = () => setSearching(true)
+    window.addEventListener(SEARCH_CHATS_EVENT, onSearch)
+    return () => window.removeEventListener(SEARCH_CHATS_EVENT, onSearch)
+  }, [])
 
   const needle = filter.trim().toLowerCase()
   const visible = needle
@@ -261,12 +272,15 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
 
   return (
     <div className="flex flex-col h-full theme-sidebar zone-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
-      {/* Header */}
+      {/* Header. The close button stays even when the brand is hidden — losing
+          the way to collapse the column is a different thing from tidying it. */}
       <div className="flex items-center justify-between p-3">
+        {show('sidebar-brand') ? (
         <div className="flex items-center gap-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] p-1.5 rounded-md transition-colors">
           <LabyrinthIcon className="w-5 h-5 zone-brand" />
           <span className="font-semibold text-[15px] tracking-wide font-serif zone-brand-text">Daedalus</span>
         </div>
+        ) : <span />}
         <div className="flex items-center gap-1">
           {onClose && (
             <Button variant="ghost" size="icon" onClick={onClose} className="w-8 h-8 theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
@@ -277,6 +291,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
       </div>
 
       {/* New Chat Button */}
+      {show('sidebar-new') && (
       <div className="px-3 mb-4">
         <Button
           onClick={newChat}
@@ -286,9 +301,11 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           New
         </Button>
       </div>
+      )}
 
       {/* The three core modules never scroll — three rows that are always there.
           Scrolling is for the two lists below, and each does its own. */}
+      {show('sidebar-modules') && (
       <div className="px-3 shrink-0">
         <div className="flex flex-col gap-0.5 mb-4">
           {/* The three core modules — designed in docs/MODULES.md. Two are
@@ -316,6 +333,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           ))}
         </div>
       </div>
+      )}
 
       {/* Two lists, two scroll regions, one shared column of space.
           `min-h-0` on every flex parent down to each viewport is what makes them
@@ -329,6 +347,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           cannot eat the chat list. */}
       <div className="flex-1 min-h-0 flex flex-col px-3 gap-3">
         {/* Chats and tasks */}
+        {show('sidebar-chats') && (
         <div className="flex-1 min-h-0 flex flex-col">
           <div
             className="flex items-center justify-between px-2 mb-1 group cursor-pointer shrink-0"
@@ -397,15 +416,27 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           </div>
           </ScrollArea>
         </div>
+        )}
 
         {/* Separated by a rule, because two lists that scroll independently need
-            to look like two things rather than one list with a gap in it. */}
-        <div className="min-h-0 max-h-[45%] flex flex-col border-t theme-border pt-3 pb-1">
+            to look like two things rather than one list with a gap in it. The
+            rule and the cap are dropped when the chat list is hidden: one list
+            in a column needs neither a separator nor a share of the space. */}
+        {show('sidebar-stores') && (
+        <div
+          className={`min-h-0 flex flex-col ${
+            show('sidebar-chats')
+              ? 'max-h-[45%] border-t theme-border pt-3 pb-1'
+              : 'flex-1 pb-1'
+          }`}
+        >
           <DataStores onOpenStore={onOpenStore} activeStore={activeStore} />
         </div>
+        )}
       </div>
 
       {/* Bottom Section */}
+      {show('sidebar-account') && (
       <div className="p-3 border-t theme-border mt-auto flex flex-col gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center justify-between p-2 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] cursor-pointer transition-colors w-full border-none outline-none">
@@ -428,6 +459,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      )}
     </div>
   )
 }
