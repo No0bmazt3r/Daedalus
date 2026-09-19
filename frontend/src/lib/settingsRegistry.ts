@@ -9,6 +9,7 @@ import {
   Bell,
   Cpu,
   Database,
+  Globe,
   Keyboard,
   Link as LinkIcon,
   List,
@@ -88,6 +89,15 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: [
       'rag', 'documents', 'sop', 'manual', 'ingestion', 'chunks', 'embedding',
       'track', 'graphrag', 'graph', 'vector', 'retrieval', 'switch', 'compare',
+    ],
+  }),
+
+  panel({
+    id: 'search', label: 'Search', group: 'data', icon: Globe, implemented: true,
+    keywords: [
+      'search', 'web', 'internet', 'provider', 'searxng', 'duckduckgo', 'brave',
+      'google', 'pse', 'tavily', 'serper', 'api', 'key', 'fallback', 'sourcing',
+      'corpus', 'documents', 'safesearch',
     ],
   }),
 

@@ -37,6 +37,44 @@ Unblocks every data-backed answer.
 Offline pipeline. Never runs during a live query.
 
 - [ ] Collect the corpus into `data/documents/{manuals,sops,anomaly_records,uauc_records}/`
+- [x] **Settings → Search**, the setup surface for finding that corpus. Six
+      providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper)
+      with an ordered fallback chain, per-provider credentials, a Test probe and
+      a live search that shows every attempt the chain made. Ported from the
+      Odysseus Search tab.
+      - [x] Rule 1 held in the schema, not in good intentions:
+            `search_config.purpose` CHECKs to `'setup'`, nothing on the chat
+            path imports `services/web_search.py`, and §8.2's line for model
+            weights — downloading is setup, the runtime stays offline — is the
+            same line drawn for documents
+      - [x] Credentials get 002's three protections: a masked `key_hint`
+            instead of the key, one obviously-named `secret_for()` accessor, and
+            `prefs` absent from `log_browser.BROWSABLE` so the raw viewer cannot
+            render either table
+      - [x] Three deliberate departures from Odysseus: no implicit DuckDuckGo
+            fallback (a second provider is a second party seeing the query), a
+            failing provider states its reason rather than returning an empty
+            list that reads as "no results", and the chain's attempts are in the
+            response so a fallback is watched rather than inferred
+      - [x] **SearXNG is containerised**, behind `--profile with-search` on
+            `127.0.0.1:8081` — the one provider where the query reaches a
+            process on this machine instead of a company with a log of it.
+            Behind a profile rather than in the default stack because Rule 1
+            says the runtime is offline: it is started while sourcing the
+            corpus and stopped afterwards. 8081 because Odysseus holds 8080 on
+            the same machine, the same reason ChromaDB moved off 8000
+      - [x] Its engine list is tuned from measurement, not from the defaults.
+            From behind NAT, Brave, DuckDuckGo and Startpage all returned
+            `Suspended` or `CAPTCHA`, and Bing answered a reactor query with
+            Gmail help pages — worse than nothing, because nothing is honest.
+            Crossref, OpenAlex and Semantic Scholar answer over real APIs, do
+            not block a datacentre address, and are the right index for
+            manuals and standards anyway. SearXNG's general defaults stay
+            enabled underneath for a network that is not blocked
+      - [x] DuckDuckGo is parsed with the standard library's `html.parser`
+            rather than BeautifulSoup — it is the only HTML this backend reads,
+            and its redirector is unwrapped only after checking the host, which
+            is otherwise an open redirect
 - [ ] Extract text — PDF, DOCX, MD, TXT, CSV/JSON
 - [ ] Clean: strip page numbers, repeated headers, corrupt characters; normalise whitespace/headings
 - [ ] Chunk 300–500 tokens, ~50 overlap, **section-aware** — never split a safety procedure mid-step
@@ -707,12 +745,20 @@ Layer 9 below for the per-step detail.
 - [ ] The chat path has no retrieval or tool-calling yet: it replays conversation
       history and answers. `evidence` is threaded through `inference.answer()`
       unused, so the prompt is already in its final shape for M5/M6
-- [ ] Four `setState`-in-effect lint warnings (`SessionsContext`, `ModelsView` ×2,
-      `AddedModelsView`) — all the legitimate kind: an effect synchronising with
-      the backend on mount
+- [ ] Five `setState`-in-effect lint warnings (`SessionsContext`, `ModelsView` ×2,
+      `AddedModelsView`, `SearchPanel`) — all the legitimate kind: an effect
+      synchronising with the backend on mount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
+- [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**
+      SearXNG volume gets. An instance that has already booted keeps its own
+      copy, on purpose — so applying a template change means
+      `docker volume rm daedalus_searxng-data` and letting it re-seed
+- [ ] The SearXNG image logs three engine init failures on every boot (`ahmia`,
+      `torch`, `radio browser`). Upstream noise, unrelated to the engines
+      Daedalus enables, and harmless — but it makes `docker logs` look worse
+      than the container is
 - [ ] **Embedded Chroma does not work on a default install.**
       `requirements.txt` ships `chromadb-client`, which is HTTP-only, so an
       unset `CHROMA_URL` is not a fallback to embedded mode — it is no vector
@@ -726,7 +772,15 @@ Layer 9 below for the per-step detail.
       as "512d (verified)" in Settings → Knowledge Base. Clear the block, or
       re-verify once an embedder is pulled
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
-- [ ] Settings panels other than Add Models, Databases and Shortcuts are still placeholders
+- [ ] Search results are read by a person, not ingested. There is no "save this
+      result to the corpus" path, so sourcing is still copy-a-URL-and-download
+      by hand. Worth building with M2's extractor rather than before it, since
+      the thing it would write into does not exist yet
+- [ ] A cloud search provider's key is stored in plain text in `prefs.db`,
+      exactly as the benchmark API keys are, and with the same caveat: fine for
+      a single-user local deployment on a git-ignored file, not a secret store
+- [ ] Settings panels other than Add Models, Added Models, Hardware, Databases,
+      Knowledge Base, Search, Appearance and Shortcuts are still placeholders
 - [ ] Two Font selector options are not actually bundled — `mono` names Fira Code
       and `opendyslexic` names OpenDyslexic, but only Monocraft and Geist ship
       with the app, so both silently fall back (to the system monospace and to

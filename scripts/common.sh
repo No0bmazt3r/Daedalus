@@ -240,11 +240,32 @@ ensure_chroma() {
   fi
 }
 
+# host_searxng_url — where SearXNG is, as seen *from the host*.
+#
+# Third instance of the same problem as Ollama and Chroma: .env holds the
+# container's view, `http://searxng:8080`, which is a compose service name and
+# does not resolve on the host. docker-compose.yml publishes it on
+# 127.0.0.1:${SEARXNG_PORT:-8081}.
+#
+# No `ensure_searxng` to match `ensure_chroma`, and that is deliberate. Track 1
+# cannot work without a vector store, so `dev` starts one; nothing in Daedalus
+# needs a search engine to run, and a project whose first rule is "the runtime
+# is offline" should not quietly start one every time somebody runs the dev
+# servers. Start it when you want it: `./daedalus.sh start --with-search`.
+host_searxng_url() {
+  case "${SEARXNG_URL:-}" in
+    "") return 0 ;;
+    "http://searxng:8080") printf 'http://127.0.0.1:%s' "${SEARXNG_PORT:-8081}" ;;
+    *) printf '%s' "$SEARXNG_URL" ;;
+  esac
+}
+
 host_py() {
   local root="$PWD"
   (cd backend && env \
       ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
       ${CHROMA_URL:+CHROMA_URL="$(host_chroma_url)"} \
+      ${SEARXNG_URL:+SEARXNG_URL="$(host_searxng_url)"} \
       DAEDALUS_DATA_DIR="$root/data" \
       DAEDALUS_LOG_DIR="$root/logs" \
       DAEDALUS_PREFS_DB="$root/backend/data/prefs.db" \
@@ -258,6 +279,7 @@ host_uvicorn() {
   env \
     ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
     ${CHROMA_URL:+CHROMA_URL="$(host_chroma_url)"} \
+    ${SEARXNG_URL:+SEARXNG_URL="$(host_searxng_url)"} \
     DAEDALUS_DATA_DIR="$root/data" \
     DAEDALUS_LOG_DIR="$root/logs" \
     DAEDALUS_PREFS_DB="$root/backend/data/prefs.db" \

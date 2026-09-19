@@ -12,13 +12,16 @@
 #
 # Flags:
 #   --with-ollama            run Ollama as a container too (default: use the host)
+#   --with-search            run SearXNG as a container too (corpus sourcing only)
 #
 # Related scripts:
 #   ./sync.sh                after a git pull: deps, .env, migrations  (safe)
 #   ./reset.sh               wipe and rebuild the local databases (destructive)
 #
 # The stack is one container serving both the API and the built dashboard,
-# plus ChromaDB for the vector store.
+# plus ChromaDB for the vector store. SearXNG is available behind a flag: the
+# runtime is offline (Rule 1), so a search engine is something you start while
+# sourcing the corpus and stop afterwards, not part of the deployed stack.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -53,6 +56,7 @@ else
   for arg in "$@"; do
     case "$arg" in
       --with-ollama) PROFILE_ARGS+=(--profile with-ollama) ;;
+      --with-search) PROFILE_ARGS+=(--profile with-search) ;;
       -h|--help)     usage; exit 0 ;;
       *) err "unknown option '$arg' (try --help)"; exit 1 ;;
     esac

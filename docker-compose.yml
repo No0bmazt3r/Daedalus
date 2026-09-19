@@ -2,6 +2,7 @@
 #
 #   docker compose up                          # app + vector DB
 #   docker compose --profile with-ollama up    # also run Ollama in a container
+#   docker compose --profile with-search up    # also run SearXNG (setup only)
 #
 # Four separate databases, on purpose (docs/PROJECT.md §6.3):
 #
@@ -45,6 +46,10 @@ services:
       DAEDALUS_HW_LIVE_INTERVAL: ${DAEDALUS_HW_LIVE_INTERVAL:-30}
       DAEDALUS_HW_SLOW_INTERVAL: ${DAEDALUS_HW_SLOW_INTERVAL:-300}
       DAEDALUS_HW_IDLE_AFTER: ${DAEDALUS_HW_IDLE_AFTER:-120}
+      # Where the self-hosted search engine is, when the `with-search` profile
+      # is running one. Only a default: a URL saved in Settings → Search wins,
+      # and with neither, SearXNG is simply unconfigured.
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
     volumes:
       # Sensor SQLite + documents. Mount the SCADA machine's real database
       # here (read-only at the driver level regardless).
@@ -83,6 +88,69 @@ services:
     # reported by the app instead, via /api/system/databases.
     restart: unless-stopped
 
+  # Optional: only starts with `--profile with-search`.
+  #
+  # Behind a profile rather than in the default stack, unlike Odysseus, which
+  # runs it always. Rule 1 says the production runtime is offline, so a
+  # deployed reactor assistant should not have a search engine sitting next to
+  # it by default. It is started deliberately, while somebody is sourcing the
+  # corpus, and stopped afterwards.
+  #
+  # Self-hosted for the reason that makes SearXNG the recommended provider in
+  # the panel: the query goes to a container on this machine, which fans out to
+  # public engines without a key, an account, or a third party holding a log of
+  # what a reactor operator searched for.
+  searxng:
+    profiles: ["with-search"]
+    # Pinned, not :latest. A search engine that silently changes behaviour
+    # between two runs of a project whose results chapter cites what it found
+    # is not a dependency, it is a variable.
+    image: docker.io/searxng/searxng:2026.5.31-7159b8aed
+    container_name: daedalus-searxng
+    # First boot seeds /etc/searxng from the mounted template with a generated
+    # secret. Afterwards the volume's copy is authoritative, so an instance you
+    # have tuned is never silently reset by a redeploy.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        if [ ! -s /etc/searxng/settings.yml ] || grep -q '__SEARXNG_SECRET__' /etc/searxng/settings.yml; then
+          secret="$${SEARXNG_SECRET:-}"
+          if [ -z "$$secret" ]; then
+            secret="$$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          fi
+          sed "s|__SEARXNG_SECRET__|$$secret|g" /tmp/searxng-settings.yml.template > /etc/searxng/settings.yml
+        fi
+        exec /usr/local/searxng/entrypoint.sh
+    ports:
+      # Localhost only. This instance exists for one process on this machine.
+      - "127.0.0.1:${SEARXNG_PORT:-8081}:8080"
+    volumes:
+      - searxng-data:/etc/searxng
+      - ./config/searxng/settings.yml:/tmp/searxng-settings.yml.template:ro
+    environment:
+      SEARXNG_BASE_URL: http://localhost:${SEARXNG_PORT:-8081}/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
+    # The image runs as the non-root `searxng` user, but its entrypoint still
+    # chowns /etc/searxng on first boot and drops privileges with su-exec.
+    # Without these four it fails setup with EACCES. Same set the upstream
+    # searxng-docker compose file recommends.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=5).read(1)\""]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
   # Optional: only starts with `--profile with-ollama`.
   ollama:
     profiles: ["with-ollama"]
@@ -105,3 +173,4 @@ services:
 volumes:
   chroma-data:
   ollama-models:
+  searxng-data:

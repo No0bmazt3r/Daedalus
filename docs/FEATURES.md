@@ -88,6 +88,10 @@ to it.
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
 | `POST` | `/api/embeddings/verify` | Embed a probe string and record the width the model actually returns. The only call here that runs a model |
+| `GET`/`PUT` | `/api/search/config` | The web search provider, its fallback chain, and what each provider still needs configured |
+| `PUT` | `/api/search/providers/{id}` | One provider's URL, key or engine id. Write-only for the key — it returns a masked hint |
+| `POST` | `/api/search/test` | Run one provider once. A failing provider is a `200` with `ok: false`, not a 5xx |
+| `POST` | `/api/search/query` | Search with the configured chain, reporting every attempt it made |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 | `POST`/`DELETE` | `/api/system/seed-graph-traces` | Record real graph traversals into `rag_logs` so Blueprints' replay can be built before the orchestrator exists. **Dev only**; rows marked `vector_db_used='seed'` |
 
@@ -511,6 +515,83 @@ The container installs `chromadb-client` rather than full `chromadb` — it only
 talks HTTP, and the full package drags in onnxruntime for embedded mode the
 image never uses.
 
+### Web search — `services/web_search.py`
+
+Six providers behind one interface: SearXNG, DuckDuckGo, Brave, Google PSE,
+Tavily and Serper, plus `disabled` as a real selectable state rather than the
+absence of a row.
+
+**Why a networked feature exists in an offline project.** Rule 1 keeps the
+production runtime local, and a web search is network egress, so it is not on
+the answer path — nothing in `chat_service`, `inference` or the retrieval tracks
+imports the module, and `search_config.purpose` carries a CHECK admitting only
+`'setup'`. What it is for is the work *around* the corpus: finding, checking and
+versioning the manuals and SOPs M2 ingests, and reading a model card while
+sizing one in the Forge. §8.2 already draws exactly this line for model
+weights — *"model downloading is a one-time setup activity performed when
+internet is available"* — and this is the same line for documents. Rule 5 makes
+the point from the other side: nothing here is exposed to the model as a tool.
+
+Credentials live in `prefs.db` under the same three protections as the cloud
+model endpoints: `public()` returns `key_hint` and never the key, `secret_for()`
+is the single accessor that returns the real value, and `prefs` is absent from
+`log_browser.BROWSABLE` entirely so the raw viewer cannot render either table.
+
+### SearXNG runs here, not somewhere else
+
+The one provider that is not somebody else's API. `docker compose --profile
+with-search up` (or `./daedalus.sh start --with-search`) runs a pinned SearXNG
+on `127.0.0.1:8081`, and the query reaches a container on this machine that
+fans out to public engines — no key, no account, and no third party holding a
+log of what a reactor operator searched for. That is the whole reason it is the
+recommended provider, and it is why it is containerised rather than left as a
+URL you are expected to have.
+
+**Behind a profile, unlike Odysseus, which runs it always.** Rule 1 says the
+production runtime is offline, so a deployed reactor assistant should not have
+a search engine sitting next to it by default. It is started deliberately while
+somebody is sourcing the corpus, and stopped afterwards.
+
+Three things about the bundled instance are measured rather than assumed:
+
+- **Port 8081, not SearXNG's usual 8080.** Odysseus publishes its own instance
+  on 8080 and the two projects share a development machine. ChromaDB moved off
+  8000 for the same reason.
+- **The first boot seeds `/etc/searxng` from `config/searxng/settings.yml`**
+  with a generated secret, then never touches it again — so an instance you
+  have tuned is not silently reset by a redeploy. Changing that template only
+  affects a *fresh* volume.
+- **The engine list is tuned for a literature search, not a web search.** On a
+  default install from behind NAT, Brave, DuckDuckGo and Startpage all answered
+  `Suspended: too many requests` or `CAPTCHA`, and Bing — which does respond —
+  returned Gmail help pages for "pressurised water reactor operating manual",
+  which is worse than nothing because nothing is honest. Crossref, OpenAlex and
+  Semantic Scholar answer over real APIs, do not block a datacentre address, and
+  are the right index for manuals, standards and papers anyway. The same query
+  against the tuned instance returns *Operating manual for the High Flux Isotope
+  Reactor* and *OPERATING MANUAL FOR THE ARGONAUT REACTOR*. SearXNG's own
+  general-engine defaults are left enabled underneath, so a network that is not
+  blocked keeps them.
+
+`SEARXNG_URL` is only a default. A URL saved in the panel wins, so pointing at
+an instance you already run stays a matter of typing an address.
+
+Ported from the Odysseus Search tab, with three deliberate differences:
+
+| | Odysseus | Daedalus |
+|---|---|---|
+| Empty fallback chain | Silently appends DuckDuckGo | Nothing. A second provider is a second party seeing the query, and one nobody chose is one nobody can account for |
+| A provider that fails | Returns `[]`, indistinguishable from no results | Raises with the reason — missing key, rate limit, a SearXNG whose engines are all down |
+| The chain | Runs invisibly | Every attempt is in the response, so a fallback is watched rather than inferred |
+
+The DuckDuckGo provider parses HTML, because that endpoint has no JSON API. It
+uses the standard library's `html.parser` rather than BeautifulSoup: it is the
+only HTML anything in this backend parses, and adding a parser dependency would
+make it the obvious tool for the next person with a scraping idea. DuckDuckGo
+wraps every result in its own redirector, and the unwrapper checks the host is
+DuckDuckGo's before following `uddg=` — otherwise it is an open redirect this
+code walks into willingly.
+
 ---
 
 ## 4. Theme engine — `frontend/src/lib/themes.ts`
@@ -842,6 +923,7 @@ compose and `daedalus.sh`.
 | `daedalus` | The app. Volumes: `./data`, `./logs`, `./backend/data` |
 | `chromadb` | Vector store, persistent volume, telemetry disabled |
 | `ollama` | Optional — `--profile with-ollama`; host by default for GPU |
+| `searxng` | Optional — `--profile with-search`; a self-hosted search engine for corpus sourcing |
 
 **Two gotchas worth remembering.** The chroma image is minimal (dash only, no
 curl/wget/python), so no healthcheck can run inside it — readiness is reported
