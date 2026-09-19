@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, Brain, Wrench, Eye } from 'lucide-react'
+import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -16,33 +16,9 @@ import {
   DropdownMenuSeparator
 } from './ui/dropdown-menu'
 
+import { CapabilityBadges } from './ui/capability-badges'
 import { useSettings } from '../contexts/SettingsContext'
 import { useSessions } from '../contexts/SessionsContext'
-
-/** The capabilities worth showing. Anything else Ollama reports is ignored. */
-const CAPABILITY_BADGES = [
-  { id: 'thinking', icon: Brain, label: 'Reasoning', hint: 'Works through the problem before answering. Slower to first token by design.' },
-  { id: 'tools', icon: Wrench, label: 'Tools', hint: 'Can call tools — what Rule 3 needs for sensor readings to come from the DB rather than the weights.' },
-  { id: 'vision', icon: Eye, label: 'Vision', hint: 'Accepts images as well as text.' },
-] as const
-
-function CapabilityBadges({ capabilities }: { capabilities?: string[] }) {
-  const shown = CAPABILITY_BADGES.filter((c) => capabilities?.includes(c.id))
-  if (!shown.length) return null
-  return (
-    <span className="flex items-center gap-1 shrink-0">
-      {shown.map((c) => (
-        <span
-          key={c.id}
-          title={`${c.label} — ${c.hint}`}
-          className="p-0.5 rounded theme-text-muted"
-        >
-          <c.icon size={11} />
-        </span>
-      ))}
-    </span>
-  )
-}
 
 function TypewriterText({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
@@ -109,12 +85,7 @@ function MessageActions({ text, modelTag, fromCloud }: { text: string, modelTag?
           className={`text-[11px] ml-1 select-none flex items-center gap-1 ${
             fromCloud ? 'status-warn' : 'theme-text-muted'
           }`}
-          title={
-            fromCloud
-              ? 'Answered off this machine. Logged as chat_cloud and excluded from '
-                + 'the local latency figures — this turn is not the production path.'
-              : undefined
-          }
+          title={fromCloud ? 'Answered off this machine — logged as chat_cloud' : undefined}
         >
           {fromCloud && <Cloud size={10} />}
           {modelTag}
@@ -124,13 +95,31 @@ function MessageActions({ text, modelTag, fromCloud }: { text: string, modelTag?
   )
 }
 
-export function ChatInterface() {
-  const { isIncognito, setIsIncognito, selectedModel, setSelectedModel, models, referenceModels, modelsLoading, modelsError, deployedModel } = useSettings()
-  // The transcript lives on the server — see contexts/SessionsContext.
-  const { messages, sendMessage, sending, error, modelNotice } = useSessions()
-  const [input, setInput] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  
+/**
+ * Everything under the textarea: attach, mode, model picker, mic, send.
+ *
+ * One component for both composers. They were separate blocks, and the
+ * in-conversation one had drifted down to just attach-and-send — so once a
+ * chat had started there was no way to change model without opening a new one.
+ * That is the wrong default for a multi-model system: comparing a local answer
+ * against a cloud one is most useful *within* one conversation, and `model_tag`
+ * is already recorded per message, so a mixed transcript is a shape the store
+ * has always supported.
+ */
+function ComposerControls({
+  onSend,
+  canSend,
+  compact = false,
+}: {
+  onSend: () => void
+  canSend: boolean
+  /** The in-conversation composer sits tighter than the greeting one. */
+  compact?: boolean
+}) {
+  const {
+    selectedModel, setSelectedModel, models, referenceModels,
+    modelsLoading, modelsError, deployedModel,
+  } = useSettings()
 
   let modelOptions: { value: string; label: string; capabilities?: string[] }[] =
     [{ value: '', label: 'Loading models…' }]
@@ -147,6 +136,115 @@ export function ChatInterface() {
   // Which of the two halves the current pick came from. The composer says so
   // before you send, not only afterwards in the transcript.
   const selectedIsCloud = referenceModels.some((m) => m.name === selectedModel)
+
+  return (
+      <div className={`flex items-center justify-between px-3 pt-1 ${compact ? 'pb-2' : 'pb-3'}`}>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
+            <Plus size={18} />
+          </Button>
+          <div className="flex items-center rounded-lg p-0.5 border theme-border bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)]">
+            <button className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] transition-colors duration-200">Chat</button>
+            <button className="px-3 py-1 text-xs font-medium theme-text-muted hover:theme-text transition-colors duration-200">System</button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center text-xs theme-text-muted mr-2 cursor-pointer hover:theme-text outline-none data-[state=open]:theme-text">
+              {selectedIsCloud
+                ? <Cloud size={14} className="mr-1 status-warn" />
+                : <Zap size={14} className="mr-1 theme-accent" />}
+              {selectedModel}
+              <ChevronDown size={14} className="ml-1 opacity-50" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 z-50 theme-card theme-border theme-text border">
+              {modelOptions.map(opt => (
+                <DropdownMenuItem
+                  key={opt.value}
+                  onClick={() => { if (opt.value) setSelectedModel(opt.value) }}
+                  disabled={!opt.value}
+                  className={`cursor-pointer flex items-center gap-2 ${
+                    selectedModel === opt.value
+                      ? 'theme-accent bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
+                      : 'theme-text-muted'
+                  }`}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  <CapabilityBadges capabilities={opt.capabilities} />
+                  {deployedModel?.tag === opt.value && (
+                    <span
+                      className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0"
+                      title={deployedModel.reason}
+                    >
+                      {deployedModel.mode}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+
+              {/* Selectable, under their own heading and their own
+                  warning. Rule 1 is recorded rather than prevented here:
+                  the turn is logged `chat_cloud` and the transcript marks
+                  it, so the production figures stay clean while the
+                  comparison stays inside the system where it is logged. */}
+              {referenceModels.length > 0 && (
+                <>
+                  <DropdownMenuSeparator className="theme-border" />
+                  {/* Label and rows inside a Group: Base UI's GroupLabel
+                      reads its context and throws without one. */}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wide status-warn font-normal">
+                      Evaluation only · not Rule&nbsp;1 safe
+                    </DropdownMenuLabel>
+                    {referenceModels.map(m => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={() => setSelectedModel(m.name)}
+                        title={m.note ?? undefined}
+                        className={`cursor-pointer flex items-center gap-2 ${
+                          selectedModel === m.name
+                            ? 'status-warn bg-[color-mix(in_srgb,var(--status-warn)_16%,transparent)]'
+                            : 'theme-text-muted'
+                        }`}
+                      >
+                        <Cloud size={12} className="shrink-0" />
+                        <span className="truncate">{m.name}</span>
+                        <CapabilityBadges capabilities={m.capabilities} />
+                        <span className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0">
+                          cloud
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
+            <Mic size={18} />
+          </Button>
+          <Button
+            onClick={onSend}
+            disabled={!canSend}
+            className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled:opacity-40 disabled:theme-track disabled:theme-text-muted p-0"
+          >
+            <ArrowUp size={18} strokeWidth={2.5} />
+          </Button>
+        </div>
+      </div>
+  )
+}
+
+export function ChatInterface() {
+  // The picker lives in ComposerControls now; only `referenceModels` is needed
+  // here, to mark which transcript turns came from off the machine.
+  const { isIncognito, setIsIncognito, referenceModels } = useSettings()
+  // The transcript lives on the server — see contexts/SessionsContext.
+  const { messages, sendMessage, sending, error, modelNotice } = useSessions()
+  const [input, setInput] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -236,101 +334,7 @@ export function ChatInterface() {
               rows={1}
             />
             
-            <div className="flex items-center justify-between px-3 pb-3 pt-1">
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
-                  <Plus size={18} />
-                </Button>
-                <div className="flex items-center rounded-lg p-0.5 border theme-border bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)]">
-                  <button className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] transition-colors duration-200">Chat</button>
-                  <button className="px-3 py-1 text-xs font-medium theme-text-muted hover:theme-text transition-colors duration-200">System</button>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center text-xs theme-text-muted mr-2 cursor-pointer hover:theme-text outline-none data-[state=open]:theme-text">
-                    {selectedIsCloud
-                      ? <Cloud size={14} className="mr-1 status-warn" />
-                      : <Zap size={14} className="mr-1 theme-accent" />}
-                    {selectedModel}
-                    <ChevronDown size={14} className="ml-1 opacity-50" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-80 z-50 theme-card theme-border theme-text border">
-                    {modelOptions.map(opt => (
-                      <DropdownMenuItem
-                        key={opt.value}
-                        onClick={() => { if (opt.value) setSelectedModel(opt.value) }}
-                        disabled={!opt.value}
-                        className={`cursor-pointer flex items-center gap-2 ${
-                          selectedModel === opt.value
-                            ? 'theme-accent bg-[color-mix(in_srgb,var(--primary)_16%,transparent)]'
-                            : 'theme-text-muted'
-                        }`}
-                      >
-                        <span className="truncate">{opt.label}</span>
-                        <CapabilityBadges capabilities={opt.capabilities} />
-                        {deployedModel?.tag === opt.value && (
-                          <span
-                            className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0"
-                            title={deployedModel.reason}
-                          >
-                            {deployedModel.mode}
-                          </span>
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-
-                    {/* Selectable, under their own heading and their own
-                        warning. Rule 1 is recorded rather than prevented here:
-                        the turn is logged `chat_cloud` and the transcript marks
-                        it, so the production figures stay clean while the
-                        comparison stays inside the system where it is logged. */}
-                    {referenceModels.length > 0 && (
-                      <>
-                        <DropdownMenuSeparator className="theme-border" />
-                        {/* Label and rows inside a Group: Base UI's GroupLabel
-                            reads its context and throws without one. */}
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide status-warn font-normal">
-                            Evaluation only · not Rule&nbsp;1 safe
-                          </DropdownMenuLabel>
-                          {referenceModels.map(m => (
-                            <DropdownMenuItem
-                              key={m.id}
-                              onClick={() => setSelectedModel(m.name)}
-                              title={m.note ?? undefined}
-                              className={`cursor-pointer flex items-center gap-2 ${
-                                selectedModel === m.name
-                                  ? 'status-warn bg-[color-mix(in_srgb,var(--status-warn)_16%,transparent)]'
-                                  : 'theme-text-muted'
-                              }`}
-                            >
-                              <Cloud size={12} className="shrink-0" />
-                              <span className="truncate">{m.name}</span>
-                              <CapabilityBadges capabilities={m.capabilities} />
-                              <span className="ml-auto text-[10px] theme-text-muted uppercase tracking-wide shrink-0">
-                                cloud
-                              </span>
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuGroup>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
-                  <Mic size={18} />
-                </Button>
-                <Button 
-                  onClick={handleSend} 
-                  disabled={!input.trim() || sending}
-                  className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled:opacity-40 disabled:theme-track disabled:theme-text-muted p-0"
-                >
-                  <ArrowUp size={18} strokeWidth={2.5} />
-                </Button>
-              </div>
-            </div>
+            <ComposerControls onSend={handleSend} canSend={!!input.trim() && !sending} />
           </div>
         </div>
       ) : (
@@ -406,19 +410,11 @@ export function ChatInterface() {
                   rows={1}
                 />
                 
-                <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
-                    <Plus size={18} />
-                  </Button>
-                  
-                  <Button 
-                    onClick={handleSend} 
-                    disabled={!input.trim() || sending}
-                    className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled:opacity-40 disabled:theme-track disabled:theme-text-muted p-0"
-                  >
-                    <ArrowUp size={18} strokeWidth={2.5} />
-                  </Button>
-                </div>
+                <ComposerControls
+                  onSend={handleSend}
+                  canSend={!!input.trim() && !sending}
+                  compact
+                />
               </div>
             </div>
           </div>

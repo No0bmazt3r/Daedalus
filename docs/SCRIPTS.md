@@ -50,7 +50,10 @@ One-time preparation of a fresh clone. Idempotent — safe to re-run.
    root-owned bind-mount sources.
 6. **Applies migrations**, so a fresh clone has its schema before first run.
 7. **Checks for Ollama** — a warning, never fatal. The dashboard works without
-   it; only model inference needs it.
+   it; only model inference needs it. If Ollama is installed but not running it
+   tries to start it (systemd, or `brew services` / the app on macOS); if it is
+   not installed at all, it offers to install it, but only on an interactive
+   terminal. Neither path ever blocks a non-interactive run.
 
 ### `start` (alias `up`)
 
@@ -306,7 +309,8 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 | `migrate_cli …` | `host_py -m app.db.migrate` |
 | `require_venv` | Fail with a useful message if `backend/.venv` is missing |
 | `wait_for_api [port]` | Poll `/api/health` for 60s |
-| `check_ollama` | Warn, never fail — only inference needs it |
+| `check_ollama` | Warn, never fail — only inference needs it. Tries to start it, and offers to install it when interactive |
+| `host_ollama_url` | `OLLAMA_BASE_URL` as seen *from the host*: rewrites `host.docker.internal`, leaves a real remote alone, and stays unset rather than becoming `""` |
 | `stack_running` | Is the app container up? |
 | `image_is_stale` | Is any source file newer than the last successful build? |
 | `mark_build` | Touch `.daedalus-build-stamp` after a successful build |
@@ -328,6 +332,15 @@ Sourcing `.env` and then running the backend **on the host** points it at
 `backend/data/…` and the dev servers quietly used a different set of databases
 from the container. That was a real bug; `host_py` and `host_uvicorn` fix it
 by mapping the paths back, so `dev` and `start` read and write the same files.
+
+`OLLAMA_BASE_URL` gets the same treatment, via `host_ollama_url`. `.env` holds
+the container's view — `host.docker.internal` — which does not resolve outside
+Docker, so the backend paid a full DNS timeout on every call before falling
+back. A URL pointing at a *real* remote is left alone: quietly answering from a
+daemon on this machine instead would attribute a benchmark to the wrong
+hardware. And an unset variable stays unset rather than becoming the empty
+string, which the backend would read literally and end up with no candidate URL
+at all.
 
 The mapping is applied **per command, never exported**, because
 `docker compose` reads the shell environment in preference to `.env`:

@@ -99,6 +99,14 @@ CREATE TABLE rag_logs (
 ```
 
 ### 4. Model Inference Logs
+
+> **Historical.** The live schema has since gained `prefill_ms`,
+> `generation_ms`, `load_ms` (migration `002`), `source` (`003`) and `host`
+> (`004`). `source` distinguishes `chat` / `chat_cloud` / `benchmark` /
+> `benchmark_cloud`, which is what keeps a cloud measurement out of the
+> production latency figures. Canonical:
+> `backend/app/db/migrations/audit/` and [`../BENCHMARK.md`](../BENCHMARK.md) §8.
+
 ```sql
 CREATE TABLE model_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

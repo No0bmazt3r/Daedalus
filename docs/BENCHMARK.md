@@ -268,7 +268,15 @@ non-reasoning one.
 a Q8_0 build of the same model are different artifacts with different speed and
 quality. The Forge records `quantization` per row; comparisons must respect it.
 
-**9.7 One prompt shape.** Latency is measured on a RAG-style evidence pack only.
+**9.7 Switching model mid-conversation does not give a clean A/B.**
+`chat_service.build_context` replays the transcript, so a model selected partway
+through sees the *previous* model's answers as prior assistant turns. That is
+correct behaviour for a conversation and wrong for a comparison: the second
+model is not answering the question, it is continuing someone else's answer. For
+a real side-by-side, ask the same question in two fresh sessions and compare the
+`chat` and `chat_cloud` rows by `query_id`.
+
+**9.8 One prompt shape.** Latency is measured on a RAG-style evidence pack only.
 A long multi-turn conversation with no retrieval has a different prefill profile
 and is not covered.
 

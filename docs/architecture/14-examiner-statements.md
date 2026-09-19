@@ -7,7 +7,7 @@
 Use these exact phrasings during your proposal defence, viva, and final report.
 
 ### 1. Local-only Constraint
-> "All production inference and retrieval is local. Cloud LLMs are only used as external benchmark references and are not part of the deployed runtime system."
+> "All production inference and retrieval is local. Cloud LLMs are only used as external benchmark references and are not part of the deployed runtime system. The console does permit an operator to direct a single chat turn at a cloud model for comparison; such a turn is written to `model_logs` as `chat_cloud` rather than `chat`, is labelled in the transcript, and is excluded from every production latency figure. The boundary is therefore enforced *and* auditable rather than merely asserted."
 
 ### 2. Read-only Safety
 > "Zone 3 is strictly read-only. The agent can query SQLite and the vector store, but it cannot issue actuator commands or modify SCADA state."

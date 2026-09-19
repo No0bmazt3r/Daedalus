@@ -8,6 +8,7 @@ import {
   modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark,
   type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type BenchmarkProgress, type ModelSource,
 } from '../../lib/forgeClient'
+import { CapabilityBadges } from '../ui/capability-badges'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
 
 /**
@@ -320,6 +321,7 @@ function Row({
             </Pill>
             {row.shortlist && <Pill tone="ok" title="One of the six candidates PROJECT.md §8.1 names.">shortlist</Pill>}
             {row.installed && <Pill tone="ok" title="Pulled and on this disk.">installed</Pill>}
+            <CapabilityBadges capabilities={row.capabilities} />
             {row.tag_exists === false && (
               <Pill tone="warn" title="The Ollama registry has no manifest for this tag, so a pull would fail.">
                 tag missing
@@ -377,7 +379,7 @@ function Row({
                   className="text-xs font-mono theme-text"
                   title={
                     row.remote
-                      ? `Benchmarked ${measured.at ?? ''} on Ollama's cloud — not this machine's hardware.`
+                      ? `Benchmarked ${measured.at ?? ''} — Ollama's hardware, not this machine`
                       : `Benchmarked ${measured.at ?? ''}`
                   }
                 >
@@ -433,12 +435,7 @@ function Row({
               <button
                 onClick={() => onBenchmark(row)}
                 disabled={!!busy}
-                title={
-                  'Measure as an evaluation baseline. Runs on Ollama\'s servers, not this '
-                  + 'machine, so it is logged separately and never compared against local '
-                  + 'hardware. Uses the synthetic fixture prompt, never real retrieved '
-                  + 'documents. Needs `ollama signin`.'
-                }
+                title="Benchmark as a baseline — runs on Ollama's servers, logged apart"
                 className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
               >
                 {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}

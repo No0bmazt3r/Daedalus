@@ -10,6 +10,7 @@ import {
 } from '../../lib/forgeClient'
 import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
 import { listEndpoints, type ModelEndpoint } from '../../lib/systemClient'
+import { CapabilityBadges } from '../ui/capability-badges'
 import { SkeletonList } from '../ui/skeleton'
 
 /**
@@ -127,6 +128,7 @@ function CloudModel({
             <span className="text-sm font-medium truncate">{row.label}</span>
             <Pill title="Served from Ollama's cloud. Not on this disk.">cloud</Pill>
             {row.quantization && <Pill>{row.quantization}</Pill>}
+            <CapabilityBadges capabilities={row.capabilities} />
           </div>
           <code className="text-[10px] theme-text-muted break-all">{row.tag}</code>
         </div>
@@ -134,11 +136,7 @@ function CloudModel({
           <button
             onClick={() => onBenchmark(row)}
             disabled={!!busy}
-            title={
-              'Measure as an evaluation baseline. Runs on Ollama\'s servers, so it is '
-              + 'logged as benchmark_cloud and never compared against local hardware. '
-              + 'Uses the synthetic fixture prompt, never real retrieved documents.'
-            }
+            title="Benchmark as a baseline — runs on Ollama's servers, logged apart"
             className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
           >
             {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
@@ -182,12 +180,9 @@ function CloudModel({
               }
               title={
                 measured.rate_source === 'engine'
-                  ? "Ollama's own eval_duration — a property of the model."
-                  : 'Derived from wall clock: Ollama\'s cloud returns no engine '
-                    + 'counters, so this divides tokens by (total − TTFT). That window '
-                    + 'includes network time, and on a short generation it is small '
-                    + 'enough that the result is not a trustworthy generation rate. '
-                    + 'TTFT and end-to-end above are measured directly and are sound.'
+                  ? "Engine-reported — a property of the model"
+                  : 'Wall-clock estimate: no engine counters from the cloud, so this is '
+                    + 'not a trustworthy rate. TTFT and end-to-end are sound.'
               }
             />
             <Stat label="Measured" value={since(measured.at ?? null)} />
@@ -212,7 +207,7 @@ function CloudModel({
               // nothing to type. Gone on reload by design — it is a capability,
               // not a setting, and is never persisted.
               <>
-                {' '}This machine is not linked to an account yet.{' '}
+                {' '}
                 <a
                   href={signinUrl}
                   target="_blank"
@@ -222,10 +217,10 @@ function CloudModel({
                   Sign in to Ollama
                   <ExternalLink size={10} />
                 </a>
-                {' '}— it is free — then benchmark again.
+                {' '}— free — then try again.
               </>
             ) : lastError ? (
-              <> Benchmark again once that clears.</>
+              <> Try again once that clears.</>
             ) : (
               <> Run it again to see why.</>
             )}
@@ -312,6 +307,7 @@ function LocalModel({
               {isSlm ? 'SLM' : 'LLM'}
             </Pill>
             <Pill>{row.quantization}</Pill>
+            <CapabilityBadges capabilities={row.capabilities} />
             <span className={`text-[11px] flex items-center gap-1 ${verdict.tone}`}>
               <VerdictIcon size={11} />
               {verdict.label}
@@ -528,8 +524,9 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
-          What this machine has, and what it has been running. Both local tiers answer
-          chat; cloud endpoints never do. To find and pull something new, use{' '}
+          What this machine has, and what it has been running. Both local tiers are
+          the production path; cloud models answer only as a marked evaluation
+          override. To find and pull something new, use{' '}
           <span className="theme-text">Models</span>.
         </p>
         <button
@@ -666,9 +663,9 @@ export function AddedModelsView({ isPeek }: { isPeek: boolean }) {
         ) : (
           <div className="flex flex-col gap-5">
             <p className="text-xs theme-text-muted">
-              Reference baselines for the evaluation chapter. None of these can answer a
-              live query — Rule 1 keeps the chat path on local models, and the store
-              enforces it.
+              Reference baselines for the evaluation chapter. None of these is on the
+              production path: picking one in chat logs the turn as{' '}
+              <code>chat_cloud</code> and keeps it out of the local latency figures.
             </p>
 
             <div className="flex flex-col gap-2">

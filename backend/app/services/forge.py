@@ -179,10 +179,18 @@ def _row(
     # Weight size, best source first. All three beat `params × bytes_per_param`,
     # and the row reports which one answered so an estimate is never mistaken
     # for a measurement.
+    capabilities: list[str] = []
+    if installed:
+        # Asked for cloud tags too: a cloud model's capabilities are a property
+        # of the model, not of where it runs, and the picker shows them either
+        # way. `_show_cached` keys on the digest, so this is one call per tag.
+        detail = _show_cached(installed["name"], installed.get("digest"))
+        if detail:
+            capabilities = detail.get("capabilities") or []
+
     if installed and not installed.get("remote"):
         weights_bytes = installed.get("size_bytes")
         weights_hint = "measured"
-        detail = _show_cached(installed["name"], installed.get("digest"))
         if detail:
             arch = detail.get("arch")
             measured_context = detail.get("context_length")
@@ -235,6 +243,7 @@ def _row(
         "context_length": measured_context or context_length,
         "context_source": "measured" if measured_context else "declared",
         "notes": notes,
+        "capabilities": capabilities,
         "installed": bool(installed) and not (installed or {}).get("remote"),
         "remote": bool((installed or {}).get("remote")),
         "size_bytes": (installed or {}).get("size_bytes"),
@@ -326,6 +335,8 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
             continue
         params_b = model_fit.parse_params_b(model.get("parameter_size"))
         quant_raw = model.get("quantization_level")
+        discovered_detail = _show_cached(tag, model.get("digest")) or {}
+        discovered_caps = discovered_detail.get("capabilities") or []
         if model.get("remote") or not params_b:
             # Ollama could not say how large it is — usually a cloud entry.
             # Scoring it would mean inventing the one number that decides the
@@ -356,6 +367,7 @@ def _build(context_tokens: int | None = None) -> dict[str, Any]:
                     if model.get("remote")
                     else "Ollama reports no parameter count for this model, so it cannot be scored."
                 ),
+                "capabilities": discovered_caps,
                 "installed": not model.get("remote"),
                 "remote": bool(model.get("remote")),
                 "size_bytes": model.get("size_bytes"),

@@ -36,8 +36,11 @@ All documentation lives in **[`docs/`](docs/)** — start at [`docs/README.md`](
 
 ## The three rules that shape everything
 
-1. **Fully local.** No cloud APIs in the runtime. Cloud models appear only as
-   offline evaluation baselines.
+1. **Fully local.** No cloud APIs in the production path. Cloud models exist as
+   evaluation baselines: the console lets you point one chat turn at a hosted
+   model for comparison, and that turn is logged `chat_cloud`, labelled in the
+   transcript, and excluded from every production latency figure. Recorded, not
+   merely forbidden — see [`docs/PROJECT.md`](docs/PROJECT.md) §3.
 2. **Read-only toward the plant.** The AI cannot write to SCADA, actuators or
    sensors — enforced by the SQLite driver and the tool registry, not by
    prompting. The automated ball valves are write-only from SCADA, so their true
@@ -263,9 +266,9 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | Area | What works |
 |---|---|
 | **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat interface** | Message list, composer, model selector, incognito — wired to the session API. *Replies are still placeholders until the orchestrator lands* |
+| **Chat interface** | Message list, composer, model selector, incognito — wired end to end. Replies stream token by token from a real local model and survive a reload mid-answer. *No retrieval or tool-calling yet, so it answers from the conversation alone* |
 | **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen |
-| **Dynamic Models**| Unified `/api/system/models` querying Ollama + cloud baselines. Chat interface auto-adapts |
+| **Dynamic Models**| Unified `/api/system/models` querying Ollama + cloud baselines, with per-model capability badges (reasoning · tools · vision). Cloud models are selectable but marked, and their turns are logged apart |
 | **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
 | **Typography** | **Monocraft** — the Minecraft typeface — as the default face, bundled and self-hosted; four alternatives in the Font selector |
 | **Background effects** | 13 options, 11 canvas-animated, **pointer-reactive** — including Nexus, Aurora, Bubbles and Voxels |
@@ -277,7 +280,7 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` |
 | **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
 | **Model manager** | What is installed, badged SLM or LLM, with per-model usage: runs split by chat and benchmark, token totals, and latency as mean / p50 / p95 |
-| **Chat** | `POST /api/chat` resolves the committed model, replays conversation history, answers from Ollama and logs the call. The composer's picker offers local installed models only — a cloud endpoint can never answer a live query |
+| **Chat** | `POST /api/chat` resolves the committed model, replays conversation history, streams the answer from Ollama and logs the call. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged `chat_cloud` and kept out of every production figure |
 | **Accessible theming** | Every colour derives from the selected theme and is floored to WCAG AA: body, muted, accent-as-text, on-accent labels and the three status colours. All 16 shipped themes pass on every role, and custom themes run through the same derivation |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Databases panel reports health only |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
@@ -292,10 +295,10 @@ Knowledge ingestion, both retrieval tracks, the deterministic tool layer, the
 full orchestration flow and the evaluation harness.
 
 Chat answers now: the serving path is wired, so a message goes to a real local
-model and the transcript persists. What it does *not* do yet is retrieve —
-there is no evidence pack and no tool-calling, so it answers from the
-conversation alone. Responses are also synchronous rather than streamed, which
-is tolerable at 300–400ms to first token and will not be on a larger model.
+model, streams token by token, and the transcript persists. A generation
+outlives the request that started it, so reloading mid-answer picks it back up.
+What it does *not* do yet is retrieve — there is no evidence pack and no
+tool-calling, so it answers from the conversation alone.
 
 ---
 

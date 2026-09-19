@@ -227,10 +227,10 @@ def list_models() -> dict[str, Any]:
                 "provider": "ollama",
                 "type": "cloud" if remote else "local",
                 "capabilities": capabilities,
+                # Tooltip text: one line, not a paragraph.
                 "note": (
-                    "Runs on Ollama's cloud, not this machine. Rule 1 keeps it "
-                    "out of the production path: choosing it logs the turn as "
-                    "chat_cloud and excludes it from the local latency figures."
+                    "Runs on Ollama's cloud — logged as chat_cloud, not the "
+                    "production path"
                     if remote
                     else None
                 ),
@@ -253,10 +253,7 @@ def list_models() -> dict[str, Any]:
                 "provider": ep["provider"],
                 "type": "cloud",
                 "capabilities": [],
-                "note": (
-                    "A configured benchmark endpoint. Rule 1 allows it as an "
-                    "offline evaluation baseline, never as a runtime model."
-                ),
+                "note": "Benchmark endpoint — evaluation baseline only",
                 "details": {"base_url": ep["base_url"]},
             })
     except Exception:

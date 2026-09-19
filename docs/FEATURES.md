@@ -29,7 +29,7 @@ Everything below was read off the source, not from memory.
 | Data stores (×5) | Built and containerised, each with a versioned schema |
 | Preference API | Built |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
-| Chat UI | Wired end to end — `POST /api/chat` streams tokens from a local model, both turns persist, and a generation survives the client disconnecting. The picker offers installed local models only; cloud tags appear disabled and labelled |
+| Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration, tools, RAG | **Not started.** Chat answers from conversation history alone; there is no evidence pack and no tool-calling yet |
 
@@ -88,6 +88,36 @@ Writable preference keys (anything else is rejected with 404):
 | `settings-ui` | `{ width: number, collapsed: boolean }` |
 
 Interactive docs while running: <http://localhost:8000/docs>
+
+### The two streaming endpoints
+
+`POST /api/chat` and `POST /api/forge/benchmark` return **server-sent events**
+rather than one JSON body. Both are legitimately slow — a long answer is
+minutes, a benchmark is a warm-up plus a 2k-token prefill — and a spinner for
+that long is indistinguishable from a hang.
+
+Each frame is `data: {json}\n\n`, carrying a `phase`:
+
+| phase | payload |
+|---|---|
+| `generating` | one token (`piece`), or a running `tokens` count |
+| `done` | `result` — the same object the endpoint used to return synchronously |
+| `error` | `error`, plus `signin_url` when Ollama refused a cloud tag for want of an account |
+
+**Errors arrive as events, not status codes.** Once the first byte is out the
+status line is already sent, so a 503 has nowhere to go. The only failure that
+still gets a status code is the one detectable before the response starts — an
+empty message.
+
+On the client, `lib/http.ts` owns the framing in `streamEvents()`. It lives
+beside `request()` for the same reason: two copies of "how do we read a stream"
+would eventually disagree about a frame split across two chunks, which is the
+case that only shows up under a slow model.
+
+`/api/chat` deliberately **outlives its request**. The model call runs on a
+worker thread, so a browser navigating away does not lose the turn: the worker
+finishes, writes the assistant message, and clears its entry.
+`GET /api/chat/{id}/status` is what a returning client polls to find it.
 
 ### Why only user messages are writable
 
@@ -177,11 +207,31 @@ response; logging is evidence, not control flow.
 
 > `memory_logs` is an addition — it appears in neither historical spec set.
 
+**`model_logs.source` is the column the latency chapter turns on.** Benchmark
+and live rows share one table on purpose, so the two are comparable; `source`
+is what separates them again:
+
+| `source` | meaning |
+|---|---|
+| `chat` | a live query on a local model. **The production path.** |
+| `chat_cloud` | a live query the operator pointed at a cloud model — a marked override |
+| `benchmark` | a Forge run on this machine's hardware |
+| `benchmark_cloud` | a Forge run against a cloud tag. Measures someone else's hardware |
+
+Four values rather than two plus a flag, so any query asking about the
+production path filters `source = 'chat'` and stays correct unchanged.
+`host` (migration `004`) records which service served a run — `ollama.com` for a
+cloud row, NULL for local. Methodology: [`BENCHMARK.md`](BENCHMARK.md).
+
 ### Chat store — conversation memory
 
 Two tables. `chat_sessions` holds one row per conversation (title, rolling
 summary, `ephemeral` for incognito, `archived_at`); `chat_messages` holds the
-turns.
+turns, each carrying the `model_tag` that produced it (migration `002`).
+
+`model_tag` is **per message, not per session**: the picker is available in both
+composers, so a transcript may legitimately mix models — which is how a local
+answer and a cloud one can be compared in place.
 
 Ollama is stateless, so "the assistant remembers" only ever means the
 orchestrator re-sent the transcript. This store is that transcript — and both

@@ -86,6 +86,8 @@ export interface Measurement {
 
 export interface ModelRow {
   id: string;
+  /** From Ollama's `/api/show`. Empty for a model that is not pulled. */
+  capabilities?: string[];
   model_id: string;
   label: string;
   vendor: string | null;

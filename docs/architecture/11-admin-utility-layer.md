@@ -4,6 +4,7 @@
 
 * **Zone Mapping:** Setup / Support
 * **Purpose:** Supports hardware profiling, model selection, and benchmarking. **Not part of the live operator chat path.**
+* **Built as:** The Forge (`frontend/src/components/forge/`), backed by `/api/forge/*`. Benchmark methodology: [`../BENCHMARK.md`](../BENCHMARK.md).
 * **Positioning:** *"A local administrative utility for model selection, benchmarking, and resource management"*, NOT *"Another AI layer inside the chat system."*
 
 ---

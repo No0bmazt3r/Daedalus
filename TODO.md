@@ -103,7 +103,10 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 - [ ] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values
 - [ ] Response validator — reject numbers absent from evidence, control language, empty, timeout
 - [ ] **Validate numbers against the current evidence pack only** — a figure that appears only in replayed history sets `hallucination_flag` (§7.4)
-- [ ] SSE streaming for token-by-token output
+- [x] SSE streaming for token-by-token output — `POST /api/chat` yields one
+      frame per token. The model call runs on a worker thread, so a generation
+      outlives the request that started it and a client that navigated away can
+      rejoin via `GET /api/chat/{id}/status`
 - [ ] Tests: every unsafe phrasing is refused · a response containing an invented number is caught · a stale number replayed from history is caught
 
 ## M6 — Retrieval tracks  ▸ Layer 5
@@ -215,8 +218,9 @@ Layer 9 below for the per-step detail.
 
 ## M10 — Dashboard completion  ▸ Layer 9B
 
-- [ ] Wire the chat UI to `POST /api/chat` *(currently mocked)*
-- [ ] SSE streaming rendering
+- [x] Wire the chat UI to `POST /api/chat` — no longer mocked
+- [x] SSE streaming rendering — tokens append as they arrive; `lib/http.ts`
+      `streamEvents()` owns the framing for both streaming endpoints
 - [ ] Source badges — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]`
 - [ ] Collapsible tool-call trace (Thought → Action → Observation) — the inline
       half of Ariadne's Thread, below
@@ -299,6 +303,14 @@ Layer 9 below for the per-step detail.
       today, unreplayable traces forever if it lands after rows exist
 - [x] Mark the unbuilt modules in the sidebar — Ariadne's Thread and Labyrinth
       Blueprints are disabled with a dot and a tooltip; The Forge opens
+- [x] **The model picker is in both composers.** It only existed in the greeting
+      one, so once a chat had started there was no way to change model without
+      opening a new conversation — wrong for a multi-model system, and it left
+      the per-message `model_tag` column with nothing to record. Both now render
+      one shared `ComposerControls`, which is what stops them drifting again.
+      Note `build_context` replays history, so a model switched to mid-thread
+      continues the previous model's answer rather than answering fresh
+      (`BENCHMARK.md` §9.7)
 - [x] **Cloud models are selectable, marked, and logged apart.** Rule 1 narrowed
       from *prevented* to *recorded*: `choose_model` honours a cloud override,
       the turn is written `source='chat_cloud'` with its `host`, the picker puts
