@@ -14,6 +14,7 @@ import { CapabilityBadges } from '../ui/capability-badges'
 import { ModelArchitecture } from '../ui/model-architecture'
 import { EmbeddingModelsPane } from './EmbeddingModelsPane'
 import { SkeletonList } from '../ui/skeleton'
+import { Collapse } from '../ui/collapse'
 
 /**
  * The model manager: what this machine has, and what it has been doing.
@@ -394,11 +395,9 @@ function LocalModel({
           pane is a list to scan rather than one model to study: the header and
           what the model has been running stay on screen for every card, and the
           architecture opens on the one card being asked about. */}
-      {open && hasArch && (
-        <div className="border-t theme-border px-3 py-2.5 animate-in fade-in slide-in-from-top-1 duration-200 ease-out">
-          <ModelArchitecture arch={row.arch} />
-        </div>
-      )}
+      <Collapse open={open && hasArch} className="border-t theme-border px-3 py-2.5">
+        <ModelArchitecture arch={row.arch} />
+      </Collapse>
 
       {isBusy && benchProgress ? (
         <div className="border-t theme-border px-3 py-2.5 text-[11px] font-mono theme-text-muted animate-pulse">

@@ -121,9 +121,16 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
             {/* Keyed on the tab so React remounts and the entry animation runs
                 again. Without the key the pane swaps its contents in place and
                 the transition never fires. */}
+            {/* The measure grows in steps rather than stopping at one width.
+                A clamp is right — 1900px of prose is unreadable — but a single
+                `max-w-3xl` meant a maximized window drew a 768px column down
+                the middle of a 1900px pane and called it a layout. The last
+                step is `min(100%, …)` so the cap can never exceed the pane it
+                is centred in. The panes themselves reflow into columns; see
+                `HardwareView`. */}
             <div
               key={tab}
-              className="mx-auto w-full @3xl:max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
+              className="mx-auto w-full @3xl:max-w-3xl @5xl:max-w-5xl @7xl:max-w-[min(100%,1500px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
             >
               {tab === 'hardware' && <HardwareView isPeek={isPeek} />}
               {tab === 'models' && <ModelsView />}

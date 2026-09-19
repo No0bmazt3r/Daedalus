@@ -13,6 +13,7 @@ import { ModelArchitecture } from '../ui/model-architecture'
 import { EmbeddingCatalogue } from './EmbeddingCatalogue'
 import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
+import { Collapse } from '../ui/collapse'
 
 /**
  * Steps 2–5 of the Forge: estimate · score · manage · benchmark.
@@ -477,11 +478,9 @@ function Row({
         </div>
       </div>
 
-      {open && (
-        <div className="border-t theme-border px-4 py-4 theme-surface animate-in fade-in slide-in-from-top-1 duration-200 ease-out">
-          <Detail row={row} />
-        </div>
-      )}
+      <Collapse open={open} className="border-t theme-border px-4 py-4 theme-surface">
+        <Detail row={row} />
+      </Collapse>
     </div>
   )
 }

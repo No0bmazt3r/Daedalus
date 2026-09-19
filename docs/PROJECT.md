@@ -629,7 +629,7 @@ Trust comes from visible reasoning, not a black box:
 | Area | Detail |
 |---|---|
 | **React frontend shell** | Vite 8 · React 19 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat UI (mock)** | Message list, auto-growing composer, model selector, incognito mode, typewriter greeting — **no backend wired yet** |
+| **Chat UI** | Message list, auto-growing composer, model selector, incognito mode, typewriter greeting — wired to `POST /api/chat`, streaming token by token, with both turns persisted. It answers from conversation history alone: retrieval and tool-calling are the part that is missing, not the transport |
 | **Theme system** | 16 themes; live customisation of 7 base + 14 per-zone colours; derived syntax ramps; complementary-harmony generator; font/density/text-scale; frosted glass; import/export; up to 8 saved custom themes |
 | **Typography** | Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted so the UI never reaches a font CDN; every font path in the app resolves through one CSS variable |
 | **Background effects** | 13 options (11 canvas-animated) with colour/intensity/size. Pointer reactivity was built and then removed — a background that answers the cursor competes with whatever the cursor is doing (`FEATURES.md` §5) |
@@ -645,8 +645,14 @@ Trust comes from visible reasoning, not a black box:
 
 ### Not started
 
-Knowledge ingestion, both retrieval tracks, the deterministic tool layer, and
-the evaluation harness.
+Knowledge ingestion, both retrieval tracks, the orchestration flow, and the
+evaluation harness.
+
+The deterministic tool layer is **built** — 29 tools in five categories behind a
+gate that checks declared effects, validates arguments, stamps result integrity
+and writes a `tool_logs` row per call. What is missing is a caller: nothing
+reaches it during an answer, so it is exercised from Settings → Agent Tools and
+over `/api/tools`, not from the chat path.
 
 Chat answers now. The serving path resolves the committed model, replays
 conversation history and returns a real local completion, logging what the call

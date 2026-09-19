@@ -34,7 +34,7 @@ Everything below was read off the source, not from memory.
 | Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
 | Agent tools | Built — 29 tools, two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
-| Orchestration, tools, RAG | **Not started.** Chat answers from conversation history alone; there is no evidence pack and no tool-calling yet |
+| Orchestration and RAG | **Not started.** Chat answers from conversation history alone: no evidence pack, and nothing calls the tool layer during an answer |
 
 ---
 
@@ -1297,6 +1297,8 @@ Paths are relative to `frontend/src/`.
 | `components/stores/StoreWindow.tsx` | Puts it in a `FloatingWindow` |
 | `components/ui/floating-window.tsx` | The shared window shell: drag, resize, Peek, minimize, Escape. Also exports `useMinimizeToDock` for `ThemeModal`, which is off the shell by design |
 | `components/ui/switch.tsx` | The one on/off control — a segmented ON \| OFF, not a pill and knob |
+| `components/ui/collapse.tsx` | The one collapse/expand animation — the domino cascade, and the mount lifetime it needs |
+| `hooks/useDraggable.ts` | Window drag, plus edge snapping: zones, preview rectangle, restore-under-cursor |
 | `components/ui/skeleton.tsx` | Loading placeholders that hold the shape of what is coming |
 | `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |
 | `components/forge/ForgeWindow.tsx` | The Forge (Layer 11) — step 1 of §8.2 |
@@ -1304,6 +1306,100 @@ Paths are relative to `frontend/src/`.
 | `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
 | `lib/systemClient.ts` | Log-browser, observability and provider API client |
 | `components/settings/` | `SettingsSearch`, `DatabasesPanel` (health only), `ModelEndpointsPanel`, `AppearancePanel`, `ShortcutsPanel` |
+
+### Every collapse is the same cascade — `components/ui/collapse.tsx`
+
+Ported from Odysseus' sidebar sections, and used by every collapsible thing
+here: a store's table list, a tool's trial body, the capability chips, the
+Forge's fit detail and architecture panes, the embedding catalogue's facts,
+Theme → More Colors, and `components/ui/accordion.tsx`. Opening cascades the rows in from a little below and to the
+left with a small overshoot (`cubic-bezier(0.22, 1.61, 0.36, 1)`, 40ms apart);
+closing peels them off from the **bottom up**, faster and without the bounce, so
+the two read as one gesture played in both directions.
+
+Three things the obvious implementation gets wrong:
+
+- **The stagger is the animation; the container height is not animated.** A
+  `max-height` transition has to guess a height — short clips the list, tall ends
+  every collapse with a dead pause.
+- **The exit waits on the real animations,** via `getAnimations({ subtree: true })`
+  filtered to the `domino-out` name, not on a timeout. A two-row section would
+  otherwise sit through the timing of a twelve-row one, and an unrelated infinite
+  animation in the subtree — a spinner — could hold the section open forever. A
+  600ms timeout remains as a safety net, because an element removed mid-flight
+  never settles its animation.
+- **A generation token per toggle.** Two quick clicks used to end in whatever
+  state the first click's callback decided; a stale callback now returns without
+  touching anything.
+
+**The accordion composes the two animations rather than replacing one.** Base UI
+animates the panel's *height*, from a measured `--accordion-panel-height` — which
+is what makes the items below slide instead of jumping, and is not the guess a
+`max-height` transition would be — and the cascade plays over the contents on
+top of it. `data-domino` is set in the component from the panel's state, because
+CSS cannot set an attribute and the stagger rules key on one; `transitionStatus
+=== 'ending'` is what distinguishes *closing* from *closed*, and is the only
+moment an outbound cascade is visible at all, since the panel still has height
+then. The height animation is slowed to 0.42s opening and 0.3s closing so the
+last row is not carried off screen mid-fall — unlayered CSS, which beats the
+Tailwind utility that would otherwise set the same property.
+
+The rows are the direct children of the animated element, so a list cascades and
+a single block of prose arrives on one beat — which is right, since staggering
+paragraphs is motion for its own sake. Everything collapses to `0.01ms` under
+`prefers-reduced-motion: reduce`.
+
+### A maximized window reflows, it does not letterbox
+
+Every window pane centres its content in a measured column, which is right for
+prose and was wrong for a full screen: a maximized Forge drew a 768px column of
+cards down the middle of a 1900px pane and left two thirds of it empty.
+
+Two changes, because one alone does not fix it. The measure now **grows in
+steps** rather than stopping — `@3xl:max-w-3xl @5xl:max-w-5xl` and finally
+`@7xl:max-w-[min(100%,1500px)]`, where the `min()` keeps the cap from exceeding
+the pane it is centred in — and the panes that are made of independent cards
+**tile** once there is width to tile into: the Forge's five hardware readings go
+to two columns at `@4xl` and three at `@7xl`, and Settings → Databases goes to
+two at `@5xl`. Both use `items-start`, because the cards are different heights
+and stretching them to match is how a grid turns into four cards of padding.
+
+The measure is still capped. Filling 1900px with a single line of text is not
+nicer, it is unreadable, and the clamp is the reason a window at any width is
+still laid out rather than merely stretched. The breakpoints are container
+queries throughout, so a window at half-screen and a window maximized differ
+without either one asking the viewport anything.
+
+### Windows snap to the edges — `hooks/useDraggable.ts`
+
+Drag a window's header into an edge and it takes that region on release: the
+halves, the four quadrants, or the whole screen from the top edge. The bottom
+edge is deliberately inert — it is where a window ends up while you are reaching
+for something below it.
+
+- **The pointer decides the zone, not the window.** A window is grabbed wherever
+  you happened to click it, so its own edges say more about where the cursor
+  started than about where you are aiming.
+- **The target is drawn before the drop.** A dashed outline (`.snap-preview`)
+  shows the region while the drag is over an edge; resizing the moment an edge
+  is brushed is a window fighting the person dragging it.
+- **Dragging a snapped window restores its old size under the cursor.** The
+  pre-snap rectangle is measured from the DOM at snap time — so a window resized
+  by hand returns to *that* size, not to the component's default — and the grab
+  point keeps its fraction of the width, so the window does not leap sideways.
+- **The class-level clamps stand down while snapped.** `max-w-[95vw]` would leave
+  a maximized window 5% short and `min-w-[560px]` would push a half-screen snap
+  off a narrow display. Native `resize` is withdrawn at the same time, because
+  the handle writes inline sizes that the next React render overwrites — which
+  looks broken rather than unavailable.
+- **`left`/`top`/`width`/`height` transition only while settling.** A transition
+  during the drag itself makes the window trail the cursor, which reads as the
+  app being slow.
+
+A snapped window re-derives its rectangle on viewport resize, so one snapped to
+half a screen that no longer exists does not keep describing it. Double-clicking
+the header maximizes and restores. Both window shells use it — `FloatingWindow`
+and the non-modal `ThemeModal`.
 
 ### 7.1 Where a thing lives is decided by how often you reach for it
 
@@ -1491,6 +1587,9 @@ therefore tracked with `.gitkeep`.
 | Scripts | `sync.sh --check`/apply, `reset.sh` refusal while the stack is up, WAL-sidecar deletion, host-path resolution |
 | Log browser | Allowlist verified: `sqlite_master`, `prefs` and `model_endpoints` all 404. Paging, ordering and the 1000-row cap exercised |
 | Model endpoints | Key absent from every response; duplicate URL 409; bad URL 422; unreachable-host and rejected-key paths produce distinct messages; a new key clears the cached verdict; `purpose='runtime'` refused by the schema |
+| Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
+| Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
+| GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
 | Backend | **No automated tests.** Verified by direct API calls |
 
 The absence of an automated test suite on both sides is the biggest gap.

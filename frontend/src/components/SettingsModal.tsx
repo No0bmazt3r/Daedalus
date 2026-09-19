@@ -186,7 +186,10 @@ export function SettingsModal({ open, onClose, onOpenTheme }: SettingsModalProps
                 full width would just make a 1300px-wide select, which is
                 harder to scan, not easier. Panels that genuinely benefit from
                 width (Databases) add columns via their own container queries. */}
-            <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl">
+            {/* Same ladder as the Forge: the column keeps growing with the
+                window rather than stopping, and the last step cannot exceed
+                the pane it is centred in. */}
+            <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl @7xl:max-w-[min(100%,1400px)]">
 
             {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
 

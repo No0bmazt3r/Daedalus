@@ -154,6 +154,12 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
         </div>
       )}
 
+      {/* Five independent store cards, so they tile once the pane is wide
+          enough to give each one a sensible width — the same reasoning as the
+          Forge's hardware readings. `items-start`: a sensor card carrying the
+          demo-data prompt is much taller than a healthy one, and stretching
+          the rest to match would be four cards of padding. */}
+      <div className="grid gap-6 @5xl:grid-cols-2 items-start">
       {databases?.map((db) => (
         <div key={db.id} className={card}>
           <div className="flex items-start justify-between gap-3 mb-3">
@@ -252,6 +258,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           )}
         </div>
       ))}
+      </div>
 
       {!databases && !error && (
         <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">

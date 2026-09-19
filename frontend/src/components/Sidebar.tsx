@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
+import { Collapse } from './ui/collapse'
 import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
 import { Skeleton } from './ui/skeleton'
 import {
@@ -208,8 +209,10 @@ function DataStores({
                 )}
               </button>
 
-              {isOpen && (
-                <div className="flex flex-col gap-0.5 ml-[22px] mt-0.5 mb-1 pl-2 border-l theme-border">
+              <Collapse
+                open={isOpen}
+                className="flex flex-col gap-0.5 ml-[22px] mt-0.5 mb-1 pl-2 border-l theme-border"
+              >
                   {store.available && store.tables.length === 0 && (
                     <span className="px-2 py-1 text-xs theme-text-muted">No tables</span>
                   )}
@@ -239,8 +242,7 @@ function DataStores({
                       </button>
                     )
                   })}
-                </div>
-              )}
+              </Collapse>
             </div>
           )
         })}

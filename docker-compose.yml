@@ -4,10 +4,11 @@
 #   docker compose --profile with-ollama up    # also run Ollama in a container
 #   docker compose --profile with-search up    # also run SearXNG (setup only)
 #
-# Four separate databases, on purpose (docs/PROJECT.md §6.3):
+# Five separate databases, on purpose (docs/PROJECT.md §6.3):
 #
 #   sensor  SQLite  /data/sqlite/sensor_readings.db  IoT telemetry   READ-ONLY to the AI
 #   audit   SQLite  /logs/ai_logs.db                 chat/tool/RAG/model/error/feedback/memory logs
+#   chat    SQLite  /data/sqlite/chat.db             conversations and transcripts
 #   vector  Chroma  chromadb service                 RAG knowledge chunks
 #   prefs   SQLite  /app/data/prefs.db               UI state
 #

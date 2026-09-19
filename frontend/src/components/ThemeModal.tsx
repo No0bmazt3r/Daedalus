@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ADV_GROUPS,
   ADV_KEYS,
@@ -47,6 +48,7 @@ import { Switch } from './ui/switch'
 import { useMinimizeToDock, useMinimizeOnOutsideClick } from './ui/floating-window'
 import { Skeleton } from './ui/skeleton'
 import { ThemeSelect } from './ui/theme-select'
+import { Collapse } from './ui/collapse'
 
 interface ThemeModalProps {
   open: boolean
@@ -194,7 +196,8 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   const [harmonyType, setHarmonyType] = useState<HarmonyKey>('complementary')
   const [harmonyMode, setHarmonyMode] = useState<'dark' | 'light'>('dark')
 
-  const { position, onMouseDown, handleRef, windowRef } = useDraggable()
+  const { position, onMouseDown, handleRef, windowRef, preview, snapRect, settling, toggleMaximize } =
+    useDraggable()
   // Borrowed from FloatingWindow rather than reimplemented, so this window's
   // chip is identical to every other one. See useMinimizeToDock for why this
   // modal is not simply built on that shell.
@@ -255,9 +258,23 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   if (!open) return null
 
   const style: React.CSSProperties = {
-    ...(position.x !== 0 || position.y !== 0
-      ? { top: position.y, left: position.x, right: 'auto', bottom: 'auto' }
-      : {}),
+    // Snapped geometry wins over both the drag position and the parked corner,
+    // and stands the size clamps down — see `useDraggable` and FloatingWindow,
+    // which do exactly this for the same reason.
+    ...(snapRect
+      ? {
+          top: snapRect.top,
+          left: snapRect.left,
+          right: 'auto',
+          bottom: 'auto',
+          width: snapRect.width,
+          height: snapRect.height,
+          maxWidth: 'none',
+          maxHeight: 'none',
+        }
+      : position.x !== 0 || position.y !== 0
+        ? { top: position.y, left: position.x, right: 'auto', bottom: 'auto' }
+        : {}),
     backgroundColor: isPeek
       ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)'
       : 'var(--bg)',
@@ -377,13 +394,20 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
         style={{ display: minimized ? 'none' : undefined }}
         aria-hidden={minimized}
       >
+      {preview &&
+        createPortal(<div className="snap-preview" style={preview} aria-hidden />, document.body)}
+
       <div
         ref={windowRef}
         style={style}
         data-theme-modal
-        className={`pointer-events-auto absolute resize ${
-          position.x === 0 ? 'top-16 right-16' : ''
-        } w-[480px] max-w-[calc(100vw-2rem)] h-[620px] max-h-[calc(100vh-6rem)] border theme-border rounded-xl shadow-2xl flex flex-col overflow-hidden transition-colors duration-300 ${
+        className={`pointer-events-auto absolute ${
+          snapRect
+            ? ''
+            : 'resize w-[480px] max-w-[calc(100vw-2rem)] h-[620px] max-h-[calc(100vh-6rem)]'
+        } ${position.x === 0 && !snapRect ? 'top-16 right-16' : ''} ${
+          settling ? 'snap-settling' : ''
+        } border theme-border rounded-xl shadow-2xl flex flex-col overflow-hidden transition-colors duration-300 ${
           isPeek ? 'theme-hairline shadow-none' : ''
         }`}
       >
@@ -391,6 +415,8 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
         <div
           ref={handleRef}
           onMouseDown={onMouseDown}
+          onDoubleClick={toggleMaximize}
+          title={snapRect ? 'Double-click to restore' : 'Drag to move · drag to an edge to snap · double-click to maximize'}
           className="flex items-center justify-between p-3 border-b theme-border theme-surface-strong cursor-move shrink-0"
           style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
         >
@@ -537,8 +563,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   More Colors
                 </button>
 
-                {advOpen && (
-                  <div className="mt-3 space-y-3 border-t theme-border pt-3">
+                <Collapse open={advOpen} className="mt-3 space-y-3 border-t theme-border pt-3">
                     {ADV_GROUPS.map((group) => (
                       <div key={group}>
                         <div className="text-[10px] uppercase tracking-wider theme-text-muted mb-1">
@@ -564,8 +589,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                     >
                       Clear Advanced Overrides
                     </button>
-                  </div>
-                )}
+                </Collapse>
               </Card>
 
               {/* Colour harmony */}

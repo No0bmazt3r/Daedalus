@@ -256,7 +256,7 @@ export function BlueprintsWindow({ open, onClose }: { open: boolean; onClose: ()
         <div className="flex-1 overflow-y-auto no-scrollbar p-6">
           <div
             key={`${viewing}-${tab}`}
-            className="mx-auto w-full @4xl:max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
+            className="mx-auto w-full @4xl:max-w-4xl @7xl:max-w-[min(100%,1400px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
           >
             {activeTrack && (
               <TrackBanner tabTrack={viewing} activeTrack={activeTrack} isReplay={tab === 'replay'} />

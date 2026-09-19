@@ -299,8 +299,10 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Background effects** | 13 options, 11 canvas-animated — including Nexus, Aurora, Bubbles and Voxels. Cursor reactivity was built and then deliberately removed: on a monitoring console, the only thing moving for a reason should be the answer on screen |
 | **Attention dimming** | The sidebar and the chat surfaces sit back translucent while the pointer and focus are elsewhere |
 | **Floating windows** | Settings, Data stores, the Forge and the theme palette open as draggable, resizable windows with **Peek** (fade to see the page behind) and **minimize** (collapse to a chip beside the incognito toggle, restored exactly as you left it). Clicking outside minimizes rather than closes, so a stray click never discards what you were doing |
+| **Window snapping** | Drag a window into an edge and it takes that region on release — halves, quadrants, or the whole screen from the top. The target is drawn as a dashed outline first, dragging a snapped window restores its old size under the cursor, and double-clicking the header maximizes |
+| **Collapse animation** | One cascade for every collapsible thing: rows arrive from below with a small overshoot, staggered, and leave bottom-up without one. The exit waits on the real animations rather than a timeout, so a two-row section does not sit through a twelve-row section's timing |
 | **Loading skeletons** | Placeholders shaped like the content they precede, in a pixel or smooth style — switchable in Theme → Customize |
-| **Data stores** | The five stores in the sidebar under the chats — expand one, click a table, read its rows in a floating window |
+| **Data stores** | Four browsable stores in the sidebar under the chats — chat · audit · sensor · vector. Expand one, click a table, read its rows in a floating window. Preferences is the fifth store and is deliberately absent: it holds this UI's own settings, not evidence |
 | **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. Settings → Hardware, and **The Forge**. In a container it says which machine it is describing: GPU passthrough is layered on automatically where the host has one (`--gpu` / `--no-gpu`), and where it is absent the panel names the flag instead of reporting no GPU |
 | **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` |
 | **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
@@ -324,8 +326,13 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 
 ### Not built yet
 
-Knowledge ingestion, both retrieval tracks, the deterministic tool layer, the
-full orchestration flow and the evaluation harness.
+Knowledge ingestion, both retrieval tracks, the orchestration flow that would
+call the tool layer, and the evaluation harness.
+
+The tool layer itself **is** built — 29 tools behind a gate that checks declared
+effects, validates arguments and logs every call — but nothing calls it during
+an answer yet. It is exercised from Settings → Agent Tools and by `/api/tools`,
+not by the chat path.
 
 Chat answers now: the serving path is wired, so a message goes to a real local
 model, streams token by token, and the transcript persists. A generation

@@ -3,6 +3,7 @@ import {
   AlertTriangle, Check, ChevronDown, Loader2, Play, ShieldCheck, Wand2, X,
 } from 'lucide-react'
 import { Skeleton } from '../ui/skeleton'
+import { Collapse } from '../ui/collapse'
 import { Switch } from '../ui/switch'
 import {
   disableTool,
@@ -299,8 +300,7 @@ function ToolRow({ tool, onChange }: {
       </div>
       </div>
 
-      {open && (
-        <div className="pb-3 pl-6 space-y-2">
+      <Collapse open={open} className="pb-3 pl-6 space-y-2">
           <p className="text-[10px] theme-text-muted" title={INTEGRITY_HINT[tool.integrity]}>
             returns <code className="theme-text">{tool.integrity}</code> ·{' '}
             {tool.citable ? 'citable as evidence' : 'never citable'}
@@ -365,8 +365,7 @@ function ToolRow({ tool, onChange }: {
               )}
             </div>
           )}
-        </div>
-      )}
+      </Collapse>
     </div>
   )
 }
@@ -469,11 +468,9 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
             }`}
           />
         </button>
-        {capsOpen && (
-          <div className="mt-3">
-            <Capabilities catalogue={catalogue} onChange={setCatalogue} />
-          </div>
-        )}
+        <Collapse open={capsOpen} className="mt-3">
+          <Capabilities catalogue={catalogue} onChange={setCatalogue} />
+        </Collapse>
       </div>
 
       {catalogue.categories.map((category) => {

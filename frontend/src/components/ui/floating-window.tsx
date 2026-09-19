@@ -289,7 +289,8 @@ export function FloatingWindow({
   const [isPeek, setIsPeek] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const [dock, setDock] = useState<HTMLElement | null>(null)
-  const { position, onMouseDown, handleRef, windowRef } = useDraggable()
+  const { position, onMouseDown, handleRef, windowRef, preview, snapRect, settling, toggleMaximize } =
+    useDraggable()
 
   // Closing and reopening should give a normal window, not a chip. Minimize is
   // a view state, not a preference worth remembering.
@@ -359,25 +360,46 @@ export function FloatingWindow({
         title="Click to set this aside"
       />
 
+      {/* The dashed target, drawn under the window and over the page, while a
+          drag is over an edge. Portalled to <body> so it is not clipped by the
+          window's own `overflow: hidden`. */}
+      {preview &&
+        createPortal(
+          <div className="snap-preview" style={preview} aria-hidden />,
+          document.body,
+        )}
+
       <div
         ref={windowRef}
         style={{
-          left: position.x || anchor.left,
-          top: position.y || anchor.top,
-          width,
-          height,
+          left: snapRect ? snapRect.left : position.x || anchor.left,
+          top: snapRect ? snapRect.top : position.y || anchor.top,
+          width: snapRect ? snapRect.width : width,
+          height: snapRect ? snapRect.height : height,
+          // A snapped window is the size of the region it was dropped in, so
+          // the class-level clamps have to stand down: `max-w-[95vw]` would
+          // leave a maximized window 5% short, and `min-w-[560px]` would push a
+          // half-screen snap off a narrow display.
+          ...(snapRect
+            ? { maxWidth: 'none', maxHeight: 'none', minWidth: 0, minHeight: 0 }
+            : null),
           backgroundColor: isPeek
             ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)'
             : 'var(--bg)',
           backdropFilter: isPeek ? 'none' : undefined,
         }}
-        className={`pointer-events-auto absolute resize overflow-hidden min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh] flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${
-          isPeek ? 'theme-hairline shadow-none' : ''
-        } ${className}`}
+        className={`pointer-events-auto absolute overflow-hidden flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${
+          // Native resize is withdrawn while snapped: the handle writes inline
+          // width/height that React overwrites on the next render, so it looks
+          // broken rather than unavailable.
+          snapRect ? '' : 'resize min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh]'
+        } ${settling ? 'snap-settling' : ''} ${isPeek ? 'theme-hairline shadow-none' : ''} ${className}`}
       >
         <div
           ref={handleRef}
           onMouseDown={onMouseDown}
+          onDoubleClick={toggleMaximize}
+          title={snapRect ? 'Double-click to restore' : 'Drag to move · drag to an edge to snap · double-click to maximize'}
           className="flex items-center justify-between px-4 py-3 border-b theme-border cursor-move theme-surface select-none shrink-0"
           style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
         >

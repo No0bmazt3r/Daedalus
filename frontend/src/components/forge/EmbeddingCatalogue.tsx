@@ -5,6 +5,7 @@ import {
   type EmbeddingConfig, type EmbeddingModel, type FigureSource,
 } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
+import { Collapse } from '../ui/collapse'
 
 /**
  * Forge → Models → Embeddings: the candidates, and pulling them.
@@ -211,8 +212,7 @@ function Row({
         </div>
       </div>
 
-      {open && (
-        <div className="border-t theme-border px-3 py-2.5 space-y-2 animate-in fade-in duration-200">
+      <Collapse open={open} className="border-t theme-border px-3 py-2.5 space-y-2">
           <div className="grid grid-cols-2 @md:grid-cols-3 gap-x-4 gap-y-2">
             <Fact label="tag" value={model.tag} />
             <Fact label="languages" value={model.languages ?? '—'} />
@@ -267,8 +267,7 @@ function Row({
             figures, and the catalogue does not carry any — an unsourced number here would look
             exactly as authoritative as the measured ones elsewhere in the Forge.
           </p>
-        </div>
-      )}
+      </Collapse>
     </div>
   )
 }
