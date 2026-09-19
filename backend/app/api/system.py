@@ -143,6 +143,14 @@ def databases() -> dict[str, Any]:
                 "metrics": {
                     "documents": vector["documents"],
                     "collection": vector["collection"],
+                    # Which embedding model produced these vectors, read off the
+                    # collection itself. A store of vectors whose model is
+                    # unknown is not a store anything may retrieve from, so the
+                    # figure belongs next to the document count rather than
+                    # somewhere a reader has to go looking for it.
+                    "embedding_model": vector["embedding_model"],
+                    "dimensions": vector["dimensions"],
+                    "indexed_at": vector["indexed_at"],
                     "mode": vector["mode"],
                     "error": vector["error"],
                 },

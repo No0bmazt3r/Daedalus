@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Download, Check, AlertTriangle, CloudOff, Cloud, X, RefreshCw,
+  Download, Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, RefreshCw,
 } from 'lucide-react'
 import {
   fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel,
@@ -48,16 +48,21 @@ import { Skeleton } from '../ui/skeleton'
  * Changing the chat model — including mid-conversation, which this project
  * allows — does nothing to the index.
  *
- * ## Changing *this* model is a one-way door
+ * ## Changing *this* model means re-embedding, not losing, the corpus
  *
  * An embedding is only comparable to embeddings from the same model. Different
  * model, different vector space, and cosine similarity across two spaces is not
- * a worse ranking — it is a meaningless one. So a change means re-embedding
- * every chunk, and the panel states that before the change rather than after.
+ * a worse ranking — it is a meaningless one. So a change means every chunk must
+ * be embedded again before retrieval means anything, and the panel says so
+ * before the change rather than after.
  *
- * `index_state` is the mechanism: the config records which model actually built
- * the current index, so a mismatch shows as `stale` instead of as silently
- * wrong search results.
+ * What a change does *not* do is destroy anything. Each model owns its own
+ * collection (`config.collection`, derived from the tag), so selecting another
+ * one addresses a different index — empty until it is ingested — and selecting
+ * the first one back finds its vectors where they were. `index_state` reads the
+ * model stamped on the collection itself rather than a note kept beside it, so
+ * it stays true across a restored config or a `data/chroma` copied from another
+ * machine.
  *
  *
  * ## Cloud is quarantined, not offered as an equal
@@ -78,28 +83,49 @@ function bytes(n: number | null): string {
   return `${v.toFixed(u === 0 ? 0 : 1)} ${units[u]}`
 }
 
+// `unknown` is deliberately not styled as a problem or as an all-clear. Chroma
+// being unreachable says nothing about the index, and an amber "we could not
+// look" is the honest rendering of a question that was never answered.
+const INDEX_TONES = {
+  stale: { wrap: 'border-rose-400/40 bg-rose-400/10', tint: 'text-rose-400', icon: AlertTriangle },
+  current: {
+    wrap: 'border-emerald-400/40 bg-emerald-400/10', tint: 'text-emerald-400', icon: Check,
+  },
+  unknown: { wrap: 'border-amber-400/40 bg-amber-400/10', tint: 'text-amber-400', icon: HelpCircle },
+  empty: { wrap: 'theme-border', tint: 'theme-text-muted', icon: Check },
+} as const
+
 function IndexState({ config }: { config: EmbeddingConfig }) {
-  const tone =
-    config.index_state === 'stale'
-      ? 'border-rose-400/40 bg-rose-400/10'
-      : config.index_state === 'current'
-        ? 'border-emerald-400/40 bg-emerald-400/10'
-        : 'theme-border'
-  const Icon = config.index_state === 'stale' ? AlertTriangle : Check
-  const tint =
-    config.index_state === 'stale'
-      ? 'text-rose-400'
-      : config.index_state === 'current'
-        ? 'text-emerald-400'
-        : 'theme-text-muted'
+  const tone = INDEX_TONES[config.index_state] ?? INDEX_TONES.empty
+  const Icon = tone.icon
+  // One collection per model means several can exist at once. Only worth the
+  // room when there is more than the selected model's, which is exactly the
+  // local-versus-cloud comparison §5 asks for.
+  const others = config.indexes.filter((i) => i.name !== config.collection && i.documents > 0)
 
   return (
-    <div className={`flex items-start gap-2 rounded-lg border p-2.5 ${tone}`}>
-      <Icon size={13} className={`mt-0.5 shrink-0 ${tint}`} />
-      <p className="text-[11px] leading-relaxed theme-text">
-        <span className="theme-text-muted">index {config.index_state} — </span>
-        {config.index_detail}
-      </p>
+    <div className={`space-y-2 rounded-lg border p-2.5 ${tone.wrap}`}>
+      <div className="flex items-start gap-2">
+        <Icon size={13} className={`mt-0.5 shrink-0 ${tone.tint}`} />
+        <p className="text-[11px] leading-relaxed theme-text">
+          <span className="theme-text-muted">index {config.index_state} — </span>
+          {config.index_detail}
+        </p>
+      </div>
+      {others.length > 0 && (
+        <div className="space-y-0.5 border-t theme-border pt-2 pl-[21px]">
+          <p className="text-[10px] uppercase tracking-wide theme-text-muted">
+            other indexes on this machine
+          </p>
+          {others.map((index) => (
+            <p key={index.name} className="text-[10px] theme-text-muted">
+              <code className="theme-text">{index.name}</code> · {index.documents} chunks
+              {index.embedding_model ? ` · ${index.embedding_model}` : ' · unattributed'}
+              {index.dimensions ? ` · ${index.dimensions}d` : ''}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -290,9 +316,10 @@ export function EmbeddingModelsPane() {
               comparable — so every question goes out too. There is no one-off cloud embedding.
             </p>
             <p className="text-[11px] leading-relaxed theme-text-muted">
-              A cloud selection writes a separate collection (
-              <code className="theme-text">daedalus_knowledge_cloud_baseline</code>) and cannot
-              serve the local system — the runtime refuses it.
+              A cloud selection writes its own collection, under a separate{' '}
+              <code className="theme-text">daedalus_knowledge_cloud_baseline</code> prefix, and
+              cannot serve the local system — the runtime refuses it. Its index sits alongside
+              the local one rather than replacing it, which is what makes the two comparable.
             </p>
 
             {config.cloud_baselines.length === 0 ? (

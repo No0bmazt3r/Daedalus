@@ -121,15 +121,20 @@ def catalogue() -> list[dict[str, Any]]:
             entry["tables"] = [{"name": t, "rows": None} for t in tables]
         out.append(entry)
         
-    # Add vector store
+    # Add vector store. One collection per embedding model, so the "tables" are
+    # however many indexes exist — a local one and a cloud baseline over the same
+    # corpus are a legitimate pair, and being able to open each is the point.
     from ..db import vector_store
     vs_stats = vector_store.stats()
+    indexes = vector_store.collections()
     out.append({
         "store": "vector",
         "label": "Vector Knowledge Base",
         "path": vs_stats["target"],
         "available": vs_stats["available"],
-        "tables": [{"name": "daedalus_knowledge", "rows": vs_stats.get("documents")}]
+        "tables": [
+            {"name": index["name"], "rows": index["documents"]} for index in indexes
+        ] or [{"name": vs_stats["collection"], "rows": 0}],
     })
 
     return out
@@ -149,11 +154,22 @@ def read(
 
     if store == "vector":
         from ..db import vector_store
-        collection = vector_store.get_collection()
+
+        # Rule 1 still holds: the caller names a collection and it is checked
+        # against the ones that exist before it is opened. The allowlist is read
+        # from the store rather than hardcoded, because the set of collections
+        # is now a function of which embedding models have been used.
+        known = {index["name"] for index in vector_store.collections()}
+        name = table if table in known else vector_store.resolve_collection()
+
+        # Unguarded on purpose. This is the raw viewer, and an index that
+        # retrieval must refuse is exactly the thing somebody opens it to look
+        # at; `stamp` is in each row's metadata, so what wrote it is visible.
+        collection = vector_store.get_collection(name, require_match=False, create=False)
         if not collection:
             return {
                 "store": store,
-                "table": table,
+                "table": name,
                 "columns": [],
                 "rows": [],
                 "total": 0,
@@ -177,7 +193,7 @@ def read(
                 
         return {
             "store": store,
-            "table": table,
+            "table": name,
             "columns": ["id", "document", "metadata"],
             "rows": rows,
             "total": total,

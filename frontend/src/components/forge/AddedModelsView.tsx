@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, ArrowLeft, Cloud, Cpu, ExternalLink, FlaskConical, Loader2, Plus,
+  AlertTriangle, ArrowLeft, ChevronDown, Cloud, Cpu, ExternalLink, FlaskConical, Loader2, Plus,
   RefreshCw, Trash2, X, CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity,
   Settings2, Binary,
 } from 'lucide-react'
@@ -11,6 +11,7 @@ import {
 import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
 import { listEndpoints, type ModelEndpoint } from '../../lib/systemClient'
 import { CapabilityBadges } from '../ui/capability-badges'
+import { ModelArchitecture } from '../ui/model-architecture'
 import { EmbeddingModelsPane } from './EmbeddingModelsPane'
 import { SkeletonList } from '../ui/skeleton'
 
@@ -286,11 +287,16 @@ function LocalModel({
   onBenchmark: (row: ModelRow) => void
   onDelete: (row: ModelRow) => void
 }) {
+  const [open, setOpen] = useState(false)
   const verdict = VERDICT[row.verdict.fit] ?? VERDICT.unknown
   const VerdictIcon = verdict.icon
   const isBusy = busy === row.tag
   const isSlm = row.tier === 'slm'
   const isEmbedding = row.tier === 'embedding'
+  // Never for an embedder: its `hidden size` is a plausible-looking number that
+  // is not the width the vector store receives — that one is measured by
+  // embedding a probe string, and belongs to the Embedding pane.
+  const hasArch = !isEmbedding && !!row.arch?.layers
 
   return (
     <div className="rounded-xl border theme-border theme-surface overflow-hidden">
@@ -333,6 +339,15 @@ function LocalModel({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {hasArch && (
+            <button
+              onClick={() => setOpen((v) => !v)}
+              title="Show the shape of the file on this disk."
+              className="p-1.5 rounded-lg theme-text-muted hover:theme-text transition-colors"
+            >
+              <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+          )}
           <button
             onClick={() => onBenchmark(row)}
             disabled={!!busy}
@@ -369,6 +384,21 @@ function LocalModel({
         />
         <Stat label="Last used" value={usage ? since(usage.last_used) : 'never'} />
       </div>
+
+      {/* What was actually pulled. The Forge shows the same block as the memory
+          estimate's inputs; here the estimate is settled and this is simply the
+          description of the file on this disk, which is otherwise only visible
+          by going back to the Models tab and expanding the row.
+
+          Collapsed, behind the same chevron the Forge's rows use, because this
+          pane is a list to scan rather than one model to study: the header and
+          what the model has been running stay on screen for every card, and the
+          architecture opens on the one card being asked about. */}
+      {open && hasArch && (
+        <div className="border-t theme-border px-3 py-2.5 animate-in fade-in slide-in-from-top-1 duration-200 ease-out">
+          <ModelArchitecture arch={row.arch} />
+        </div>
+      )}
 
       {isBusy && benchProgress ? (
         <div className="border-t theme-border px-3 py-2.5 text-[11px] font-mono theme-text-muted animate-pulse">

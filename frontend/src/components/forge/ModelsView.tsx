@@ -9,6 +9,7 @@ import {
   type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type BenchmarkProgress, type ModelSource,
 } from '../../lib/forgeClient'
 import { CapabilityBadges } from '../ui/capability-badges'
+import { ModelArchitecture } from '../ui/model-architecture'
 import { EmbeddingCatalogue } from './EmbeddingCatalogue'
 import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
@@ -160,64 +161,6 @@ function Section({ title, children, right }: {
   )
 }
 
-/**
- * The architecture behind the memory estimate.
- *
- * `estimate.formula` states the sum; these are its inputs. `MODULES.md` §2.2 is
- * about a reader being able to check a number rather than trust it, and the
- * KV-cache term is the half that is pure arithmetic — it is computed from
- * layers x kv_heads x head_dim, so those belong on screen next to it.
- *
- * Absent before a model is pulled, and rendered as nothing rather than as
- * dashes: there is no architecture to report for a file that is not here.
- */
-function Architecture({ row }: { row: ModelRow }) {
-  const arch = row.arch
-  if (!arch || !arch.layers) return null
-
-  const facts: [string, string, string?][] = [
-    ['layers', String(arch.layers), 'Transformer blocks. The KV cache scales linearly with this.'],
-    ['attn heads', arch.heads ? String(arch.heads) : '—'],
-    [
-      'KV heads',
-      arch.kv_heads ? String(arch.kv_heads) : '—',
-      'Fewer than attention heads means grouped-query attention, which is what makes the KV cache affordable.',
-    ],
-    ['head dim', arch.head_dim ? String(arch.head_dim) : '—'],
-    [
-      'hidden size',
-      arch.embedding_length ? String(arch.embedding_length) : '—',
-      "The model's internal width. Not a retrieval vector width — an embedding model's dimensions are a different quantity that happens to share a GGUF key.",
-    ],
-  ]
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-[10px] uppercase tracking-wide theme-text-muted">architecture</span>
-        <span
-          title={
-            arch.measured
-              ? 'Read from the pulled file.'
-              : 'Partly inferred: this family did not publish every field, so head_dim or kv_heads were derived from the standard relations.'
-          }
-          className={`text-[9px] uppercase tracking-wide ${arch.measured ? 'status-ok' : 'theme-text-muted opacity-70'}`}
-        >
-          {arch.measured ? 'measured' : 'partly inferred'}
-        </span>
-      </div>
-      <div className="grid grid-cols-3 @lg:grid-cols-5 gap-x-4 gap-y-1.5">
-        {facts.map(([label, value, hint]) => (
-          <div key={label} className="min-w-0" title={hint}>
-            <div className="text-[10px] uppercase tracking-wide theme-text-muted">{label}</div>
-            <div className="text-xs font-mono theme-text">{value}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function Detail({ row }: { row: ModelRow }) {
   const est = row.estimate
 
@@ -271,7 +214,7 @@ function Detail({ row }: { row: ModelRow }) {
         {/* Directly under the estimate, because it is the estimate's inputs —
             the KV term above is layers x kv_heads x head_dim x 2 x bytes. */}
         <div className="mt-3 pt-3 border-t theme-border">
-          <Architecture row={row} />
+          <ModelArchitecture arch={row.arch} />
         </div>
       </Section>
 

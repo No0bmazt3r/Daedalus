@@ -71,27 +71,74 @@ export interface CloudBaseline {
 }
 
 /**
- * `empty`   — nothing ingested yet.
- * `current` — the index was built with the selected model.
- * `stale`   — it was not. Retrieval still returns results, ranked by comparing
- *             vectors from two different spaces, which is not a worse ranking
- *             but a meaningless one. Re-ingest.
+ * `empty`   — nothing has been ingested with the selected model yet.
+ * `current` — this model's collection exists, and the model stamped on it is
+ *             the one selected.
+ * `stale`   — the collection holds vectors some other model produced, or
+ *             vectors nothing accounted for. The query path refuses it rather
+ *             than ranking by comparing two vector spaces, which is not a worse
+ *             ranking but a meaningless one. Re-ingest.
+ * `unknown` — Chroma could not be read, so none of the above was established.
+ *             An absence of a verdict, not a verdict.
+ *
+ * Since each embedding model owns its own collection, `stale` is now a guard
+ * against something having gone wrong rather than the ordinary consequence of
+ * changing models — that just addresses a different, empty index.
  */
-export type IndexState = 'empty' | 'current' | 'stale';
+export type IndexState = 'empty' | 'current' | 'stale' | 'unknown';
+
+/**
+ * Which source answered `index_state`.
+ *
+ * `collection` is the index itself, and is the only one that is a fact about
+ * the vectors. `config` is the note kept beside the store, used when Chroma
+ * cannot be reached. `none` means neither could answer.
+ */
+export type IndexSource = 'collection' | 'config' | 'none';
+
+/** One index, as the store describes itself. */
+export interface VectorIndex {
+  name: string;
+  available: boolean;
+  exists: boolean;
+  documents: number;
+  /** Stamped at ingest. Null means nothing recorded what built this. */
+  embedding_model: string | null;
+  dimensions: number | null;
+  indexed_at: string | null;
+  error: string | null;
+}
 
 export interface EmbeddingConfig {
   provider: 'local' | 'cloud';
   model: string;
   endpoint_id: string | null;
   dimensions: number | null;
+  /** A verified width outranks a declared one — see `FigureSource`. */
+  dimensions_source: FigureSource;
+  /** The last ingest the config recorded, of any model. Null before the first. */
   indexed_with: string | null;
   indexed_at: string | null;
-  /** Cloud runs write a separate collection so they cannot touch the local index. */
+  /**
+   * The collection this model owns, derived from its tag. Selecting a different
+   * model addresses a different collection rather than invalidating this one,
+   * and a cloud selection carries its own prefix on top of that so it cannot
+   * touch the local index.
+   */
   collection: string;
   production_safe: boolean;
   ready: boolean;
   index_state: IndexState;
   index_detail: string;
+  index_source: IndexSource;
+  /** Null when the store could not be read, which is not the same as zero. */
+  index_documents: number | null;
+  /**
+   * Every index on this machine, not just the selected model's. A local index
+   * and a cloud baseline over the same corpus are a pair to compare, not a mess
+   * to tidy — §5's comparison is the reason both exist.
+   */
+  indexes: VectorIndex[];
   local_models: EmbeddingModel[];
   cloud_baselines: CloudBaseline[];
   ollama_available: boolean;

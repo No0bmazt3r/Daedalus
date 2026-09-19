@@ -153,6 +153,10 @@ def _rag_pack(target_tokens: int) -> tuple[str, dict[str, Any]] | None:
     try:
         from ..db import vector_store
 
+        # Guarded, which is the default: if the index was not built by the
+        # selected embedding model, `get_collection` raises and this falls back
+        # to the synthetic prompt. A benchmark is a measurement, and measuring
+        # against chunks from a different vector space measures nothing.
         collection = vector_store.get_collection()
         fetched = collection.get(ids=list(chunk_ids)[:20])
         documents = [d for d in (fetched.get("documents") or []) if d]

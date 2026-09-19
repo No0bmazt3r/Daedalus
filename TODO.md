@@ -116,8 +116,37 @@ the Forge while M5 was in flight.
       rather than reading metadata about one. Handles both the current
       `/api/embed` response shape and the older flat `embedding` key, because
       the failure is otherwise an empty vector reported as 0 dimensions
-- [ ] Ingestion must call `record_index()` when it finishes, or `stale` can
-      never become `current`
+- [x] **One collection per embedding model.** `collection_name()` derives
+      `daedalus_knowledge__<tag>` from the selection, so changing models
+      addresses a different index rather than corrupting the current one, and
+      changing back finds the old vectors intact. The width is deliberately not
+      in the name: a tag is known at selection, a verified width may only arrive
+      later, and putting it there would rename a collection out from under an
+      index that already existed. Clamped to Chroma's 63-character limit, with a
+      hash of the full tag when a name would overrun it
+- [x] **The index is stamped with what built it.** `record_index()` writes the
+      model onto the collection's own metadata *before* writing it to the
+      config. The collection is the authority because it survives a config
+      restored from git and a `data/chroma` copied between machines; the config
+      is the cache that still answers when Chroma is down, and `index_source`
+      says which one answered
+- [x] **The query path refuses an index it cannot attribute.**
+      `vector_store.get_collection()` checks the stamp and raises
+      `IndexMismatch`, with `require_match=True` as the default so retrieval
+      written later inherits the guard instead of having to remember it. An
+      empty collection is safe; documents with no stamp are not. The raw browser
+      is the one caller that opts out, because showing an index nothing may
+      query is its whole job
+- [x] `index_state` gained `unknown` — Chroma could not be read, so nothing was
+      established. An absence of a verdict rather than a verdict, and the normal
+      state on this machine without the container running
+- [x] The cloud quarantine became real rather than declared. `vector_store`
+      hardcoded `daedalus_knowledge` and never read the `collection` the config
+      set, so a configured cloud embedder would have written its vectors into
+      the local production index
+- [ ] Ingestion must call `record_index()` when it finishes, or nothing can
+      attribute the index: `index_state` stays `stale` and the query path
+      refuses to retrieve from it
 - [ ] Warn when a chunk exceeds the selected model's context window. The UI
       flags a narrow window against M2's 300-500 token chunks, but only
       ingestion can know whether a chunk actually overran
@@ -189,6 +218,12 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 ## M6 — Retrieval tracks  ▸ Layer 5
 
 ### Track 1 — Traditional vector RAG
+
+> Readiness now means `index_state: current`, not "has rows". An index built by
+> a different embedding model, or by something that never recorded itself,
+> cannot answer — so counting it as ready would put an arm into §5's comparison
+> that cannot run.
+
 - [ ] ChromaDB store + `VectorStoreAdapter` interface
 - [ ] Top-k cosine retrieval with metadata filtering
 - [ ] Query expansion (LLM rewrites with lab synonyms)
@@ -213,6 +248,10 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 ### Store plumbing
 - [x] ChromaDB running as a compose service with a persistent volume
 - [x] Client wrapper supporting both server and embedded mode, degrading to a status when absent
+- [x] One collection per embedding model, stamped with what produced it, and a
+      `get_collection()` guard that refuses vectors it cannot attribute — so a
+      local index and a cloud baseline over the same corpus coexist and stay
+      comparable instead of overwriting each other
 - [ ] `VectorStoreAdapter` interface over it (needed for the DB bake-off)
 
 ## M7 — Observability  ▸ Layer 10
@@ -343,6 +382,15 @@ Layer 9 below for the per-step detail.
           **LLM** with a size filter; both tiers answer chat, and only the cloud
           tier never does (§8.1 marks only *it* "never deployed"). Cloud renders
           the same `ModelEndpointsPanel` Settings does, behind its own warning
+    - [x] **Architecture on the inventory card too.** The block the Models tab
+          shows under its memory estimate (layers · attn heads · KV heads · head
+          dim · hidden size) moved to `ui/model-architecture.tsx` and now renders
+          on Added Models as well, behind the same chevron the Models rows use so
+          a list of cards stays scannable. Never for an embedding model: its
+          `hidden size` is a plausible-looking number that is *not* the width the
+          vector store receives, and the verified width in the Embedding pane is
+          the only figure that is. `head dim` gained a hint saying the same, since
+          it is the field that reads like a retrieval dimension and is not one
     - [x] **Usage and stats per model** — `GET /api/forge/usage` aggregates
           `model_logs` into run counts split by `source`, token totals, and
           latency as **mean, p50 and p95**, which is what §9.2 asks for by name.
@@ -665,6 +713,18 @@ Layer 9 below for the per-step detail.
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
 - [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
+- [ ] **Embedded Chroma does not work on a default install.**
+      `requirements.txt` ships `chromadb-client`, which is HTTP-only, so an
+      unset `CHROMA_URL` is not a fallback to embedded mode — it is no vector
+      store at all, and `index_state` reads `unknown`. Either run
+      `./daedalus.sh dev`, which starts the container, or install full `chromadb`
+- [ ] **`config/embedding_config.json` carries a `verified` record that cannot
+      be real:** `nomic-embed-text` at 512 dimensions with `elapsed_ms: 0`, and
+      `indexed_at` set while `indexed_with` is null. Nomic is 768, no embedding
+      model is installed, and `record_index()` cannot produce that pair — it
+      looks seeded. Since a verified width outranks a declared one it now shows
+      as "512d (verified)" in Settings → Knowledge Base. Clear the block, or
+      re-verify once an embedder is pulled
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
 - [ ] Settings panels other than Add Models, Databases and Shortcuts are still placeholders
 - [ ] Two Font selector options are not actually bundled — `mono` names Fira Code

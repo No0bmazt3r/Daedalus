@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, ArrowUpRight } from 'lucide-react'
+import {
+  Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, HelpCircle, ArrowUpRight,
+} from 'lucide-react'
 import {
   fetchRagConfig, setRagTrack, type RagConfig, type RagTrack, type TrackStatus,
 } from '../../lib/blueprintsClient'
@@ -194,7 +196,8 @@ export function KnowledgeBasePanel() {
  * It is worth stating at all because the failure is invisible from the results:
  * an index built by one model and queried through another still returns rows,
  * ranked by comparing vectors from two different spaces. That is not a worse
- * ranking, it is a meaningless one, and nothing in the answer says so.
+ * ranking, it is a meaningless one, and nothing in the answer says so. The query
+ * path refuses such an index outright; this is where a reader finds out why.
  */
 function IndexSummary() {
   const [config, setConfig] = useState<EmbeddingConfig | null>(null)
@@ -206,20 +209,29 @@ function IndexSummary() {
   if (!config) return <Skeleton className="h-20 w-full" />
 
   const stale = config.index_state === 'stale'
+  // Chroma being unreachable is not a verdict on the index, so it is neither
+  // red nor an all-clear: amber for a question that could not be asked.
+  const unread = config.index_state === 'unknown'
+  const Icon = stale ? AlertTriangle : unread ? HelpCircle : Check
 
   return (
     <div className="space-y-2">
       <h3 className="text-sm theme-text">Vector index</h3>
       <div
         className={`flex items-start gap-2 rounded-lg border p-2.5 ${
-          stale ? 'border-rose-400/40 bg-rose-400/10' : 'theme-border'
+          stale
+            ? 'border-rose-400/40 bg-rose-400/10'
+            : unread
+              ? 'border-amber-400/40 bg-amber-400/10'
+              : 'theme-border'
         }`}
       >
-        {stale ? (
-          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-rose-400" />
-        ) : (
-          <Check size={13} className="mt-0.5 shrink-0 theme-text-muted" />
-        )}
+        <Icon
+          size={13}
+          className={`mt-0.5 shrink-0 ${
+            stale ? 'text-rose-400' : unread ? 'text-amber-400' : 'theme-text-muted'
+          }`}
+        />
         <div className="min-w-0 space-y-1">
           <p className="text-[11px] leading-relaxed theme-text">
             <span className="theme-text-muted">index {config.index_state} — </span>
@@ -228,6 +240,10 @@ function IndexSummary() {
           <p className="text-[10px] theme-text-muted">
             embedding model: <code className="theme-text">{config.model}</code>
             {config.dimensions ? ` · ${config.dimensions}d` : ''}
+            {/* A declared width is a claim about the tag; a verified one is what
+                a probe actually received. Worth a word, since only the second
+                is the width the store will hold. */}
+            {config.dimensions ? ` (${config.dimensions_source})` : ''}
             {!config.production_safe && (
               <span className="text-amber-400"> · cloud baseline, not production-safe</span>
             )}

@@ -52,8 +52,10 @@ you have decided may leave.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import tempfile
 import threading
 import time
@@ -65,11 +67,21 @@ from . import ollama_client
 
 CONFIG_PATH = paths.CONFIG_DIR / "embedding_config.json"
 
-# The production collection, and the quarantine. Kept apart by name so a cloud
-# run physically cannot overwrite the local index — the separation is a
-# different collection, not a flag somebody has to remember to check.
+# The production prefix, and the quarantine. Kept apart by name so a cloud run
+# physically cannot overwrite the local index — the separation is a different
+# collection, not a flag somebody has to remember to check.
+#
+# Prefixes rather than names: `collection_name` appends the model, so each
+# embedding model owns its own index. See `db/vector_store` for why the name
+# alone is not the whole guard.
 LOCAL_COLLECTION = "daedalus_knowledge"
 CLOUD_COLLECTION = "daedalus_knowledge_cloud_baseline"
+
+# Chroma's limit, and it is a hard one: names run 3-63 characters, alphanumeric
+# at both ends, alphanumerics, underscores and hyphens between. A model name long
+# enough to overrun it is truncated and given a hash of the full tag, so two long
+# names that share a prefix still get separate indexes.
+_MAX_COLLECTION_NAME = 63
 
 # Ollama reports this in `/api/show` capabilities for models that embed.
 EMBEDDING_CAPABILITY = "embedding"
@@ -174,7 +186,6 @@ DEFAULT: dict[str, Any] = {
     # until ingestion runs. A difference from `model` means re-ingest.
     "indexed_with": None,
     "indexed_at": None,
-    "collection": LOCAL_COLLECTION,
     # Per-tag results of actually embedding `PROBE_TEXT`, keyed by tag. Kept in
     # the same file because it is small, is about embedding models, and reviews
     # in a diff — and because a verified width is a fact worth surviving a
@@ -189,9 +200,83 @@ class NotProductionSafe(Exception):
     """A cloud embedding model was asked for on a path that must stay local."""
 
 
-def _normalise_tag(tag: str) -> str:
+def normalise_tag(tag: str) -> str:
     """`nomic-embed-text:latest` and `nomic-embed-text` are the same model."""
     return tag.split(":", 1)[0] if tag.endswith(":latest") else tag
+
+
+def _slug(value: str) -> str:
+    """A model tag as a Chroma-legal name fragment."""
+    return re.sub(r"[^A-Za-z0-9]+", "-", value).strip("-").lower() or "unknown"
+
+
+def collection_name(provider: str, model: str) -> str:
+    """The collection a given embedding model owns.
+
+    The **model** is in the name and the width is not, deliberately. The tag is
+    what identifies a vector space, and it is known the moment a model is
+    selected; a width may only be known after verifying, so putting it here would
+    rename the collection out from under an index that already exists. The width
+    is recorded on the collection instead, where a later disagreement shows up as
+    a mismatch rather than as a silently different name.
+    """
+    prefix = CLOUD_COLLECTION if provider == "cloud" else LOCAL_COLLECTION
+    name = f"{prefix}__{_slug(normalise_tag(model))}"
+    if len(name) <= _MAX_COLLECTION_NAME:
+        return name
+    digest = hashlib.sha256(f"{provider}:{model}".encode()).hexdigest()[:8]
+    keep = _MAX_COLLECTION_NAME - len(prefix) - len("__") - len(digest) - 1
+    return f"{prefix}__{_slug(normalise_tag(model))[:keep].rstrip('-')}-{digest}"
+
+
+def collection_for(config: dict[str, Any] | None = None) -> str:
+    """The collection the current selection reads and writes."""
+    config = config or read()
+    return collection_name(config["provider"], config["model"])
+
+
+def effective_dimensions(
+    config: dict[str, Any] | None = None, model: str | None = None
+) -> tuple[int | None, str]:
+    """The width the vector store will receive, and which source answered.
+
+    The same `declared < measured < verified` ladder the rest of this module
+    uses: a probe that actually ran outranks anything a header claims.
+    """
+    config = config or read()
+    tag = normalise_tag(model or config["model"])
+    record = (config.get("verified") or {}).get(tag)
+    if record and record.get("dimensions"):
+        return int(record["dimensions"]), "verified"
+    if config.get("dimensions"):
+        return int(config["dimensions"]), "declared"
+    known = _BY_TAG.get(tag, {}).get("dimensions")
+    return (int(known), "declared") if known else (None, "unknown")
+
+
+def _persist(payload: dict[str, Any]) -> dict[str, Any]:
+    """Write the config atomically.
+
+    Shared by every writer here because this file now records what produced the
+    index: a half-written one would be a claim about provenance that is not true,
+    which is worse than no claim at all.
+    """
+    paths.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=paths.CONFIG_DIR, prefix=".embedding_config-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, CONFIG_PATH)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return payload
 
 
 def read() -> dict[str, Any]:
@@ -211,9 +296,14 @@ def write(
 ) -> dict[str, Any]:
     """Commit a choice. Does **not** clear `indexed_with` — that is the point.
 
-    Selecting a different model leaves the record of what built the current
-    index intact, so `status()` can report the mismatch. Clearing it here would
-    erase the only evidence that the index needs rebuilding.
+    Selecting a different model leaves the record of what built the last index
+    intact, so `status()` can report on it. Clearing it here would erase the only
+    evidence of what has been ingested when Chroma cannot be reached.
+
+    It is also no longer destructive. Each model owns its own collection, so
+    selecting a different one addresses a different index rather than
+    invalidating the current one: the old vectors stay where they are, correct
+    and queryable, for as long as that model is the selection again.
     """
     if provider not in ("local", "cloud"):
         raise ValueError(f"unknown provider {provider!r}")
@@ -227,35 +317,42 @@ def write(
             "provider": provider,
             "model": model,
             "endpoint_id": endpoint_id if provider == "cloud" else None,
-            "dimensions": dimensions or _BY_TAG.get(_normalise_tag(model), {}).get("dimensions"),
-            "collection": CLOUD_COLLECTION if provider == "cloud" else LOCAL_COLLECTION,
+            "dimensions": dimensions or _BY_TAG.get(normalise_tag(model), {}).get("dimensions"),
         }
-        paths.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=paths.CONFIG_DIR, prefix=".embedding_config-", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, indent=2)
-                fh.write("\n")
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, CONFIG_PATH)
-        except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-        return payload
+        return _persist(payload)
 
 
-def record_index(model: str, dimensions: int | None, at: str) -> dict[str, Any]:
-    """Called by ingestion when it finishes. This is what makes `stale` work."""
+def record_index(
+    model: str, dimensions: int | None, at: str, *, provider: str | None = None
+) -> dict[str, Any]:
+    """Called by ingestion when it finishes. This is what makes the guard work.
+
+    Writes the same fact twice, on purpose and in this order:
+
+    1. **Onto the collection**, where it travels with the vectors it describes.
+       This is the authority, because it survives a config restored from git and
+       a `data/chroma/` copied between machines — the two cases where a record
+       kept beside the store starts describing an index it never saw.
+    2. **Into the config**, which is the cache that can still answer when Chroma
+       is not running.
+
+    A failed stamp fails the call. An index nothing can attribute is the state
+    this module exists to prevent, so it is better to not finish an ingest than
+    to finish one that cannot be checked afterwards.
+    """
+    from ..db import vector_store  # noqa: PLC0415 — avoids an import cycle at boot
+
     with _lock:
         current = read()
-        payload = {**current, "indexed_with": model, "indexed_at": at, "dimensions": dimensions}
-        paths.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        return payload
+        provider = provider or current["provider"]
+        name = collection_name(provider, model)
+        vector_store.stamp_index(name, model=normalise_tag(model), dimensions=dimensions, at=at)
+        return _persist({
+            **current,
+            "indexed_with": model,
+            "indexed_at": at,
+            "dimensions": dimensions,
+        })
 
 
 def verify(tag: str) -> dict[str, Any]:
@@ -272,7 +369,7 @@ def verify(tag: str) -> dict[str, Any]:
     """
     installed_tag = tag
     for row in local_models():
-        if row["tag"] == _normalise_tag(tag) and row.get("installed_tag"):
+        if row["tag"] == normalise_tag(tag) and row.get("installed_tag"):
             installed_tag = row["installed_tag"]
             break
 
@@ -280,7 +377,7 @@ def verify(tag: str) -> dict[str, Any]:
     vector = ollama_client.embed(installed_tag, PROBE_TEXT)
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
-    normalised = _normalise_tag(tag)
+    normalised = normalise_tag(tag)
     record = {
         "dimensions": len(vector),
         "verified_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -292,9 +389,7 @@ def verify(tag: str) -> dict[str, Any]:
         config = read()
         verified = dict(config.get("verified") or {})
         verified[normalised] = record
-        payload = {**config, "verified": verified}
-        paths.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        _persist({**config, "verified": verified})
 
     return record
 
@@ -319,7 +414,7 @@ def local_models() -> list[dict[str, Any]]:
                 continue
             if EMBEDDING_CAPABILITY not in (detail.get("capabilities") or []):
                 continue
-            tag = _normalise_tag(name)
+            tag = normalise_tag(name)
             known = _BY_TAG.get(tag, {})
 
             # Measured first, declared as the fallback. A model pulled from
@@ -430,35 +525,115 @@ def cloud_baselines() -> list[dict[str, Any]]:
     ]
 
 
+def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Whether the selected model's index exists, and who says so.
+
+    Asks the collection first and the config second, and reports which one
+    answered. They normally agree; when they cannot both be consulted, a reader
+    needs to know whether they are looking at a record of the vectors or at a
+    note kept beside them.
+    """
+    from ..db import vector_store  # noqa: PLC0415 — avoids an import cycle at boot
+
+    config = config or read()
+    chosen_tag = normalise_tag(config["model"])
+    name = collection_for(config)
+    info = vector_store.describe(name)
+
+    if not info["available"]:
+        # Chroma is not answering, so the only thing left is the config's own
+        # note. It records the last ingest of any model, not of this one, so it
+        # can confirm that something was built and never that this index is
+        # ready — which is what `unknown` says.
+        indexed_with = config.get("indexed_with")
+        detail = f"cannot read {name}: {info['error']}"
+        if indexed_with:
+            detail += f" · the config last recorded an ingest with {indexed_with}"
+        return {
+            "index_state": "unknown",
+            "index_detail": detail,
+            "index_source": "config" if indexed_with else "none",
+            "index_documents": None,
+            "collection": name,
+        }
+
+    documents = info["documents"]
+    stamped = info["embedding_model"]
+
+    if not info["exists"] or not documents:
+        return {
+            "index_state": "empty",
+            "index_detail": (
+                f"nothing has been ingested with {config['model']} yet · it would build {name}"
+            ),
+            "index_source": "collection",
+            "index_documents": 0,
+            "collection": name,
+        }
+
+    if stamped and normalise_tag(stamped) != chosen_tag:
+        # Only reachable if something wrote to this collection with the wrong
+        # model, since the name is derived from the model. Kept because a guard
+        # that can only fire when it is impossible for it to fire is not a guard.
+        return {
+            "index_state": "stale",
+            "index_detail": (
+                f"{name} holds {documents} chunks built with {stamped}, but {config['model']} is "
+                "selected — re-ingest before querying"
+            ),
+            "index_source": "collection",
+            "index_documents": documents,
+            "collection": name,
+        }
+
+    if not stamped:
+        return {
+            "index_state": "stale",
+            "index_detail": (
+                f"{name} holds {documents} chunks with no record of which model embedded them, "
+                "so they cannot be trusted as comparable — re-ingest"
+            ),
+            "index_source": "collection",
+            "index_documents": documents,
+            "collection": name,
+        }
+
+    width = f", {info['dimensions']}d" if info["dimensions"] else ""
+    return {
+        "index_state": "current",
+        "index_detail": f"{documents} chunks in {name}, built with {stamped}{width}",
+        "index_source": "collection",
+        "index_documents": documents,
+        "collection": name,
+    }
+
+
 def status() -> dict[str, Any]:
     """The choice, what it can reach, and whether the index matches it."""
+    from ..db import vector_store  # noqa: PLC0415 — avoids an import cycle at boot
+
     config = read()
     models = local_models()
-    chosen_tag = _normalise_tag(config["model"])
+    chosen_tag = normalise_tag(config["model"])
     chosen = next((m for m in models if m["tag"] == chosen_tag), None)
 
     ready = bool(chosen and chosen["installed"]) if config["provider"] == "local" else bool(
         config.get("endpoint_id")
     )
 
-    indexed_with = config.get("indexed_with")
-    if indexed_with is None:
-        index_state, index_detail = "empty", "nothing has been ingested yet"
-    elif _normalise_tag(indexed_with) == chosen_tag:
-        index_state, index_detail = "current", f"built with {indexed_with}"
-    else:
-        index_state = "stale"
-        index_detail = (
-            f"built with {indexed_with}, but {config['model']} is selected — "
-            "every chunk must be re-embedded before retrieval means anything"
-        )
+    dimensions, dimensions_source = effective_dimensions(config)
 
     return {
         **config,
+        "dimensions": dimensions,
+        "dimensions_source": dimensions_source,
         "production_safe": config["provider"] == "local",
         "ready": ready,
-        "index_state": index_state,
-        "index_detail": index_detail,
+        **index_state(config),
+        # Every index on this machine, not just the selected model's. One
+        # collection per model means a local index and a cloud baseline over the
+        # same corpus coexist by design, and comparing them is the point.
+        "indexes": vector_store.collections(),
         "local_models": models,
         "cloud_baselines": cloud_baselines(),
         "ollama_available": ollama_client.available(),
@@ -479,4 +654,13 @@ def resolve_for_runtime() -> dict[str, Any]:
             "system. Rule 1 permits cloud models as offline evaluation baselines only — "
             "select a local model in Settings → Knowledge Base."
         )
-    return config
+    dimensions, dimensions_source = effective_dimensions(config)
+    # The collection comes back with the model, because the two are one decision:
+    # a caller that resolves the model and then picks a collection for itself is
+    # a caller that can pick the wrong one.
+    return {
+        **config,
+        "collection": collection_for(config),
+        "dimensions": dimensions,
+        "dimensions_source": dimensions_source,
+    }

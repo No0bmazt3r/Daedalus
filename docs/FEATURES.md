@@ -414,18 +414,38 @@ migrating a database we do not own breaches Rule 2 as surely as an INSERT.
 
 Two shapes behind one interface: **server mode** when `CHROMA_URL` is set (the
 compose service), **embedded mode** otherwise (a persistent client under
-`data/chroma`). Collection: `daedalus_knowledge`.
+`data/chroma`).
 
 Chroma is an **optional import**. A machine without it still boots the
 dashboard and preference API; absence is reported as a status, not raised.
 
-Two collections, kept apart by name rather than by a flag somebody has to
-remember to check:
+**One collection per embedding model.** The name carries the model that built
+it, so changing models addresses a different index rather than corrupting the
+current one — and changing back finds the old vectors intact. Cloud baselines
+carry their own prefix on top of that, so a cloud run is quarantined by name
+rather than by a flag somebody has to remember to check:
 
 | Collection | Written by |
 |---|---|
-| `daedalus_knowledge` | The selected **local** embedding model — the production index |
-| `daedalus_knowledge_cloud_baseline` | A cloud embedding model, if one is configured as an offline baseline |
+| `daedalus_knowledge__<tag>` | The local embedding model named by `<tag>` — the production index |
+| `daedalus_knowledge_cloud_baseline__<tag>` | A cloud embedding model, if one is configured as an offline baseline |
+
+Names are derived by `embedding_models.collection_name()` and clamped to
+Chroma's 63-character limit, with a hash of the full tag appended when a name
+would overrun it.
+
+**The name is not the whole guard.** It says which model *should* have written a
+collection; the collection's own metadata — stamped at ingest by `stamp_index()`
+— says which one *did*, and only the stamp survives a config restored from git
+or a `data/chroma` copied between machines. `get_collection()` checks the stamp
+and raises `IndexMismatch` rather than handing back vectors of unknown
+provenance; the raw browser is the one caller that opts out, with
+`require_match=False`, because displaying an index nothing may query is its job.
+
+An empty collection is safe and opens normally — there are no vectors to compare
+wrongly. Documents with *no* stamp are not: something wrote them without
+recording itself, and an unknown vector space cannot be declared comparable to
+the selected one.
 
 **`./daedalus.sh dev` starts the `chromadb` container.** It previously started
 neither Docker nor Chroma, and `.env`'s `CHROMA_URL` names the compose service
@@ -461,11 +481,25 @@ an unusual pooling config can emit something narrower. The Ollama registry
 manifest carries size and existence but **no architecture**, which is why nothing
 can be measured before a pull.
 
-**Changing the embedding model is a one-way door.** An embedding is only
-comparable to embeddings from the same model — different model, different vector
-space, and cosine similarity across two spaces is not a worse ranking but a
-meaningless one. The config records which model actually built the index, so a
-mismatch surfaces as `index_state: stale` instead of as silently wrong results.
+**Changing the embedding model means re-embedding the corpus.** An embedding is
+only comparable to embeddings from the same model — different model, different
+vector space, and cosine similarity across two spaces is not a worse ranking but
+a meaningless one. What it no longer means is losing anything: each model owns
+its own collection, so the previous index stays where it is, correct and
+queryable the moment that model is selected again.
+
+`index_state` reports the result, read from the collection's stamp and falling
+back to the config only when Chroma cannot be reached:
+
+| State | Means |
+|---|---|
+| `empty` | Nothing has been ingested with the selected model yet |
+| `current` | The collection exists and the model stamped on it is the selected one |
+| `stale` | It holds vectors another model produced, or vectors nothing accounted for. The query path refuses it |
+| `unknown` | Chroma could not be read. An absence of a verdict, not a verdict |
+
+`index_source` says which of the two answered, because "a fact about the
+vectors" and "a note kept beside them" are different claims.
 
 **Cloud embedding models are quarantined.** Rule 1 permits cloud models as
 offline evaluation baselines, and the exposure here is worse than for a chat

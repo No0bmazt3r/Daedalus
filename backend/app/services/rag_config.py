@@ -157,18 +157,23 @@ def status() -> dict[str, Any]:
     try:
         from ..db import vector_store  # noqa: PLC0415
 
+        from . import embedding_models  # noqa: PLC0415
+
         health = vector_store.stats()
-        documents = health.get("documents") or 0
-        # Reachable and empty is a different problem from unreachable, and the
-        # panel has to distinguish them: one waits on M2, the other on Chroma
-        # not running — which `./daedalus.sh dev` does not start.
-        if not health.get("available"):
-            vector_detail = str(health.get("error") or "chroma unreachable")
-        elif documents:
-            vector_ready = True
-            vector_detail = f"{documents} chunks in {health.get('collection')}"
-        else:
-            vector_detail = f"reachable ({health.get('mode')} mode), no chunks ingested yet"
+        index = embedding_models.index_state()
+        # Ready means "can answer this query", which is stricter than "has rows
+        # in it". An index built by a different embedding model, or by something
+        # that never recorded itself, is refused by the query path — so this arm
+        # is not ready either, and saying otherwise would put a track into the
+        # comparison that cannot run.
+        #
+        # Reachable and empty stays distinguishable from unreachable: one waits
+        # on M2, the other on Chroma not running — which `./daedalus.sh dev`
+        # does not start.
+        vector_ready = index["index_state"] == "current"
+        vector_detail = index["index_detail"]
+        if index["index_state"] == "empty" and health.get("available"):
+            vector_detail = f"reachable ({health['mode']} mode) · {vector_detail}"
     except Exception as exc:  # noqa: BLE001
         vector_detail = str(exc)
 
