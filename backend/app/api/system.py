@@ -22,7 +22,7 @@ from ..db import (
     sqlite_util,
     vector_store,
 )
-from ..services import model_endpoints, ollama_client
+from ..services import graph_seed, model_endpoints, ollama_client
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -179,6 +179,28 @@ def seed_demo() -> dict[str, Any]:
         "rows_inserted": inserted,
         "note": "already populated — nothing written" if inserted == 0 else "demo run generated",
     }
+
+
+@router.post("/seed-graph-traces")
+def seed_graph_traces(force: bool = False) -> dict[str, Any]:
+    """Record real graph traversals into `rag_logs` — development only.
+
+    `MODULES.md` §1.2's seeder pattern, for Blueprints' traversal replay. The
+    walks are genuine — put through the real graph tools against the authored
+    graph — so the viewer is developed against the shape the orchestrator will
+    actually write. Rows are marked `vector_db_used = 'seed'` and must be
+    excluded from every reported metric.
+    """
+    try:
+        return {"ok": True, **graph_seed.seed(force=force)}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/seed-graph-traces")
+def clear_graph_traces() -> dict[str, Any]:
+    """Remove seeded traversals, leaving any real ones untouched."""
+    return {"ok": True, "deleted": graph_seed.clear()}
 
 
 @router.get("/models")

@@ -8,6 +8,7 @@ import { restoreWindow } from '../components/ui/floating-window'
 import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import { ForgeWindow } from '../components/forge/ForgeWindow'
+import { BlueprintsWindow } from '../components/blueprints/BlueprintsWindow'
 import { StoreWindow } from '../components/stores/StoreWindow'
 import { SettingsProvider } from '../contexts/SettingsContext'
 import { SessionsProvider } from '../contexts/SessionsContext'
@@ -40,6 +41,7 @@ function RootLayout() {
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [forgeOpen, setForgeOpen] = useState(false)
+  const [blueprintsOpen, setBlueprintsOpen] = useState(false)
   // Every floating window is owned here rather than by the Sidebar. Rendered
   // inside it they would sit under `.attention-zone`, and inherit the sidebar's
   // idle opacity the moment the pointer moved onto the window itself.
@@ -63,6 +65,7 @@ function RootLayout() {
                 onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
                 onOpenSettings={() => openWindow('settings', () => setSettingsModalOpen(true))}
                 onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
+                onOpenBlueprints={() => openWindow('blueprints', () => setBlueprintsOpen(true))}
                 onOpenStore={(store, table) =>
                   openWindow('stores', () => setStoreTarget({ store, table }))
                 }
@@ -92,6 +95,7 @@ function RootLayout() {
           <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
           <SettingsModal open={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
           <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
+          <BlueprintsWindow open={blueprintsOpen} onClose={() => setBlueprintsOpen(false)} />
           <StoreWindow
             open={storeTarget !== null}
             store={storeTarget?.store ?? null}

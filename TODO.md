@@ -296,13 +296,57 @@ Layer 9 below for the per-step detail.
           model cards before any of this reaches the report. (Library and
           discovered models carry no MMLU at all, by design — they are scored
           from a neutral baseline with the quantization penalty applied)
-  - [ ] **Labyrinth Blueprints** — the corpus and the knowledge graph, with
-        traversal replay for a graph-track `query_id`. Most blocked (M2 +
-        Track 2); storage is an open decision — see MODULES.md §3.4
-- [ ] Add a traversal-path column to `rag_logs` **now** — one cheap migration
-      today, unreplayable traces forever if it lands after rows exist
-- [x] Mark the unbuilt modules in the sidebar — Ariadne's Thread and Labyrinth
-      Blueprints are disabled with a dot and a tooltip; The Forge opens
+  - [~] **Labyrinth Blueprints** — the graph half is built; the corpus half
+        waits on M2. Storage decision settled: NetworkX over a git-tracked YAML
+        source of truth (MODULES.md §3.4's recommendation), so the store count
+        stays at five
+    - [x] Hand-authored graph — `backend/app/data/graph/knowledge_graph.yaml`,
+          37 nodes and 48 edges across all 7 node and 7 edge types, authored
+          against the real `sensor_readings` columns so a graph `Sensor` node
+          and a telemetry tool call name one thing
+    - [x] Loader with schema validation — `services/knowledge_graph.py`. Refuses
+          a graph that does not validate rather than serving a subtly broken
+          one: a typo'd edge type is not a crash, it is a silent retrieval
+          failure. `python -m app.services.knowledge_graph` is the authoring
+          checker
+    - [x] Graph tools — `services/graph_tools.py`: `graph_lookup`,
+          `graph_query_natural`, `graph_traverse`, and `TraversalPath`, which
+          records every hop regardless of caller so the viewer had real replay
+          data before any agent existed
+    - [x] **Track 2 is embedding-free by decision.** `graph_query_natural` was
+          specced (research/03 §7) as a vector search over node descriptions;
+          it is authored aliases plus a stdlib fuzzy fallback instead. If both
+          tracks depend on an embedding model the comparison cannot separate
+          "the graph helped" from "the embeddings helped". `entry_strategy` is
+          recorded per query so the report can state this from the data
+    - [x] API — `/api/graph/{schema,nodes,nodes/{id},coverage,traversals,traversal/{query_id}}`
+          plus `/api/corpus/*` on honest empty states. Read-only, opened
+          `read_only=True`, and deliberately no "run a traversal" endpoint
+    - [x] UI — `components/blueprints/`: graph browser, coverage, hop-by-hop
+          replay, corpus empty state
+    - [x] Seeder — `POST /api/system/seed-graph-traces` records *real* walks
+          through the real tools, so the viewer is developed against the shape
+          the orchestrator will write. Rows marked `vector_db_used='seed'` and
+          excluded from every reported metric
+    - [ ] **Ingestion must report graph gaps.** Dropping a PDF into
+          `data/documents/` gives Track 1 a searchable document for free while
+          Track 2 stays blind until nodes are hand-authored — which quietly
+          tilts the comparison. M2 should flag ingested documents with no
+          matching `SOPDocument` node as another Coverage row
+    - [ ] **Reconcile the placeholder SOP filenames** against the real corpus
+          when it lands. The four `filename:` values are authored to shape, not
+          to any file that exists; `filename` is the join into `source_file`, so
+          one that matches nothing retrieves nothing, silently
+    - [ ] Force-directed canvas (MODULES.md §3.6) — bundled, never CDN. The
+          table half carries browsing today and the replay renders as an ordered
+          hop list; a canvas is worth adding when a walk is big enough to need
+          one
+- [x] Add a traversal-path column to `rag_logs` **now** — migration `005`
+      adds `traversal_path` and `entry_strategy`. Landed before the orchestrator
+      writes its first row, which was the whole point: a path is not derivable
+      after the fact
+- [x] Mark the unbuilt modules in the sidebar — Ariadne's Thread is disabled
+      with a dot and a tooltip; The Forge and Labyrinth Blueprints open
 - [x] **The model picker is in both composers.** It only existed in the greeting
       one, so once a chat had started there was no way to change model without
       opening a new conversation — wrong for a multi-model system, and it left

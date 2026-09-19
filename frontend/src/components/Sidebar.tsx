@@ -21,6 +21,7 @@ interface SidebarProps {
   onOpenTheme: () => void;
   onOpenSettings: () => void;
   onOpenForge: () => void;
+  onOpenBlueprints: () => void;
   /** Opens the raw-row window on one table. */
   onOpenStore: (store: string, table: string) => void;
   /** The table currently open in that window, so the row can be highlighted. */
@@ -243,7 +244,7 @@ function DataStores({
   )
 }
 
-export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenStore, activeStore }: SidebarProps) {
+export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenStore, activeStore }: SidebarProps) {
   const { sessions, activeSessionId, status, newChat, selectSession, rename, remove } = useSessions()
   const { isIncognito } = useSettings()
   const [filter, setFilter] = useState('')
@@ -285,13 +286,13 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
       <ScrollArea className="flex-1" viewportClassName="px-3">
         {/* Core Modules (Top Navigation) */}
         <div className="flex flex-col gap-0.5 mb-6">
-          {/* The three core modules — designed in docs/MODULES.md. Only the
-              Forge is built; the other two carry a dot and say so rather than
-              being buttons that silently do nothing. */}
+          {/* The three core modules — designed in docs/MODULES.md. Two are
+              built; Ariadne's Thread carries a dot and says so rather than
+              being a button that silently does nothing. */}
           {[
             { title: "Ariadne's Thread", icon: Network, onClick: undefined },
             { title: 'The Forge', icon: Hammer, onClick: onOpenForge },
-            { title: 'Labyrinth Blueprints', icon: Map, onClick: undefined },
+            { title: 'Labyrinth Blueprints', icon: Map, onClick: onOpenBlueprints },
           ].map((item) => (
             <Button
               key={item.title}

@@ -31,3 +31,15 @@ psutil>=5.9
 # succeeds and nvmlInit() fails — which `_gpus()` already treats as "no GPU"
 # and falls through. Safe to install unconditionally; nothing here requires it.
 nvidia-ml-py>=12.535
+
+# Graph storage and traversal for Track 2 (app/services/knowledge_graph.py).
+# MODULES.md §3.4 chose NetworkX over a git-tracked YAML file rather than a
+# sixth SQLite store: the graph is tens of nodes, hand-authored, and edited
+# rather than inserted into, so the file is the authoring surface and the store
+# count stays at five. Pure Python, no C extensions, no network — Rule 1 clean.
+networkx>=3.2
+
+# Parses that graph file. It arrives transitively via chromadb-client, but
+# knowledge_graph.py imports it directly and — as with httpx above — a
+# transitive dependency is not a contract.
+pyyaml>=6.0
