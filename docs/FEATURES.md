@@ -1163,11 +1163,14 @@ to stretch the column past `h-screen` and push the account row out of the
 viewport, where the shell's `overflow-hidden` clipped it. The row was still
 rendered — just unreachable, along with the bottom of the list.
 
-Space is shared rather than split: chats take what is left, the stores cap at 45%
-and shrink to their content below that. A collapsed store list therefore costs
-nothing, and an expanded one cannot eat the chat list. When one of the two is
-hidden in Settings → Appearance the other takes the whole column, and the
-separating rule goes with it.
+Space is split rather than shared: the stores take a fixed `basis-[45%]` and the
+chats take the rest. Sizing the stores to their content and merely *capping*
+them at 45% — which is what this did first — moved the rule between the two
+lists every time a store was expanded or a table appeared, so the chat list
+jumped under the cursor. A fixed share puts the cut where it always is, and an
+expanded store scrolls inside it. When one of the two is hidden in Settings →
+Appearance the other takes the whole column, and the separating rule goes with
+it.
 
 Both viewports pass `hideScrollbar` to `ScrollArea`, which drops the track and
 keeps wheel, trackpad, touch and keyboard scrolling. It is opt-in for a reason
@@ -1207,9 +1210,28 @@ the `keybinds` preference rather than to `localStorage`.
 
 | Group | Actions | Default |
 |---|---|---|
-| Navigation | Toggle sidebar · Search chats · Focus composer | `Ctrl+Alt+B` · `Ctrl+K` · `Ctrl+/` |
+| Navigation | Toggle sidebar · Command palette · Focus composer | `Ctrl+Alt+B` · `Ctrl+K` · `Ctrl+/` |
 | Conversations | New chat · Delete this chat · Toggle incognito | `Ctrl+Alt+N` · `Ctrl+Alt+D` · `Ctrl+Alt+I` |
 | Windows | Settings · Theme · Forge · Blueprints · Close the open window | `Ctrl+,` · `Ctrl+Alt+T` · `Ctrl+Alt+G` · `Ctrl+Alt+P` · `Esc` |
+
+**`Ctrl+K` opens a command palette.** Chats, every settings panel, the four
+floating windows, Blueprints' individual tabs, every store table with its live
+row count, and the toggle actions — one overlay, `↑↓` to move, `↵` to open,
+`esc` to close. It replaced an inline filter over the chat list, which was good
+at narrowing a list already on screen and had no reach beyond it; that filter
+survives on the magnifier in the "Chats and tasks" header. The overlay is owned
+by the root, which also fixes a dead chord: the filter sat inside the block
+gated on `show('sidebar-chats')`, so with the chat list switched off in
+Appearance the shortcut rendered nothing at all.
+
+Matching is `searchSettingsPanels`' rule widened to one haystack per row: every
+term must appear somewhere in the label, breadcrumb, group or keywords, and a
+label match outranks a keyword match. Deliberately not fuzzy — over four windows
+and eleven panels a fuzzy matcher mostly invents matches, and a palette that
+answers `cov` with six plausible rows is slower to use than one that answers
+with the right one. The action's id stays `search_chats` although it no longer
+searches only chats: that id is the key the binding is stored under in the
+`keybinds` preference, and renaming it would silently discard a rebound chord.
 
 **Rebinding previews before it commits.** Click a chord, press keys, and the new
 combo is shown but not saved until Enter or the tick; Escape abandons it,
@@ -1293,6 +1315,7 @@ Paths are relative to `frontend/src/`.
 | `components/ThemeModal.tsx` | Theme editor — presets, colours, harmony, effects, import/export |
 | `components/SettingsModal.tsx` | Settings shell |
 | `components/Sidebar.tsx` | Chat list from `GET /api/sessions`, plus the Data stores section |
+| `components/CommandPalette.tsx` | `Ctrl+K` — chats, settings panels, windows, Blueprints tabs and store tables in one overlay. Holds no list of its own; every row runs a callback that already existed |
 | `components/stores/StoreBrowser.tsx` | The row grid — paging, sort, row detail. Body only, no window chrome |
 | `components/stores/StoreWindow.tsx` | Puts it in a `FloatingWindow` |
 | `components/ui/floating-window.tsx` | The shared window shell: drag, resize, Peek, minimize, Escape. Also exports `useMinimizeToDock` for `ThemeModal`, which is off the shell by design |
@@ -1302,6 +1325,8 @@ Paths are relative to `frontend/src/`.
 | `components/ui/skeleton.tsx` | Loading placeholders that hold the shape of what is coming |
 | `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |
 | `components/forge/ForgeWindow.tsx` | The Forge (Layer 11) — step 1 of §8.2 |
+| `components/blueprints/BlueprintsWindow.tsx` | Labyrinth Blueprints (MODULES.md §3) — renders the live retrieval track's tabs only, and owns the fallback chain when that track cannot be read or has nothing to show (§3.8) |
+| `lib/blueprintsClient.ts` | `/api/graph`, `/api/corpus` and `/api/rag/config` client. Read-only by construction: there is no "run a traversal" call |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
 | `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
 | `lib/systemClient.ts` | Log-browser, observability and provider API client |

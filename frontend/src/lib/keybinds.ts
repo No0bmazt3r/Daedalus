@@ -61,7 +61,14 @@ export const KEYBIND_DEFAULTS: KeybindMap = {
 /** What each action does, in the words the panel shows. */
 export const KEYBIND_LABELS: Record<KeybindAction, { label: string; hint: string }> = {
   toggle_sidebar: { label: 'Toggle sidebar', hint: 'Hide or show the left column' },
-  search_chats: { label: 'Search chats', hint: 'Open the filter over the chat list' },
+  // The id stays `search_chats` although this now opens the command palette:
+  // it is the key the binding is stored under in the `keybinds` preference, so
+  // renaming it would discard the chord of anybody who had rebound it. The id
+  // is storage, the label is the UI.
+  search_chats: {
+    label: 'Command palette',
+    hint: 'Search chats, tables, settings and windows',
+  },
   focus_input: { label: 'Focus the composer', hint: 'Put the cursor in the message box' },
   open_settings: { label: 'Open Settings', hint: 'The window you are reading this in' },
   new_chat: { label: 'New chat', hint: 'Start a conversation and select it' },
@@ -225,7 +232,6 @@ export function normaliseBinds(stored: unknown): KeybindMap {
  * the coupling to a name.
  */
 export const FOCUS_COMPOSER_EVENT = 'daedalus:focus-composer';
-export const SEARCH_CHATS_EVENT = 'daedalus:search-chats';
 
 /** True when the keystroke landed in something the person is typing into. */
 export function isTypingTarget(target: EventTarget | null): boolean {

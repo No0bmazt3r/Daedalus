@@ -4,18 +4,25 @@ import type { RagTrack } from '../../lib/blueprintsClient'
 /**
  * Says which retrieval track is live, on a tab that belongs to the other one.
  *
- * ## Why signal rather than hide
+ * ## When it appears
  *
- * The obvious reading of "don't confuse the user" is to hide the half that is
- * not answering queries. That would be wrong here, and the reason is the
- * authoring loop: you inspect and complete the graph *before* switching to it,
- * so the window that shows you the graph must work while the graph is not live.
- * Hiding it would make Track 2 impossible to prepare from inside the app.
+ * Only when you have deliberately left the live track. `BlueprintsWindow` shows
+ * one track — the one answering queries — so the two are no longer peers on
+ * screen; the other is reachable as a fallback, and this is what marks the
+ * detour for as long as it lasts.
  *
- * The real confusion is narrower than "the graph is visible". It is that a
- * diagram on screen looks like a description of how the answer was produced. So
- * this states the relationship instead of removing the view — which is the same
- * call MODULES.md §0 rule 4 makes about empty states: explain, do not blank.
+ * ## Why signal rather than hide, once you are there
+ *
+ * The off-track views cannot simply be removed, because of the authoring loop:
+ * you inspect and complete the graph *before* switching to it, so the window
+ * that shows you the graph must work while the graph is not live. Hiding it
+ * would make Track 2 impossible to prepare from inside the app.
+ *
+ * The confusion that ranking did not solve is narrower than "the graph is
+ * visible". It is that a diagram on screen looks like a description of how the
+ * answer was produced. So this states the relationship instead of removing the
+ * view — the same call MODULES.md §0 rule 4 makes about empty states: explain,
+ * do not blank.
  *
  * ## Replay is the case that actually needed this
  *

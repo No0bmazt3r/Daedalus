@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import {
   FOCUS_COMPOSER_EVENT,
   KEYBIND_ACTIONS,
-  SEARCH_CHATS_EVENT,
   isTypingTarget,
   matchesCombo,
   type KeybindAction,
@@ -79,9 +78,4 @@ export function useGlobalShortcuts(keybinds: KeybindMap, handlers: ShortcutHandl
 /** Ask whoever owns the composer to focus it. See `keybinds.ts` for the why. */
 export function focusComposer() {
   window.dispatchEvent(new CustomEvent(FOCUS_COMPOSER_EVENT));
-}
-
-/** Ask the sidebar to open its chat filter. */
-export function openChatSearch() {
-  window.dispatchEvent(new CustomEvent(SEARCH_CHATS_EVENT));
 }

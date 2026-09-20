@@ -444,12 +444,11 @@ resolved to.
 
 > *"What does this system actually know, and how is it connected?"*
 
-> **Status: the graph half is built; the corpus half waits on M2.** The window is
-> organised by retrieval track rather than as a flat row of tabs — Track 1 ·
-> Vector holds Corpus, Track 2 · Graph holds Graph, Coverage and Replay — and it
-> opens on whichever track is answering queries, marking it. The other track
-> stays reachable, because the graph is *authored* while Track 1 is live and
-> hiding it would make Track 2 impossible to prepare from inside the app.
+> **Status: the graph half is built; the corpus half waits on M2.** The window
+> shows **one** retrieval track — the one answering queries, read from Settings →
+> Knowledge Base — and only that track's tabs: Track 1 · Vector holds Corpus,
+> Track 2 · Graph holds Graph, Coverage and Replay. The other track is a
+> fallback, not a peer. §3.8 has the reasoning and the failure cases.
 
 ### 3.1 What it is
 
@@ -633,6 +632,51 @@ Three behaviours worth recording, each fixing something that was wrong:
 | **Risk** | Depends on a track that may be descoped. If Track 2 slips, the corpus half still stands alone and is still worth having |
 | ~~**Risk**~~ | ~~Traversal replay needs the agent to record its path~~ — **done.** Migration `005` adds `traversal_path` and `entry_strategy`, landed before the orchestrator wrote its first row, which was the point: a path is not derivable after the fact. `graph_tools.TraversalPath` records every hop regardless of caller, so the viewer had real replay data before any agent existed |
 | **Note** | A hop stores its `from`/`to` node *sets* **and** the pairs actually joined. The sets do not imply the pairings — a hop spanning two Sensors and two Thresholds has four possible pairs and two real ones — so a renderer given only the sets draws edges the graph does not contain. Fixed in the recorder, not guessed at in the renderer |
+
+### 3.8 One track on screen, and what happens when it cannot be read
+
+The window reads `GET /api/rag/config` and renders the tabs of the live track
+only:
+
+| Live track | Tabs |
+|---|---|
+| Track 1 · Vector | Corpus |
+| Track 2 · Graph | Graph · Coverage · Replay |
+
+**Why one.** The first build put both tracks at the top as peer buttons, which
+asked the reader a question they had no way to answer: two systems on screen,
+equally prominent, only one of them responsible for any answer they had seen. A
+picker is the wrong shape for a setting that lives in Settings → Knowledge Base
+— it reads as *"pick one"* when the choice was already made, and made somewhere
+that records it (`config/rag_config.json`, §5's freeze) rather than here. So the
+window follows the setting. There is no badge naming the track either: with one
+track on screen it separates that track from nothing, and the window's subtitle
+already says which arm is live.
+
+**Why the other track still exists.** The graph is *authored* while Track 1 is
+live. Coverage is the to-do list you work through before switching, so a window
+that hid the graph until the graph was selected would make Track 2 impossible to
+prepare from inside the app. The resolution is rank, not removal: the live track
+*is* the window, and the other one is reachable from the notice that already
+explained why you would want it. On the detour the header carries a way back and
+`TrackBanner` states the relationship for as long as it lasts — replay being the
+case that needed it, since with Track 1 live nothing writes a traversal and the
+tab would otherwise keep rendering old walks with no sign they were recorded
+under a setting that no longer holds.
+
+**Four failures, four answers.** Rule 4 forbids a shared blank page, so each
+step of "which track is live" fails distinctly:
+
+| Failure | What the window does |
+|---|---|
+| Track not read yet | A skeleton tab row at its final height. Guessing a track and correcting it a moment later would swap the whole tab row under the cursor, so nothing is asserted until it is known |
+| Config unreadable (backend down, bad JSON) | Names the error and offers Retry. A previously read track is kept and marked stale — a failed *re-read* is not evidence the track changed, and blanking a view that was correct a second ago loses more than the stale badge costs. If nothing was ever read, the graph views are offered anyway, because the graph is the track that is actually built |
+| Live track not ready | Still what the window shows — readiness is *reported, never enforced*, the same rule `KnowledgeBasePanel` follows. But when the other track has something to show, a notice says so and links to it, so an empty window is never the end of the road. Offered, never taken automatically: silently redirecting would make the window disagree with Settings without saying so |
+| Track known, view empty | Each view's own `Unavailable`, naming the milestone that owes the data |
+
+Today's default lands in row 3: Track 1 is the declared baseline but waits on
+M2, so selecting it gives an empty Corpus tab and a one-click offer to inspect
+the authored graph.
 
 ---
 

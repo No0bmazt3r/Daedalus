@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { FloatingWindow } from './ui/floating-window'
 import {
@@ -33,10 +33,22 @@ interface SettingsModalProps {
   onClose: () => void
   /** Appearance hands colours and fonts to the Theme window rather than copying them. */
   onOpenTheme?: () => void
+  /**
+   * A panel to jump to, from the command palette. Not the *current* panel —
+   * the window owns that, and lifting it would mean every click on the rail
+   * round-tripped through the root to come back as a prop.
+   */
+  panel?: string | null
 }
 
-export function SettingsModal({ open, onClose, onOpenTheme }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
+
+  // Asking for the panel already open is a no-op, which is what makes it safe
+  // for the caller to leave the request set rather than having to clear it.
+  useEffect(() => {
+    if (panel && getSettingsPanel(panel)) setActiveTab(panel)
+  }, [panel])
 
   // The window is draggable and resizable, so its content can be narrow on a
   // wide screen — a viewport media query would be measuring the wrong thing.

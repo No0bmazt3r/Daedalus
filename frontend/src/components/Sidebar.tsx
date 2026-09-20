@@ -15,7 +15,6 @@ import {
 import { useSessions } from '../contexts/SessionsContext'
 import { useSettings } from '../contexts/SettingsContext'
 import { useUiPrefs } from '../contexts/UiPrefsContext'
-import { SEARCH_CHATS_EVENT } from '../lib/keybinds'
 import { sessionLabel, type ChatSession } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
 
@@ -259,13 +258,10 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
   const [filter, setFilter] = useState('')
   const [searching, setSearching] = useState(false)
 
-  // The search shortcut is handled at the root, which owns the keyboard but not
-  // this state. See `lib/keybinds.ts` for why it arrives as an event.
-  useEffect(() => {
-    const onSearch = () => setSearching(true)
-    window.addEventListener(SEARCH_CHATS_EVENT, onSearch)
-    return () => window.removeEventListener(SEARCH_CHATS_EVENT, onSearch)
-  }, [])
+  // No shortcut opens this any more — `Ctrl+K` is the command palette, which
+  // reaches more than this list and works with the sidebar hidden. The filter
+  // kept the magnifier, because narrowing a list you are already reading is
+  // the one thing it was better at than an overlay covering that list.
 
   const needle = filter.trim().toLowerCase()
   const visible = needle
@@ -344,9 +340,11 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           is how expanding a data store used to push the account row off-screen,
           where the shell's `overflow-hidden` clipped it.
 
-          Chats take what is left; the stores cap at 45% and shrink to their
-          content below that, so a collapsed list costs nothing and an expanded one
-          cannot eat the chat list. */}
+          The stores take a fixed 45% of the column and the chats take the rest.
+          Sizing the stores to their content instead would move the rule between
+          the two lists every time a store is expanded or a table appears, so the
+          chat list would jump under the cursor. The cut is where it always is;
+          an expanded store scrolls inside it. */}
       <div className="flex-1 min-h-0 flex flex-col px-3 gap-3">
         {/* Chats and tasks */}
         {show('sidebar-chats') && (
@@ -428,7 +426,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
         <div
           className={`min-h-0 flex flex-col ${
             show('sidebar-chats')
-              ? 'max-h-[45%] border-t theme-border pt-3 pb-1'
+              ? 'basis-[45%] grow-0 border-t theme-border pt-3 pb-1'
               : 'flex-1 pb-1'
           }`}
         >

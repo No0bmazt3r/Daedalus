@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { Sidebar } from '../components/Sidebar'
 import { Menu } from 'lucide-react'
@@ -8,18 +8,15 @@ import { restoreWindow } from '../components/ui/floating-window'
 import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import { ForgeWindow } from '../components/forge/ForgeWindow'
-import { BlueprintsWindow } from '../components/blueprints/BlueprintsWindow'
+import { BlueprintsWindow, type BlueprintsTab } from '../components/blueprints/BlueprintsWindow'
+import { CommandPalette, type PaletteActions } from '../components/CommandPalette'
 import { StoreWindow } from '../components/stores/StoreWindow'
 import { SettingsProvider, useSettings } from '../contexts/SettingsContext'
 import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { UiPrefsProvider, useUiPrefs } from '../contexts/UiPrefsContext'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
-import {
-  focusComposer,
-  openChatSearch,
-  useGlobalShortcuts,
-} from '../hooks/useGlobalShortcuts'
+import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -71,6 +68,12 @@ function AppShell() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [forgeOpen, setForgeOpen] = useState(false)
   const [blueprintsOpen, setBlueprintsOpen] = useState(false)
+  // Which panel/tab the palette last asked for. Held rather than fired because
+  // both windows read it as a prop; asking for the one already showing is a
+  // no-op, so neither needs clearing afterwards.
+  const [settingsPanel, setSettingsPanel] = useState<string | null>(null)
+  const [blueprintsTab, setBlueprintsTab] = useState<BlueprintsTab | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   // Every floating window is owned here rather than by the Sidebar. Rendered
   // inside it they would sit under `.attention-zone`, and inherit the sidebar's
   // idle opacity the moment the pointer moved onto the window itself.
@@ -82,26 +85,61 @@ function AppShell() {
 
   const { keybinds } = useUiPrefs()
   const { isIncognito, setIsIncognito } = useSettings()
-  const { sessions, activeSessionId, newChat, remove } = useSessions()
+  const { sessions, activeSessionId, newChat, remove, selectSession } = useSessions()
 
   /** Close whatever is in front, in the order the windows stack. */
   const closeTopWindow = useCallback(() => {
+    // The palette handles its own Escape and marks the event, so this only
+    // reaches here if something else had focus while it was open.
+    if (paletteOpen) return setPaletteOpen(false)
     if (confirmDelete) return setConfirmDelete(null)
     if (storeTarget) return setStoreTarget(null)
     if (blueprintsOpen) return setBlueprintsOpen(false)
     if (forgeOpen) return setForgeOpen(false)
     if (themeModalOpen) return setThemeModalOpen(false)
     if (settingsModalOpen) return setSettingsModalOpen(false)
-  }, [blueprintsOpen, confirmDelete, forgeOpen, settingsModalOpen, storeTarget, themeModalOpen])
+  }, [
+    blueprintsOpen, confirmDelete, forgeOpen, paletteOpen, settingsModalOpen,
+    storeTarget, themeModalOpen,
+  ])
+
+  /**
+   * What a palette row does when you press Enter on it.
+   *
+   * Every one of these is the callback some existing affordance already calls —
+   * the sidebar row, the account menu, the shortcut. The palette is a second
+   * door onto the same handlers, never a second implementation of them.
+   */
+  const paletteActions = useMemo<PaletteActions>(
+    () => ({
+      openChat: (id) => { setSidebarOpen(true); selectSession(id) },
+      openStore: (store, table) =>
+        openWindow('stores', () => setStoreTarget({ store, table })),
+      openSettings: (panel) =>
+        openWindow('settings', () => {
+          if (panel) setSettingsPanel(panel)
+          setSettingsModalOpen(true)
+        }),
+      openTheme: () => openWindow('theme', () => setThemeModalOpen(true)),
+      openForge: () => openWindow('forge', () => setForgeOpen(true)),
+      openBlueprints: (tab) =>
+        openWindow('blueprints', () => {
+          setBlueprintsTab(tab ?? null)
+          setBlueprintsOpen(true)
+        }),
+      newChat,
+      toggleIncognito: () => setIsIncognito(!isIncognito),
+      toggleSidebar: () => setSidebarOpen((v) => !v),
+    }),
+    [isIncognito, newChat, selectSession, setIsIncognito],
+  )
 
   useGlobalShortcuts(keybinds, {
     toggle_sidebar: () => setSidebarOpen((v) => !v),
-    // Searching a list that is not on screen is not a shortcut, it is a
-    // surprise — so this opens the column first.
-    search_chats: () => {
-      setSidebarOpen(true)
-      openChatSearch()
-    },
+    // The palette, not the sidebar filter. It toggles, because the chord that
+    // opened it is the one a hand is already on when it turns out to be the
+    // wrong window. See `CommandPalette` for why this took the chord over.
+    search_chats: () => setPaletteOpen((v) => !v),
     focus_input: focusComposer,
     open_settings: () => openWindow('settings', () => setSettingsModalOpen(true)),
     new_chat: newChat,
@@ -168,9 +206,14 @@ function AppShell() {
             open={settingsModalOpen}
             onClose={() => setSettingsModalOpen(false)}
             onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
+            panel={settingsPanel}
           />
           <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
-          <BlueprintsWindow open={blueprintsOpen} onClose={() => setBlueprintsOpen(false)} />
+          <BlueprintsWindow
+            open={blueprintsOpen}
+            onClose={() => setBlueprintsOpen(false)}
+            requestedTab={blueprintsTab}
+          />
           <StoreWindow
             open={storeTarget !== null}
             store={storeTarget?.store ?? null}
@@ -178,6 +221,14 @@ function AppShell() {
             onClose={() => setStoreTarget(null)}
           />
         </div>
+
+        {/* Outside the shell's `overflow-hidden`, like ConfirmDialog: it covers
+            the whole viewport and must not be clipped by the app frame. */}
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          actions={paletteActions}
+        />
 
         <ConfirmDialog
           open={confirmDelete !== null}

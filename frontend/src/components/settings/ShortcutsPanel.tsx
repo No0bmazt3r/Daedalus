@@ -107,7 +107,7 @@ function ShortcutRow({ action, conflicted }: { action: KeybindAction; conflicted
 
   return (
     <div
-      className={`flex items-center gap-3 py-1.5 border-b theme-border last:border-b-0 ${
+      className={`flex items-center gap-2 py-1.5 border-b theme-border last:border-b-0 ${
         conflicted ? 'status-warn' : ''
       }`}
     >
@@ -126,6 +126,23 @@ function ShortcutRow({ action, conflicted }: { action: KeybindAction; conflicted
         </div>
         <div className="text-[10px] theme-text-muted truncate">{hint}</div>
       </div>
+
+      {/* Reset sits *before* the chord, so the chord is the last thing in the
+          row and lands flush against the card's padding. It is hidden with
+          `opacity-0` rather than unmounted — a button that appears only once a
+          binding is custom would shift the keycaps sideways the moment you
+          rebind — and hidden space at the end of a row reads as the keycaps
+          being short of the edge, which is exactly what it looked like. Moved
+          inwards it is invisible either way. */}
+      <button
+        onClick={() => resetKeybind(action)}
+        disabled={!isCustom || recording}
+        title={isCustom ? `Back to ${formatCombo(KEYBIND_DEFAULTS[action]).join(' ')}` : 'Unchanged'}
+        aria-label={`Reset ${label}`}
+        className="shrink-0 p-1 rounded-md theme-text-muted hover:theme-text disabled:opacity-0 transition-colors"
+      >
+        <RotateCcw size={12} />
+      </button>
 
       <button
         onClick={() => (recording ? commit() : setRecording(true))}
@@ -152,16 +169,6 @@ function ShortcutRow({ action, conflicted }: { action: KeybindAction; conflicted
         ) : (
           <Keycaps combo={combo} />
         )}
-      </button>
-
-      <button
-        onClick={() => resetKeybind(action)}
-        disabled={!isCustom || recording}
-        title={isCustom ? `Back to ${formatCombo(KEYBIND_DEFAULTS[action]).join(' ')}` : 'Unchanged'}
-        aria-label={`Reset ${label}`}
-        className="shrink-0 p-1 rounded-md theme-text-muted hover:theme-text disabled:opacity-0 transition-colors"
-      >
-        <RotateCcw size={12} />
       </button>
     </div>
   )

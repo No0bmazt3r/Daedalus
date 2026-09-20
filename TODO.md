@@ -637,20 +637,38 @@ Layer 9 below for the per-step detail.
           `config/rag_config.json`, read on the chat path, recorded per query in
           `rag_logs.track`. Honours §5's freeze: `frozen: true` makes the API
           refuse writes so unfreezing is a visible commit
-    - [x] **Blueprints is organised by retrieval track**, not as a flat row of
-          four tabs. Track 1 · Vector holds Corpus; Track 2 · Graph holds Graph,
-          Coverage and Replay. The window opens on whichever track is live and
-          marks it, and the other stays reachable — the graph is *authored*
-          while Track 1 is live, so hiding it would make Track 2 impossible to
-          prepare from inside the app. Corpus is filed under Track 1 but says it
-          is shared, because the graph track indexes the same chunks
-    - [x] Blueprints reflects the live track — dot on the tabs describing the
-          running arm, track named in the subtitle, and a banner on a tab that
-          describes the other one. Replay is the case that needed it: with Track
-          1 live nothing writes a traversal, so the tab would keep rendering old
-          walks with no sign they were recorded under a setting that no longer
-          holds. Marks rather than hides, because the graph must be inspectable
-          before it goes live
+    - [x] **Blueprints shows one retrieval track — the live one.** It reads
+          `/api/rag/config` and renders only that track's tabs: Track 1 · Vector
+          holds Corpus; Track 2 · Graph holds Graph, Coverage and Replay. Corpus
+          is filed under Track 1 but says it is shared, because the graph track
+          indexes the same chunks
+    - [x] **The two-track picker is gone, and so is the track chip.** Two tracks
+          offered as peer buttons asked the reader to choose between two systems
+          when the choice had already been made in Settings — and only one of
+          them was responsible for any answer they had seen. A picker is the
+          wrong shape for a setting that lives elsewhere, so the window follows
+          the setting instead. The `Track 2 · Graph ●` chip went with it: with
+          one track on screen it distinguished that track from nothing, and the
+          window subtitle already names what is live
+    - [x] **The other track is a fallback, not a peer.** It cannot vanish — the
+          graph is *authored* while Track 1 is live, so hiding it would make
+          Track 2 impossible to prepare from inside the app. Demoted rather than
+          removed: reachable only from the notice raised when the live track has
+          nothing to show, with a Back control in the header and `TrackBanner`
+          stating the relationship for as long as the detour lasts
+    - [x] **Four fallbacks, one per failure, none of them a blank page**
+          (MODULES.md §0 rule 4). *Track not read yet* — a skeleton tab row at
+          its final height; guessing a track and correcting it a moment later
+          would swap the tab row under the cursor. *Config unreadable* — names
+          the error, offers Retry, keeps the last known track rather than
+          blanking a view that was correct a second ago, and offers the graph
+          views anyway when nothing was ever read. *Live track not ready* — it
+          is still what the window shows, because readiness is reported and
+          never enforced, but when the other track has data the notice says so
+          and links to it. *View empty* — each view's own `Unavailable`
+    - [x] Replay is the case that needed the banner: with Track 1 live nothing
+          writes a traversal, so the tab would keep rendering old walks with no
+          sign they were recorded under a setting that no longer holds
     - [x] `./daedalus.sh dev` now starts the chromadb container. It previously
           started neither Docker nor Chroma, and `.env`'s `CHROMA_URL` names the
           compose service (`http://chromadb:8000`), which does not resolve on
@@ -706,6 +724,12 @@ Layer 9 below for the per-step detail.
         store, click a table, rows render in the main pane at
         `/stores/$store/$table`. A route, not a modal: deep-linkable, Back
         works, full pane width. `RawLogModal` is gone
+  - [x] **The stores take a fixed share of the sidebar column, not a capped
+        one.** They used to size to their content and merely *cap* at 45%, so
+        expanding a store grew the block, moved the rule between the two lists
+        and shrank the chat list under the cursor. `max-h-[45%]` →
+        `basis-[45%] grow-0`: the cut is where it always is, and an expanded
+        store scrolls inside it
 - [ ] Let the raw browser filter by `session_id` / `query_id`, so one conversation's rows can be isolated
 - [x] Sidebar driven by `GET /api/sessions` — select, inline rename, delete, filter
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
@@ -1001,6 +1025,31 @@ Layer 9 below for the per-step detail.
       commit rebinding, conflicts shown with the rule that resolves them, and the
       AltGr guard that stops an `@` on a German layout deleting a conversation.
       Persisted to the `keybinds` preference, server-side like everything else
+  - [x] **`Ctrl+K` is a command palette, not the chat filter.** The filter was
+        good at narrowing a list you are already reading and bad at reach —
+        every other destination in the console had its own separate path. The
+        palette covers chats, all eleven settings panels, the four windows,
+        Blueprints' individual tabs, every store table with its row count, and
+        the three toggle actions. Matching is `settingsRegistry`'s rule widened
+        to one haystack per row — every term must match, label beats keyword,
+        deliberately not fuzzy. The `search_chats` **id is unchanged**: it is
+        the key the binding is stored under, so renaming it would discard a
+        rebound chord. The inline filter keeps the magnifier
+  - [x] It also fixed a dead chord: the filter lives inside the block gated on
+        `show('sidebar-chats')`, so with the chat list switched off in
+        Appearance, `Ctrl+K` set state and rendered nothing at all. An overlay
+        owned by the root has no such dependency
+  - [x] Palette rows call the callbacks that already existed — the sidebar row,
+        the account menu, the shortcut — so it is a second door onto the same
+        handlers and never a second implementation. Chats come from
+        `SessionsContext` and tables from `/api/logs/catalogue`, read on open
+        rather than held, so no row can quote a count it has not checked
+  - [x] Keycaps sit flush at the right edge of the row. The per-row reset button
+        is hidden with `opacity-0` rather than unmounted, so that it does not
+        shift the keycaps sideways the moment a binding becomes custom — but at
+        the end of the row that reserved space read as the chords stopping short
+        of the edge. Reset moved to the *left* of the chord, where hidden space
+        is invisible
 - [x] **Appearance** built, ported from the same project's visibility column:
       nine switches over the app's own furniture, grouped by region with a
       per-section reset. Chrome only — nothing switchable can hide an answer, a
