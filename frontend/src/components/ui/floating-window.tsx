@@ -284,7 +284,14 @@ export function FloatingWindow({
   width?: number
   height?: number
   className?: string
-  children: ReactNode | ((ctx: { isPeek: boolean }) => ReactNode)
+  /**
+   * `minimized` is passed because minimize hides with `display: none` rather
+   * than unmounting — deliberately, so tab, scroll and filter state survive.
+   * The cost is that a window can sit invisible for minutes while the state it
+   * renders changes underneath it, and nothing tells it to look again. A window
+   * whose content can go stale watches this and re-reads when it comes back.
+   */
+  children: ReactNode | ((ctx: { isPeek: boolean; minimized: boolean }) => ReactNode)
 }) {
   const [isPeek, setIsPeek] = useState(false)
   const [minimized, setMinimized] = useState(false)
@@ -446,7 +453,7 @@ export function FloatingWindow({
         </div>
 
         <div className={`flex-1 min-h-0 flex flex-col ${isPeek ? 'bg-transparent' : 'theme-surface'}`}>
-          {typeof children === 'function' ? children({ isPeek }) : children}
+          {typeof children === 'function' ? children({ isPeek, minimized }) : children}
         </div>
         </div>
       </div>

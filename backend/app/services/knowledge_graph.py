@@ -34,7 +34,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-GRAPH_PATH = Path(__file__).resolve().parent.parent / "data" / "graph" / "knowledge_graph.yaml"
+# The graph is read from whichever of these exists, in order.
+#
+# `SEED_PATH` is the copy that ships with the code. `GRAPH_PATH` is the authored
+# copy, in `config/` — the same directory `model_config.json` and
+# `rag_config.json` live in, chosen for the same two reasons: it is **writable**
+# at runtime, and it is **git-tracked**, so an in-app edit still reviews in a
+# diff exactly as MODULES.md §3.4 requires.
+#
+# The split exists because the packaged copy is not writable where it matters.
+# `docker-compose` mounts `app/` read-only — deliberately, since the application
+# source is not something the application should edit — while `config/` is
+# mounted read/write. Authoring into the source tree worked in a bare `uvicorn`
+# and failed in the container, which is the worse of the two ways round: it
+# works for whoever built it and breaks for everybody else.
+#
+# The first edit copies the seed across. Until then the seed is served directly,
+# so a fresh checkout has the authored 37-node graph with nothing to set up.
+from ..db import paths as _paths  # noqa: E402 — needed for the path below
+
+SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "graph" / "knowledge_graph.yaml"
+GRAPH_PATH = _paths.CONFIG_DIR / "knowledge_graph.yaml"
+
+
+def source_path() -> Path:
+    """The file to read: the authored copy if it exists, else the packaged seed."""
+    return GRAPH_PATH if GRAPH_PATH.exists() else SEED_PATH
 
 # The schema, from PROJECT.md §5. Anything outside these two sets is rejected.
 NODE_TYPES = (
@@ -110,6 +135,7 @@ class Coverage:
 _lock = threading.Lock()
 _cache: Any = None
 _cache_mtime: float | None = None
+_cache_source: Path | None = None
 
 
 def _build(raw: dict[str, Any]) -> Any:
@@ -178,18 +204,26 @@ def load(force: bool = False) -> Any:
     which matters because Blueprints' coverage view is the tool you author
     against, and a restart between every edit would make it useless for that.
     """
-    global _cache, _cache_mtime
+    global _cache, _cache_mtime, _cache_source
     import yaml  # noqa: PLC0415 — see requirements.txt
 
     with _lock:
-        if not GRAPH_PATH.exists():
-            raise GraphValidationError(f"graph source not found at {GRAPH_PATH}")
-        mtime = GRAPH_PATH.stat().st_mtime
-        if _cache is not None and not force and _cache_mtime == mtime:
+        path = source_path()
+        if not path.exists():
+            raise GraphValidationError(
+                f"no graph file — looked for the authored copy at {GRAPH_PATH} "
+                f"and the packaged seed at {SEED_PATH}"
+            )
+        mtime = path.stat().st_mtime
+        # The source is part of the cache key, not just its mtime: the first
+        # authoring edit switches which file is being read, and a seed whose
+        # mtime happened to match would otherwise serve stale content.
+        if _cache is not None and not force and _cache_mtime == mtime and _cache_source == path:
             return _cache
-        raw = yaml.safe_load(GRAPH_PATH.read_text(encoding="utf-8")) or {}
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         _cache = _build(raw)
         _cache_mtime = mtime
+        _cache_source = path
         return _cache
 
 

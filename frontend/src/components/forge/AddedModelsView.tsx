@@ -395,7 +395,11 @@ function LocalModel({
           pane is a list to scan rather than one model to study: the header and
           what the model has been running stay on screen for every card, and the
           architecture opens on the one card being asked about. */}
-      <Collapse open={open && hasArch} className="border-t theme-border px-3 py-2.5">
+      <Collapse
+        open={open && hasArch}
+        variant="flow"
+        className="border-t theme-border px-3 py-2.5"
+      >
         <ModelArchitecture arch={row.arch} />
       </Collapse>
 

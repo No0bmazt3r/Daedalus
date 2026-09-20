@@ -43,3 +43,16 @@ networkx>=3.2
 # knowledge_graph.py imports it directly and — as with httpx above — a
 # transitive dependency is not a contract.
 pyyaml>=6.0
+
+# PDF text extraction for the ingestion pipeline (app/services/extraction.py).
+#
+# **Optional at runtime, by design.** `extraction.pdf_available()` probes for it
+# and a machine without it still boots, still ingests .txt/.md/.csv/.json, and
+# refuses a PDF with a message naming this package — the same optional-import
+# discipline `vector_store` uses for Chroma and `hardware` for pynvml. Listed
+# here so a container rebuild picks it up; nothing breaks before one happens.
+#
+# Pure Python, no C extensions, no network at import or at call. Rule 1 clean.
+# There is deliberately no OCR dependency: a scanned PDF has no text layer, and
+# the pipeline says so rather than storing a document whose chunks are blank.
+pypdf>=4.0

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Map, Network, ListChecks, Route, Library, Boxes, ArrowLeft, RefreshCw, AlertCircle,
+  Map, Network, ListChecks, Route, Library, Boxes, RefreshCw, AlertCircle,
+  PenLine, Upload,
 } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
 import {
-  fetchTraversals, fetchRagConfig,
+  fetchTraversals, fetchRagConfig, RAG_TRACK_CHANGED_EVENT,
   type TraversalSummary, type RagTrack, type RagConfig, type TrackStatus,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
@@ -12,7 +13,9 @@ import { GraphView } from './GraphView'
 import { CoverageView } from './CoverageView'
 import { TraversalView } from './TraversalView'
 import { CorpusView } from './CorpusView'
-import { TrackBanner } from './TrackBanner'
+import { IngestView } from './IngestView'
+import { RetrievalView } from './RetrievalView'
+import { AuthoringView } from './AuthoringView'
 import { Unavailable } from './Unavailable'
 
 /**
@@ -43,15 +46,25 @@ import { Unavailable } from './Unavailable'
  * nothing — the window's own subtitle already names what is live. The badge
  * survives only where it still separates two things: on the detour below.
  *
- * ## The other track is a fallback, not a peer
+ * ## The other track is not reachable at all
  *
- * It cannot disappear entirely, because the graph is *authored* while Track 1 is
- * live: Coverage is the to-do list you work through before switching, and a
- * window that hid the graph until the graph was selected would make Track 2
- * impossible to prepare from inside the app. The resolution is rank rather than
- * removal — the live track is the window, and the other one is reachable only
- * from a notice that has already explained why you would want it, with
- * `TrackBanner` stating the relationship for as long as you are over there.
+ * Strictly. There is no detour, no "inspect the other one" button and no
+ * off-track banner, because there is no off-track state to be in: the window
+ * renders `activeTrack`'s tabs and nothing else exists to navigate to.
+ *
+ * This is the UI half of the rule the tool registry enforces on the model. With
+ * Track 1 selected the orchestrator is not offered `search_graph`, and it would
+ * be incoherent for the console beside it to keep the graph one click away — a
+ * comparison whose two arms are separated for the model and merged for the
+ * operator is separated in the half nobody reads and merged in the half
+ * everybody does.
+ *
+ * **The cost, stated.** You author the graph *before* switching to it, so with
+ * Track 1 live there is no way to reach Build or Coverage. That is deliberate,
+ * and the resolution is one setting rather than a second door: switch the track
+ * in Settings → Knowledge Base and Track 2's tabs are what this window is. The
+ * switch is recorded in a committed file, so "I was working on the graph" is a
+ * fact about the run rather than something the window let you do invisibly.
  *
  * ## Fallbacks, in order
  *
@@ -61,14 +74,16 @@ import { Unavailable } from './Unavailable'
  * 1. **Not read yet** — a skeleton tab row at its final height. Guessing a
  *    track and correcting it a moment later would swap the whole tab row under
  *    the cursor, so nothing is asserted until it is known.
- * 2. **Config unreadable** (backend down, bad JSON) — says so, offers a retry,
- *    and offers the graph views anyway: the graph is the built track, and a
- *    window that can only apologise is worse than one that admits it does not
- *    know which track is live while still showing what it has.
+ * 2. **Config unreadable** (backend down, bad JSON) — says so and offers a
+ *    retry, and shows nothing else. Guessing a track here would be the strict
+ *    rule failing open, which is the one direction it must not fail: a window
+ *    that showed Track 2's graph because it could not read the setting would be
+ *    doing exactly what the setting exists to prevent.
  * 3. **Live track not ready** — it is still what the window shows, because
- *    readiness is reported and never enforced (see `KnowledgeBasePanel`). But
- *    when the *other* track has something to show, the notice says so and links
- *    to it, so an empty window is never the end of the road.
+ *    readiness is reported and never enforced (see `KnowledgeBasePanel`). The
+ *    notice says what it is waiting on and points at the track switch. It does
+ *    *not* offer the other track's views: that was the detour, and the detour is
+ *    what made the two arms feel like tabs of one thing.
  * 4. **Track known, view empty** — each view owns that one, via `Unavailable`.
  *
  * ## Corpus sits under Track 1, and is shared
@@ -87,10 +102,9 @@ import { Unavailable } from './Unavailable'
  * they belong in a setup surface under Rule 5, not here.
  */
 
-type TabId = 'corpus' | 'graph' | 'coverage' | 'replay'
+import { TRACK_OF_TAB, type BlueprintsTab } from './tabs'
 
-/** The tab ids, for callers that want to open the window on one. */
-export type BlueprintsTab = TabId
+type TabId = BlueprintsTab
 
 interface TrackSpec {
   label: string
@@ -106,7 +120,9 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
     full: 'Track 1 — traditional vector RAG',
     icon: Boxes,
     tabs: [
-      { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Ingested documents and chunks — blocked on M2' },
+      { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Every document and chunk, as the retriever stores them' },
+      { id: 'retrieval', label: 'Replay', icon: Route, hint: 'Which passages a query actually pulled, and at what distance' },
+      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed — the ingestion pipeline' },
     ],
   },
   graph: {
@@ -117,46 +133,24 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
       { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 7 node types, 7 edge types' },
       { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: 'Orphans and gaps — every row is a question the graph cannot answer' },
       { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
+      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges — Track 2 gets knowledge by being authored' },
     ],
   },
 }
 
-const OTHER: Record<RagTrack, RagTrack> = { vector: 'graph', graph: 'vector' }
-
 const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'corpus', graph: 'graph' }
 
-/** Which track owns each tab — the inverse of `TRACKS[].tabs`. */
-const TRACK_OF_TAB: Record<TabId, RagTrack> = {
-  corpus: 'vector',
-  graph: 'graph',
-  coverage: 'graph',
-  replay: 'graph',
-}
-
 /**
- * Flat, for the command palette, which offers each tab as its own destination.
+ * The tab row is laid out in quarters whichever track is showing.
  *
- * Exported from here rather than restated there so a tab cannot exist in one
- * list and not the other. Opening a tab whose track is not live is allowed and
- * lands on the detour, banner and all — that is the same door the fallback
- * notice opens, reached by name instead of by dead end.
+ * Track 1 has three tabs and Track 2 has four. Sizing each row to its own count
+ * would make the two tracks' headers different widths per tab, so switching
+ * tracks would redraw the row rather than move the underline. Quarters is the
+ * larger of the two counts, so Track 1's three sit left-aligned with a quarter
+ * of empty rail after them — which is honest: it is the tab Track 1 does not
+ * have (Coverage, and the graph's gaps are not a thing a corpus has).
  */
-export const BLUEPRINT_TABS: readonly { id: TabId; label: string; keywords: string }[] = [
-  { id: 'corpus', label: 'Corpus', keywords: 'documents chunks ingested vector track 1' },
-  { id: 'graph', label: 'Graph', keywords: 'nodes edges knowledge browse track 2' },
-  { id: 'coverage', label: 'Coverage', keywords: 'orphans gaps missing todo authoring' },
-  { id: 'replay', label: 'Replay', keywords: 'traversal hops walk trace query path' },
-]
-
-/**
- * The tab row is laid out in thirds whichever track is showing.
- *
- * Track 1 has one tab and Track 2 has three, and sizing each row to its own
- * count would make a single tab a full-width bar — a heading pretending to be a
- * control. Thirds keep one geometry for both, so switching tracks moves the
- * underline rather than redrawing the header.
- */
-const TAB_BASIS = 100 / 3
+const TAB_BASIS = 100 / 4
 
 function TracePicker({
   traces, selected, onSelect,
@@ -200,54 +194,52 @@ function TracePicker({
 }
 
 /**
- * The live track has nothing to show, and the other one does.
+ * The live track has nothing to show yet.
  *
- * Offered rather than taken: silently redirecting to whichever track has data
- * would make the window disagree with Settings without saying so, and the
- * reader would be looking at the wrong system believing it was the right one.
+ * States it and points at the switch. It used to offer a button into the other
+ * track's views, which was the most-used door in a window that is supposed to
+ * show one arm — an empty Corpus tab made jumping to the graph the obvious
+ * move, and from there the two arms read as two tabs of one thing.
+ *
+ * Changing the track is the answer, and it deliberately costs a trip to
+ * Settings: it is written to a committed file and recorded per query, so which
+ * arm produced a result stays recoverable. A button here would have made that a
+ * click nobody remembers.
  */
-function FallbackOffer({
-  live, other, onGo,
-}: {
-  live: TrackStatus
-  other: TrackStatus
-  onGo: () => void
-}) {
-  const spec = TRACKS[other.id]
+function NotReady({ live }: { live: TrackStatus }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border theme-border theme-card p-2.5">
-      <AlertCircle size={13} className="shrink-0 theme-text-muted" />
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
+      <AlertCircle size={13} className="mt-0.5 shrink-0 text-amber-400" />
       <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text">
-        <span className="theme-text-muted">{TRACKS[live.id].full}</span> is live but has nothing to
-        show yet{live.blocked_by ? ` — it needs ${live.blocked_by}` : ''}.{' '}
+        <span className="theme-text-muted">{TRACKS[live.id].full}</span> is the selected track and
+        has nothing to show yet{live.blocked_by ? ` — it needs ${live.blocked_by}` : ''}.{' '}
+        <span className="theme-text-muted">{live.detail}</span>
+        <br />
         <span className="theme-text-muted">
-          {live.detail} · change the live track in Settings → Knowledge Base.
+          The other track's views are not reachable from here while this one is selected — change
+          the track in Settings → Knowledge Base.
         </span>
       </p>
-      <button
-        onClick={onGo}
-        className="flex shrink-0 items-center gap-1.5 rounded-md border theme-accent-border px-2 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
-      >
-        <spec.icon size={11} />
-        Inspect {spec.label}
-      </button>
     </div>
   )
 }
 
 export function BlueprintsWindow({
-  open, onClose, requestedTab = null,
+  open, onClose, requestedTab = null, onOpenForge,
 }: {
   open: boolean
   onClose: () => void
   /** Open on this tab instead of the live track's default — see `BLUEPRINT_TABS`. */
   requestedTab?: BlueprintsTab | null
+  /**
+   * Opens the Forge. Passed through to the Corpus step that reports the
+   * embedding model, which hands model management off rather than duplicating
+   * it — the window does not own the other windows, the root does.
+   */
+  onOpenForge?: () => void
 }) {
   const [config, setConfig] = useState<RagConfig | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
-  // null until the track is known — see fallback 1. Set from the config on
-  // every open, and only ever moved off it deliberately, by the offer above.
-  const [viewing, setViewing] = useState<RagTrack | null>(null)
   const [tab, setTab] = useState<TabId>('graph')
   const [traces, setTraces] = useState<TraversalSummary[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -266,28 +258,38 @@ export function BlueprintsWindow({
   }, [])
 
   const show = useCallback((track: RagTrack) => {
-    setViewing(track)
     setTab(DEFAULT_TAB[track])
   }, [])
 
-  /** Open a named tab, on whichever track owns it. */
-  const showTab = useCallback((wanted: TabId) => {
-    setViewing(TRACK_OF_TAB[wanted])
-    setTab(wanted)
+  /**
+   * Honour a tab asked for by name — but only if the live track owns it.
+   *
+   * A palette row, a stale request, a link from somewhere: none of them may
+   * move the window onto the other arm. A foreign tab falls back to the live
+   * track's default rather than being refused, because the caller asked to see
+   * Blueprints and showing Blueprints is the right answer to that.
+   */
+  const showTab = useCallback((wanted: TabId, live: RagTrack) => {
+    setTab(TRACK_OF_TAB[wanted] === live ? wanted : DEFAULT_TAB[live])
   }, [])
 
   // Re-read on every open rather than once: the track is changed in Settings, a
   // different window, and a stale badge here would assert the opposite of what
   // is running. Following the live track is the whole point of knowing it.
   const loadConfig = useCallback((preferTab: TabId | null = null) => {
-    setConfigError(null)
     fetchRagConfig()
       .then((c) => {
+        // Cleared on success rather than before the request. Clearing it up
+        // front is a synchronous setState inside the effect that calls this —
+        // a render of the empty state, then another once the answer lands — and
+        // it makes a failed Retry blink the message away and back. Held until
+        // there is something better to say, the strip just stops being true.
+        setConfigError(null)
         setConfig(c)
         // A tab asked for by name wins over the live track's default. Applied
         // in here rather than in a second effect because this resolves last:
         // set outside, the config's own `show` would land after it and undo it.
-        if (preferTab) showTab(preferTab)
+        if (preferTab) showTab(preferTab, c.track)
         else show(c.track)
       })
       .catch((e: Error) => {
@@ -295,10 +297,10 @@ export function BlueprintsWindow({
         // track changed, and blanking a window that was correct a second ago
         // loses more than the stale badge costs. The strip below says so.
         setConfigError(e.message || 'the backend is not answering')
-        // Still honour the request — the tab a caller named does not depend on
-        // knowing which track is live, and refusing it would make a palette row
-        // silently do nothing whenever the backend is down.
-        if (preferTab) showTab(preferTab)
+        // The request is *not* honoured here. Which track owns a tab is only
+        // half the question; the other half is which track is live, and that is
+        // exactly what could not be read. Applying it anyway would show the
+        // graph because the setting was unavailable.
       })
   }, [show, showTab])
 
@@ -312,28 +314,41 @@ export function BlueprintsWindow({
     loadConfig(requestedTab)
   }, [open, requestedTab, loadTraces, loadConfig])
 
+  // Two more ways the track changes while this window is not looking.
+  //
+  // **Minimize hides, it does not unmount** — so the window can sit invisible
+  // across a track change in Settings, keep its stale config, and come back
+  // showing the other arm's tabs until it is closed and reopened. `open` never
+  // changed, so the effect above never re-ran.
+  //
+  // The event covers it the moment it happens; `becameVisible` covers every
+  // other cause, including the `manage_settings` agent tool writing the config
+  // from the backend, which no frontend event can know about.
+  useEffect(() => {
+    if (!open) return
+    const onChanged = () => loadConfig()
+    window.addEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+    return () => window.removeEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+  }, [open, loadConfig])
+
   useEffect(() => {
     if (open && tab === 'replay') loadTraces()
   }, [open, tab, loadTraces])
 
   const activeTrack = config?.track ?? null
-  const group = viewing ? TRACKS[viewing] : null
-  const offTrack = !!(viewing && activeTrack && viewing !== activeTrack)
+  // The window *is* the live track. There is no second variable that could
+  // disagree with it, which is what makes the isolation structural rather than
+  // a rule every render has to remember to apply.
+  const group = activeTrack ? TRACKS[activeTrack] : null
 
   const liveStatus = useMemo(
     () => config?.tracks.find((t) => t.id === config.track) ?? null,
     [config],
   )
-  const otherStatus = useMemo(
-    () => (config ? config.tracks.find((t) => t.id === OTHER[config.track]) ?? null : null),
-    [config],
-  )
-  // Fallback 3. Only on the live track — once you have taken the offer, the
-  // banner is what explains where you are, and two notices would say it twice.
-  const offer =
-    !offTrack && liveStatus && otherStatus && !liveStatus.ready && otherStatus.ready
-      ? { live: liveStatus, other: otherStatus }
-      : null
+  // Fallback 3. Shown whenever the selected track cannot answer, regardless of
+  // whether the other one could — the other one is not on offer, so its
+  // readiness is not this notice's business.
+  const notReady = liveStatus && !liveStatus.ready ? liveStatus : null
 
   return (
     <FloatingWindow
@@ -350,29 +365,16 @@ export function BlueprintsWindow({
       width={980}
       height={720}
     >
+      {({ minimized }) => (
+      <WindowBody
+        minimized={minimized}
+        onRestored={loadConfig}
+      >
       <div className="@container flex-1 flex flex-col min-h-0">
         <div className="shrink-0 border-b theme-border px-6 pt-4">
-          {/* Nothing names the live track here. The window's own subtitle
-              already does, and one track on screen needs no badge to tell it
-              apart from the other. This row exists only on the detour: it is
-              the way back, and the only place the chrome has to admit that what
-              is below did not answer anything. */}
-          {offTrack && activeTrack && group && (
-            <div className="mb-3 flex items-center gap-2">
-              <button
-                onClick={() => show(activeTrack)}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border theme-border px-2 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text"
-              >
-                <ArrowLeft size={11} />
-                Back to {TRACKS[activeTrack].label}
-              </button>
-              <span className="flex items-center gap-1.5 text-[10px] theme-text-muted">
-                <group.icon size={11} className="text-amber-400" />
-                viewing {group.label} — not answering queries
-              </span>
-            </div>
-          )}
-
+          {/* No track chip and no way back, because there is nowhere to come
+              back from: this window renders the live track and the other one is
+              not reachable. The window's subtitle names which arm is running. */}
           <div className="relative flex min-h-[34px] items-center">
             {group ? (
               <>
@@ -414,7 +416,7 @@ export function BlueprintsWindow({
 
         <div className="flex-1 overflow-y-auto no-scrollbar p-6">
           <div
-            key={`${viewing ?? 'unknown'}-${tab}`}
+            key={`${activeTrack ?? 'unknown'}-${tab}`}
             className="mx-auto w-full @4xl:max-w-4xl @7xl:max-w-[min(100%,1400px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
           >
             {/* Fallback 2. Shown above whatever is on screen rather than instead
@@ -440,29 +442,21 @@ export function BlueprintsWindow({
               </div>
             )}
 
-            {offer && (
-              <FallbackOffer live={offer.live} other={offer.other} onGo={() => show(offer.other.id)} />
-            )}
-
-            {offTrack && activeTrack && viewing && (
-              <TrackBanner tabTrack={viewing} activeTrack={activeTrack} isReplay={tab === 'replay'} />
-            )}
+            {notReady && <NotReady live={notReady} />}
 
             {!group ? (
-              // Nothing is known yet. With no error that is just the read in
-              // flight; with one it is fallback 2's dead end, and the graph is
-              // offered because it is the track that is actually built.
+              // Nothing is known yet. With no error that is the read in flight;
+              // with one it is a dead end, and it stays one. Offering the graph
+              // here would be the strict rule failing open in the only direction
+              // it must not: showing Track 2 *because* the setting that selects a
+              // track could not be read.
               configError ? (
                 <Unavailable
-                  reason="The retrieval track couldn't be read, so this window doesn't know which half of the knowledge layer is answering queries. The views below read the graph directly and work without it."
-                  action={
-                    <button
-                      onClick={() => show('graph')}
-                      className="flex items-center gap-1.5 rounded-md border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
-                    >
-                      <Network size={11} />
-                      Inspect {TRACKS.graph.label} anyway
-                    </button>
+                  reason={
+                    "Which retrieval track is live could not be read, and this window shows " +
+                    "one track — the one answering queries. Showing either arm without knowing " +
+                    "which is selected would be a guess about the thing that decides what you " +
+                    "are looking at, so it shows neither. Retry above, or check the backend."
                   }
                 />
               ) : (
@@ -470,7 +464,10 @@ export function BlueprintsWindow({
               )
             ) : (
               <>
-                {tab === 'corpus' && <CorpusView />}
+                    {tab === 'corpus' && <CorpusView />}
+                    {tab === 'retrieval' && <RetrievalView />}
+                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} />}
+                    {tab === 'authoring' && <AuthoringView />}
                 {tab === 'graph' && <GraphView />}
                 {tab === 'coverage' && <CoverageView />}
                 {tab === 'replay' && (
@@ -488,6 +485,34 @@ export function BlueprintsWindow({
           </div>
         </div>
       </div>
+      </WindowBody>
+      )}
     </FloatingWindow>
   )
+}
+
+/**
+ * Calls `onRestored` when the window stops being minimized.
+ *
+ * A component rather than an effect inside `BlueprintsWindow`, because the
+ * `minimized` flag only exists inside `FloatingWindow`'s render prop and
+ * lifting it would mean threading state back up through the very component that
+ * owns it. This just watches the edge and passes it on.
+ *
+ * Only the false-edge: `onRestored` firing on minimize would issue a request
+ * for a window nobody is looking at, which is the opposite of the point.
+ */
+function WindowBody({
+  minimized, onRestored, children,
+}: {
+  minimized: boolean
+  onRestored: () => void
+  children: React.ReactNode
+}) {
+  const wasMinimized = useRef(minimized)
+  useEffect(() => {
+    if (wasMinimized.current && !minimized) onRestored()
+    wasMinimized.current = minimized
+  }, [minimized, onRestored])
+  return <>{children}</>
 }

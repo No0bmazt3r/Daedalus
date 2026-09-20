@@ -16,6 +16,22 @@ Odysseus' equivalent category is `manage_memory` — a store the model writes
 facts into about its user. There is no counterpart here on purpose: a reactor
 assistant's knowledge is the reviewed corpus and the authored graph, and a model
 that could add to its own knowledge base could add something nobody approved.
+
+## Which of these belong to a track
+
+The three `graph_*` tools read Track 2's structure, so they carry `track="graph"`
+and the registry withholds them while Track 1 is selected. `PROJECT.md` §5's
+comparison is only a comparison if each arm is confined to its own retrieval, and
+`graph_lookup` is retrieval whatever its category says — a model that cannot
+`search_graph` but can still `graph_lookup` its way to the same nodes is running
+Track 2 under Track 1's name.
+
+`knowledge_status` is the exception and carries no track. It *reports on* both
+arms without retrieving through either: no node text, no chunk text, just
+readiness and counts. Gating it would leave a model unable to check whether the
+corpus it is about to fail to find anything in even exists, which is the check
+that makes "I don't have that" a statement rather than a guess — and that matters
+most, not least, on the arm that is not ready.
 """
 
 from __future__ import annotations
@@ -34,6 +50,7 @@ from .registry import Effect, Integrity, Param, ToolError, register
         "is authored about it."
     ),
     effects={Effect.READ_GRAPH},
+    track="graph",
     params=(
         Param("entity", str, "The name or alias to look up.", required=True, max_length=200,
               example="temperature"),
@@ -59,6 +76,7 @@ def graph_lookup(entity: str, entity_type: str | None) -> dict[str, Any]:
         "example from an anomaly type to the procedure that resolves it."
     ),
     effects={Effect.READ_GRAPH},
+    track="graph",
     params=(
         Param("start_node_ids", list, "Node ids to start from.", required=True,
               example="Sensor:temp_c"),
@@ -166,6 +184,7 @@ def knowledge_status() -> dict[str, Any]:
         "unanswerable question is reported rather than guessed at."
     ),
     effects={Effect.READ_GRAPH},
+    track="graph",
     params=(),
 )
 def graph_coverage() -> dict[str, Any]:

@@ -106,6 +106,57 @@ _FORBIDDEN_AT_RUNTIME: Final = frozenset({
 })
 
 
+# The third axis: which retrieval track a tool belongs to.
+#
+# `PROJECT.md` §5 is a controlled comparison. Both arms share Zones 1/2/4 and
+# every deterministic sensor tool, and diverge **only** on Path B — which means
+# an arm that can reach the other arm's retrieval is not that arm. With Track 1
+# selected and `search_graph` still on the tool list, a model that walked the
+# graph would produce an answer filed under `rag_logs.track='vector'` that a
+# vector-only system could not have produced, and nothing in the logs would say
+# so. The comparison chapter would then be reporting a number for a system that
+# was never run.
+#
+# This is *not* the same kind of rule as `_FORBIDDEN_AT_RUNTIME`. That one is
+# safety, and an operator may unlock an effect with a reason. This one is
+# experimental validity, so it follows the setting rather than a policy row:
+# there is no unlock, because "let this arm use the other arm's retrieval" is
+# not a permission anybody can grant — it just makes the measurement mean
+# something else. Change the track in Settings → Knowledge Base and the other
+# set becomes available, which is the whole mechanism.
+#
+# Tools with `track=None` — the default — belong to neither and are always
+# offered. That is most of the registry: sensors, sessions, system health, and
+# `knowledge_status`, which *reports on* both tracks without retrieving through
+# either and is what lets a model say "I don't have that" rather than guess.
+# Mirrors `rag_config.TRACKS`, restated rather than imported: this module is
+# imported at boot by every tool module, and reaching into a service for a
+# two-element tuple is the kind of import that turns into a cycle later.
+# `test_registry_tracks_match_rag_config` keeps the two honest.
+TRACKS: Final[tuple[str, ...]] = ("vector", "graph")
+
+
+def _active_track() -> str | None:
+    """The retrieval track answering questions right now, or None if unknowable.
+
+    Fails **open** — None disables the gate rather than refusing everything. The
+    reasoning is the opposite of `_unlocked_effects`, because the risk is the
+    opposite: an unreadable effect policy might permit something unsafe, while an
+    unreadable track config can at worst let a tool through that pollutes one
+    measurement. Refusing every retrieval tool because a JSON file would not
+    parse would take the whole assistant down to protect a statistic.
+
+    In practice it does not fail: `rag_config.read` already falls back to the
+    committed baseline rather than raising.
+    """
+    from .. import rag_config  # noqa: PLC0415 — avoids an import cycle at boot
+
+    try:
+        return rag_config.resolve()
+    except Exception:  # noqa: BLE001 — see above
+        return None
+
+
 def _unlocked_effects() -> frozenset[Effect]:
     """Effects permitted at runtime — everything except what is locked.
 
@@ -205,6 +256,9 @@ class Tool:
     # M3's sensors. It still appears in the catalogue, because "this exists and
     # is waiting on ingestion" is a more useful answer than a missing entry.
     blocked_by: str | None = None
+    # Which retrieval track this tool *is*. None means "neither" and is the
+    # default — see `_active_track` for why only retrieval carries one.
+    track: str | None = None
 
 
 _REGISTRY: dict[str, Tool] = {}
@@ -230,10 +284,13 @@ def register(
     params: tuple[Param, ...] = (),
     citable: bool = True,
     blocked_by: str | None = None,
+    track: str | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Declare a tool. The decorator is the only way into the registry."""
     if category not in _CATEGORY_IDS:
         raise ValueError(f"unknown category {category!r}")
+    if track is not None and track not in TRACKS:
+        raise ValueError(f"unknown track {track!r}; expected one of {TRACKS}")
 
     def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
         if name in _REGISTRY:
@@ -248,6 +305,7 @@ def register(
             fn=fn,
             citable=citable,
             blocked_by=blocked_by,
+            track=track,
         )
         return fn
 
@@ -295,6 +353,8 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
             # sentences, and the panel offers a switch for exactly one of them.
             "disabled": tool.name in off,
             "blocked_by": tool.blocked_by,
+            # null for everything that is not retrieval, which is most of it.
+            "track": tool.track,
             "refused_because": refusal,
             "params": [
                 {
@@ -389,7 +449,30 @@ def _refusal(tool: Tool, surface: Surface, *, switched_off: frozenset[str] | Non
     off = _disabled_tools() if switched_off is None else switched_off
     if tool.name in off:
         return f"{tool.name} is switched off in Settings → Agent Tools."
-    return _surface_refusal(tool, surface)
+    return _surface_refusal(tool, surface) or _track_refusal(tool, surface)
+
+
+def _track_refusal(tool: Tool, surface: Surface) -> str | None:
+    """Why the other arm's retrieval may not run, or None.
+
+    Runtime only. An operator in Settings → Agent Tools trying a tool is not the
+    orchestrator answering a question, and nothing they do there is recorded as a
+    query in `rag_logs` — so there is no measurement to protect, and refusing
+    would only stop somebody inspecting the arm they are about to switch to.
+    Same reasoning as the `SETUP` exemption from the effect gate.
+    """
+    if surface is not Surface.RUNTIME or tool.track is None:
+        return None
+    active = _active_track()
+    if active is None or active == tool.track:
+        return None
+    return (
+        f"{tool.name} is Track {'1' if tool.track == 'vector' else '2'} "
+        f"({tool.track}) retrieval, and Track {'1' if active == 'vector' else '2'} "
+        f"({active}) is the selected track. PROJECT.md §5 compares the two arms, "
+        f"so an arm may not retrieve through the other one. Change the track in "
+        f"Settings → Knowledge Base."
+    )
 
 
 def _surface_refusal(tool: Tool, surface: Surface) -> str | None:
@@ -509,8 +592,85 @@ def call(
     if isinstance(result, dict) and "detail" in result and "data" in result:
         # A tool that wants to explain an empty result says so explicitly.
         data, detail = result["data"], result["detail"]
-    return _envelope(tool, ok=True, detail=detail, started=started, query_id=query_id,
-                     status="ok", arguments=cleaned, data=data)
+    envelope = _envelope(tool, ok=True, detail=detail, started=started, query_id=query_id,
+                         status="ok", arguments=cleaned, data=data)
+    _log_retrieval(tool, cleaned, data, envelope, query_id)
+    return envelope
+
+
+def _log_retrieval(
+    tool: Tool,
+    arguments: dict[str, Any],
+    data: Any,
+    envelope: dict[str, Any],
+    query_id: str | None,
+) -> None:
+    """Write the `rag_logs` row for a retrieval, whichever track ran it.
+
+    ## Why here and not inside the tools
+
+    `search_corpus` and `search_graph` are deliberately separate implementations
+    — that is what makes "which track answered this" recoverable — but they must
+    be *recorded* the same way, or the comparison in `PROJECT.md` §10 ends up
+    comparing two measurement methods as much as two retrieval strategies. One
+    writer at the dispatch boundary is the only place that is structurally true:
+    it already owns `query_id`, the surface and the elapsed time, and a tool
+    cannot forget to call it.
+
+    ## Only real queries
+
+    No `query_id` means nobody is tracing this — an operator trialling a tool in
+    Settings → Agent Tools, most often — and `_log` already refuses to write a
+    `tool_logs` row for one. The same rule applies harder here: a trial is not a
+    query, and a row for one would land in the evaluation set as though it were.
+
+    ## Latency is retrieval only, and says so
+
+    `envelope["elapsed_ms"]` is the tool call, which for Track 1 is the query
+    embedding plus the Chroma round trip and for Track 2 is the walk. It is *not*
+    end-to-end — no model call is inside it — and `BENCHMARK.md` §9.7 is about
+    exactly this kind of figure being quoted as though it were.
+    """
+    if not query_id or not isinstance(data, dict):
+        return
+    track = data.get("track")
+    if track not in TRACKS:
+        return
+
+    import json  # noqa: PLC0415 — only needed on the logging path
+
+    row: dict[str, Any] = {
+        "query_id": query_id,
+        "track": track,
+        "query_text": str(arguments.get("query", ""))[:1000],
+        "retrieval_latency_ms": envelope["elapsed_ms"],
+    }
+
+    if track == "vector":
+        chunks = data.get("chunks") or []
+        row.update(
+            # The collection, not the engine: "chromadb" is true of every row
+            # and says nothing, while the collection name identifies the
+            # embedding model that produced the vectors being compared.
+            vector_db_used=data.get("collection"),
+            top_k=arguments.get("top_k"),
+            retrieved_chunk_ids=json.dumps([c.get("chunk_id") for c in chunks]),
+            # Distances as the store returned them, never converted to a
+            # similarity. A reader has to be able to check these against Chroma.
+            retrieval_scores=json.dumps([c.get("distance") for c in chunks]),
+            source_files=json.dumps(
+                sorted({c.get("source_file") for c in chunks if c.get("source_file")})
+            ),
+        )
+    else:
+        path = data.get("path") or {}
+        row.update(
+            hop_count=path.get("hop_count") or 0,
+            traversal_path=json.dumps(path, default=str) if path else None,
+            entry_strategy=data.get("entry_strategy") or path.get("entry_strategy"),
+        )
+
+    audit_store.log("rag_logs", **row)
 
 
 def _envelope(

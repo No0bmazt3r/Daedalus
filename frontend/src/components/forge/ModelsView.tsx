@@ -173,8 +173,12 @@ function Detail({ row }: { row: ModelRow }) {
     )
   }
 
+  // A fragment, not a wrapping <div>. `Collapse` cascades the *direct children*
+  // of its own element, so a layout wrapper here would make the whole panel one
+  // child and the whole cascade one beat — which is exactly what it looked
+  // like. The grid classes moved onto the Collapse's className instead.
   return (
-    <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-x-8 gap-y-4">
+    <>
       <Section
         title="Memory estimate"
         right={
@@ -296,7 +300,7 @@ function Detail({ row }: { row: ModelRow }) {
           </a>
         </Section>
       )}
-    </div>
+    </>
   )
 }
 
@@ -478,7 +482,19 @@ function Row({
         </div>
       </div>
 
-      <Collapse open={open} className="border-t theme-border px-4 py-4 theme-surface">
+      {/* The grid lives here, not inside `Detail`. `Collapse` cascades its own
+          element's direct children, so the layout wrapper has to *be* that
+          element — otherwise every section is one child, the cascade is one
+          beat, and the panel pops in fully formed.
+
+          `flow` rather than the default domino: this is a tall panel of
+          sections, so the container unfolds and the sections settle downward
+          without the bounce. See `ui/collapse` for why those differ. */}
+      <Collapse
+        open={open}
+        variant="flow"
+        className="border-t theme-border px-4 py-4 theme-surface grid grid-cols-1 @2xl:grid-cols-2 gap-x-8 gap-y-4"
+      >
         <Detail row={row} />
       </Collapse>
     </div>

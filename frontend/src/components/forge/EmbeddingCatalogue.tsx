@@ -212,7 +212,13 @@ function Row({
         </div>
       </div>
 
-      <Collapse open={open} className="border-t theme-border px-3 py-2.5 space-y-2">
+      {/* `flow`, like the other two row expansions in the Forge: they sit behind
+          the same chevron and should not each open differently. */}
+      <Collapse
+        open={open}
+        variant="flow"
+        className="border-t theme-border px-3 py-2.5 space-y-2"
+      >
           <div className="grid grid-cols-2 @md:grid-cols-3 gap-x-4 gap-y-2">
             <Fact label="tag" value={model.tag} />
             <Fact label="languages" value={model.languages ?? '—'} />

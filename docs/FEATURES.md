@@ -28,7 +28,7 @@ Everything below was read off the source, not from memory.
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
-| Data stores (×5) | Built and containerised, each with a versioned schema |
+| Data stores (×5) | Built and containerised, each with a versioned schema. The Vector store gained a relational half — `corpus.db`, the ingestion manifest — which is that store's own record, not a sixth store |
 | Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
 | Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
@@ -87,6 +87,19 @@ to it.
 | `GET` | `/api/graph/traversal/{query_id}` | The recorded walk for one query, hop by hop |
 | `GET` | `/api/corpus/documents` | Ingested documents. **Blocked on M2** — answers with `available: false` and the milestone |
 | `GET` | `/api/corpus/documents/{id}/chunks` | Chunks with metadata. Same honest empty state |
+| `GET` | `/api/corpus/status` | Corpus totals, chunk settings, extraction and embedding readiness — the pipeline panel's one call |
+| `GET`/`POST` | `/api/corpus/documents` | List, or upload. **The POST body is the raw file**, not multipart — one file per request, metadata in the query string, and `python-multipart` stays out of the image |
+| `DELETE` | `/api/corpus/documents/{id}` | Removes the document, its chunks and its vectors. Chroma does not cascade, so the chunk ids come back from the row delete to drive the vector delete |
+| `POST` | `/api/corpus/preview` | Chunk a document at candidate settings and **write nothing** — what `services/chunking` having no I/O buys |
+| `GET`/`PUT` | `/api/corpus/config` | Chunk strategy, size and overlap, committed to `config/corpus_config.json`. Not retroactive: existing chunks keep their boundaries |
+| `POST` | `/api/corpus/ingest` | Starts a run in a worker thread and returns the run row; the UI polls. Holds the response until the row exists, so the client always gets an id to poll or the reason there is none |
+| `POST` | `/api/corpus/resume` | Embeds the chunks with no vector, without re-chunking. The other half of partial failure |
+| `POST` | `/api/corpus/clear-vectors` | Drops every vector, keeps every chunk — the first half of an embedding-model swap |
+| `GET` | `/api/corpus/runs/{id}/events` | The pipeline's own log, level-filterable. The debugging surface |
+| `GET` | `/api/graph/authoring/status` | Graph totals, validity, coverage, the schema and recent edits |
+| `POST`/`PATCH`/`DELETE` | `/api/graph/authoring/nodes` | Author nodes. Validated before the file is written; a node with edges is refused unless `cascade` |
+| `POST`/`DELETE` | `/api/graph/authoring/edges` | Author edges. The domain check is the loader's, so there is one copy of the rule |
+| `GET` | `/api/graph/authoring/history` | Every edit **including the refused ones** — the schema saying no is the informative part |
 | `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can. `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
@@ -1318,9 +1331,9 @@ Paths are relative to `frontend/src/`.
 | `components/CommandPalette.tsx` | `Ctrl+K` — chats, settings panels, windows, Blueprints tabs and store tables in one overlay. Holds no list of its own; every row runs a callback that already existed |
 | `components/stores/StoreBrowser.tsx` | The row grid — paging, sort, row detail. Body only, no window chrome |
 | `components/stores/StoreWindow.tsx` | Puts it in a `FloatingWindow` |
-| `components/ui/floating-window.tsx` | The shared window shell: drag, resize, Peek, minimize, Escape. Also exports `useMinimizeToDock` for `ThemeModal`, which is off the shell by design |
+| `components/ui/floating-window.tsx` | The shared window shell: drag, resize, Peek, minimize, Escape. Passes `minimized` to children, because minimize hides rather than unmounts — a window can sit invisible while the state it renders changes, and one whose content goes stale re-reads on the restore edge. Also exports `useMinimizeToDock` for `ThemeModal`, which is off the shell by design |
 | `components/ui/switch.tsx` | The one on/off control — a segmented ON \| OFF, not a pill and knob |
-| `components/ui/collapse.tsx` | The one collapse/expand animation — the domino cascade, and the mount lifetime it needs |
+| `components/ui/collapse.tsx` | The one collapse/expand animation, and the mount lifetime it needs. Two variants: `domino` for a list of rows (springy, the sidebar's), `flow` for a panel of sections (the container unfolds via `grid-template-rows`, sections settle downward, no overshoot) |
 | `hooks/useDraggable.ts` | Window drag, plus edge snapping: zones, preview rectangle, restore-under-cursor |
 | `components/ui/skeleton.tsx` | Loading placeholders that hold the shape of what is coming |
 | `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |

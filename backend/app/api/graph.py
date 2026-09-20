@@ -35,7 +35,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from ..db import audit_store, paths, sqlite_util
 from ..services import graph_seed
 from ..services import knowledge_graph as kg
-from ..services import rag_config
+from ..services import graph_authoring, rag_config
 
 router = APIRouter(prefix="/api", tags=["blueprints"])
 
@@ -255,35 +255,115 @@ def graph_traversal(query_id: str) -> dict[str, Any]:
     return {"available": True, **record, "path": path, "nodes": seen}
 
 
-# ── the corpus half — blocked on M2 ──────────────────────────────────────────
-
-_CORPUS_BLOCKED = {
-    "available": False,
-    "blocked_by": "M2",
-    "reason": (
-        "no documents have been ingested, because the ingestion pipeline is not built. "
-        "TODO.md:18 — the real corpus (manuals, SOPs, anomaly records, UAUC) blocks M2 entirely."
-    ),
-    "documents": [],
-    "total": 0,
-}
+# ── the corpus half ──────────────────────────────────────────────────────────
+#
+# Was a pair of stubs answering `available: false, blocked_by: M2`. The pipeline
+# is built, and it is large enough to own a module: see `api/corpus.py` for
+# upload, chunking, embedding, runs and the pipeline log. Nothing corpus-shaped
+# is served from here any more, and these two routes are gone rather than left
+# as redirects — a route that answers with a different shape than it used to is
+# worse than one that 404s, because the client cannot tell it changed.
 
 
-@router.get("/corpus/documents")
-def corpus_documents() -> dict[str, Any]:
-    """Ingested documents with chunk and embedding counts.
+# ── authoring (Track 2's pipeline) ───────────────────────────────────────────
+#
+# The graph half's counterpart to `/api/corpus`. Everything here writes, so it is
+# a **setup** surface under Rule 5 and is never exposed to the model: a node
+# exists because a person authored it, which is the provenance claim that makes
+# `search_graph` SYSTEM integrity rather than CORPUS.
+#
+# The YAML stays the source of truth (MODULES.md §3.4) — these routes validate a
+# candidate and rewrite the file, so the graph still reviews in a diff and can
+# still be hand-edited. See `services/graph_authoring` for why validation runs
+# before the write rather than at the next load.
 
-    Wired to the honest empty state rather than left unrouted: a 404 here reads
-    as a bug in the frontend, and the point of rule 4 is that the panel can
-    explain *which milestone* it is waiting on.
+
+@router.get("/graph/authoring/status")
+def authoring_status() -> dict[str, Any]:
+    """Totals, validity, coverage, the schema and recent edits — one call."""
+    return graph_authoring.status()
+
+
+@router.get("/graph/authoring/schema")
+def authoring_schema() -> dict[str, Any]:
+    """Node types, edge domains and the fields each type carries.
+
+    The editor renders its forms from this. A dropdown built from a second copy
+    of the schema in TypeScript would offer edges the validator refuses, and only
+    at save time.
     """
-    return dict(_CORPUS_BLOCKED)
+    return graph_authoring.schema()
 
 
-@router.get("/corpus/documents/{document_id:path}/chunks")
-def corpus_chunks(document_id: str) -> dict[str, Any]:
-    """Chunks with metadata and the text as the retriever sees it."""
-    return {**_CORPUS_BLOCKED, "document_id": document_id, "chunks": []}
+@router.get("/graph/authoring/history")
+def authoring_history(
+    limit: int = Query(100, ge=1, le=1000),
+    only_failures: bool = Query(False, description="Just the refused edits."),
+) -> dict[str, Any]:
+    """Every edit, including the refused ones — the debugging surface.
+
+    Failures are the point. `Sensor --RESOLVED_BY--> SOPDocument` is plausible
+    English and meaningless in this schema, and a history that kept only
+    successful edits would omit exactly what somebody is trying to understand.
+    """
+    return {"edits": graph_authoring.history(limit, only_failures=only_failures)}
+
+
+@router.post("/graph/authoring/nodes")
+def create_node(
+    node_type: str = Body(...),
+    node_id: str = Body(...),
+    attributes: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    try:
+        return graph_authoring.create_node(node_type, node_id, attributes)
+    except graph_authoring.AuthoringError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.patch("/graph/authoring/nodes/{node_id:path}")
+def update_node(node_id: str, attributes: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        return graph_authoring.update_node(node_id, attributes)
+    except graph_authoring.AuthoringError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.delete("/graph/authoring/nodes/{node_id:path}")
+def delete_node(
+    node_id: str,
+    cascade: bool = Query(False, description="Remove the node's edges with it."),
+) -> dict[str, Any]:
+    """Refuses while edges point at the node, unless cascade is set.
+
+    The refusal names the edges. A node removed from under them is the silent
+    omission MODULES.md §3.3 is about — traversal stops reaching something and
+    the answer just gets worse.
+    """
+    try:
+        return graph_authoring.delete_node(node_id, cascade=cascade)
+    except graph_authoring.AuthoringError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/graph/authoring/edges")
+def create_edge(
+    source: str = Body(...), edge_type: str = Body(...), target: str = Body(...)
+) -> dict[str, Any]:
+    try:
+        return graph_authoring.create_edge(source, edge_type, target)
+    except graph_authoring.AuthoringError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.delete("/graph/authoring/edges")
+def delete_edge(
+    source: str = Query(...), edge_type: str = Query(...), target: str = Query(...)
+) -> dict[str, Any]:
+    try:
+        return graph_authoring.delete_edge(source, edge_type, target)
+    except graph_authoring.AuthoringError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 # ── the retrieval track switch ───────────────────────────────────────────────

@@ -8,7 +8,8 @@ import { restoreWindow } from '../components/ui/floating-window'
 import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import { ForgeWindow } from '../components/forge/ForgeWindow'
-import { BlueprintsWindow, type BlueprintsTab } from '../components/blueprints/BlueprintsWindow'
+import { BlueprintsWindow } from '../components/blueprints/BlueprintsWindow'
+import type { BlueprintsTab } from '../components/blueprints/tabs'
 import { CommandPalette, type PaletteActions } from '../components/CommandPalette'
 import { StoreWindow } from '../components/stores/StoreWindow'
 import { SettingsProvider, useSettings } from '../contexts/SettingsContext'
@@ -104,6 +105,23 @@ function AppShell() {
   ])
 
   /**
+   * Open Blueprints, on a named tab or on the live track's default.
+   *
+   * Every entry point goes through here because `blueprintsTab` is *sticky
+   * state*, not an event: the sidebar row and the shortcut used to open the
+   * window without touching it, so a tab the palette had set once was re-applied
+   * on every subsequent open, forever. Clicking "Labyrinth Blueprints" landed on
+   * whatever tab you had last jumped to from the palette, which is the opposite
+   * of what clicking the module's own name should do.
+   */
+  const openBlueprints = useCallback((tab: BlueprintsTab | null = null) => {
+    openWindow('blueprints', () => {
+      setBlueprintsTab(tab)
+      setBlueprintsOpen(true)
+    })
+  }, [])
+
+  /**
    * What a palette row does when you press Enter on it.
    *
    * Every one of these is the callback some existing affordance already calls —
@@ -122,16 +140,12 @@ function AppShell() {
         }),
       openTheme: () => openWindow('theme', () => setThemeModalOpen(true)),
       openForge: () => openWindow('forge', () => setForgeOpen(true)),
-      openBlueprints: (tab) =>
-        openWindow('blueprints', () => {
-          setBlueprintsTab(tab ?? null)
-          setBlueprintsOpen(true)
-        }),
+      openBlueprints: (tab) => openBlueprints(tab ?? null),
       newChat,
       toggleIncognito: () => setIsIncognito(!isIncognito),
       toggleSidebar: () => setSidebarOpen((v) => !v),
     }),
-    [isIncognito, newChat, selectSession, setIsIncognito],
+    [isIncognito, newChat, openBlueprints, selectSession, setIsIncognito],
   )
 
   useGlobalShortcuts(keybinds, {
@@ -154,7 +168,7 @@ function AppShell() {
     toggle_incognito: () => setIsIncognito(!isIncognito),
     open_theme: () => openWindow('theme', () => setThemeModalOpen(true)),
     open_forge: () => openWindow('forge', () => setForgeOpen(true)),
-    open_blueprints: () => openWindow('blueprints', () => setBlueprintsOpen(true)),
+    open_blueprints: () => openBlueprints(),
     close_window: closeTopWindow,
   })
 
@@ -174,7 +188,7 @@ function AppShell() {
                 onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
                 onOpenSettings={() => openWindow('settings', () => setSettingsModalOpen(true))}
                 onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
-                onOpenBlueprints={() => openWindow('blueprints', () => setBlueprintsOpen(true))}
+                onOpenBlueprints={() => openBlueprints()}
                 onOpenStore={(store, table) =>
                   openWindow('stores', () => setStoreTarget({ store, table }))
                 }
@@ -213,6 +227,7 @@ function AppShell() {
             open={blueprintsOpen}
             onClose={() => setBlueprintsOpen(false)}
             requestedTab={blueprintsTab}
+            onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
           />
           <StoreWindow
             open={storeTarget !== null}
@@ -223,12 +238,12 @@ function AppShell() {
         </div>
 
         {/* Outside the shell's `overflow-hidden`, like ConfirmDialog: it covers
-            the whole viewport and must not be clipped by the app frame. */}
-        <CommandPalette
-          open={paletteOpen}
-          onClose={() => setPaletteOpen(false)}
-          actions={paletteActions}
-        />
+            the whole viewport and must not be clipped by the app frame. Gated
+            here rather than inside, so each opening mounts a fresh one — see
+            the component for why that is the reset. */}
+        {paletteOpen && (
+          <CommandPalette onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+        )}
 
         <ConfirmDialog
           open={confirmDelete !== null}

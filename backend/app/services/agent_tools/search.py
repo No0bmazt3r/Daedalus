@@ -11,6 +11,11 @@ built to compare, and they are deliberately separate tools rather than one that
 consults `rag_config`. The orchestrator is what selects a track; a tool that
 quietly picked one would make "which track answered this" unanswerable from the
 logs, and that question is the project's entire result.
+
+They each declare that allegiance with `track=`, and the registry gate offers
+only the selected arm's tool at runtime. Separate tools were always the right
+shape; what was missing was the gate, and without it Track 1 was answering
+questions with a `search_graph` call available the whole time.
 """
 
 from __future__ import annotations
@@ -37,6 +42,7 @@ SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "any")
     ),
     effects={Effect.READ_CORPUS},
     integrity=Integrity.CORPUS,
+    track="vector",
     params=(
         Param("query", str, "What to look for, in plain words.", required=True, max_length=500,
               example="reactor temperature limits"),
@@ -55,7 +61,7 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
     comparing two vector spaces. For a project whose claim is groundedness, a
     confident wrong ranking is the worst available outcome.
     """
-    from .. import embedding_models  # noqa: PLC0415 — avoids an import cycle at boot
+    from .. import embedding_models, ingestion  # noqa: PLC0415 — avoids an import cycle at boot
 
     state = embedding_models.index_state()
     if state["index_state"] != "current":
@@ -78,7 +84,23 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         }
 
     where = None if source_type == "any" else {"source_type": source_type}
-    found = collection.query(query_texts=[query], n_results=top_k, where=where)
+
+    # `query_embeddings`, never `query_texts`. Handing Chroma raw text makes it
+    # embed the query with its *own* bundled model — ONNX MiniLM — and compare
+    # that vector against documents embedded by nomic-embed-text. It does not
+    # error, it does not return nothing: it returns confidently ranked nonsense,
+    # which for a project claiming groundedness is the worst available outcome.
+    # `vector_store`'s stamp guard catches a mismatched *index*; this is the same
+    # failure on the query side, where no stamp can see it.
+    try:
+        vector = ingestion.embed_query(query)
+    except Exception as exc:  # noqa: BLE001 — an unreachable embedder is a stated result
+        return {
+            "data": {"chunks": [], "track": "vector"},
+            "detail": f"the query could not be embedded, so the corpus was not searched: {exc}",
+        }
+
+    found = collection.query(query_embeddings=[vector], n_results=top_k, where=where)
 
     documents = (found.get("documents") or [[]])[0]
     metadatas = (found.get("metadatas") or [[]])[0]
@@ -101,7 +123,11 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         })
 
     return {
-        "data": {"chunks": chunks, "track": "vector"},
+        # `collection` travels with the result so the dispatch boundary can
+        # record *which index* answered without re-deriving it — two callers
+        # resolving the collection separately is how a log ends up naming one
+        # index while the query read another.
+        "data": {"chunks": chunks, "track": "vector", "collection": state["collection"]},
         "detail": f"{len(chunks)} passages from {state['collection']}"
                   if chunks else "no passage matched",
     }
@@ -116,6 +142,7 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
     ),
     effects={Effect.READ_GRAPH},
     integrity=Integrity.SYSTEM,
+    track="graph",
     params=(
         Param("query", str, "The question or phrase to find entities for.",
               example="reactor temperature",

@@ -11,6 +11,7 @@ opened with different permissions.
 | audit    | $LOG_DIR/ai_logs.db                 | read/write (its own logs) |
 | chat     | $DATA_DIR/sqlite/chat.db            | read/write (transcripts) |
 | vector   | $DATA_DIR/chroma (or server)        | read/write (its own index) |
+| corpus   | $DATA_DIR/sqlite/corpus.db          | read/write (the vector store's manifest) |
 | prefs    | $APP_DIR/prefs.db                   | read/write (UI state) |
 
 **Why `chat` is separate from `audit`**, when both hold conversation text: they
@@ -46,6 +47,22 @@ AUDIT_DB = LOG_DIR / "ai_logs.db"
 CHAT_DB = Path(os.environ.get("DAEDALUS_CHAT_DB", DATA_DIR / "sqlite" / "chat.db"))
 PREFS_DB = Path(os.environ.get("DAEDALUS_PREFS_DB", _BACKEND_ROOT / "data" / "prefs.db"))
 
+# The Vector store's relational half — the corpus manifest. Not a sixth store:
+# §6.3's five are a statement about which subsystem writes which file, and this
+# is the same Vector store's record of what was ingested, sitting beside the
+# Chroma directory the same way Chroma's own catalogue sits beside its vectors.
+# Splitting it out of Chroma is what makes it migratable, joinable and
+# browsable; keeping it out of `audit` is deliberate, since deleting a document
+# should take its ingestion history with it and must never be able to touch
+# append-only evidence.
+CORPUS_DB = Path(os.environ.get("DAEDALUS_CORPUS_DB", DATA_DIR / "sqlite" / "corpus.db"))
+
+# Uploaded documents, as bytes, exactly as they arrived. The originals are kept
+# rather than only their extracted text: a parser improvement is then
+# retroactive, and a citation can be checked against the file somebody actually
+# supplied instead of against our reading of it.
+CORPUS_DIR = DATA_DIR / "corpus"
+
 # ChromaDB: a URL means the containerised server, otherwise an embedded
 # persistent client writing to this directory.
 CHROMA_DIR = DATA_DIR / "chroma"
@@ -68,6 +85,8 @@ def ensure_dirs() -> None:
         AUDIT_DB.parent,
         CHAT_DB.parent,
         PREFS_DB.parent,
+        CORPUS_DB.parent,
+        CORPUS_DIR,
         CHROMA_DIR,
         CONFIG_DIR,
     ):

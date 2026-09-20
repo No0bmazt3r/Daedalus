@@ -890,3 +890,158 @@ input[type='color']::-webkit-color-swatch {
 [data-slot='accordion-content'][data-closed] {
   animation-duration: 0.3s;
 }
+
+/* ── The pipeline stepper ────────────────────────────────────────────────────
+   Numbered circles joined by a track that fills as you advance.
+
+   The fill is a `scaleX` on an inner element rather than an animated `width`.
+   Width animates on the layout box, so every frame is a layout pass for the
+   whole row; a transform is composited and costs nothing. It also gives the
+   reverse for free — going back scales the same element to 0, so the fill
+   drains right-to-left instead of jumping.
+
+   `transform-origin: left` is what makes the direction read correctly: the fill
+   grows *from the completed step towards the next one*, which is the direction
+   the pipeline runs. Origin at centre would grow outwards from the middle of
+   the connector and look like a bar loading rather than progress flowing. */
+.step-track {
+  position: relative;
+  height: 2px;
+  background: color-mix(in srgb, var(--text-main) 14%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.step-track-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--primary);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-track-fill[data-filled='true'] { transform: scaleX(1); }
+
+/* The travelling highlight. Only on the connector being crossed right now, so
+   exactly one segment is ever animating — a row where every connector shimmers
+   reads as "loading", not as "you are here". */
+.step-track-flow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* `--primary`, not `--primary-contrast`. Contrast is white in the light theme
+     and the unfilled track is light grey, so the highlight would travel
+     invisibly in exactly the theme somebody is most likely to demo in. Primary
+     is dark on light and light on dark, which is the one that reads in both. */
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 45%, transparent),
+    transparent
+  );
+  animation: step-flow 1.4s ease-in-out infinite;
+}
+
+@keyframes step-flow {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* The current step's ring. A slow breath rather than a pulse: this sits next to
+   a log that updates and a progress bar that moves, and a third thing competing
+   for attention would make the panel feel busy rather than alive. */
+.step-dot-active {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+  animation: step-breathe 2.4s ease-out infinite;
+}
+
+@keyframes step-breathe {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--primary) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The fill still lands in the right place — only the travel goes. Progress is
+     information, so it must survive; the motion carrying it is decoration. */
+  .step-track-fill { transition: none; }
+  .step-track-flow::after { animation: none; }
+  .step-dot-active { animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent); }
+}
+
+/* ── Collapse, `flow` variant ────────────────────────────────────────────────
+   For a panel of sections rather than a list of rows. Two differences from the
+   domino cascade, both because a panel is bigger than a list.
+
+   **The container unfolds.** `grid-template-rows: 0fr → 1fr` is the technique
+   that animates to *content height* without anyone having to know it. The
+   alternative, `max-height`, has to guess a number: guess low and the content
+   clips, guess high and most of the duration animates empty space — which is
+   the "opens slowly, then snaps" feel. The inner element carries the
+   `overflow: hidden` and `min-height: 0` that make the 0fr row actually
+   collapse; a grid item's automatic minimum size would otherwise hold it open
+   at content height and nothing would appear to animate at all. */
+.collapse-flow {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapse-flow-open { grid-template-rows: 1fr; }
+
+.collapse-flow > * {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* **The sections settle downward, without the bounce.** They arrive from
+   slightly *above* and come down, so the eye is carried top-to-bottom as the
+   panel fills — the direction it is about to be read in. The domino's overshoot
+   is right for a 28px row landing in a list and reads as a wobble on a 400px
+   panel, so the curve here decelerates into place and stops. */
+@keyframes collapse-flow-in {
+  from { opacity: 0; transform: translateY(-7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes collapse-flow-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-5px); }
+}
+
+[data-domino='in'][data-flow='true'] > * {
+  animation: collapse-flow-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+[data-domino='out'][data-flow='true'] > * {
+  animation: collapse-flow-out 0.18s ease-in forwards;
+}
+
+/* A gentler stagger than the domino's 40ms. A panel has fewer, larger sections,
+   and the gap that reads as "one after another" on small rows reads as "slow"
+   when each step is a whole block of text. */
+[data-flow='true'] > *:nth-child(1) { animation-delay: 0.02s; }
+[data-flow='true'] > *:nth-child(2) { animation-delay: 0.07s; }
+[data-flow='true'] > *:nth-child(3) { animation-delay: 0.12s; }
+[data-flow='true'] > *:nth-child(4) { animation-delay: 0.17s; }
+[data-flow='true'] > *:nth-child(5) { animation-delay: 0.22s; }
+[data-flow='true'] > *:nth-child(6) { animation-delay: 0.27s; }
+[data-flow='true'] > *:nth-child(n + 7) { animation-delay: 0.32s; }
+
+/* The outbound cascade must not inherit the inbound delays, or closing sits
+   still for a third of a second before anything moves. */
+[data-domino='out'][data-flow='true'] > * { animation-delay: 0s; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The panel still opens and closes — only the travel goes. `Collapse` waits
+     on the exit animation before unmounting, so the outbound keyframes stay
+     (at a duration nobody perceives) rather than being removed: with no
+     animation to await, the settle logic unmounts on the next frame, which is
+     correct but must not be reached by accident. */
+  .collapse-flow { transition: none; }
+  [data-domino='in'][data-flow='true'] > * { animation: none; }
+  [data-domino='out'][data-flow='true'] > * {
+    animation: collapse-flow-out 0.01s linear forwards;
+  }
+}

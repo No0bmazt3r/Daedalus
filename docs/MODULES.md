@@ -444,7 +444,11 @@ resolved to.
 
 > *"What does this system actually know, and how is it connected?"*
 
-> **Status: the graph half is built; the corpus half waits on M2.** The window
+> **Status: both halves are built.** Track 1 has an ingestion pipeline (upload →
+> extract → chunk → embed → Chroma, with a preview that writes nothing and a
+> per-stage log) and Track 2 has an authoring one (add and delete nodes and
+> edges, validated before the file is written, with refused edits kept). §3.9 has
+> both. The window
 > shows **one** retrieval track — the one answering queries, read from Settings →
 > Knowledge Base — and only that track's tabs: Track 1 · Vector holds Corpus,
 > Track 2 · Graph holds Graph, Coverage and Replay. The other track is a
@@ -633,6 +637,112 @@ Three behaviours worth recording, each fixing something that was wrong:
 | ~~**Risk**~~ | ~~Traversal replay needs the agent to record its path~~ — **done.** Migration `005` adds `traversal_path` and `entry_strategy`, landed before the orchestrator wrote its first row, which was the point: a path is not derivable after the fact. `graph_tools.TraversalPath` records every hop regardless of caller, so the viewer had real replay data before any agent existed |
 | **Note** | A hop stores its `from`/`to` node *sets* **and** the pairs actually joined. The sets do not imply the pairings — a hop spanning two Sensors and two Thresholds has four possible pairs and two real ones — so a renderer given only the sets draws edges the graph does not contain. Fixed in the recorder, not guessed at in the renderer |
 
+### 3.9 The two pipelines
+
+Each track gets knowledge a different way, and each now has a surface for it.
+
+**Track 1's panel is a stepper, not a page.** Import → Chunk → Embedding → Run.
+The four stages are sequential and dependent — chunk settings mean nothing
+without a document, an embedding model cannot be checked against an index that
+does not exist, and a run is the consequence of the three decisions above it — so
+showing all four at once showed three things you could not act on and gave no
+clue which to touch first. Going *back* is always allowed, because adjusting
+chunk settings against the preview is inherently repetitive; going *forward* is
+gated, and the rail says why rather than just disabling itself.
+
+Step 3 **reports** the embedding model and hands management off to the Forge. It
+is a step rather than a footnote because it is the only choice in the flow that
+is irreversible with respect to the work — the model is stamped onto the index it
+builds, and changing it afterwards invalidates every vector — so the run should
+not be reachable without passing it. But pulling, switching and hardware fit
+belong to the Forge, which is the model console; a second one inside this panel
+would drift until one of them was wrong about what is installed.
+
+**The two tracks mirror each other, tab for tab.** Track 1's single *Corpus* tab
+used to be inventory, chunk settings, embedding model and the run all at once —
+which made its name wrong: the corpus is the artefact, and most of that screen
+was the machinery producing it. Split three ways, each tab has one job and the
+name means what it says:
+
+| | Track 1 | Track 2 |
+|---|---|---|
+| **inventory** — what this arm knows | Corpus | Graph |
+| **gaps** — what it cannot answer | — | Coverage |
+| **trace** — what one query actually did | Replay | Replay |
+| **authoring** — how knowledge gets in | Build | Build |
+
+Track 1 had no trace at all until now, and that asymmetry was a hole in the
+project's own claim: a comparison of two retrieval strategies where only one of
+them is auditable is not a comparison of two retrieval strategies, and *grounded*
+is not a property that can be asserted about an arm nobody can inspect. Replay
+shows the query, the passages it returned, the cosine distance each came back at,
+and the document each belongs to — enough to check a citation by reading it.
+
+Both replays read `rag_logs` and neither re-runs anything. Re-querying would show
+what the index returns *today* rather than what produced that answer, which after
+any re-ingest is a quietly different claim.
+
+**One writer, both tracks.** The `rag_logs` row is written at the tool dispatch
+boundary rather than inside `search_corpus` and `search_graph`. The two tools are
+deliberately separate implementations — that is what makes "which track answered
+this" recoverable — but recording them separately would have let the comparison
+measure two instrumentation methods as much as two retrieval strategies. Dispatch
+already owns `query_id`, the surface and the elapsed time, and a tool cannot
+forget to call it. A call with no `query_id` writes nothing: a tool trialled in
+Settings is not a query, and a row for one would land in the evaluation set as
+though it were.
+
+| | Track 1 · Build | Track 2 · Build |
+|---|---|---|
+| **Knowledge arrives by** | ingesting documents | somebody authoring nodes |
+| **Source of truth** | ChromaDB + `corpus.db` manifest | `config/knowledge_graph.yaml` |
+| **Stages** | store → extract → chunk → embed → stamp | validate → write → reload |
+| **Log** | `ingest_events`, per stage, level-tagged | `graph_edits`, including refusals |
+| **API** | `/api/corpus/*` | `/api/graph/authoring/*` |
+
+**Both are setup surfaces, never runtime tools** (Rule 5). Ingesting writes, and
+authoring writes; a model that could add to its own knowledge base could add
+something nobody reviewed. That is also the provenance claim that makes
+`search_graph` `SYSTEM` integrity rather than `CORPUS` — every node in the graph
+was authored by a person and reviews in a diff.
+
+**Chunking is pure, which is what makes it adjustable.** `services/chunking` does
+no I/O, so the panel can run the real chunker over the real document at candidate
+settings and write nothing. Chunk size and overlap have a large effect on
+retrieval and are impossible to reason about as numbers; the preview makes the
+question cost a parse instead of an embedding run. Three strategies —
+`recursive` (default), `paragraph`, `fixed` — with `fixed` kept deliberately as
+the naive baseline, because a retrieval result that improves when you switch away
+from it is evidence that structure-aware chunking mattered.
+
+**Embeddings come from the selected model, never from Chroma.** Chroma will embed
+text for you with its own bundled MiniLM. Doing so would put MiniLM vectors in a
+collection stamped `nomic-embed-text` and make every similarity score meaningless
+with nothing on screen to say so. Ingestion passes explicit vectors, and
+`search_corpus` passes `query_embeddings` — the same failure on the query side,
+where no stamp can catch it.
+
+**Failure is partial and recorded as such.** Embedding runs in batches of 16 and
+records the outcome per chunk, so a run that dies at chunk 400 of 900 keeps the
+first 399 and `Resume` picks up exactly the rest. Rolling back would discard
+minutes of correct work over one bad row; not recording it would produce a corpus
+that claims to be complete.
+
+**The authored graph lives in `config/`, not `app/data/`.** `docker-compose`
+mounts `app/` read-only — correctly, since the application source is not
+something the application should rewrite — so authoring into it worked in a bare
+`uvicorn` and failed in the container. `config/` is writable *and* git-tracked, so
+§3.4's "the file is the authoring surface and it reviews in a pull request" still
+holds exactly. The packaged copy is a seed; the first edit copies it across.
+
+**Validate before write, always.** The candidate graph is built in memory first
+and the file is rewritten only if that build succeeded, so a rejected edit leaves
+the YAML byte-identical and Track 2 never goes down because of a bad edit. A
+typo'd edge type is not a crash — §3.4 — it is a silent retrieval failure, and
+catching it at edit time rather than at the next load is the whole point.
+
+---
+
 ### 3.8 One track on screen, and what happens when it cannot be read
 
 The window reads `GET /api/rag/config` and renders the tabs of the live track
@@ -653,16 +763,24 @@ window follows the setting. There is no badge naming the track either: with one
 track on screen it separates that track from nothing, and the window's subtitle
 already says which arm is live.
 
-**Why the other track still exists.** The graph is *authored* while Track 1 is
-live. Coverage is the to-do list you work through before switching, so a window
-that hid the graph until the graph was selected would make Track 2 impossible to
-prepare from inside the app. The resolution is rank, not removal: the live track
-*is* the window, and the other one is reachable from the notice that already
-explained why you would want it. On the detour the header carries a way back and
-`TrackBanner` states the relationship for as long as it lasts — replay being the
-case that needed it, since with Track 1 live nothing writes a traversal and the
-tab would otherwise keep rendering old walks with no sign they were recorded
-under a setting that no longer holds.
+**The other track is not reachable at all.** Strictly: no detour, no "inspect the
+other one", no off-track banner — there is no off-track state to be in, because
+the window renders the live track's tabs and nothing else exists to navigate to.
+The command palette filters its Blueprints rows the same way, and the window
+refuses a tab belonging to the other arm even if something asks for one by name.
+
+This is the UI half of the rule the tool registry enforces on the model (§7). A
+comparison whose arms are separated for the orchestrator and merged for the
+operator is separated in the half nobody reads and merged in the half everybody
+does.
+
+**The cost, stated.** You author the graph *before* switching to it, so with
+Track 1 live there is no way to reach Build or Coverage. That is deliberate, and
+the resolution is one setting rather than a second door: switch the track in
+Settings → Knowledge Base and Track 2's tabs are what this window is. The switch
+is written to a committed file and recorded per query, so "I was working on the
+graph" stays a recoverable fact about the run rather than something the window
+let you do invisibly.
 
 **Four failures, four answers.** Rule 4 forbids a shared blank page, so each
 step of "which track is live" fails distinctly:
@@ -670,13 +788,13 @@ step of "which track is live" fails distinctly:
 | Failure | What the window does |
 |---|---|
 | Track not read yet | A skeleton tab row at its final height. Guessing a track and correcting it a moment later would swap the whole tab row under the cursor, so nothing is asserted until it is known |
-| Config unreadable (backend down, bad JSON) | Names the error and offers Retry. A previously read track is kept and marked stale — a failed *re-read* is not evidence the track changed, and blanking a view that was correct a second ago loses more than the stale badge costs. If nothing was ever read, the graph views are offered anyway, because the graph is the track that is actually built |
-| Live track not ready | Still what the window shows — readiness is *reported, never enforced*, the same rule `KnowledgeBasePanel` follows. But when the other track has something to show, a notice says so and links to it, so an empty window is never the end of the road. Offered, never taken automatically: silently redirecting would make the window disagree with Settings without saying so |
+| Config unreadable (backend down, bad JSON) | Names the error and offers Retry. A previously read track is kept and marked stale — a failed *re-read* is not evidence the track changed. If nothing was ever read it shows **neither** arm: guessing here would be the strict rule failing open in the one direction it must not, showing Track 2 *because* the setting that selects a track could not be read |
+| Live track not ready | Still what the window shows — readiness is *reported, never enforced*, the same rule `KnowledgeBasePanel` follows. The notice says what it is waiting on and points at the track switch. It does **not** offer the other track's views: that was the detour, and the detour is what made two arms feel like tabs of one thing |
 | Track known, view empty | Each view's own `Unavailable`, naming the milestone that owes the data |
 
-Today's default lands in row 3: Track 1 is the declared baseline but waits on
-M2, so selecting it gives an empty Corpus tab and a one-click offer to inspect
-the authored graph.
+Row 3 is the common case while a corpus is still being built: Track 1 is the
+declared baseline, so selecting it before anything is ingested gives a Corpus tab
+that says what it is waiting on and where to change the track.
 
 ---
 

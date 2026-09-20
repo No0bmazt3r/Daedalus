@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 /**
+ * Exit animation names the settle logic waits for.
+ *
+ * A set rather than one string, because `flow` uses its own outbound keyframes
+ * and an exit this does not recognise is not merely unanimated — the section
+ * unmounts immediately, mid-fade.
+ */
+const EXIT_ANIMATIONS = new Set(['domino-out', 'collapse-flow-out'])
+
+/**
  * The app's one collapse/expand animation — the domino cascade from Odysseus'
  * sidebar sections, as a component every collapsible thing here uses.
  *
@@ -34,20 +43,51 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
  * therefore cascades; a body that is one `<div>` of prose arrives as one beat,
  * which is right — prose is not a list and staggering its paragraphs would be
  * motion for its own sake.
+ *
+ * This is also the usual mistake. Wrapping a panel's sections in a layout
+ * `<div>` and passing that makes the whole panel *one* child, so the cascade
+ * degrades to a single beat and the panel appears to pop in fully formed. The
+ * fix is to pass the sections directly and put the layout classes on
+ * `className`, which lands them on the domino element itself.
+ *
+ * ## Two variants, because two different things are opening
+ *
+ * `domino` (the default) is for a **list of rows**: a short springy arrival with
+ * a slight sideways lean, which reads as items dropping into place. It is the
+ * sidebar's cascade and it should stay exactly as it is.
+ *
+ * `flow` is for a **panel of sections** — a model's full detail, a settings
+ * body. Two differences, both because a panel is bigger than a list:
+ *
+ * 1. **The container unfolds.** `grid-template-rows: 0fr → 1fr` animates the
+ *    height, so the box grows into place instead of appearing at full size with
+ *    its contents catching up. On a tall panel that snap is most of what reads
+ *    as "pop", and no amount of tuning the children's motion hides it.
+ * 2. **The sections settle downward, without the bounce.** They arrive from
+ *    slightly above rather than below, so the eye is carried top-to-bottom as
+ *    the panel fills — the direction it will then read in. An overshoot on a
+ *    400px panel is a wobble; on a 28px row it is character.
  */
 export function Collapse({
   open,
   children,
   className = '',
+  variant = 'domino',
 }: {
   open: boolean
   children: ReactNode
   /** Applied to the animated element itself, so callers keep their layout. */
   className?: string
+  /** `domino` for a list of rows, `flow` for a panel of sections. */
+  variant?: 'domino' | 'flow'
 }) {
   // What is on screen, which lags `open` by the length of the outbound cascade.
   const [mounted, setMounted] = useState(open)
   const [phase, setPhase] = useState<'in' | 'out' | null>(open ? null : null)
+  // `flow` only: drives the height transition. Separate from `mounted` because
+  // a transition needs two states in two different frames — mounting already
+  // at `1fr` would transition from nothing and simply appear.
+  const [unfolded, setUnfolded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const generation = useRef(0)
 
@@ -57,13 +97,22 @@ export function Collapse({
     if (open) {
       setMounted(true)
       setPhase('in')
+      // One frame after mounting at `0fr`, so the browser has a start value to
+      // transition from. Setting it in the same pass is the classic no-op: the
+      // element is only ever laid out at the end state.
+      const frame = requestAnimationFrame(() => {
+        if (generation.current === gen) setUnfolded(true)
+      })
       // Long enough for the last row's delay plus its duration. Clearing it
       // matters: a row left carrying a finished animation cannot replay it.
       const timer = window.setTimeout(() => {
         if (generation.current === gen) setPhase(null)
       }, 900)
-      return () => window.clearTimeout(timer)
+      return () => { window.clearTimeout(timer); cancelAnimationFrame(frame) }
     }
+
+    // Fold first, so the box is already shrinking while the rows peel off.
+    setUnfolded(false)
 
     // Closing from a closed state — nothing to play.
     if (!mounted) return
@@ -83,7 +132,7 @@ export function Collapse({
     const raf = requestAnimationFrame(() => {
       if (generation.current !== gen) return
       const running = (ref.current?.getAnimations({ subtree: true }) ?? []).filter(
-        (a) => (a as CSSAnimation).animationName === 'domino-out'
+        (a) => EXIT_ANIMATIONS.has((a as CSSAnimation).animationName)
       )
       if (running.length === 0) {
         settle()
@@ -104,9 +153,26 @@ export function Collapse({
 
   if (!mounted) return null
 
-  return (
-    <div ref={ref} data-domino={phase ?? undefined} className={className}>
+  const body = (
+    <div
+      ref={ref}
+      data-domino={phase ?? undefined}
+      data-flow={variant === 'flow' ? 'true' : undefined}
+      className={className}
+    >
       {children}
+    </div>
+  )
+
+  if (variant !== 'flow') return body
+
+  // The unfolding wrapper. `grid-template-rows` rather than `max-height`,
+  // because a max-height animation has to guess a number: guess low and the
+  // content clips, guess high and the transition spends most of its duration
+  // animating empty space, which is the "opens slowly then snaps" feel.
+  return (
+    <div className={`collapse-flow ${unfolded ? 'collapse-flow-open' : ''}`}>
+      <div>{body}</div>
     </div>
   )
 }

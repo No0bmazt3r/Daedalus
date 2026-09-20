@@ -153,29 +153,71 @@ def status() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — a broken graph is "not ready", not a 500
         graph_detail = str(exc)
 
-    vector_ready, vector_detail = False, "ingestion is not built (M2)"
+    # What is actually standing between this arm and answering a question.
+    #
+    # This used to report `blocked_by: "M2"` whenever the arm was not ready,
+    # which stopped being true the moment ingestion was built: an empty corpus
+    # is not a missing milestone, it is a corpus with nothing in it, and the two
+    # have completely different fixes. Telling somebody to wait for M2 when the
+    # answer is "import a document" is worse than saying nothing — it names a
+    # blocker they cannot act on and hides the one they can.
+    #
+    # So the blocker is computed from the pipeline's own state, in the order the
+    # pipeline runs: no documents → nothing chunked → nothing embedded → a
+    # mismatched index. Each step is the thing you would do next.
+    vector_ready, vector_detail, vector_blocker = False, "the corpus could not be read", None
     try:
-        from ..db import vector_store  # noqa: PLC0415
+        from ..db import corpus_store, vector_store  # noqa: PLC0415
 
         from . import embedding_models  # noqa: PLC0415
 
         health = vector_store.stats()
         index = embedding_models.index_state()
+        corpus = corpus_store.stats()
+
         # Ready means "can answer this query", which is stricter than "has rows
         # in it". An index built by a different embedding model, or by something
         # that never recorded itself, is refused by the query path — so this arm
         # is not ready either, and saying otherwise would put a track into the
         # comparison that cannot run.
-        #
-        # Reachable and empty stays distinguishable from unreachable: one waits
-        # on M2, the other on Chroma not running — which `./daedalus.sh dev`
-        # does not start.
         vector_ready = index["index_state"] == "current"
         vector_detail = index["index_detail"]
-        if index["index_state"] == "empty" and health.get("available"):
-            vector_detail = f"reachable ({health['mode']} mode) · {vector_detail}"
+
+        if vector_ready:
+            vector_blocker = None
+        elif not corpus.get("available"):
+            vector_blocker = "the corpus store"
+            vector_detail = corpus.get("error") or "the corpus manifest could not be opened"
+        elif not corpus.get("documents"):
+            vector_blocker = "documents"
+            vector_detail = (
+                "the corpus is empty — import documents in Blueprints → Corpus"
+            )
+        elif not corpus.get("chunks"):
+            vector_blocker = "an ingest run"
+            vector_detail = (
+                f"{corpus['documents']} document(s) imported but never chunked — "
+                "run the pipeline in Blueprints → Corpus"
+            )
+        elif not corpus.get("embedded"):
+            vector_blocker = "embedding"
+            vector_detail = (
+                f"{corpus['chunks']} chunks written, none embedded · {index['index_detail']}"
+            )
+        else:
+            # Chunks, vectors, and still not ready: the index exists but the
+            # query path will refuse it. `index_detail` is the only thing here
+            # that knows why, and it is the actionable half.
+            vector_blocker = "a matching index"
+
+        # Reachable and empty stays distinguishable from unreachable: one is a
+        # corpus nobody has filled, the other is Chroma not running — which
+        # `./daedalus.sh dev` does start, but a bare uvicorn does not.
+        if index["index_state"] == "empty" and not health.get("available"):
+            vector_detail = f"the vector store is unreachable · {vector_detail}"
     except Exception as exc:  # noqa: BLE001
         vector_detail = str(exc)
+        vector_blocker = "the corpus store"
 
     return {
         **read(),
@@ -186,7 +228,7 @@ def status() -> dict[str, Any]:
                 "role": "baseline / control",
                 "ready": vector_ready,
                 "detail": vector_detail,
-                "blocked_by": None if vector_ready else "M2",
+                "blocked_by": vector_blocker,
             },
             {
                 "id": "graph",

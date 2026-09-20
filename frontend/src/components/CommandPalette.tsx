@@ -8,7 +8,8 @@ import { useSettings } from '../contexts/SettingsContext'
 import { sessionLabel } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
 import { SETTINGS_PANELS, getGroupLabel } from '../lib/settingsRegistry'
-import { BLUEPRINT_TABS, type BlueprintsTab } from './blueprints/BlueprintsWindow'
+import { fetchRagConfig, type RagTrack } from '../lib/blueprintsClient'
+import { BLUEPRINT_TABS, type BlueprintsTab } from './blueprints/tabs'
 
 /**
  * The command palette — `Ctrl+K`.
@@ -154,32 +155,55 @@ function Row({
   )
 }
 
+/**
+ * Mounted only while it is open — the root renders it behind `paletteOpen`,
+ * and there is deliberately no `open` prop.
+ *
+ * A palette has to start empty every time: last search still in the box, and
+ * the selection still three rows down a list that has since changed, is not a
+ * palette anybody wants. Kept mounted, that means resetting `query` and
+ * `active` in an effect on `open` — which renders the stale state first and
+ * then immediately renders again to correct it, and is what
+ * `react(set-state-in-effect)` is pointing at.
+ *
+ * Mounting it on open makes the `useState` initialisers do that work instead:
+ * fresh state by construction, one render, no effect and nothing to correct.
+ * Unmounting costs nothing here because there is no exit animation to play and
+ * nothing worth preserving between openings.
+ */
 export function CommandPalette({
-  open, onClose, actions,
+  onClose, actions,
 }: {
-  open: boolean
   onClose: () => void
   actions: PaletteActions
 }) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [stores, setStores] = useState<LogStore[]>([])
+  // Which arm is answering, so the Blueprints tabs offered are the ones that
+  // window will actually open. Null until known, and a null hides all of them
+  // rather than guessing — an unreadable setting is not a reason to offer
+  // Track 2's views.
+  const [track, setTrack] = useState<RagTrack | null>(null)
   const { sessions, activeSessionId } = useSessions()
   const { isIncognito } = useSettings()
 
-  // Read on open rather than held: the catalogue's row counts move constantly
-  // and a palette quoting a number from the last time it was opened would be
-  // asserting something it has not checked.
+  // Read per opening rather than held: the catalogue's row counts move
+  // constantly, and a palette quoting a number from the last time it was opened
+  // would be asserting something it has not checked. This is the one thing here
+  // that genuinely synchronises with an external system, which is what an
+  // effect is for — and the `setStores` inside it is async, not the synchronous
+  // render-twice the rule is about.
   useEffect(() => {
-    if (!open) return
-    setQuery('')
-    setActive(0)
     let cancelled = false
     logCatalogue()
       .then((loaded) => !cancelled && setStores(loaded))
       .catch(() => !cancelled && setStores([]))
+    fetchRagConfig()
+      .then((c) => !cancelled && setTrack(c.track))
+      .catch(() => !cancelled && setTrack(null))
     return () => { cancelled = true }
-  }, [open])
+  }, [])
 
   const run = useCallback(
     (item: PaletteItem) => {
@@ -219,7 +243,10 @@ export function CommandPalette({
       keywords: 'knowledge map graph corpus rag track window',
       run: () => actions.openBlueprints(),
     })
-    for (const t of BLUEPRINT_TABS) {
+    // Only the live track's tabs. Blueprints shows one arm and refuses a tab
+    // belonging to the other, so listing them all would put rows in the palette
+    // that silently land somewhere else.
+    for (const t of BLUEPRINT_TABS.filter((t) => t.track === track)) {
       push({
         id: `go:blueprints:${t.id}`, group: 'Go to', icon: Map, crumb: 'Blueprints',
         label: t.label, keywords: `${t.keywords} knowledge map rag`,
@@ -286,7 +313,7 @@ export function CommandPalette({
     })
 
     return out
-  }, [actions, activeSessionId, isIncognito, sessions, stores])
+  }, [actions, activeSessionId, isIncognito, sessions, stores, track])
 
   // Filtered, grouped, capped — and flattened in the same pass, because the
   // arrow keys walk the list as rendered and a second traversal to build that
@@ -339,8 +366,6 @@ export function CommandPalette({
       if (item) run(item)
     }
   }
-
-  if (!open) return null
 
   return (
     <div

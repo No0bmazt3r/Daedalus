@@ -1,400 +1,481 @@
-# Daedalus knowledge graph — Track 2 (Agentic GraphRAG) source of truth.
-#
-# `MODULES.md` §3.4 chose NetworkX over a git-tracked file rather than a sixth
-# SQLite store: the graph is small, hand-authored, and changes by editing rather
-# than by insert. So this file *is* the authoring surface — it diffs in a pull
-# request, and Labyrinth Blueprints renders it.
-#
-# Schema is `PROJECT.md` §5 Track 2: 7 node types, 7 edge types. The loader
-# (services/knowledge_graph.py) validates against that list and refuses anything
-# else, because a typo'd edge type is a silent retrieval failure otherwise.
-#
-# ## Aliases are load-bearing, not decoration
-#
-# Track 2 is deliberately embedding-free (see the module docstring in
-# graph_tools.py). The way a natural-language question reaches a starting node is
-# the `aliases` list on each node — so "the CO2 sensor", "carbon dioxide" and
-# "co2_ppm" all resolve to the same node deterministically. Every alias you fail
-# to author is a question the graph answers worse. When Blueprints reports an
-# entry-point miss, the fix is usually here rather than in the code.
-#
-# ## Node ids are `Type:local_id`
-#
-# Globally unique, and readable in a traversal path without a lookup.
-
 nodes:
-  # ── Sensors ────────────────────────────────────────────────────────────────
-  # Column names match `sensor_readings` in db/sensor_store.py exactly. That is
-  # the join between the graph and the real telemetry: a graph answer about
-  # `Sensor:co2_ppm` and a tool call to get_trend('co2_ppm') refer to one thing.
-  - id: Sensor:co2_ppm
-    type: Sensor
-    label: CO₂ concentration
-    aliases: [co2, co2_ppm, carbon dioxide, CO2 sensor, ppm, gas concentration]
-    unit: ppm
-    column: co2_ppm
-    description: NDIR CO₂ concentration at the absorber outlet.
+- id: Sensor:co2_ppm
+  type: Sensor
+  label: CO₂ concentration
+  aliases:
+  - co2
+  - co2_ppm
+  - carbon dioxide
+  - CO2 sensor
+  - ppm
+  - gas concentration
+  unit: ppm
+  column: co2_ppm
+  description: NDIR CO₂ concentration at the absorber outlet.
+- id: Sensor:temp_c
+  type: Sensor
+  label: Reactor temperature
+  aliases:
+  - temp
+  - temperature
+  - temp_c
+  - reactor temp
+  - thermal
+  - degrees
+  unit: °C
+  column: temp_c
+  description: Bulk solvent temperature in the reactor vessel.
+- id: Sensor:pressure_barg
+  type: Sensor
+  label: Vessel pressure
+  aliases:
+  - pressure
+  - pressure_barg
+  - barg
+  - vessel pressure
+  - head pressure
+  unit: barg
+  column: pressure_barg
+  description: Gauge pressure in the reactor headspace.
+- id: Sensor:ph
+  type: Sensor
+  label: Solvent pH
+  aliases:
+  - ph
+  - pH
+  - acidity
+  - alkalinity
+  - solvent ph
+  unit: pH
+  column: ph
+  description: pH of the circulating amine solvent.
+- id: Sensor:level_pct
+  type: Sensor
+  label: Solvent level
+  aliases:
+  - level_pct
+  - tank level
+  - solvent level
+  - fill level
+  - liquid level
+  - solvent inventory
+  unit: '%'
+  column: level_pct
+  description: Solvent inventory as a percentage of working volume.
+- id: OperatingMode:Absorption
+  type: OperatingMode
+  label: Absorption
+  aliases:
+  - absorption
+  - absorbing
+  - capture mode
+  - loading
+  description: Lean solvent contacts flue gas; CO₂ is captured into solution.
+- id: OperatingMode:Desorption
+  type: OperatingMode
+  label: Desorption
+  aliases:
+  - desorption
+  - regeneration
+  - stripping
+  - release mode
+  description: Rich solvent is heated to release CO₂ and regenerate the amine.
+- id: OperatingMode:Manual
+  type: OperatingMode
+  label: Manual
+  aliases:
+  - manual
+  - manual mode
+  - maintenance mode
+  - operator control
+  description: Operator-driven; automatic interlocks relaxed for maintenance.
+- id: Threshold:co2_high_absorption
+  type: Threshold
+  label: CO₂ > 600 ppm (Absorption)
+  aliases:
+  - co2 limit
+  - co2 high
+  - breakthrough limit
+  operator: '>'
+  value: 600
+  unit: ppm
+  applies_mode: Absorption
+  description: 'Outlet CO₂ above 600 ppm during Absorption indicates the solvent is no longer capturing
+    — the absorber is approaching breakthrough.
 
-  - id: Sensor:temp_c
-    type: Sensor
-    label: Reactor temperature
-    aliases: [temp, temperature, temp_c, reactor temp, thermal, degrees]
-    unit: °C
-    column: temp_c
-    description: Bulk solvent temperature in the reactor vessel.
+    '
+- id: Threshold:temp_high
+  type: Threshold
+  label: Temperature > 45 °C
+  aliases:
+  - temp limit
+  - overheating
+  - high temperature
+  operator: '>'
+  value: 45
+  unit: °C
+  applies_mode: null
+  description: Above 45 °C amine degradation accelerates sharply.
+- id: Threshold:pressure_high
+  type: Threshold
+  label: Pressure > 2.5 barg
+  aliases:
+  - pressure limit
+  - overpressure limit
+  - high pressure
+  operator: '>'
+  value: 2.5
+  unit: barg
+  applies_mode: null
+  description: Design limit of the reactor headspace before relief actuates.
+- id: Threshold:ph_low
+  type: Threshold
+  label: pH < 6.0
+  aliases:
+  - ph low
+  - acidic
+  - ph limit
+  operator: <
+  value: 6.0
+  unit: pH
+  applies_mode: null
+  description: 'Falling pH indicates oxidative degradation of the amine into heat-stable salts, which
+    do not regenerate.
 
-  - id: Sensor:pressure_barg
-    type: Sensor
-    label: Vessel pressure
-    aliases: [pressure, pressure_barg, barg, vessel pressure, head pressure]
-    unit: barg
-    column: pressure_barg
-    description: Gauge pressure in the reactor headspace.
+    '
+- id: Threshold:level_low
+  type: Threshold
+  label: Level < 20 %
+  aliases:
+  - low level
+  - level limit
+  - running dry
+  operator: <
+  value: 20
+  unit: '%'
+  applies_mode: null
+  description: Below 20 % the circulation pump risks cavitation.
+- id: AnomalyType:co2_breakthrough
+  type: AnomalyType
+  label: CO₂ breakthrough
+  aliases:
+  - breakthrough
+  - co2 spike
+  - high co2
+  - capture failure
+  severity: medium
+  description: 'Outlet CO₂ rises because the solvent has lost capacity — either loaded, degraded, or too
+    hot to absorb.
 
-  - id: Sensor:ph
-    type: Sensor
-    label: Solvent pH
-    aliases: [ph, pH, acidity, alkalinity, solvent ph]
-    unit: pH
-    column: ph
-    description: pH of the circulating amine solvent.
+    '
+- id: AnomalyType:thermal_runaway_risk
+  type: AnomalyType
+  label: Thermal runaway risk
+  aliases:
+  - thermal runaway
+  - overheating
+  - runaway
+  - exotherm
+  severity: high
+  description: 'Temperature and pressure rising together: the exotherm is outpacing cooling, and vapour
+    pressure follows temperature.
 
-  - id: Sensor:level_pct
-    type: Sensor
-    label: Solvent level
-    # Bare "level" is deliberately NOT an alias. It is the most common noun in
-    # the domain ("co2 level", "pH level") and authoring it here made both of
-    # those questions retrieve the solvent-level sensor alongside the right one.
-    # An alias that means something else in context is a bad alias — qualify it.
-    aliases: [level_pct, tank level, solvent level, fill level, liquid level, solvent inventory]
-    unit: '%'
-    column: level_pct
-    description: Solvent inventory as a percentage of working volume.
-
-  # ── Operating modes ────────────────────────────────────────────────────────
-  # CHECK constraint on sensor_readings.mode — these three and no others.
-  - id: OperatingMode:Absorption
-    type: OperatingMode
-    label: Absorption
-    aliases: [absorption, absorbing, capture mode, loading]
-    description: Lean solvent contacts flue gas; CO₂ is captured into solution.
-
-  - id: OperatingMode:Desorption
-    type: OperatingMode
-    label: Desorption
-    aliases: [desorption, regeneration, stripping, release mode]
-    description: Rich solvent is heated to release CO₂ and regenerate the amine.
-
-  - id: OperatingMode:Manual
-    type: OperatingMode
-    label: Manual
-    aliases: [manual, manual mode, maintenance mode, operator control]
-    description: Operator-driven; automatic interlocks relaxed for maintenance.
-
-  # ── Thresholds ─────────────────────────────────────────────────────────────
-  # Mode-qualified where the safe band genuinely differs by mode. `applies_mode:
-  # null` means the band holds in every mode.
-  - id: Threshold:co2_high_absorption
-    type: Threshold
-    label: CO₂ > 600 ppm (Absorption)
-    aliases: [co2 limit, co2 high, breakthrough limit]
-    operator: '>'
-    value: 600
-    unit: ppm
-    applies_mode: Absorption
-    description: >
-      Outlet CO₂ above 600 ppm during Absorption indicates the solvent is no
-      longer capturing — the absorber is approaching breakthrough.
-
-  - id: Threshold:temp_high
-    type: Threshold
-    label: Temperature > 45 °C
-    aliases: [temp limit, overheating, high temperature]
-    operator: '>'
-    value: 45
-    unit: °C
-    applies_mode: null
-    description: Above 45 °C amine degradation accelerates sharply.
-
-  - id: Threshold:pressure_high
-    type: Threshold
-    label: Pressure > 2.5 barg
-    aliases: [pressure limit, overpressure limit, high pressure]
-    operator: '>'
-    value: 2.5
-    unit: barg
-    applies_mode: null
-    description: Design limit of the reactor headspace before relief actuates.
-
-  - id: Threshold:ph_low
-    type: Threshold
-    label: pH < 6.0
-    aliases: [ph low, acidic, ph limit]
-    operator: '<'
-    value: 6.0
-    unit: pH
-    applies_mode: null
-    description: >
-      Falling pH indicates oxidative degradation of the amine into heat-stable
-      salts, which do not regenerate.
-
-  - id: Threshold:level_low
-    type: Threshold
-    label: Level < 20 %
-    aliases: [low level, level limit, running dry]
-    operator: '<'
-    value: 20
-    unit: '%'
-    applies_mode: null
-    description: Below 20 % the circulation pump risks cavitation.
-
-  # ── Anomaly types ──────────────────────────────────────────────────────────
-  - id: AnomalyType:co2_breakthrough
-    type: AnomalyType
-    label: CO₂ breakthrough
-    aliases: [breakthrough, co2 spike, high co2, capture failure]
-    severity: medium
-    description: >
-      Outlet CO₂ rises because the solvent has lost capacity — either loaded,
-      degraded, or too hot to absorb.
-
-  - id: AnomalyType:thermal_runaway_risk
-    type: AnomalyType
-    label: Thermal runaway risk
-    aliases: [thermal runaway, overheating, runaway, exotherm]
-    severity: high
-    description: >
-      Temperature and pressure rising together: the exotherm is outpacing
-      cooling, and vapour pressure follows temperature.
-
-  - id: AnomalyType:solvent_degradation
-    type: AnomalyType
-    label: Solvent degradation
-    aliases: [degradation, amine degradation, heat stable salts, solvent spent]
-    severity: medium
-    description: Irreversible loss of amine capacity, visible as falling pH.
-
-  - id: AnomalyType:overpressure
-    type: AnomalyType
-    label: Overpressure
-    aliases: [overpressure, pressure excursion, relief event]
-    severity: high
-    description: Headspace pressure above the vessel design limit.
-
-  - id: AnomalyType:low_solvent_inventory
-    type: AnomalyType
-    label: Low solvent inventory
-    aliases: [low level, empty tank, pump cavitation, low inventory]
-    severity: low
-    description: Solvent inventory too low to sustain circulation.
-
-  # ── SOP documents and their steps ──────────────────────────────────────────
-  #
-  # ⚠ PLACEHOLDER CORPUS. TODO.md:18 ("get the real document corpus") is still
-  # open, so these four `filename:` values name documents that do not exist yet.
-  # They are authored to the shape the real ones will take, not invented to be
-  # kept — when the real corpus lands, reconcile `filename` against the actual
-  # files before anything cites them. `filename` is the join key into
-  # `source_file` in chunk metadata (architecture/04), which is how the graph
-  # indexes the corpus without embedding anything; a filename that matches
-  # nothing retrieves nothing, silently.
-  - id: SOPDocument:NDIR_Calibration
-    type: SOPDocument
-    label: SOP — NDIR Analyser Calibration
-    aliases: [ndir calibration, calibrate analyser, co2 sensor calibration]
-    filename: SOP_NDIR_Calibration.pdf
-    version: '2.1'
-    description: Zero and span calibration of the NDIR CO₂ analyser.
-
-  - id: SOPStep:ndir_1
-    type: SOPStep
-    label: Isolate the analyser from process gas
-    step_number: 1
-    description: Close the sample isolation valve and vent the sample line.
-
-  - id: SOPStep:ndir_2
-    type: SOPStep
-    label: Zero with nitrogen
-    step_number: 2
-    description: Flow 99.999 % N₂ at 1.0 L/min until the reading is stable; zero.
-
-  - id: SOPStep:ndir_3
-    type: SOPStep
-    label: Span with certified gas
-    step_number: 3
-    description: Flow certified 1000 ppm CO₂; span the analyser; record the drift.
-
-  - id: SOPDocument:Emergency_Cooldown
-    type: SOPDocument
-    label: SOP — Emergency Cooldown
-    aliases: [emergency cooldown, cooldown, cool down, emergency cooling]
-    filename: SOP_Emergency_Cooldown.pdf
-    version: '3.0'
-    description: Controlled cooling when reactor temperature exceeds safe limits.
-
-  - id: SOPStep:cooldown_1
-    type: SOPStep
-    label: Switch reactor to Manual
-    step_number: 1
-    description: Take the reactor off automatic sequencing before intervening.
-
-  - id: SOPStep:cooldown_2
-    type: SOPStep
-    label: Increase cooling water flow to maximum
-    step_number: 2
-    description: Open the cooling water control valve fully; confirm flow.
-
-  - id: SOPStep:cooldown_3
-    type: SOPStep
-    label: Stop solvent regeneration heating
-    step_number: 3
-    description: Isolate the reboiler steam supply to remove the heat input.
-
-  - id: SOPStep:cooldown_4
-    type: SOPStep
-    label: Monitor until below 40 °C
-    step_number: 4
-    description: Hold on Manual until bulk temperature is under 40 °C for 10 min.
-
-  - id: SOPDocument:Solvent_Management
-    type: SOPDocument
-    label: SOP — Solvent Sampling and Replacement
-    aliases: [solvent management, replace solvent, solvent sampling, top up]
-    filename: SOP_Solvent_Management.pdf
-    version: '1.4'
-    description: Sampling, titration and replacement of degraded amine solvent.
-
-  - id: SOPStep:solvent_1
-    type: SOPStep
-    label: Draw a sample from the circulation loop
-    step_number: 1
-    description: Take 250 mL from the sample point with the pump running.
-
-  - id: SOPStep:solvent_2
-    type: SOPStep
-    label: Titrate for amine concentration and heat-stable salts
-    step_number: 2
-    description: Report HSS as a percentage of total alkalinity.
-
-  - id: SOPStep:solvent_3
-    type: SOPStep
-    label: Replace charge if HSS exceeds 15 %
-    step_number: 3
-    description: Drain to the spent-solvent drum and recharge with fresh amine.
-
-  - id: SOPDocument:Pressure_Relief
-    type: SOPDocument
-    label: SOP — Pressure Relief and Recovery
-    aliases: [pressure relief, relief valve, depressurise, overpressure procedure]
-    filename: SOP_Pressure_Relief.pdf
-    version: '2.0'
-    description: Response to a headspace overpressure excursion.
-
-  - id: SOPStep:relief_1
-    type: SOPStep
-    label: Confirm the relief path is clear
-    step_number: 1
-    description: Verify the vent line isolation valve is open before venting.
-
-  - id: SOPStep:relief_2
-    type: SOPStep
-    label: Reduce gas feed rate
-    step_number: 2
-    description: Throttle the blower to lower the pressure rise rate.
-
-  # ── Anomaly records (historical instances) ─────────────────────────────────
-  # These mirror rows the SCADA subsystem writes to `anomaly_records`. Authored
-  # here so the "has this happened before?" half of a multi-hop query is
-  # answerable structurally rather than by another retrieval pass.
-  - id: AnomalyRecord:2026-08-14_co2
-    type: AnomalyRecord
-    label: CO₂ breakthrough, 14 Aug 2026
-    occurred_at: '2026-08-14T09:41:00Z'
-    severity: medium
-    resolution: NDIR analyser recalibrated; drift of 140 ppm found.
-    description: Outlet CO₂ reached 910 ppm during Absorption.
-
-  - id: AnomalyRecord:2026-09-02_co2
-    type: AnomalyRecord
-    label: CO₂ breakthrough, 02 Sep 2026
-    occurred_at: '2026-09-02T14:05:00Z'
-    severity: medium
-    resolution: Solvent replaced; HSS measured at 18 %.
-    description: Gradual CO₂ rise over four hours with pH falling in parallel.
-
-  - id: AnomalyRecord:2026-09-11_thermal
-    type: AnomalyRecord
-    label: Thermal excursion, 11 Sep 2026
-    occurred_at: '2026-09-11T03:20:00Z'
-    severity: high
-    resolution: Emergency cooldown executed; reboiler control valve found sticking.
-    description: Temperature reached 52 °C with pressure at 2.7 barg.
-
+    '
+- id: AnomalyType:solvent_degradation
+  type: AnomalyType
+  label: Solvent degradation
+  aliases:
+  - degradation
+  - amine degradation
+  - heat stable salts
+  - solvent spent
+  severity: medium
+  description: Irreversible loss of amine capacity, visible as falling pH.
+- id: AnomalyType:overpressure
+  type: AnomalyType
+  label: Overpressure
+  aliases:
+  - overpressure
+  - pressure excursion
+  - relief event
+  severity: high
+  description: Headspace pressure above the vessel design limit.
+- id: AnomalyType:low_solvent_inventory
+  type: AnomalyType
+  label: Low solvent inventory
+  aliases:
+  - low level
+  - empty tank
+  - pump cavitation
+  - low inventory
+  severity: low
+  description: Solvent inventory too low to sustain circulation.
+- id: SOPDocument:NDIR_Calibration
+  type: SOPDocument
+  label: SOP — NDIR Analyser Calibration
+  aliases:
+  - ndir calibration
+  - calibrate analyser
+  - co2 sensor calibration
+  filename: SOP_NDIR_Calibration.pdf
+  version: '2.1'
+  description: Zero and span calibration of the NDIR CO₂ analyser.
+- id: SOPStep:ndir_1
+  type: SOPStep
+  label: Isolate the analyser from process gas
+  step_number: 1
+  description: Close the sample isolation valve and vent the sample line.
+- id: SOPStep:ndir_2
+  type: SOPStep
+  label: Zero with nitrogen
+  step_number: 2
+  description: Flow 99.999 % N₂ at 1.0 L/min until the reading is stable; zero.
+- id: SOPStep:ndir_3
+  type: SOPStep
+  label: Span with certified gas
+  step_number: 3
+  description: Flow certified 1000 ppm CO₂; span the analyser; record the drift.
+- id: SOPDocument:Emergency_Cooldown
+  type: SOPDocument
+  label: SOP — Emergency Cooldown
+  aliases:
+  - emergency cooldown
+  - cooldown
+  - cool down
+  - emergency cooling
+  filename: SOP_Emergency_Cooldown.pdf
+  version: '3.0'
+  description: Controlled cooling when reactor temperature exceeds safe limits.
+- id: SOPStep:cooldown_1
+  type: SOPStep
+  label: Switch reactor to Manual
+  step_number: 1
+  description: Take the reactor off automatic sequencing before intervening.
+- id: SOPStep:cooldown_2
+  type: SOPStep
+  label: Increase cooling water flow to maximum
+  step_number: 2
+  description: Open the cooling water control valve fully; confirm flow.
+- id: SOPStep:cooldown_3
+  type: SOPStep
+  label: Stop solvent regeneration heating
+  step_number: 3
+  description: Isolate the reboiler steam supply to remove the heat input.
+- id: SOPStep:cooldown_4
+  type: SOPStep
+  label: Monitor until below 40 °C
+  step_number: 4
+  description: Hold on Manual until bulk temperature is under 40 °C for 10 min.
+- id: SOPDocument:Solvent_Management
+  type: SOPDocument
+  label: SOP — Solvent Sampling and Replacement
+  aliases:
+  - solvent management
+  - replace solvent
+  - solvent sampling
+  - top up
+  filename: SOP_Solvent_Management.pdf
+  version: '1.4'
+  description: Sampling, titration and replacement of degraded amine solvent.
+- id: SOPStep:solvent_1
+  type: SOPStep
+  label: Draw a sample from the circulation loop
+  step_number: 1
+  description: Take 250 mL from the sample point with the pump running.
+- id: SOPStep:solvent_2
+  type: SOPStep
+  label: Titrate for amine concentration and heat-stable salts
+  step_number: 2
+  description: Report HSS as a percentage of total alkalinity.
+- id: SOPStep:solvent_3
+  type: SOPStep
+  label: Replace charge if HSS exceeds 15 %
+  step_number: 3
+  description: Drain to the spent-solvent drum and recharge with fresh amine.
+- id: SOPDocument:Pressure_Relief
+  type: SOPDocument
+  label: SOP — Pressure Relief and Recovery
+  aliases:
+  - pressure relief
+  - relief valve
+  - depressurise
+  - overpressure procedure
+  filename: SOP_Pressure_Relief.pdf
+  version: '2.0'
+  description: Response to a headspace overpressure excursion.
+- id: SOPStep:relief_1
+  type: SOPStep
+  label: Confirm the relief path is clear
+  step_number: 1
+  description: Verify the vent line isolation valve is open before venting.
+- id: SOPStep:relief_2
+  type: SOPStep
+  label: Reduce gas feed rate
+  step_number: 2
+  description: Throttle the blower to lower the pressure rise rate.
+- id: AnomalyRecord:2026-08-14_co2
+  type: AnomalyRecord
+  label: CO₂ breakthrough, 14 Aug 2026
+  occurred_at: '2026-08-14T09:41:00Z'
+  severity: medium
+  resolution: NDIR analyser recalibrated; drift of 140 ppm found.
+  description: Outlet CO₂ reached 910 ppm during Absorption.
+- id: AnomalyRecord:2026-09-02_co2
+  type: AnomalyRecord
+  label: CO₂ breakthrough, 02 Sep 2026
+  occurred_at: '2026-09-02T14:05:00Z'
+  severity: medium
+  resolution: Solvent replaced; HSS measured at 18 %.
+  description: Gradual CO₂ rise over four hours with pH falling in parallel.
+- id: AnomalyRecord:2026-09-11_thermal
+  type: AnomalyRecord
+  label: Thermal excursion, 11 Sep 2026
+  occurred_at: '2026-09-11T03:20:00Z'
+  severity: high
+  resolution: Emergency cooldown executed; reboiler control valve found sticking.
+  description: Temperature reached 52 °C with pressure at 2.7 barg.
 edges:
-  # Sensor ──MONITORED_IN──▶ OperatingMode
-  - {from: Sensor:co2_ppm,        type: MONITORED_IN, to: OperatingMode:Absorption}
-  - {from: Sensor:co2_ppm,        type: MONITORED_IN, to: OperatingMode:Desorption}
-  - {from: Sensor:temp_c,         type: MONITORED_IN, to: OperatingMode:Absorption}
-  - {from: Sensor:temp_c,         type: MONITORED_IN, to: OperatingMode:Desorption}
-  - {from: Sensor:temp_c,         type: MONITORED_IN, to: OperatingMode:Manual}
-  - {from: Sensor:pressure_barg,  type: MONITORED_IN, to: OperatingMode:Absorption}
-  - {from: Sensor:pressure_barg,  type: MONITORED_IN, to: OperatingMode:Desorption}
-  - {from: Sensor:pressure_barg,  type: MONITORED_IN, to: OperatingMode:Manual}
-  - {from: Sensor:ph,             type: MONITORED_IN, to: OperatingMode:Absorption}
-  - {from: Sensor:level_pct,      type: MONITORED_IN, to: OperatingMode:Absorption}
-  - {from: Sensor:level_pct,      type: MONITORED_IN, to: OperatingMode:Desorption}
-
-  # Sensor ──HAS_THRESHOLD──▶ Threshold
-  - {from: Sensor:co2_ppm,       type: HAS_THRESHOLD, to: Threshold:co2_high_absorption}
-  - {from: Sensor:temp_c,        type: HAS_THRESHOLD, to: Threshold:temp_high}
-  - {from: Sensor:pressure_barg, type: HAS_THRESHOLD, to: Threshold:pressure_high}
-  - {from: Sensor:ph,            type: HAS_THRESHOLD, to: Threshold:ph_low}
-  - {from: Sensor:level_pct,     type: HAS_THRESHOLD, to: Threshold:level_low}
-
-  # Threshold ──TRIGGERS──▶ AnomalyType
-  # thermal_runaway_risk is reachable from BOTH temp and pressure. That is the
-  # multi-hop case PROJECT.md §5 names as the key differentiator — two sensors
-  # converging on one anomaly type is a join flat retrieval has to get lucky on.
-  - {from: Threshold:co2_high_absorption, type: TRIGGERS, to: AnomalyType:co2_breakthrough}
-  - {from: Threshold:temp_high,           type: TRIGGERS, to: AnomalyType:thermal_runaway_risk}
-  - {from: Threshold:pressure_high,       type: TRIGGERS, to: AnomalyType:thermal_runaway_risk}
-  - {from: Threshold:temp_high,           type: TRIGGERS, to: AnomalyType:co2_breakthrough}
-  - {from: Threshold:pressure_high,       type: TRIGGERS, to: AnomalyType:overpressure}
-  - {from: Threshold:ph_low,              type: TRIGGERS, to: AnomalyType:solvent_degradation}
-  - {from: Threshold:level_low,           type: TRIGGERS, to: AnomalyType:low_solvent_inventory}
-
-  # AnomalyType ──RESOLVED_BY──▶ SOPDocument
-  # NOTE: AnomalyType:low_solvent_inventory has no RESOLVED_BY edge. That is a
-  # real authoring gap, not an oversight to paper over — it is what the Blueprints
-  # coverage view should report on day one, and the proof the view works.
-  - {from: AnomalyType:co2_breakthrough,    type: RESOLVED_BY, to: SOPDocument:NDIR_Calibration}
-  - {from: AnomalyType:co2_breakthrough,    type: RESOLVED_BY, to: SOPDocument:Solvent_Management}
-  - {from: AnomalyType:thermal_runaway_risk, type: RESOLVED_BY, to: SOPDocument:Emergency_Cooldown}
-  - {from: AnomalyType:solvent_degradation, type: RESOLVED_BY, to: SOPDocument:Solvent_Management}
-  - {from: AnomalyType:overpressure,        type: RESOLVED_BY, to: SOPDocument:Pressure_Relief}
-
-  # SOPDocument ──CONTAINS──▶ SOPStep
-  - {from: SOPDocument:NDIR_Calibration,   type: CONTAINS, to: SOPStep:ndir_1}
-  - {from: SOPDocument:NDIR_Calibration,   type: CONTAINS, to: SOPStep:ndir_2}
-  - {from: SOPDocument:NDIR_Calibration,   type: CONTAINS, to: SOPStep:ndir_3}
-  - {from: SOPDocument:Emergency_Cooldown, type: CONTAINS, to: SOPStep:cooldown_1}
-  - {from: SOPDocument:Emergency_Cooldown, type: CONTAINS, to: SOPStep:cooldown_2}
-  - {from: SOPDocument:Emergency_Cooldown, type: CONTAINS, to: SOPStep:cooldown_3}
-  - {from: SOPDocument:Emergency_Cooldown, type: CONTAINS, to: SOPStep:cooldown_4}
-  - {from: SOPDocument:Solvent_Management, type: CONTAINS, to: SOPStep:solvent_1}
-  - {from: SOPDocument:Solvent_Management, type: CONTAINS, to: SOPStep:solvent_2}
-  - {from: SOPDocument:Solvent_Management, type: CONTAINS, to: SOPStep:solvent_3}
-  - {from: SOPDocument:Pressure_Relief,    type: CONTAINS, to: SOPStep:relief_1}
-  - {from: SOPDocument:Pressure_Relief,    type: CONTAINS, to: SOPStep:relief_2}
-
-  # AnomalyRecord ──INSTANCE_OF──▶ AnomalyType
-  - {from: 'AnomalyRecord:2026-08-14_co2',     type: INSTANCE_OF, to: AnomalyType:co2_breakthrough}
-  - {from: 'AnomalyRecord:2026-09-02_co2',     type: INSTANCE_OF, to: AnomalyType:co2_breakthrough}
-  - {from: 'AnomalyRecord:2026-09-11_thermal', type: INSTANCE_OF, to: AnomalyType:thermal_runaway_risk}
-
-  # AnomalyRecord ──INVOLVES──▶ Sensor
-  - {from: 'AnomalyRecord:2026-08-14_co2',     type: INVOLVES, to: Sensor:co2_ppm}
-  - {from: 'AnomalyRecord:2026-09-02_co2',     type: INVOLVES, to: Sensor:co2_ppm}
-  - {from: 'AnomalyRecord:2026-09-02_co2',     type: INVOLVES, to: Sensor:ph}
-  - {from: 'AnomalyRecord:2026-09-11_thermal', type: INVOLVES, to: Sensor:temp_c}
-  - {from: 'AnomalyRecord:2026-09-11_thermal', type: INVOLVES, to: Sensor:pressure_barg}
+- from: Sensor:co2_ppm
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:co2_ppm
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:temp_c
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:temp_c
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:temp_c
+  type: MONITORED_IN
+  to: OperatingMode:Manual
+- from: Sensor:pressure_barg
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:pressure_barg
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:pressure_barg
+  type: MONITORED_IN
+  to: OperatingMode:Manual
+- from: Sensor:ph
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:level_pct
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:level_pct
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:co2_ppm
+  type: HAS_THRESHOLD
+  to: Threshold:co2_high_absorption
+- from: Sensor:temp_c
+  type: HAS_THRESHOLD
+  to: Threshold:temp_high
+- from: Sensor:pressure_barg
+  type: HAS_THRESHOLD
+  to: Threshold:pressure_high
+- from: Sensor:ph
+  type: HAS_THRESHOLD
+  to: Threshold:ph_low
+- from: Sensor:level_pct
+  type: HAS_THRESHOLD
+  to: Threshold:level_low
+- from: Threshold:co2_high_absorption
+  type: TRIGGERS
+  to: AnomalyType:co2_breakthrough
+- from: Threshold:temp_high
+  type: TRIGGERS
+  to: AnomalyType:thermal_runaway_risk
+- from: Threshold:pressure_high
+  type: TRIGGERS
+  to: AnomalyType:thermal_runaway_risk
+- from: Threshold:temp_high
+  type: TRIGGERS
+  to: AnomalyType:co2_breakthrough
+- from: Threshold:pressure_high
+  type: TRIGGERS
+  to: AnomalyType:overpressure
+- from: Threshold:ph_low
+  type: TRIGGERS
+  to: AnomalyType:solvent_degradation
+- from: Threshold:level_low
+  type: TRIGGERS
+  to: AnomalyType:low_solvent_inventory
+- from: AnomalyType:co2_breakthrough
+  type: RESOLVED_BY
+  to: SOPDocument:NDIR_Calibration
+- from: AnomalyType:co2_breakthrough
+  type: RESOLVED_BY
+  to: SOPDocument:Solvent_Management
+- from: AnomalyType:thermal_runaway_risk
+  type: RESOLVED_BY
+  to: SOPDocument:Emergency_Cooldown
+- from: AnomalyType:solvent_degradation
+  type: RESOLVED_BY
+  to: SOPDocument:Solvent_Management
+- from: AnomalyType:overpressure
+  type: RESOLVED_BY
+  to: SOPDocument:Pressure_Relief
+- from: SOPDocument:NDIR_Calibration
+  type: CONTAINS
+  to: SOPStep:ndir_1
+- from: SOPDocument:NDIR_Calibration
+  type: CONTAINS
+  to: SOPStep:ndir_2
+- from: SOPDocument:NDIR_Calibration
+  type: CONTAINS
+  to: SOPStep:ndir_3
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_1
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_2
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_3
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_4
+- from: SOPDocument:Solvent_Management
+  type: CONTAINS
+  to: SOPStep:solvent_1
+- from: SOPDocument:Solvent_Management
+  type: CONTAINS
+  to: SOPStep:solvent_2
+- from: SOPDocument:Solvent_Management
+  type: CONTAINS
+  to: SOPStep:solvent_3
+- from: SOPDocument:Pressure_Relief
+  type: CONTAINS
+  to: SOPStep:relief_1
+- from: SOPDocument:Pressure_Relief
+  type: CONTAINS
+  to: SOPStep:relief_2
+- from: AnomalyRecord:2026-08-14_co2
+  type: INSTANCE_OF
+  to: AnomalyType:co2_breakthrough
+- from: AnomalyRecord:2026-09-02_co2
+  type: INSTANCE_OF
+  to: AnomalyType:co2_breakthrough
+- from: AnomalyRecord:2026-09-11_thermal
+  type: INSTANCE_OF
+  to: AnomalyType:thermal_runaway_risk
+- from: AnomalyRecord:2026-08-14_co2
+  type: INVOLVES
+  to: Sensor:co2_ppm
+- from: AnomalyRecord:2026-09-02_co2
+  type: INVOLVES
+  to: Sensor:co2_ppm
+- from: AnomalyRecord:2026-09-02_co2
+  type: INVOLVES
+  to: Sensor:ph
+- from: AnomalyRecord:2026-09-11_thermal
+  type: INVOLVES
+  to: Sensor:temp_c
+- from: AnomalyRecord:2026-09-11_thermal
+  type: INVOLVES
+  to: Sensor:pressure_barg

@@ -602,11 +602,102 @@ Layer 9 below for the per-step detail.
           through the real tools, so the viewer is developed against the shape
           the orchestrator will write. Rows marked `vector_db_used='seed'` and
           excluded from every reported metric
-    - [ ] **Ingestion must report graph gaps.** Dropping a PDF into
-          `data/documents/` gives Track 1 a searchable document for free while
-          Track 2 stays blind until nodes are hand-authored — which quietly
-          tilts the comparison. M2 should flag ingested documents with no
-          matching `SOPDocument` node as another Coverage row
+    - [x] **The corpus pipeline is built (M2's ingestion half).** Upload →
+          extract → chunk → embed → Chroma, as one orchestrated run with every
+          stage on the record. `services/{extraction,chunking,ingestion,
+          corpus_config}`, `db/corpus_store`, `api/corpus.py`, and Blueprints →
+          Corpus as the operating surface
+    - [x] **Track 1's tabs now mirror Track 2's: Corpus · Replay · Build.** One
+          tab called *Corpus* was doing inventory, chunk settings, embedding
+          model and the run, which made the name wrong — the corpus is the
+          artefact and most of that screen was the machinery producing it. Split
+          three ways: Corpus is the inventory (documents, and chunks as the
+          retriever stores them), Build is the pipeline, Replay is the trace
+    - [x] **Track 1 has retrieval replay** (`/api/corpus/retrieval/{query_id}`).
+          Track 2 could always show its working hop by hop and Track 1 could show
+          nothing, which was a hole in the project's own claim: a comparison
+          where only one arm is auditable is not a comparison, and *grounded* is
+          not assertable about an arm nobody can inspect. Shows the query, the
+          passages, the cosine distance each came back at (as stored, never
+          converted to a similarity — the conversion is friendlier and
+          uncheckable) and the document each belongs to
+    - [x] **A retrieved chunk that no longer exists is reported, not dropped.**
+          `rag_logs` holds ids and the text is joined from the corpus; when the
+          join misses, the answer was grounded in a passage the corpus can no
+          longer produce. That is a finding an evaluation needs, not a rendering
+          problem to hide
+    - [x] **`rag_logs` is written at the dispatch boundary, for both tracks.**
+          Nothing wrote a vector row before — only the dev graph seeder wrote
+          anything at all. The two search tools stay separate implementations
+          (that is what makes "which track answered this" recoverable) but are
+          recorded by one writer, or the comparison measures two instrumentation
+          methods as much as two retrieval strategies. No `query_id` writes
+          nothing: a tool trialled in Settings is not a query
+    - [x] **The corpus panel is a stepper — Import → Chunk → Embedding → Run.**
+          One page holding all four was congested and gave no clue what to do
+          first, which is a symptom of the real problem: the stages are
+          sequential and dependent, not four independent panels. Back is always
+          allowed (adjusting chunk settings against the preview is inherently
+          repetitive); forward is gated, and the rail states the reason rather
+          than silently disabling itself
+    - [x] **The step rail is circles joined by a filling track**, not four
+          buttons. Four boxes say "these are four places you can go"; they are
+          not — they are one process with an order, and a connector that fills
+          between 1 and 2 makes a claim four boxes cannot however they are
+          styled. The fill is a `scaleX` from the left, so forward grows toward
+          the next step and back drains toward the previous one — the motion
+          matches the travel instead of just marking a state change. The
+          travelling highlight is on the crossed segment only; a row where every
+          connector shimmers reads as "loading", not "you are here". Under
+          `prefers-reduced-motion` the fill still lands and only the travel goes
+    - [x] **Step 3 reports the embedding model and hands off to the Forge.** It
+          briefly listed every model with its own Pull buttons, which was a
+          second model console inside the corpus panel — the Forge already owns
+          pulling, quantization, hardware fit and the embedding pane, and two
+          surfaces doing one job drift until one is subtly wrong about what is
+          installed. What belongs here is the question the *pipeline* needs
+          answered — can the run embed, and with what — plus the consequence
+          specific to ingestion: the model is stamped onto the index it builds,
+          so changing it later invalidates every vector. A button opens the
+          Forge, because a sentence telling somebody where to go is a worse
+          version of a control that takes them there
+    - [x] **Dropped the "Shared by both tracks" footer.** It was written when
+          the corpus tab was an honest empty state that needed explaining, and
+          survived into a working pipeline as furniture on every step — it read
+          as a placeholder notice rather than an architectural note. The point
+          it makes is real and lives in MODULES.md §3.1 and the module docstring
+    - [x] **Chunking is pure and therefore previewable.** `services/chunking`
+          does no I/O at all, which is what lets the panel run the real chunker
+          over the real document at candidate settings and write nothing. Three
+          strategies — recursive (default), paragraph, fixed — with `fixed` kept
+          deliberately as the naive baseline the comparison may want. Sizes are
+          characters; tokens are estimated at 4 chars and labelled as estimates,
+          because counting real ones needs the embedding model's tokenizer and
+          would break preview before a model is pulled
+    - [x] **Every vector is produced by the selected model, never by Chroma.**
+          Chroma will happily embed with its own bundled MiniLM, which would put
+          vectors in an index stamped `nomic-embed-text` and make every score
+          meaningless with nothing on screen to say so. Ingest passes explicit
+          embeddings; `search_corpus` now passes `query_embeddings` through
+          `ingestion.embed_query` rather than `query_texts`, which was the same
+          bug on the query side where no stamp can catch it
+    - [x] **Failure is partial and recorded as such.** Batches of 16, outcome
+          per chunk, so a run that dies at chunk 400 of 900 keeps the first 399
+          and `Resume` picks up exactly the rest. `Clear vectors` drops the
+          index and keeps the text, which is what an embedding-model change
+          needs — re-parsing every PDF to reach text that never changed is work
+          done twice
+    - [x] **`ingest_events` is the debugging surface.** Every stage writes a
+          level-tagged row, so "it produced nothing" and "it produced nothing
+          *because the embedding model was never pulled*" are different answers.
+          Verified against the real failure: 60 chunks written, 0 vectors, and
+          the reason named in the log
+    - [ ] **Ingestion must report graph gaps.** Dropping a document in gives
+          Track 1 a searchable document for free while Track 2 stays blind until
+          nodes are hand-authored — which quietly tilts the comparison.
+          Ingestion should flag documents with no matching `SOPDocument` node as
+          another Coverage row. Both pipelines now exist, so this is a join
+          between them rather than a thing waiting on one of them
     - [ ] **Reconcile the placeholder SOP filenames** against the real corpus
           when it lands. The four `filename:` values are authored to shape, not
           to any file that exists; `filename` is the join into `source_file`, so
@@ -633,6 +724,29 @@ Layer 9 below for the per-step detail.
           possible pairs and two real ones, so the diagram drew edges the graph
           does not contain. Fixed in the recorder rather than guessed at in the
           renderer
+    - [x] **Track 2 has an authoring pipeline.** `services/graph_authoring` plus
+          `/api/graph/authoring/*` and Blueprints → Build: add and delete nodes
+          and edges, with the forms generated from the backend's own schema so a
+          dropdown cannot offer an edge the validator refuses. Validate-then-
+          write is the whole safety argument — the candidate graph is built in
+          memory first and the file is only rewritten if that build succeeded,
+          so a rejected edit leaves the YAML byte-identical
+    - [x] **The authored graph moved to `config/`.** It was under `app/data/`,
+          which `docker-compose` mounts **read-only** — correctly, since the app
+          should not rewrite its own source. In-app authoring therefore worked
+          in a bare uvicorn and 500'd in the container, which is the worse way
+          round. `config/` is writable *and* git-tracked, so MODULES.md §3.4's
+          "reviews in a diff" still holds. The packaged copy is the seed; the
+          first edit copies it across, so a fresh checkout needs no setup
+    - [x] **Refused edits are logged with their reason** (`graph_edits`). The
+          schema saying no is the most informative event in an authoring session
+          — `Sensor --RESOLVED_BY--> SOPDocument` is plausible English and
+          meaningless here — and a history of only what worked would omit
+          exactly what somebody is debugging. Deleting a node is refused while
+          edges point at it, and the refusal names them
+    - [x] **No inference, no suggestion, no model in the authoring path.** A
+          node exists because a person wrote it, which is the provenance claim
+          that makes `search_graph` SYSTEM integrity rather than CORPUS
     - [x] Retrieval track switch — Settings → Knowledge Base, committed to
           `config/rag_config.json`, read on the chat path, recorded per query in
           `rag_logs.track`. Honours §5's freeze: `frozen: true` makes the API
@@ -650,12 +764,24 @@ Layer 9 below for the per-step detail.
           the setting instead. The `Track 2 · Graph ●` chip went with it: with
           one track on screen it distinguished that track from nothing, and the
           window subtitle already names what is live
-    - [x] **The other track is a fallback, not a peer.** It cannot vanish — the
-          graph is *authored* while Track 1 is live, so hiding it would make
-          Track 2 impossible to prepare from inside the app. Demoted rather than
-          removed: reachable only from the notice raised when the live track has
-          nothing to show, with a Back control in the header and `TrackBanner`
-          stating the relationship for as long as the detour lasts
+    - [x] **The other track is not reachable from the window at all.** The
+          fallback detour went too: no "inspect the other one" button, no Back
+          control, no off-track banner, and `TrackBanner.tsx` deleted as dead
+          code. The palette filters its Blueprints rows by the live track and
+          the window refuses a foreign tab even when asked by name, so all three
+          layers — model tools, window tabs, palette rows — answer the setting
+          identically. Verified both ways
+    - [x] The cost is real and deliberate: with Track 1 live there is no way to
+          reach Build or Coverage, so authoring the graph means switching the
+          track first. That is one setting rather than a second door, and the
+          switch is a committed file recorded per query — which is what keeps
+          "I was working on the graph" a recoverable fact about the run
+    - [x] **Fixed: clicking Labyrinth Blueprints opened whatever tab the palette
+          last jumped to.** `blueprintsTab` in `__root` is sticky state, not an
+          event, and the sidebar row and the shortcut both opened the window
+          without touching it — so one `Ctrl+K` jump to Coverage made Coverage
+          the landing tab forever. All three entry points now go through one
+          `openBlueprints(tab)` that sets it explicitly
     - [x] **Four fallbacks, one per failure, none of them a blank page**
           (MODULES.md §0 rule 4). *Track not read yet* — a skeleton tab row at
           its final height; guessing a track and correcting it a moment later
@@ -675,6 +801,74 @@ Layer 9 below for the per-step detail.
           the host — so the vector store read as unreachable rather than as not
           running. `host_chroma_url` rewrites it to the published port, the same
           cure `host_ollama_url` already applied
+- [x] **A track may not retrieve through the other arm.** `PROJECT.md` §5 is a
+      controlled comparison, and the registry was offering `search_graph`,
+      `graph_lookup`, `graph_traverse` and `graph_coverage` whatever the selected
+      track was — so a Track 1 run could produce an answer filed under
+      `rag_logs.track='vector'` that a vector-only system could not have
+      produced, with nothing in the logs saying so. Tools now declare a `track`
+      and the gate withholds the other arm's at runtime. Verified both ways: the
+      model-facing tool list flips with the setting
+  - [x] It is a third axis, not a fourth permission. `_FORBIDDEN_AT_RUNTIME` is
+        safety and an operator may unlock an effect with a reason; this is
+        experimental validity and has **no unlock**, because "let this arm use
+        the other arm's retrieval" is not a permission anybody can grant — it
+        just makes the measurement mean something else. Change the track in
+        Settings → Knowledge Base and the other set becomes available
+  - [x] `knowledge_status` deliberately carries no track. It reports on both arms
+        without retrieving through either, and it is the check that makes "I
+        don't have that" a statement rather than a guess — which matters most,
+        not least, on the arm that is not ready
+  - [x] The `SETUP` surface is exempt, so trialling a tool in Settings → Agent
+        Tools still works. Nothing an operator does there is recorded as a query,
+        so there is no measurement to protect — the same reasoning that exempts
+        setup from the effect gate
+- [x] **The Blueprints tab table moved to its own module** (`blueprints/tabs.ts`).
+      A file exporting both a component and a plain value breaks React Fast
+      Refresh, and the dev server was falling back to a **full page reload** on
+      every edit — losing the open window, the active tab and any half-filled
+      form, which is most of what makes HMR worth having. It is the right shape
+      anyway: the command palette needs the list and has no business importing
+      the window to get it
+- [x] **`rag_config` stopped reporting `blocked_by: "M2"`.** It said that
+      whenever Track 1 was not ready, which stopped being true the moment
+      ingestion was built: an empty corpus is not a missing milestone, and the
+      two have completely different fixes. Naming a blocker somebody cannot act
+      on while hiding the one they can is worse than saying nothing. The blocker
+      is now computed from the pipeline's own state in the order the pipeline
+      runs — no documents → nothing chunked → nothing embedded → a mismatched
+      index — so it always names the next thing to do
+- [x] **Fixed: a minimized Blueprints kept the old track.** Minimize hides with
+      `display: none` rather than unmounting — deliberately, so tab, scroll and
+      filter state survive — but that means the window can sit invisible across
+      a track change in Settings and come back showing the other arm's tabs.
+      `open` never changed, so nothing re-read the config, and closing and
+      reopening was the only cure. Two signals now: `setRagTrack` dispatches
+      `RAG_TRACK_CHANGED_EVENT` from the **client**, so every path that changes
+      the track notifies by construction rather than by the panel remembering to;
+      and `FloatingWindow` passes `minimized` to its children, so the window also
+      re-reads on the restore edge — which covers causes no frontend event can
+      know about, such as the `manage_settings` tool writing the config from the
+      backend
+- [x] **Fixed: the Forge's expanded model row popped in.** Two causes, and the
+      second was the bigger one. (1) `Collapse` cascades the *direct children*
+      of its own element, and `Detail` wrapped every section in a layout `<div>`
+      — so the whole panel was one child, and the cascade degraded to a single
+      beat. The grid moved onto the Collapse's `className` and `Detail` returns
+      a fragment, so the sections are the rows. (2) Nothing animated the
+      **height**: the box appeared at full size with its contents catching up,
+      which on a 400px panel is most of what reads as a pop
+  - [x] New `variant="flow"` on `Collapse`, beside the default domino. The
+        container unfolds with `grid-template-rows: 0fr → 1fr` — which animates
+        to content height without anyone having to know it, unlike `max-height`
+        where guessing low clips and guessing high animates empty space — and
+        the sections settle *downward* from slightly above, so the eye is
+        carried top-to-bottom as the panel fills. No overshoot: the domino's
+        bounce is character on a 28px row and a wobble on a 400px panel
+  - [x] Applied to all three Forge row expansions (Models, Added Models,
+        Embedding catalogue) so things behind the same chevron open the same
+        way. **The sidebar keeps the domino** — it is a list of rows, which is
+        what that cascade is for
 - [x] Add a traversal-path column to `rag_logs` **now** — migration `005`
       adds `traversal_path` and `entry_strategy`. Landed before the orchestrator
       writes its first row, which was the whole point: a path is not derivable

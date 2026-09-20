@@ -20,8 +20,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
-    chat, embeddings, forge, graph, health, logs, maintenance, mcp, prefs, providers,
-    search, sessions, system, tools,
+    chat, corpus, embeddings, forge, graph, health, logs, maintenance, mcp, prefs,
+    providers, search, sessions, system, tools,
 )
 from .db import migrations, paths, sqlite_util
 from .services import app_logs
@@ -125,6 +125,7 @@ app.include_router(providers.router)
 app.include_router(system.router)
 app.include_router(forge.router)
 app.include_router(graph.router)
+app.include_router(corpus.router)
 app.include_router(embeddings.router)
 app.include_router(search.router)
 app.include_router(tools.router)
