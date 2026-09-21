@@ -283,10 +283,63 @@ failure when a relationship was never authored, and meta-reasoning steps
 ("is this enough?") that sub-2B SLMs may simply be too small to do well. That
 last one is itself a legitimate finding.
 
+### How each arm gets its knowledge
+
+The two tracks are filled by two different pipelines, and both are **setup
+surfaces** under Rule 5 — they write, so neither is ever exposed to the model.
+
+| | Track 1 | Track 2 |
+|---|---|---|
+| Knowledge arrives by | ingesting documents | somebody authoring nodes |
+| Surface | Blueprints → Corpus → **Build** | Blueprints → **Build** |
+| Source of truth | ChromaDB + `corpus.db` manifest | `config/knowledge_graph.yaml` |
+| Log | `ingest_events`, per stage | `graph_edits`, including refusals |
+
+Track 2's authoring has an **assisted** first step, and its shape matters for the
+comparison's validity. A local model reads the *ingested corpus* and proposes
+nodes and edges constrained to the schema above; every proposal is canonicalised
+against what already exists, dry-run through the real validator, and queued.
+Nothing reaches the graph without a person accepting it, and an accept goes
+through the same authoring path a hand edit does.
+
+That boundary is load-bearing. `search_graph` claims a stronger provenance than
+an ingested PDF precisely because every node was authored and reviews in a diff;
+a proposer that wrote directly would retire that claim, and the comparison would
+stop being between two retrieval strategies and start being between two guesses.
+The web is deliberately not a source — Rule 5 makes web search a surface for
+*finding documents to ingest*, and unreviewed external text in the graph breaks
+the same claim.
+
+### Auditing each arm
+
+Both arms are inspectable the same way, which is what keeps the comparison about
+the strategies rather than about how well each half happened to get instrumented:
+
+| | Track 1 | Track 2 |
+|---|---|---|
+| inventory | Corpus | Graph |
+| gaps | — | Coverage |
+| trace | Replay | Replay |
+
+**The missing cell is a finding, not an omission.** A hand-authored graph fails
+by *omission*, and omission over a fixed schema is enumerable: an `AnomalyType`
+with no `RESOLVED_BY` edge is a question the graph provably cannot answer. A
+vector corpus has no such list — it returns its nearest chunks for every query,
+including ones it knows nothing about, so its failure is a *bad match* rather
+than a missing edge and the passages nobody wrote cannot be enumerated. Worth
+stating in the report: the two arms are not equally auditable *in principle*,
+and that asymmetry is a property of the approaches.
+
+Both Replays read `rag_logs` and neither re-runs anything. Re-querying to
+"replay" would show what the index returns today rather than what produced that
+answer, which after any re-ingest is a quietly different claim.
+
 ### Comparison protocol
 
 Hold constant: same model, quantization, temperature; same corpus; same query
-set; same machine, run sequentially; same hand-labelled ground truth.
+set; same machine, run sequentially; same hand-labelled ground truth. **Also
+held constant by construction:** each arm sees only its own retrieval tools
+(§7.2), and both are recorded by one writer at the dispatch boundary.
 
 Stratify the query set (~30–50 queries, 6–10 per category):
 
@@ -373,8 +426,25 @@ the report.
 | **Sensor** | SQLite | `/data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
 | **Audit** | SQLite | `/logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
 | **Chat** | SQLite | `/data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
-| **Vector** | ChromaDB | `chromadb` service (or `data/chroma`) | read/write | embedded SOP/manual/anomaly/UAUC chunks |
+| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded SOP/manual/anomaly/UAUC chunks, and the manifest of what was ingested |
 | **Prefs** | SQLite | `/app/data/prefs.db` | read/write | UI state, kept out of the browser |
+
+**The Vector store has two halves and is still one store.** Chroma holds the
+vectors; `corpus.db` holds the record of what was ingested — documents, chunk
+text with its offsets, every pipeline run with the recipe it used, and a
+level-tagged event log. It is the same store's own metadata, sitting beside the
+Chroma directory the way Chroma's own catalogue sits beside its vectors, and
+§6.4's argument is untouched: Daedalus still writes only to its own files and
+still cannot reach `sensor_readings`.
+
+Splitting it out of Chroma rather than into it is what makes it migratable,
+joinable and browsable. Keeping it out of `audit` is deliberate in the other
+direction: deleting a document should take its ingestion history with it, and
+that DELETE must never be able to reach the one store whose whole value is that
+nothing ever deletes from it. `corpus.db` also carries Track 2's authoring
+history (`graph_edits`) and its proposal queue, for the same reason — both are
+operational records *about* the knowledge layer rather than the knowledge
+itself, which stays in Chroma and in the authored YAML.
 
 Verified: the read-only connection rejects INSERT, UPDATE, DELETE and DROP at
 the driver, while reads continue to work.
@@ -398,7 +468,8 @@ database we do not own would breach Rule 2 as surely as an INSERT would.
 Jason's subsystem  → writes sensor_readings
 Anson's subsystem  → writes anomaly flags/records
 Daedalus           → READS both; writes ONLY to its own separate stores:
-                     ChromaDB dir, graph file, ai_logs.db, chat.db, prefs.db
+                     ChromaDB dir, corpus.db, graph file, ai_logs.db,
+                     chat.db, prefs.db
 ```
 
 A bug in our indexing code physically **cannot** corrupt the sensor data of
@@ -435,6 +506,32 @@ record, because they are different files.
 | `rag_retrieve` | `query`, `top_k`, `source_types`, optional `reactor_mode` | chunks with text, score, source file, section, page |
 
 Track 2 adds `graph_lookup`, `graph_traverse`, `graph_query_natural`.
+
+**The two arms' retrieval tools are mutually exclusive at runtime.** §5 is a
+controlled comparison, and an arm that can reach the other arm's retrieval is
+not that arm — with Track 1 selected and `search_graph` still on the tool list, a
+model that walked the graph would produce an answer filed under
+`rag_logs.track='vector'` that a vector-only system could not have produced, and
+nothing in the logs would say so. The registry gates on the selected track and
+withholds the other set, so the tool list the model receives flips with the
+setting.
+
+This is **not** the same kind of rule as the effect gate below. That one is
+safety and an operator may unlock an effect with a recorded reason; this one is
+experimental validity and has no unlock, because "let this arm use the other
+arm's retrieval" is not a permission anybody can grant — it only makes the
+measurement mean something else. Tools that belong to neither arm, including
+`knowledge_status`, are unaffected: it *reports on* both tracks without
+retrieving through either, and it is the check that makes "I don't have that" a
+statement rather than a guess.
+
+Every retrieval writes one `rag_logs` row, and it is written at the **dispatch
+boundary** rather than inside each tool. The two search tools stay separate
+implementations — that is what makes "which track answered this" recoverable —
+but recording them separately would let the comparison measure two
+instrumentation methods as much as two retrieval strategies. A call with no
+`query_id` writes nothing: a tool trialled in Settings is not a query, and a row
+for one would land in the evaluation set as though it were.
 
 **Security rules:** whitelisted sensor names (`temperature`, `pressure`, `ph`,
 `co2_ppm`, `mode`, `anomaly_flag`) and aggregations (`average`, `min`, `max`,

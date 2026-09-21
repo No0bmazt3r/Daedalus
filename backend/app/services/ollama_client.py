@@ -397,6 +397,51 @@ def embed(name: str, text: str, *, timeout: float = 30.0) -> list[float]:
     raise OllamaError(f"{name} returned no embedding")
 
 
+def generate(
+    name: str,
+    prompt: str,
+    *,
+    system: str | None = None,
+    json_format: bool = False,
+    temperature: float = 0.0,
+    timeout: float = 180.0,
+) -> str:
+    """One blocking completion. Setup surfaces only.
+
+    The orchestrator streams (`inference.answer_stream`) because a person is
+    watching tokens appear. A setup job is the opposite: nobody is reading it
+    token by token, it runs on a worker thread, and the caller wants the whole
+    answer or an error. Streaming that would mean reassembling it at every call
+    site for no benefit.
+
+    `json_format` sets Ollama's `format: json`, which constrains decoding to
+    valid JSON rather than asking for it in the prompt and hoping. It does not
+    constrain the *shape* — that is still the caller's to validate — but it does
+    remove the most common failure, which is a model wrapping its object in prose
+    or a markdown fence.
+
+    `temperature: 0` by default. An extraction job wants the same answer twice
+    from the same input; sampling would make a re-run disagree with itself and
+    make the proposer's error rate unmeasurable.
+    """
+    payload: dict[str, Any] = {
+        "model": name,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": temperature},
+    }
+    if system:
+        payload["system"] = system
+    if json_format:
+        payload["format"] = "json"
+
+    data = _request("POST", "/api/generate", timeout=timeout, json=payload)
+    response = data.get("response")
+    if not isinstance(response, str):
+        raise OllamaError(f"{name} returned no completion")
+    return response
+
+
 def delete(name: str) -> bool:
     """Remove a local model. Ollama 404s for one that is not there."""
     _request("DELETE", "/api/delete", timeout=LIST_TIMEOUT, json={"model": name})

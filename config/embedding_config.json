@@ -1,8 +1,8 @@
 {
   "provider": "local",
-  "model": "nomic-embed-text",
+  "model": "",
   "endpoint_id": null,
-  "dimensions": 768,
+  "dimensions": null,
   "indexed_with": null,
   "indexed_at": "2026-09-19T05:33:11+00:00",
   "collection": "daedalus_knowledge",

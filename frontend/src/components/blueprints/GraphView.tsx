@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Search, ArrowRight, ArrowLeft, AlertCircle, Network, Table2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, ArrowRight, ArrowLeft, AlertCircle, Network, Table2, X } from 'lucide-react'
 import {
   fetchGraphSchema, fetchNodes, fetchNode, NODE_TYPES,
   type GraphSchema, type GraphNode, type GraphEdge, type NodeDetail, type NodeType,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
+import { ThemeSelect } from '../ui/theme-select'
 import { NODE_STYLE, TypeBadge, NodeChip, EdgeLabel, shortId } from './nodeStyles'
 import { GraphCanvas } from './GraphCanvas'
 
@@ -155,6 +156,7 @@ export function GraphView() {
   const [type, setType] = useState<NodeType | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [detail, setDetail] = useState<NodeDetail | null>(null)
+  const panelRef = useRef<HTMLElement>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -182,6 +184,10 @@ export function GraphView() {
       return
     }
     fetchNode(selected).then(setDetail).catch((e: Error) => setError(e.message))
+    // `nearest` does nothing when the panel is already beside the canvas, and
+    // brings it up when the container is narrow enough to have stacked it. One
+    // call covers both layouts without either having to know about the other.
+    panelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [selected])
 
   const grouped = useMemo(() => {
@@ -210,7 +216,11 @@ export function GraphView() {
   }
 
   return (
-    <div className="space-y-4">
+    // A flex column so the diagram can take the leftover height. The window body
+    // is `min-h-full`, so "leftover" means *to the bottom of the window* — which
+    // is what makes maximizing actually enlarge the graph rather than adding
+    // empty space beneath it.
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {schema ? <Legend schema={schema} /> : <Skeleton className="h-8 w-full" />}
 
       <div className="flex items-center gap-2">
@@ -223,16 +233,20 @@ export function GraphView() {
             className="w-full rounded-md border theme-border theme-card py-1.5 pl-8 pr-2 text-xs theme-text outline-none focus:theme-accent-border"
           />
         </div>
-        <select
+        {/* Was a native `<select>` carrying a `theme-select` class that does not
+            exist in the stylesheet — so it was an unthemed OS menu wearing a
+            classname that looked like it had been handled. */}
+        <ThemeSelect
+          size="sm"
+          ariaLabel="Filter by node type"
           value={type ?? ''}
-          onChange={(e) => setType((e.target.value || null) as NodeType | null)}
-          className="rounded-md border theme-border theme-card px-2 py-1.5 text-xs theme-text outline-none theme-select"
-        >
-          <option value="">All types</option>
-          {NODE_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={(v) => setType((v || null) as NodeType | null)}
+          options={[
+            { value: '', label: 'All types' },
+            ...NODE_TYPES.map((t) => ({ value: t, label: t })),
+          ]}
+          className="w-40 shrink-0"
+        />
         <div className="flex shrink-0 overflow-hidden rounded-md border theme-border">
           {([['diagram', Network], ['table', Table2]] as const).map(([id, Icon]) => (
             <button
@@ -249,23 +263,72 @@ export function GraphView() {
         </div>
       </div>
 
+      {/* The diagram and the selected node's detail share a row.
+
+          They used to be stacked, with the detail in the grid *below* a 460px
+          canvas — so clicking a node updated something entirely off-screen and
+          the click read as doing nothing. Docked beside it, the answer appears
+          where the eye already is.
+
+          Beside rather than floating over the canvas: an overlay occludes the
+          structure you are reading, which is the whole reason the diagram
+          exists. The canvas keeps its own `viewBox`, so narrowing it scales the
+          drawing rather than re-running the layout — no jitter on every click.
+
+          Below the container breakpoint they stack again, and the panel scrolls
+          itself into view. A narrow window cannot afford 340px of side panel,
+          but it can afford not to hide the result. */}
       {view === 'diagram' && (
-        nodes === null ? (
-          <Skeleton className="h-[460px] w-full" />
-        ) : nodes.length === 0 ? (
-          <p className="rounded border border-dashed theme-border p-8 text-center text-xs theme-text-muted">
-            No node matches. The graph holds {schema?.total_nodes ?? '—'} nodes.
-          </p>
-        ) : (
-          <GraphCanvas nodes={nodes} edges={edges} selected={selected} onSelect={setSelected} />
-        )
+        <div
+          className={`grid min-h-[420px] flex-1 gap-3 ${
+            selected ? '@3xl:grid-cols-[minmax(0,1fr)_minmax(0,340px)]' : ''
+          }`}
+        >
+          {nodes === null ? (
+            <Skeleton className="h-full min-h-[420px] w-full" />
+          ) : nodes.length === 0 ? (
+            <p className="rounded border border-dashed theme-border p-8 text-center text-xs theme-text-muted">
+              No node matches. The graph holds {schema?.total_nodes ?? '—'} nodes.
+            </p>
+          ) : (
+            <GraphCanvas nodes={nodes} edges={edges} selected={selected} onSelect={setSelected} />
+          )}
+
+          {selected && (
+            <aside
+              ref={panelRef}
+              className="max-h-full min-h-0 overflow-y-auto no-scrollbar rounded-lg border theme-accent-border theme-card p-3 animate-in fade-in slide-in-from-right-2 duration-200"
+            >
+              <div className="mb-2 flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[10px] uppercase tracking-wider theme-text-muted">
+                  Selected node
+                </span>
+                <button
+                  onClick={() => setSelected(null)}
+                  title="Clear the selection"
+                  aria-label="Clear the selection"
+                  className="shrink-0 rounded p-0.5 theme-text-muted transition-colors hover:theme-text"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+              {detail ? (
+                <Detail detail={detail} onNavigate={setSelected} />
+              ) : (
+                <p className="py-6 text-center text-xs theme-text-muted">
+                  Loading {shortId(selected)}…
+                </p>
+              )}
+            </aside>
+          )}
+        </div>
       )}
 
       <div
         className={
           view === 'table'
-            ? 'grid gap-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]'
-            : 'grid gap-4'
+            ? 'grid min-h-0 flex-1 gap-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]'
+            : 'hidden'
         }
       >
         <div className={`space-y-3 ${view === 'diagram' ? 'hidden' : ''}`}>
@@ -311,7 +374,10 @@ export function GraphView() {
           ))}
         </div>
 
-        {(view === 'table' || selected) && (
+        {/* Table view keeps the side-by-side it always had: a list and the
+            selected row's detail are two halves of one reading, and the list
+            does not need to stay whole the way the diagram does. */}
+        {view === 'table' && (
           <div className="rounded-lg border theme-border theme-card p-4">
             {detail ? (
               <Detail detail={detail} onNavigate={setSelected} />

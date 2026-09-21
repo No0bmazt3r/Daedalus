@@ -35,7 +35,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from ..db import audit_store, paths, sqlite_util
 from ..services import graph_seed
 from ..services import knowledge_graph as kg
-from ..services import graph_authoring, rag_config
+from ..services import graph_authoring, graph_proposals, rag_config
 
 router = APIRouter(prefix="/api", tags=["blueprints"])
 
@@ -364,6 +364,67 @@ def delete_edge(
         return graph_authoring.delete_edge(source, edge_type, target)
     except graph_authoring.AuthoringError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+# ── assisted authoring: the proposal queue ───────────────────────────────────
+#
+# The model proposes, a person disposes. Nothing here writes to the graph except
+# `accept`, and `accept` goes through the same `graph_authoring` path a hand
+# edit does — so an accepted proposal is validated and logged to `graph_edits`
+# identically. See `services/graph_proposals` for why the queue exists at all:
+# `search_graph` claims SYSTEM integrity on the basis that a person authored
+# every node, and a proposer that wrote directly would retire that claim.
+
+
+@router.get("/graph/proposals/status")
+def proposals_status() -> dict[str, Any]:
+    """Queue counts, what there is to read, and recent runs."""
+    return graph_proposals.status()
+
+
+@router.get("/graph/proposals")
+def list_proposals(
+    status: str = Query("pending", description="pending · accepted · rejected · failed"),
+    limit: int = Query(200, ge=1, le=1000),
+) -> dict[str, Any]:
+    if status not in ("pending", "accepted", "rejected", "failed"):
+        raise HTTPException(400, "status must be pending, accepted, rejected or failed")
+    return {"proposals": graph_proposals.list_proposals(status, limit)}
+
+
+@router.post("/graph/proposals/generate")
+def generate_proposals(
+    document_ids: list[str] | None = Body(None),
+    model: str | None = Body(None),
+) -> dict[str, Any]:
+    """Read the ingested corpus and queue what the schema accepts.
+
+    Synchronous: it is one model call per chunk, bounded by `MAX_CHUNKS`, and the
+    caller wants the run row when it is done. A long corpus is deliberately a
+    series of bounded runs rather than one unbounded job — the surveys call
+    unbounded extraction the construction bottleneck, and a queue nobody can
+    finish reviewing is the same problem one layer up.
+    """
+    try:
+        return {"run": graph_proposals.propose(document_ids, model=model)}
+    except graph_proposals.ProposalError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/graph/proposals/{proposal_id}/accept")
+def accept_proposal(proposal_id: str) -> dict[str, Any]:
+    """Apply one proposal. This is the only write in the assisted path."""
+    try:
+        return graph_proposals.accept(proposal_id)
+    except graph_proposals.ProposalError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/graph/proposals/{proposal_id}/reject")
+def reject_proposal(proposal_id: str) -> dict[str, Any]:
+    """Decline one proposal. Kept, not deleted — see the migration's note."""
+    graph_proposals.reject(proposal_id)
+    return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
 
 
 # ── the retrieval track switch ───────────────────────────────────────────────

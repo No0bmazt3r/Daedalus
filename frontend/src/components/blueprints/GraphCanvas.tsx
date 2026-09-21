@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useElementHeight } from '../../hooks/useElementHeight'
 import {
   forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide,
   forceX, forceY,
@@ -161,7 +162,7 @@ export function GraphCanvas({
   onSelect,
   highlight,
   caption,
-  height = HEIGHT,
+  height,
 }: {
   nodes: GraphNode[]
   edges: { from: string; type: string; to: string }[]
@@ -174,6 +175,17 @@ export function GraphCanvas({
    */
   highlight?: Set<string> | null
   caption?: string
+  /**
+   * Drawing height in pixels. Omitted means **fill the parent**, measured — the
+   * canvas then grows when the window is maximized instead of leaving a screen
+   * of empty space under a fixed box.
+   *
+   * A number rather than a CSS class because the value is not only a style: the
+   * fit maths matches the viewBox's aspect ratio to the drawing area's, and
+   * getting that from CSS alone is not possible. `vh` would be wrong for the
+   * same reason it is wrong anywhere in this app — the window is resizable, so
+   * the viewport's height says nothing about this element's.
+   */
   height?: number
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -184,8 +196,15 @@ export function GraphCanvas({
   // wheel and pan handlers are non-React listeners that must read the current
   // value, not the one captured when they were attached; `setFrame` is what
   // turns a mutation into a repaint.
-  const viewRef = useRef({ x: 0, y: 0, w: WIDTH, h: height })
-  const fittedRef = useRef({ w: WIDTH, h: height })
+  // Measured when `height` is not given. `HEIGHT` covers the frame before the
+  // first observation, so the fit maths never divides by zero and the canvas
+  // never renders at no height for a frame.
+  const frameRef = useRef<HTMLDivElement>(null)
+  const measured = useElementHeight(frameRef)
+  const drawHeight = height ?? (measured > 0 ? measured : HEIGHT)
+
+  const viewRef = useRef({ x: 0, y: 0, w: WIDTH, h: drawHeight })
+  const fittedRef = useRef({ w: WIDTH, h: drawHeight })
   const panRef = useRef<{ x: number; y: number; view: { x: number; y: number } } | null>(null)
   const [, setFrame] = useState(0)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -242,7 +261,7 @@ export function GraphCanvas({
 
     // Match the drawing area's aspect ratio, or the browser letterboxes the
     // viewBox for us and the padding stops being symmetric.
-    const aspect = WIDTH / height
+    const aspect = WIDTH / drawHeight
     let w = boxW
     let h = boxH
     if (boxW / boxH > aspect) h = boxW / aspect
@@ -256,7 +275,34 @@ export function GraphCanvas({
     }
     fittedRef.current = { w, h }
     setFrame((f) => f + 1)
-  }, [height])
+  }, [drawHeight])
+
+  /**
+   * Keep the viewBox's aspect matched to the frame when the frame changes.
+   *
+   * A resize — maximizing the window, opening the detail panel — changes the
+   * drawing area's shape. Left alone the viewBox keeps its old aspect and the
+   * browser letterboxes it, so a taller window adds empty bands rather than
+   * showing more graph.
+   *
+   * Deliberately **not** a re-`fit()`. Refitting would discard whatever the
+   * reader had zoomed and panned to, and a resize is not a request to go back
+   * to the whole graph — it is a request for more room. So the horizontal
+   * extent and the centre are held and only the vertical extent is adjusted,
+   * which spends the new pixels on more graph and keeps the view they chose.
+   */
+  const lastHeight = useRef(drawHeight)
+  useEffect(() => {
+    if (lastHeight.current === drawHeight) return
+    lastHeight.current = drawHeight
+
+    const view = viewRef.current
+    const aspect = WIDTH / drawHeight
+    const nextH = view.w / aspect
+    viewRef.current = { ...view, y: view.y + view.h / 2 - nextH / 2, h: nextH }
+    fittedRef.current = { ...fittedRef.current, h: fittedRef.current.w / aspect }
+    setFrame((f) => f + 1)
+  }, [drawHeight])
 
   /** Zoom about a point given in 0..1 of the drawing area. */
   const zoomBy = useCallback((factor: number, px = 0.5, py = 0.5) => {
@@ -466,12 +512,13 @@ export function GraphCanvas({
   }
 
   return (
-    <div className="rounded-lg border theme-border theme-card">
+    <div className="flex h-full min-h-0 flex-col rounded-lg border theme-border theme-card">
+      <div ref={frameRef} className="min-h-0 flex-1">
       <svg
         ref={svgRef}
         viewBox={`${viewRef.current.x} ${viewRef.current.y} ${viewRef.current.w} ${viewRef.current.h}`}
         className="w-full cursor-grab touch-none select-none active:cursor-grabbing"
-        style={{ height }}
+        style={{ height: drawHeight }}
         onPointerDown={(e) => {
           // Only the background pans. A node's own handler stops propagation,
           // so reaching here means the press was not on a node.
@@ -574,8 +621,9 @@ export function GraphCanvas({
           })}
         </g>
       </svg>
+      </div>
 
-      <div className="flex items-center gap-1 border-t theme-border px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-1 border-t theme-border px-2 py-1.5">
         <button
           onClick={() => zoomBy(1 / 1.25)}
           title="Zoom in"
@@ -598,11 +646,11 @@ export function GraphCanvas({
           <Maximize2 size={10} /> Fit
         </button>
       </div>
-      <p className="border-t theme-border px-3 py-1.5 text-[10px] theme-text-muted">
+      <p className="shrink-0 border-t theme-border px-3 py-1.5 text-[10px] theme-text-muted">
         {caption ??
           'Scroll to zoom · drag the background to pan · drag a node to pull it out, it eases ' +
-            "back when you let go · click to open it. Position carries no meaning: the layout " +
-            'shows connectedness, not measurement.'}
+            'back when you let go · click a node to read it beside the diagram. Position carries ' +
+            'no meaning: the layout shows connectedness, not measurement.'}
       </p>
     </div>
   )

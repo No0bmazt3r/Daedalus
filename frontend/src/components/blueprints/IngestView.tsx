@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Upload, FileText, Trash2, Play, RotateCcw, AlertCircle, AlertTriangle, Check,
-  Loader2, Eraser, ChevronRight, ChevronLeft, Scissors, Cpu, Hammer, ArrowUpRight,
+  Loader2, Eraser, ChevronRight, Scissors, Cpu, Hammer, ArrowUpRight,
 } from 'lucide-react'
 import {
   fetchCorpusStatus, fetchCorpusDocuments, uploadDocument, deleteDocument,
@@ -12,6 +12,8 @@ import {
 } from '../../lib/blueprintsClient'
 import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
+import { StepRail, StepFooter, type Step } from '../ui/stepper'
+import { ThemeSelect } from '../ui/theme-select'
 
 /**
  * The ingestion pipeline, as the four steps it actually is — MODULES.md §3.1.
@@ -77,12 +79,12 @@ const SOURCE_TYPES = [
   { id: 'other', label: 'Other' },
 ]
 
-const STEPS = [
+const STEPS: readonly Step[] = [
   { id: 1, label: 'Import', icon: Upload, hint: 'Add the documents to index' },
   { id: 2, label: 'Chunk', icon: Scissors, hint: 'Decide where they get split' },
   { id: 3, label: 'Embedding', icon: Cpu, hint: 'Choose the model that turns chunks into vectors' },
   { id: 4, label: 'Run', icon: Play, hint: 'Ingest, and watch it happen' },
-] as const
+]
 
 function bytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -113,102 +115,6 @@ function bytes(n: number): string {
  * only the travel is dropped. Progress is information; the motion carrying it
  * is decoration, and the two must not fail together.
  */
-function StepRail({
-  step, setStep, blocked,
-}: {
-  step: number
-  setStep: (n: number) => void
-  /** Why each step cannot be reached yet, by id. Absent means reachable. */
-  blocked: Record<number, string | undefined>
-}) {
-  return (
-    <ol className="flex items-start" aria-label="Ingestion pipeline">
-      {STEPS.map((s, i) => {
-        const why = blocked[s.id]
-        const active = step === s.id
-        const done = step > s.id
-        const Icon = s.icon
-        return (
-          <li key={s.id} className="flex min-w-0 flex-1 items-start last:flex-none">
-            <div className="flex min-w-0 flex-col items-center gap-1.5">
-              <button
-                onClick={() => !why && setStep(s.id)}
-                disabled={!!why}
-                title={why ?? s.hint}
-                aria-current={active ? 'step' : undefined}
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] tabular-nums transition-colors duration-300 ${
-                  done
-                    ? 'theme-bg-primary border-transparent theme-text-on-primary'
-                    : active
-                      ? `theme-accent-border theme-surface-strong theme-accent step-dot-active`
-                      : why
-                        ? 'theme-border theme-text-muted opacity-35 cursor-not-allowed'
-                        : 'theme-border theme-text-muted hover:theme-text'
-                }`}
-              >
-                {done ? <Check size={12} /> : active ? <Icon size={12} /> : s.id}
-              </button>
-              <span
-                className={`max-w-[7rem] truncate text-center text-[10px] transition-colors duration-300 ${
-                  active ? 'theme-text' : why ? 'theme-text-muted opacity-35' : 'theme-text-muted'
-                }`}
-              >
-                {s.label}
-              </span>
-            </div>
-
-            {i < STEPS.length - 1 && (
-              <div
-                aria-hidden
-                className={`step-track mx-1.5 mt-3 min-w-4 flex-1 ${
-                  // The segment being crossed is the one *leaving* the current
-                  // step, and only while its destination is actually reachable.
-                  step === s.id && !blocked[s.id + 1] ? 'step-track-flow' : ''
-                }`}
-              >
-                <span className="step-track-fill" data-filled={step > s.id} />
-              </div>
-            )}
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
-function StepFooter({
-  step, setStep, nextBlocked, nextLabel,
-}: {
-  step: number
-  setStep: (n: number) => void
-  nextBlocked?: string
-  nextLabel?: string
-}) {
-  return (
-    <div className="flex items-center gap-2 border-t theme-border pt-3">
-      <button
-        onClick={() => setStep(step - 1)}
-        disabled={step === 1}
-        className="flex items-center gap-1 rounded-md border theme-border px-2 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text disabled:opacity-30"
-      >
-        <ChevronLeft size={11} /> Back
-      </button>
-      {nextBlocked && (
-        <span className="min-w-0 flex-1 truncate text-[10px] theme-text-muted">{nextBlocked}</span>
-      )}
-      {step < STEPS.length && (
-        <button
-          onClick={() => setStep(step + 1)}
-          disabled={!!nextBlocked}
-          className={`${nextBlocked ? '' : 'ml-auto'} flex items-center gap-1 rounded-md border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong disabled:opacity-30`}
-        >
-          {nextLabel ?? `Next: ${STEPS[step].label}`} <ChevronRight size={11} />
-        </button>
-      )}
-    </div>
-  )
-}
-
 // ── step 1 ───────────────────────────────────────────────────────────────────
 
 function ImportStep({
@@ -482,15 +388,13 @@ function ChunkStep({
 
         <div className="space-y-2">
           {readable.length > 1 && (
-            <select
+            <ThemeSelect
+              size="sm"
+              ariaLabel="Document to preview"
               value={subject ?? ''}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full rounded-md border theme-border theme-surface px-2 py-1 text-[11px] theme-text outline-none"
-            >
-              {readable.map((d) => (
-                <option key={d.document_id} value={d.document_id}>{d.filename}</option>
-              ))}
-            </select>
+              onChange={setSubject}
+              options={readable.map((d) => ({ value: d.document_id, label: d.filename }))}
+            />
           )}
 
           {error && (
@@ -570,9 +474,13 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
   }
   if (!config) return <Skeleton className="h-48 w-full" />
 
-  const selected = config.local_models.find((m) => m.tag === config.model)
+  const chosen = (config.model || '').trim()
+  const selected = config.local_models.find((m) => m.tag === chosen)
   const installed = !!selected?.installed
-  const blocked = !config.ollama_available || !installed
+  // Three distinct blockers, reported as three distinct sentences below. "No
+  // model chosen" is the first one and used to be invisible, because the config
+  // shipped with a model already named.
+  const blocked = !chosen || !config.ollama_available || !installed
 
   return (
     <div className="space-y-3">
@@ -595,29 +503,44 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
             <Check size={14} className="mt-0.5 shrink-0 theme-accent" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-xs theme-text">
-              {selected?.label ?? config.model}
-              <span className="ml-1.5 text-[10px] theme-text-muted">
-                <code>{config.model}</code>
-              </span>
-            </p>
-            <p className="mt-0.5 text-[10px] theme-text-muted">
-              {config.dimensions ? `${config.dimensions}d (${config.dimensions_source})` : 'width unknown'}
-              {' · '}
-              {!config.ollama_available
-                ? 'Ollama unreachable'
-                : installed
-                  ? 'pulled and ready'
-                  : 'not pulled — the run will chunk, then fail every embed batch'}
-              {!config.production_safe && ' · cloud baseline, not production-safe'}
-            </p>
+            {!chosen ? (
+              <>
+                <p className="text-xs theme-text">No embedding model selected</p>
+                <p className="mt-0.5 text-[10px] leading-relaxed theme-text-muted">
+                  Nothing is chosen, and nothing is assumed. The model is stamped onto the index
+                  it builds and changing it afterwards invalidates every vector, so this is picked
+                  rather than defaulted — the run is blocked until it is.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs theme-text">
+                  {selected?.label ?? chosen}
+                  <span className="ml-1.5 text-[10px] theme-text-muted">
+                    <code>{chosen}</code>
+                  </span>
+                </p>
+                <p className="mt-0.5 text-[10px] theme-text-muted">
+                  {config.dimensions
+                    ? `${config.dimensions}d (${config.dimensions_source})`
+                    : 'width unknown'}
+                  {' · '}
+                  {!config.ollama_available
+                    ? 'Ollama unreachable'
+                    : installed
+                      ? 'pulled and ready'
+                      : 'not pulled — the run will chunk, then fail every embed batch'}
+                  {!config.production_safe && ' · cloud baseline, not production-safe'}
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       <dl className="grid gap-2 @2xl:grid-cols-2">
         {([
-          ['Index it builds', config.collection],
+          ['Index it builds', config.collection || 'none until a model is chosen'],
           ['Index state', config.index_detail],
         ] as const).map(([k, v]) => (
           <div key={k} className="rounded-lg border theme-border theme-card p-2.5">
@@ -902,7 +825,7 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
 
   return (
     <div className="space-y-4">
-      <StepRail step={step} setStep={setStep} blocked={blocked} />
+      <StepRail steps={STEPS} step={step} setStep={setStep} blocked={blocked} />
 
       <div>
         <h3 className="text-sm theme-text">{STEPS[step - 1].label}</h3>
@@ -937,7 +860,7 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
         />
       )}
 
-      <StepFooter step={step} setStep={setStep} nextBlocked={blocked[step + 1]} />
+      <StepFooter steps={STEPS} step={step} setStep={setStep} nextBlocked={blocked[step + 1]} />
 
     </div>
   )

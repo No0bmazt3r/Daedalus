@@ -85,7 +85,14 @@ export interface CloudBaseline {
  * against something having gone wrong rather than the ordinary consequence of
  * changing models — that just addresses a different, empty index.
  */
-export type IndexState = 'empty' | 'current' | 'stale' | 'unknown';
+/**
+ * `unset` is its own state, ahead of every question about the store: nobody has
+ * chosen an embedding model. Distinct from `empty`, which means a model *is*
+ * chosen and has simply not been used to build anything — different facts with
+ * different fixes, and collapsing them is what let a fresh install report a
+ * readiness it had no basis for.
+ */
+export type IndexState = 'unset' | 'empty' | 'current' | 'stale' | 'unknown';
 
 /**
  * Which source answered `index_state`.

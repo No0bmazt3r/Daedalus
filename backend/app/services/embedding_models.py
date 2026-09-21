@@ -177,11 +177,25 @@ def _derived(dimensions: int | None) -> dict[str, Any]:
 # to the last one rather than depending on what was typed.
 PROBE_TEXT = "reactor temperature threshold"
 
+# No model, on purpose.
+#
+# This used to default to `nomic-embed-text`, which made every fresh install
+# look like a choice had been made. It is the wrong default twice over. First
+# it is a claim about a model that may not be pulled, so the panel reported a
+# selection while the pipeline would have failed at the embed stage. Second, and
+# worse, the embedding model is the one setting here that is **irreversible with
+# respect to the work**: it is stamped onto the index it builds, and changing it
+# after ingesting invalidates every vector. A decision with that cost should be
+# made by somebody, not inherited from a constant.
+#
+# Empty is therefore a real state that the whole module handles — `index_state`
+# reports `unset`, `resolve_for_runtime` refuses, and the corpus pipeline blocks
+# on it — rather than a hole that each caller discovers for itself.
 DEFAULT: dict[str, Any] = {
     "provider": "local",
-    "model": "nomic-embed-text",
+    "model": "",
     "endpoint_id": None,
-    "dimensions": 768,
+    "dimensions": None,
     # Which model actually produced the vectors currently in the store. None
     # until ingestion runs. A difference from `model` means re-ingest.
     "indexed_with": None,
@@ -229,10 +243,25 @@ def collection_name(provider: str, model: str) -> str:
     return f"{prefix}__{_slug(normalise_tag(model))[:keep].rstrip('-')}-{digest}"
 
 
+def selected(config: dict[str, Any] | None = None) -> str | None:
+    """The chosen model tag, or None when nobody has chosen one.
+
+    One place that answers "has a model been picked?", so callers test that
+    rather than each inventing its own idea of what an unset value looks like.
+    """
+    config = config or read()
+    tag = (config.get("model") or "").strip()
+    return tag or None
+
+
 def collection_for(config: dict[str, Any] | None = None) -> str:
     """The collection the current selection reads and writes."""
     config = config or read()
-    return collection_name(config["provider"], config["model"])
+    tag = selected(config)
+    # The bare prefix when nothing is chosen. `vector_store` already treats that
+    # as "no model yet" and nothing ingests into it, so a status call can still
+    # answer before there is a model to name a collection after.
+    return collection_name(config["provider"], tag) if tag else LOCAL_COLLECTION
 
 
 def effective_dimensions(
@@ -244,7 +273,9 @@ def effective_dimensions(
     uses: a probe that actually ran outranks anything a header claims.
     """
     config = config or read()
-    tag = normalise_tag(model or config["model"])
+    tag = normalise_tag(model or config.get("model") or "")
+    if not tag:
+        return None, "unknown"
     record = (config.get("verified") or {}).get(tag)
     if record and record.get("dimensions"):
         return int(record["dimensions"]), "verified"
@@ -536,7 +567,24 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
     from ..db import vector_store  # noqa: PLC0415 — avoids an import cycle at boot
 
     config = config or read()
-    chosen_tag = normalise_tag(config["model"])
+    tag = selected(config)
+    if not tag:
+        # Its own state, ahead of every question about the store. "No model
+        # chosen" and "chosen model has an empty index" are different facts with
+        # different fixes, and collapsing them into `empty` is what let a fresh
+        # install report a readiness it had no basis for.
+        return {
+            "index_state": "unset",
+            "index_detail": (
+                "no embedding model is selected, so nothing can be embedded and no index "
+                "can be built. Choose one in the Forge → Embedding models."
+            ),
+            "index_source": "none",
+            "index_documents": None,
+            "collection": None,
+        }
+
+    chosen_tag = normalise_tag(tag)
     name = collection_for(config)
     info = vector_store.describe(name)
 
@@ -648,6 +696,12 @@ def resolve_for_runtime() -> dict[str, Any]:
     embedding each query to match sends every question out after it.
     """
     config = read()
+    if not selected(config):
+        raise NotProductionSafe(
+            "no embedding model is selected. The model is stamped onto the index it builds and "
+            "changing it later invalidates every vector, so it is chosen rather than defaulted — "
+            "pick one in the Forge → Embedding models."
+        )
     if config["provider"] != "local":
         raise NotProductionSafe(
             "the selected embedding model is a cloud baseline and cannot serve the local "

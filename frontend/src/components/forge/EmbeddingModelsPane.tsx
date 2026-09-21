@@ -5,6 +5,9 @@ import {
 import {
   fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel,
   type EmbeddingConfig, type EmbeddingModel,
+  // Aliased: the local component below is also called `IndexState`, and the
+  // tone map needs the union to be exhaustively checked.
+  type IndexState as IndexStateValue,
 } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
 
@@ -86,14 +89,21 @@ function bytes(n: number | null): string {
 // `unknown` is deliberately not styled as a problem or as an all-clear. Chroma
 // being unreachable says nothing about the index, and an amber "we could not
 // look" is the honest rendering of a question that was never answered.
-const INDEX_TONES = {
+const INDEX_TONES: Record<
+  IndexStateValue,
+  { wrap: string; tint: string; icon: typeof AlertTriangle }
+> = {
+  // Nothing chosen yet. Neutral, not a warning: on a fresh install this is the
+  // correct state and flagging it red would make "you have not started" look
+  // like "something is broken".
+  unset: { wrap: 'theme-border', tint: 'theme-text-muted', icon: HelpCircle },
   stale: { wrap: 'border-rose-400/40 bg-rose-400/10', tint: 'text-rose-400', icon: AlertTriangle },
   current: {
     wrap: 'border-emerald-400/40 bg-emerald-400/10', tint: 'text-emerald-400', icon: Check,
   },
   unknown: { wrap: 'border-amber-400/40 bg-amber-400/10', tint: 'text-amber-400', icon: HelpCircle },
   empty: { wrap: 'theme-border', tint: 'theme-text-muted', icon: Check },
-} as const
+}
 
 function IndexState({ config }: { config: EmbeddingConfig }) {
   const tone = INDEX_TONES[config.index_state] ?? INDEX_TONES.empty

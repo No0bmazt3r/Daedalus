@@ -522,13 +522,25 @@ checked rather than assumed.
 
 ### 3.4 Decided — where the graph lives
 
-**NetworkX over a git-tracked YAML source of truth**, as recommended below. The
-graph is authored in `backend/app/data/graph/knowledge_graph.yaml` — 37 nodes
-and 48 edges across all 7 node and 7 edge types — and loaded by
-`services/knowledge_graph.py`, which validates it against the declared schema
-and **refuses a graph that does not validate** rather than serving a subtly
-broken one. A typo'd edge type is not a crash; it is a silent retrieval failure,
-which is the failure mode §3.3 is about.
+**NetworkX over a git-tracked YAML source of truth**, as recommended below —
+37 nodes and 48 edges across all 7 node and 7 edge types, loaded by
+`services/knowledge_graph.py`, which validates against the declared schema and
+**refuses a graph that does not validate** rather than serving a subtly broken
+one. A typo'd edge type is not a crash; it is a silent retrieval failure, which
+is the failure mode §3.3 is about.
+
+**Two paths, one file.** `backend/app/data/graph/knowledge_graph.yaml` is the
+packaged **seed**; `config/knowledge_graph.yaml` is the **authored** copy, and
+the loader serves whichever exists. The split is not tidiness — `docker-compose`
+mounts `app/` read-only, correctly, since the application source is not
+something the application should rewrite. Authoring into the source tree worked
+under a bare `uvicorn` and failed in the container, which is the worse of the two
+ways round. `config/` is writable *and* git-tracked, so this section's argument
+is untouched: the file is still the authoring surface and still reviews in a pull
+request, beside `model_config.json` and `rag_config.json`.
+
+The first edit copies the seed across, so a fresh checkout has the full graph
+with nothing to set up, and `authoring/status` reports which file is live.
 
 `python -m app.services.knowledge_graph` prints the same schema and coverage
 report in the terminal, so the graph can be authored without the UI open.
@@ -627,13 +639,38 @@ Three behaviours worth recording, each fixing something that was wrong:
   is a reference figure, not a workspace, so a dropped node is permanent damage
   to a layout somebody is reading.
 
+**The diagram fills the window.** It was a fixed 460px box, so maximizing added
+a screen of empty space under it rather than more graph. The canvas now measures
+its own frame and takes the leftover height — `min-h-full` on the window body
+plus a `flex-1` diagram row, which other tabs simply do not opt into. `vh` would
+have been the wrong tool: every panel here lives in a window that is draggable,
+resizable and maximizable, so the viewport's height says nothing about how much
+room the content has.
+
+A resize adjusts the viewBox's *aspect* rather than re-fitting. Refitting would
+discard whatever the reader had zoomed and panned to, and a resize is not a
+request to go back to the whole graph — it is a request for more room, so the
+horizontal extent and centre are held and the new pixels are spent on more graph.
+
+**Selecting a node answers beside the diagram, not below it.** The detail used
+to render in the grid row under a 460px canvas, so clicking a node updated
+something entirely off-screen and the click read as doing nothing. It docks to
+the right instead — beside rather than floating over, because an overlay
+occludes the structure you are reading, which is the whole reason the diagram
+exists. The canvas keeps its own `viewBox`, so narrowing it scales the drawing
+rather than re-running the layout; there is no jitter on every click. Below the
+container breakpoint the two stack again and the panel scrolls itself into view:
+a narrow window cannot afford 340px of side panel, but it can afford not to hide
+the result.
+
 ### 3.7 Dependencies and risks
 
 | | |
 |---|---|
-| **Blocked by** | M2 (ingestion) for the corpus half; M6 Track 2 for the graph half. **The most blocked of the three** |
+| ~~**Blocked by**~~ | ~~M2 for the corpus half; M6 Track 2 for the graph half~~ — **neither, now.** Both halves are built, including the two pipelines that fill them (§3.9). What is outstanding is the *corpus itself* — real manuals and SOPs — which is a document-collection task rather than a milestone this module waits on |
 | **Unblocks** | The comparison chapter's qualitative figure; graph-authoring coverage checks |
 | **Risk** | Depends on a track that may be descoped. If Track 2 slips, the corpus half still stands alone and is still worth having |
+| **Risk — assisted authoring** | The proposer runs a local model over the corpus, and a small model proposes confidently wrong triples. Guarded three ways — ontology-constrained prompting, canonicalisation against existing nodes, and a dry run through the real validator — but the residual risk is a *plausible* proposal that passes all three and is wrong. That is what the verbatim evidence quote is for: the review is checking a sentence, not trusting a model |
 | ~~**Risk**~~ | ~~Traversal replay needs the agent to record its path~~ — **done.** Migration `005` adds `traversal_path` and `entry_strategy`, landed before the orchestrator wrote its first row, which was the point: a path is not derivable after the fact. `graph_tools.TraversalPath` records every hop regardless of caller, so the viewer had real replay data before any agent existed |
 | **Note** | A hop stores its `from`/`to` node *sets* **and** the pairs actually joined. The sets do not imply the pairings — a hop spanning two Sensors and two Thresholds has four possible pairs and two real ones — so a renderer given only the sets draws edges the graph does not contain. Fixed in the recorder, not guessed at in the renderer |
 
@@ -671,7 +708,20 @@ name means what it says:
 | **trace** — what one query actually did | Replay | Replay |
 | **authoring** — how knowledge gets in | Build | Build |
 
-Track 1 had no trace at all until now, and that asymmetry was a hole in the
+**Track 1 has no Coverage, and that is a finding rather than a gap.** A
+hand-authored graph fails by *omission*, and omission over a fixed schema is
+enumerable: an `AnomalyType` with no `RESOLVED_BY` edge is a question the graph
+provably cannot answer, and §3.3's report lists exactly those. A vector corpus
+has no such list — it returns the top-k nearest chunks for every query, including
+ones it knows nothing about, so its failure is a *bad match* rather than a
+missing edge and the passages nobody wrote cannot be enumerated. What Track 1 can
+report is mechanical (failed extractions, chunks with no vector, documents never
+ingested) and those are counts on the Corpus tab, because they are properties of
+the corpus rather than a separate question about it. A fourth tab for symmetry
+would assert an equivalence that does not hold — and that non-equivalence is one
+of the more interesting things the comparison has to say.
+
+Track 1 had no trace at all until now, and that asymmetry *was* a hole in the
 project's own claim: a comparison of two retrieval strategies where only one of
 them is auditable is not a comparison of two retrieval strategies, and *grounded*
 is not a property that can be asserted about an arm nobody can inspect. Replay
@@ -699,6 +749,31 @@ though it were.
 | **Stages** | store → extract → chunk → embed → stamp | validate → write → reload |
 | **Log** | `ingest_events`, per stage, level-tagged | `graph_edits`, including refusals |
 | **API** | `/api/corpus/*` | `/api/graph/authoring/*` |
+
+**Track 2's Build has an assisted first step.** The model proposes, a person
+disposes. `graph_proposals` reads the *ingested corpus*, extracts candidates
+under the graph's own fixed schema, canonicalises them against existing ids,
+labels and aliases, dry-runs them through the same validator the manual path
+uses, and queues what survives. Nothing reaches the YAML without an accept, and
+an accept goes through `graph_authoring` — so it is validated and logged to
+`graph_edits` identically to a hand edit. The write is the same event; what
+differs is who typed it, and that is what the proposal table records.
+
+The literature converges on why this shape works: accuracy is best when a fixed
+schema *constrains* extraction and regresses when the constraint is removed
+(Feng et al., ontology-grounded KG construction under Wikidata schema). Daedalus
+already had the ontology — `NODE_TYPES`, `EDGE_TYPES`, `EDGE_DOMAINS` — and
+already enforced it, so the prompt asks which of seven types the text describes
+rather than what entities are in it. The surveys' three named failure modes are
+each guarded: duplicate entities under different surface forms (canonicalised
+before queueing, and separately for edges, which are *not* caught by validation
+because re-adding one is a silent no-op), invalid triples (dry-run, queued with
+the refusal rather than dropped, so the error rate stays visible), and cost
+scaling with corpus size (bounded per run).
+
+The web is deliberately not a source. Rule 5 makes web search a surface for
+*finding documents to ingest*; unreviewed external text placed into the graph
+would break the provenance claim the queue exists to protect.
 
 **Both are setup surfaces, never runtime tools** (Rule 5). Ingesting writes, and
 authoring writes; a model that could add to its own knowledge base could add
@@ -806,7 +881,7 @@ Build in value order, which is also dependency order:
 |---|---|---|---|
 | 1 | **Ariadne's Thread** | **Yes** — against a trace seeder | Schema exists and is correct. It is the demonstration of the project's central claim, and the orchestrator lands into a ready-made inspector |
 | 2 | **The Forge** | **Partly** — detect/estimate/score need no model | Self-contained, no dependency on retrieval, and produces the measured numbers Objective 3 needs. Good work to do while M5 is in flight |
-| 3 | **Labyrinth Blueprints** | ~~**No**~~ — **built, graph half** | This ranking assumed the viewer would be built against a seeder. Building the graph layer *first* unblocked half of it, and the Coverage view turned out to be the tool you author the graph *with* — §3.3 calls a coverage table "a to-do list for graph authoring", which is exactly how it was used. The corpus half still waits on M2 |
+| 3 | **Labyrinth Blueprints** | ~~**No**~~ — **built, both halves** | This ranking assumed the viewer would be built against a seeder. Building the graph layer *first* unblocked half of it, and the Coverage view turned out to be the tool you author the graph *with* — §3.3 calls a coverage table "a to-do list for graph authoring", which is exactly how it was used. The corpus half followed once M2's pipeline landed, and the module ended up owning both pipelines rather than only viewing their output — see §3.9 for why that is the right place for them |
 
 ~~**One thing to do immediately, regardless of order:** add a traversal-path
 column to `rag_logs`.~~ **Done** — migration `005`. It cost one migration and

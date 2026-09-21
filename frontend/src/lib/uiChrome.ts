@@ -74,7 +74,7 @@ export const CHROME_SECTIONS: readonly ChromeSection[] = [
       {
         key: 'sidebar-stores',
         label: 'Data stores',
-        hint: 'The four databases and their tables',
+        hint: 'The five databases and their tables',
         shipped: true,
       },
       {

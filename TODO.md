@@ -75,13 +75,41 @@ Offline pipeline. Never runs during a live query.
             rather than BeautifulSoup — it is the only HTML this backend reads,
             and its redirector is unwrapped only after checking the host, which
             is otherwise an open redirect
-- [ ] Extract text — PDF, DOCX, MD, TXT, CSV/JSON
-- [ ] Clean: strip page numbers, repeated headers, corrupt characters; normalise whitespace/headings
-- [ ] Chunk 300–500 tokens, ~50 overlap, **section-aware** — never split a safety procedure mid-step
-- [ ] Tag metadata: `chunk_id`, `source_file`, `source_type`, `section_title`, `page_number`, `document_version`, `reactor_mode`, `updated_at`
-- [ ] Local embeddings via `nomic-embed-text`
-- [ ] Freeze `corpus_chunks.json` — **the same chunks and embeddings must feed both tracks**, or the comparison measures chunking instead of architecture
-- [ ] Target ≥80 chunks (200+ is stronger)
+- [x] **The pipeline is built** — `services/{extraction,chunking,ingestion,corpus_config}`,
+      `db/corpus_store`, `api/corpus.py`, and Blueprints → Corpus → Build as the
+      operating surface. Upload → extract → chunk → embed → Chroma, as one
+      orchestrated run with a level-tagged log per stage. What remains is the
+      corpus itself, not the machinery
+  - [x] Extract text — TXT, MD, CSV, JSON, YAML now; **PDF via `pypdf`**, which
+        is an optional import listed in `requirements.txt`, so a machine without
+        it still boots and refuses a PDF with a message naming the package.
+        Deliberately no OCR: a scanned PDF has no text layer and is refused with
+        that reason rather than stored as a document whose chunks are blank
+  - [ ] DOCX. Not wired — `python-docx` would be a second optional import, and
+        no document in the intended corpus is a .docx yet
+  - [x] Clean: line endings, PDF ligatures, non-breaking spaces, runs of blank
+        lines. Done in the extractor rather than the chunker because it changes
+        offsets, and every offset the extractor reports must describe the string
+        it returns
+  - [x] Chunk **section-aware**, with the strategy configurable — `recursive`
+        (paragraph → line → sentence → word) is the default, `paragraph` never
+        splits one, and `fixed` is kept as the naive baseline the comparison may
+        want. Sizes are characters, and tokens are estimated at 4 chars and
+        labelled as estimates; counting real ones needs the embedding model's
+        tokenizer, which would break preview before a model is pulled
+  - [x] Tag metadata: `chunk_id`, `source_file`, `source_type`, `section_title`,
+        `page_number`, `document_version`, `reactor_mode` — written to both the
+        manifest and the Chroma vector, since `search_corpus` filters and cites
+        on them
+  - [x] Local embeddings, by the **selected** model rather than a default one.
+        Chroma is never allowed to embed: it would use its own bundled MiniLM,
+        put those vectors in a collection stamped `nomic-embed-text`, and make
+        every score meaningless with nothing on screen to say so
+  - [x] The same chunks feed both tracks by construction — one corpus, one
+        manifest, and the graph track joins to it by `source_file`. No frozen
+        `corpus_chunks.json`: the manifest **is** the freeze, it is queryable,
+        and every run records the recipe that produced it on the run row
+  - [ ] Target ≥80 chunks (200+ is stronger) — waits on the corpus
 
 ### Embedding model selection  ▸ Layer 4 prerequisite
 
@@ -570,8 +598,8 @@ Layer 9 below for the per-step detail.
           model cards before any of this reaches the report. (Library and
           discovered models carry no MMLU at all, by design — they are scored
           from a neutral baseline with the quantization penalty applied)
-  - [~] **Labyrinth Blueprints** — the graph half is built; the corpus half
-        waits on M2. Storage decision settled: NetworkX over a git-tracked YAML
+  - [x] **Labyrinth Blueprints** — both halves built. Storage decision settled:
+        NetworkX over a git-tracked YAML
         source of truth (MODULES.md §3.4's recommendation), so the store count
         stays at five
     - [x] Hand-authored graph — `backend/app/data/graph/knowledge_graph.yaml`,
@@ -869,6 +897,103 @@ Layer 9 below for the per-step detail.
         Embedding catalogue) so things behind the same chevron open the same
         way. **The sidebar keeps the domino** — it is a list of rows, which is
         what that cascade is for
+- [x] **Fixed: three native `<select>` elements ignored the theme.** A native
+      select's option list is drawn by the operating system, so on a dark theme
+      it renders as a grey menu with a blue highlight and unreadable rows.
+      `ui/theme-select` was written for exactly this and says so in its own
+      docstring — the edge pickers, the preview document picker and the graph
+      type filter simply were not using it. The last of those carried a
+      `theme-select` class that **does not exist in the stylesheet**, so it was
+      an unthemed control wearing a classname that looked handled
+- [x] **The stepper moved to `ui/stepper`** and Track 2's Build uses it too.
+      Both tracks have a *Build* tab and should not each invent their own idea
+      of what a step looks like — two rails that disagreed would undo the
+      comparison in the one place the arms are meant to read alike
+  - [x] Graph authoring is now Nodes → Edges → Review. The dependency is real
+        and it is the first thing that confuses people: **an edge cannot exist
+        before its two endpoints do.** On one page the edge form sat fully
+        rendered with two empty pickers and no way to tell whether that was a
+        bug or the honest state of an empty graph; as a gated step the rail
+        states the reason. Back is unrestricted, because authoring is iterative
+  - [x] Surveyed the rest and **deliberately converted nothing else.** The
+        Forge's model table is the clearest non-candidate: its estimate, verdict
+        and measurement are columns of one row and `ForgeWindow` already argues
+        that separating them would hide the comparison the module exists to
+        make. The MCP add-server form is four fields — splitting it across three
+        screens would be ceremony. A stepper earns its place when stages are
+        sequential *and dependent*, not whenever there is more than one input
+- [x] **The Blueprints tab row is centred.** Every tab stays a quarter wide so
+      switching tracks slides the underline instead of redrawing the header at a
+      new per-tab size — but left-aligned, Track 1's three tabs left a quarter of
+      dead rail that read as a tab which had failed to render. The underline now
+      positions against the tab group rather than the full-width row
+- [x] **Assisted graph authoring — built.** `services/graph_proposals`,
+      `/api/graph/proposals/*`, and Blueprints → Build → **Propose** as step 1.
+      Reads the ingested corpus, extracts candidates under the graph's own fixed
+      schema, canonicalises them against what exists, dry-runs them through the
+      real validator, and queues the result. Nothing reaches the YAML without an
+      accept, and `accept` goes through `graph_authoring` so it is validated and
+      written to `graph_edits` exactly like a hand edit
+  - [x] The prompt's schema block is **generated from `knowledge_graph`**, never
+        hand-copied. A literal would drift the first time a node type was added,
+        and the drift would be invisible — the model would simply stop proposing
+        the new type and nothing would fail
+  - [x] Every proposal quotes its source sentence verbatim, and the extractor is
+        told to omit anything it cannot quote. That is the difference between
+        reviewing a claim and trusting a model
+  - [x] Invalid proposals are **queued with the schema's refusal**, not dropped.
+        A proposer that hid its own bad output would look perfect and hide the
+        number this feature is judged on. The flag is a propose-time snapshot —
+        an edge refused for a missing endpoint becomes acceptable once that node
+        is accepted — so the UI offers "Accept anyway" and re-validates for real
+  - [x] **Found by testing: edges had no duplicate guard.** Nodes did, via
+        `_canonical`. A duplicate *edge* is not a schema violation — the graph
+        is a MultiDiGraph keyed by edge type, so re-adding one is a silent
+        no-op — so it passed the dry run as valid and failed at accept time with
+        "already exists", i.e. after a person had reviewed it and clicked
+  - [x] Verified end to end against `qwen3:1.7b` on a reactor paragraph: 8
+        duplicates suppressed, one new `Sensor` proposed with its unit extracted,
+        three edges correctly refused — including
+        `SOPDocument --RESOLVED_BY--> AnomalyType`, which is plausible English
+        and backwards in this schema. Accept applied it and logged it; rolled back
+  - [ ] Still to do: a per-document scope control, and re-validating the queue's
+        `valid` flags after an accept so the snapshot refreshes without a re-run
+- [x] **No default embedding model.** The config shipped naming
+      `nomic-embed-text`, so every fresh install looked like a choice had been
+      made — a claim about a model that may not even be pulled, and a claim about
+      the one setting here that is *irreversible with respect to the work*, since
+      the model is stamped onto the index it builds. `unset` is now a real state
+      the whole module handles: `index_state` reports it, `resolve_for_runtime`
+      refuses with the reason, the pipeline blocks on it, and the Forge renders
+      it neutrally rather than as a fault
+- [x] **The corpus store is browsable in the sidebar.** Found while auditing the
+      docs: `corpus.db` was documented as the Vector store's relational half and
+      was not in `log_browser.BROWSABLE`, so nothing could read it. The whole
+      reason the manifest is SQLite rather than something inside Chroma is that
+      it *can* be read — an ingest that produced nothing, a chunk that never got
+      a vector, a proposal the schema refused are each answered by looking at a
+      row. Five stores listed now, and nothing in the new tables holds a
+      credential
+- [x] **Fixed: clicking a node in the graph answered off-screen.** The detail
+      rendered in the grid row *below* a 460px canvas, so the selection updated
+      something nobody could see and the click read as doing nothing. Docked to
+      the right of the canvas now, with a clear-selection button. Beside rather
+      than overlaid — an overlay occludes the structure being read, which is the
+      point of the diagram — and the canvas keeps its own `viewBox`, so
+      narrowing it scales the drawing instead of re-running the layout. Below
+      the container breakpoint they stack and the panel scrolls itself in
+- [x] **The graph diagram fills the window.** It was a fixed 460px box, so
+      maximizing added a screen of empty space under it rather than more graph.
+      The canvas measures its own frame (`useElementHeight`) and takes the
+      leftover height — `min-h-full` on the window body plus a `flex-1` diagram
+      row, which the other tabs simply do not opt into. `vh` would be wrong
+      here: the window is resizable, so the viewport's height says nothing about
+      this element's
+  - [x] A resize adjusts the viewBox's **aspect**, not a re-`fit()`. Refitting
+        would discard whatever the reader had zoomed and panned to, and a resize
+        is a request for more room rather than a request to go back to the whole
+        graph — so the horizontal extent and centre hold and the new pixels buy
+        more graph
 - [x] Add a traversal-path column to `rag_logs` **now** — migration `005`
       adds `traversal_path` and `entry_strategy`. Landed before the orchestrator
       writes its first row, which was the whole point: a path is not derivable

@@ -26,6 +26,26 @@ import { Skeleton } from '../ui/skeleton'
  * question "what does this arm actually know" had a good answer on one side and
  * a settings page on the other.
  *
+ * ## Why there is no Coverage tab here
+ *
+ * Track 2 has one and Track 1 does not, and that asymmetry is a property of the
+ * two approaches rather than an unfinished screen.
+ *
+ * A hand-authored graph fails by **omission**, and omission over a fixed schema
+ * is *enumerable*: an `AnomalyType` with no `RESOLVED_BY` edge is a question the
+ * graph provably cannot answer, and Coverage lists exactly those. A vector
+ * corpus has no such list. It returns the top-k nearest chunks for *every*
+ * query, including ones it knows nothing about — so its failure is a bad match
+ * rather than a missing edge, and you cannot enumerate the passages that were
+ * never written.
+ *
+ * What Track 1 *can* report is mechanical: documents that failed extraction,
+ * chunks with no vector, documents imported but never ingested. Those are on
+ * this tab as counts, because they are properties of the corpus rather than a
+ * separate question about it. Giving them their own tab for symmetry would
+ * imply an equivalence that does not hold, and that equivalence is one of the
+ * more interesting things §5's comparison has to say.
+ *
  * ## The chunk text is the point
  *
  * A citation is only checkable if you can read the passage it points at. This
@@ -151,6 +171,20 @@ export function CorpusView() {
           <AlertCircle size={12} className="mt-0.5 shrink-0" /> {error}
         </p>
       )}
+
+      {/* Stated rather than left as a missing tab. The asymmetry with Track 2 is
+          a finding about the two approaches, and §5's comparison has to say it
+          somewhere — better here, where somebody is looking for it. */}
+      <p className="text-[10px] leading-relaxed theme-text-muted">
+        Track 2 has a Coverage tab and this arm does not, because the two fail differently. An
+        authored graph fails by <span className="theme-text">omission</span>, and omission over a
+        fixed schema is enumerable — an anomaly type with no procedure attached is a question it
+        provably cannot answer. A vector corpus returns its nearest chunks for every query,
+        including ones it knows nothing about, so its failure is a bad match rather than a missing
+        edge and there is no list of the passages nobody wrote. The counts above are the part that
+        <span className="theme-text"> is </span>
+        checkable.
+      </p>
 
       <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
         <div className="space-y-1.5">

@@ -141,14 +141,19 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
 const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'corpus', graph: 'graph' }
 
 /**
- * The tab row is laid out in quarters whichever track is showing.
+ * Every tab is a quarter wide, and the row is centred.
  *
- * Track 1 has three tabs and Track 2 has four. Sizing each row to its own count
- * would make the two tracks' headers different widths per tab, so switching
- * tracks would redraw the row rather than move the underline. Quarters is the
- * larger of the two counts, so Track 1's three sit left-aligned with a quarter
- * of empty rail after them — which is honest: it is the tab Track 1 does not
- * have (Coverage, and the graph's gaps are not a thing a corpus has).
+ * Track 1 has three tabs and Track 2 has four. A fixed width keeps one geometry
+ * for both, so switching tracks slides the underline instead of redrawing the
+ * header at a new per-tab size.
+ *
+ * Centring is what that costs and it is worth paying: left-aligned, Track 1's
+ * three tabs left a quarter of dead rail on the right that read as a missing
+ * tab — something that had failed to render rather than a row that is simply
+ * shorter. Centred, a three-tab row is just a three-tab row.
+ *
+ * The underline is positioned from the group's own width rather than the
+ * container's, so it stays under its tab at either count.
  */
 const TAB_BASIS = 100 / 4
 
@@ -375,9 +380,15 @@ export function BlueprintsWindow({
           {/* No track chip and no way back, because there is nowhere to come
               back from: this window renders the live track and the other one is
               not reachable. The window's subtitle names which arm is running. */}
-          <div className="relative flex min-h-[34px] items-center">
+          <div className="flex min-h-[34px] items-center justify-center">
             {group ? (
-              <>
+              // The tabs and their underline are one positioning context, so the
+              // underline's percentages resolve against the tab group rather
+              // than the full-width row the group is centred in.
+              <div
+                className="relative flex"
+                style={{ width: `${TAB_BASIS * group.tabs.length}%` }}
+              >
                 {group.tabs.map((entry) => {
                   const selectedTab = tab === entry.id
                   return (
@@ -385,7 +396,7 @@ export function BlueprintsWindow({
                       key={entry.id}
                       onClick={() => setTab(entry.id)}
                       title={entry.hint}
-                      style={{ flexBasis: `${TAB_BASIS}%` }}
+                      style={{ flexBasis: `${100 / group.tabs.length}%` }}
                       className={`flex shrink-0 items-center justify-center gap-1.5 rounded-t-lg px-3 py-2 text-xs transition-colors duration-200 ${
                         selectedTab ? 'theme-accent' : 'theme-text-muted hover:theme-text'
                       }`}
@@ -403,21 +414,27 @@ export function BlueprintsWindow({
                   aria-hidden
                   className="absolute bottom-0 h-0.5 rounded-full theme-bg-primary transition-transform duration-300 ease-out"
                   style={{
-                    width: `${TAB_BASIS}%`,
+                    width: `${100 / group.tabs.length}%`,
                     transform: `translateX(${Math.max(group.tabs.findIndex((t) => t.id === tab), 0) * 100}%)`,
                   }}
                 />
-              </>
+              </div>
             ) : (
               <Skeleton className="h-5 w-64" />
             )}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto no-scrollbar p-6">
+        {/* `min-h-full` plus a flex column is what lets a view *fill* the window
+            instead of sitting at whatever height its content happens to be. The
+            graph diagram uses it: maximize the window and the canvas grows with
+            it, rather than leaving a screen of empty space under a fixed 460px
+            box. Views that do not opt in are unaffected — without a `flex-1`
+            child the column is just a block that scrolls as before. */}
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-6">
           <div
             key={`${activeTrack ?? 'unknown'}-${tab}`}
-            className="mx-auto w-full @4xl:max-w-4xl @7xl:max-w-[min(100%,1400px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
+            className="mx-auto flex min-h-full w-full flex-col @4xl:max-w-4xl @7xl:max-w-[min(100%,1400px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
           >
             {/* Fallback 2. Shown above whatever is on screen rather than instead
                 of it, so a failed *re-read* does not throw away a working view. */}

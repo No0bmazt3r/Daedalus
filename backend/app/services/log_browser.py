@@ -27,7 +27,7 @@ from typing import Any, Final
 
 from ..db import sqlite_util
 from ..db.audit_store import LOG_TABLES
-from ..db.paths import AUDIT_DB, CHAT_DB
+from ..db.paths import AUDIT_DB, CHAT_DB, CORPUS_DB
 
 from ..db.sensor_store import SENSOR_DB
 
@@ -40,6 +40,21 @@ BROWSABLE: Final[dict[str, tuple[Path, tuple[str, ...]]]] = {
     "chat": (CHAT_DB, ("chat_sessions", "chat_messages")),
     "audit": (AUDIT_DB, LOG_TABLES),
     "sensor": (SENSOR_DB, ("sensor_readings", "anomaly_records")),
+    # The Vector store's relational half. Listed because the whole point of
+    # keeping the manifest in SQLite rather than inside Chroma is that it can be
+    # read — an ingest that produced nothing, a chunk that never got a vector
+    # and a proposal the schema refused are all questions answered by looking at
+    # a row, and the sidebar's browser is where somebody already looks.
+    #
+    # Nothing here holds a credential: documents are filenames and text the
+    # operator supplied, and the two authoring tables hold graph ids.
+    "corpus": (
+        CORPUS_DB,
+        (
+            "documents", "chunks", "ingest_runs", "ingest_events",
+            "graph_edits", "graph_proposals", "proposal_runs",
+        ),
+    ),
 }
 
 # Human labels, so the UI does not have to carry a second copy of this map.
@@ -47,6 +62,7 @@ STORE_LABELS: Final[dict[str, str]] = {
     "chat": "Chat Transcripts",
     "audit": "Audit & Evaluation Logs",
     "sensor": "Sensor Telemetry",
+    "corpus": "Corpus & Authoring",
 }
 
 # Any column whose name contains one of these is replaced with a marker.

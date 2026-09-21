@@ -31,9 +31,12 @@ two disagree, resolve in this order:
    Describes what exists; `PROJECT.md` describes what is intended.
 3. **[`MODULES.md`](MODULES.md)** — design for Ariadne's Thread, The Forge and
    Labyrinth Blueprints. Subordinate to `PROJECT.md`: it elaborates §10.2 and
-   never overrides it. The Forge is built; Labyrinth Blueprints is built apart
-   from its corpus half, which waits on M2, and §3.4's storage decision is
-   settled (NetworkX over git-tracked YAML). **Ariadne's Thread is not built.**
+   never overrides it. The Forge is built; Labyrinth Blueprints is built in
+   full — both halves, and both of the pipelines that fill them (§3.9: corpus
+   ingestion for Track 1, assisted graph authoring for Track 2). §3.4's storage
+   decision is settled (NetworkX over git-tracked YAML), with the *authored*
+   copy in `config/` so it stays writable in the container and still reviews in
+   a diff. **Ariadne's Thread is not built.**
 4. **[`BENCHMARK.md`](BENCHMARK.md)** — canonical for *how latency is measured
    and what may be concluded from it*. Elaborates `MODULES.md` §2.3. Written to
    be defended: §9 names the limitations rather than hiding them.

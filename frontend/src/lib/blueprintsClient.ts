@@ -640,3 +640,85 @@ export const fetchRetrievals = () =>
 
 export const fetchRetrieval = (queryId: string) =>
   request<Retrieval | Unavailable>(`/api/corpus/retrieval/${encodeURIComponent(queryId)}`);
+
+// ── assisted authoring: the proposal queue (Track 2) ─────────────────────────
+//
+// The model proposes, a person disposes. Nothing reaches the graph until an
+// `accept` — which goes through the same authoring path a hand edit does, so an
+// accepted proposal is validated and logged to `graph_edits` identically.
+
+export interface GraphProposal {
+  proposal_id: string;
+  run_id: string;
+  created_at: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'failed';
+  target: 'node' | 'edge';
+  node_type: string | null;
+  element_id: string | null;
+  attributes: Record<string, unknown>;
+  source_id: string | null;
+  edge_type: string | null;
+  target_id: string | null;
+  document_id: string | null;
+  chunk_id: string | null;
+  /** Quoted verbatim from the source chunk — what makes the proposal checkable. */
+  evidence: string | null;
+  model: string | null;
+  /**
+   * A **snapshot** from propose time, not a live verdict. An edge refused for a
+   * missing endpoint becomes acceptable the moment that endpoint is accepted,
+   * and `accept` re-validates for real — so this warns rather than blocks.
+   */
+  valid: number;
+  validation_error: string | null;
+  decided_error: string | null;
+}
+
+export interface ProposalRun {
+  run_id: string;
+  created_at: string;
+  status: 'running' | 'ok' | 'failed';
+  model: string | null;
+  documents_read: number;
+  chunks_read: number;
+  proposed: number;
+  duplicates: number;
+  invalid: number;
+  elapsed_ms: number | null;
+  error: string | null;
+}
+
+export interface ProposalStatus {
+  available: boolean;
+  counts: { pending: number; accepted: number; rejected: number; failed: number };
+  chunks_available: number;
+  max_chunks: number;
+  active_run: string | null;
+  runs: ProposalRun[];
+  error?: string;
+}
+
+export const fetchProposalStatus = () =>
+  request<ProposalStatus>('/api/graph/proposals/status');
+
+export const fetchProposals = (status = 'pending') =>
+  request<{ proposals: GraphProposal[] }>(`/api/graph/proposals?status=${status}`);
+
+export const generateProposals = (documentIds?: string[]) =>
+  request<{ run: ProposalRun }>('/api/graph/proposals/generate', {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds ?? null }),
+    // One model call per chunk, up to MAX_CHUNKS. On CPU that is minutes.
+    timeoutMs: 900_000,
+  });
+
+export const acceptProposal = (id: string) =>
+  request<{ ok: true; nodes: number; edges: number }>(
+    `/api/graph/proposals/${encodeURIComponent(id)}/accept`,
+    { method: 'POST' },
+  );
+
+export const rejectProposal = (id: string) =>
+  request<{ ok: true }>(`/api/graph/proposals/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+  });

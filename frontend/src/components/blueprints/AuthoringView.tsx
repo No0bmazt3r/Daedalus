@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Plus, Trash2, AlertCircle, Check, X, Link2, Boxes, History, ChevronRight,
+  Plus, Trash2, AlertCircle, Check, X, Link2, Boxes, History, ChevronRight, ListChecks,
+  Sparkles,
 } from 'lucide-react'
 import {
   fetchAuthoringStatus, fetchAuthoringHistory, createGraphNode, deleteGraphNode,
@@ -10,6 +11,9 @@ import {
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
 import { NodeChip } from './nodeStyles'
+import { ThemeSelect } from '../ui/theme-select'
+import { StepRail, StepFooter, type Step } from '../ui/stepper'
+import { ProposalQueue } from './ProposalQueue'
 
 /**
  * Building the graph — Track 2's pipeline, MODULES.md §3.
@@ -35,6 +39,20 @@ import { NodeChip } from './nodeStyles'
  * debugging an authoring session actually wants. The YAML is never left
  * invalid — a refused edit does not touch the file at all.
  *
+ * ## Why this is a stepper
+ *
+ * Because the dependency is real and it is the first thing that confuses people:
+ * **an edge cannot exist before its two endpoints do.** On one page, the edge
+ * form sits there fully rendered with two empty pickers and no way to tell
+ * whether that is a bug or the honest state of an empty graph. As a step it is
+ * gated, and the rail says the reason.
+ *
+ * Nodes → Edges → Review is also the order a graph actually gets built, and the
+ * order §3.3's coverage report reads it back in. Going *back* is unrestricted,
+ * because authoring is iterative — you add a node, connect it, notice a gap,
+ * add another — and a wizard that made you finish step 1 before ever seeing
+ * step 2 would be describing a different activity.
+ *
  * ## This does not invent anything
  *
  * No suggestion, no inference, no model. A node exists because a person wrote
@@ -42,6 +60,17 @@ import { NodeChip } from './nodeStyles'
  * than CORPUS. A button that generated nodes would quietly demote the whole
  * track to the standing of an ingested PDF.
  */
+
+const STEPS: readonly Step[] = [
+  // Propose is step 1 because it is the cheap way in: reading the corpus and
+  // accepting what survives is faster than typing, and what it cannot find is
+  // exactly what steps 2 and 3 are for. Nothing forces it — an empty corpus or
+  // no model simply leaves the queue empty and the manual steps unaffected.
+  { id: 1, label: 'Propose', icon: Sparkles, hint: 'Extract candidates from the corpus — nothing is written until you accept' },
+  { id: 2, label: 'Nodes', icon: Boxes, hint: 'The things the graph knows about' },
+  { id: 3, label: 'Edges', icon: Link2, hint: 'How they relate — each edge type has fixed endpoints' },
+  { id: 4, label: 'Review', icon: History, hint: 'Gaps, and every edit including the refused ones' },
+]
 
 function EdgeBadge({ type }: { type: string }) {
   return (
@@ -225,24 +254,35 @@ function EdgeForm({
         edge
       </p>
 
+      {/* `ThemeSelect`, not `<select>`. A native select's option list is drawn by
+          the operating system, so it ignores the palette entirely — on a dark
+          theme it renders as a grey menu with a blue highlight and unreadable
+          rows. This component exists precisely for that and was already in the
+          codebase; using the native element here was the oversight. */}
       {([['From', from, setSource, sources], ['To', to, setTarget, targets]] as const).map(
         ([label, value, set, options]) => (
-          <label key={label} className="block">
+          <div key={label}>
             <span className="text-[10px] theme-text-muted">
               {label} {options.length === 0 && '— no node of that type exists yet'}
             </span>
-            <select
-              value={value}
-              onChange={(e) => set(e.target.value)}
-              disabled={options.length === 0}
-              className="mt-1 w-full rounded-md border theme-border theme-surface px-2 py-1 text-[11px] theme-text outline-none disabled:opacity-40"
-            >
-              <option value="">choose…</option>
-              {options.map((n) => (
-                <option key={n.id} value={n.id}>{n.label || n.id}</option>
-              ))}
-            </select>
-          </label>
+            {options.length === 0 ? (
+              <p className="mt-1 rounded-md border border-dashed theme-border px-2 py-1.5 text-[10px] theme-text-muted">
+                Add a {label === 'From' ? domain.from : domain.to} node first.
+              </p>
+            ) : (
+              <ThemeSelect
+                size="sm"
+                ariaLabel={`${label} node`}
+                value={value}
+                onChange={set}
+                options={[
+                  { value: '', label: 'choose…' },
+                  ...options.map((n) => ({ value: n.id, label: n.label || n.id })),
+                ]}
+                className="mt-1"
+              />
+            )}
+          </div>
         ),
       )}
 
@@ -305,6 +345,7 @@ export function AuthoringView() {
   const [history, setHistory] = useState<GraphEdit[]>([])
   const [failuresOnly, setFailuresOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState(1)
 
   const refresh = useCallback(() => {
     void fetchAuthoringStatus().then(setStatus).catch((e: Error) => setError(e.message))
@@ -335,8 +376,31 @@ export function AuthoringView() {
       : <Skeleton className="h-96 w-full" />
   }
 
+  const connectable = status.schema.edge_types.some(
+    (e) => nodes.some((n) => n.type === e.from) && nodes.some((n) => n.type === e.to),
+  )
+  // The one real dependency, stated rather than left to be discovered: an edge
+  // needs both of its endpoints to exist, and the schema says which types those
+  // must be. Until some edge type has both ends available, step 2 is a form
+  // that cannot be completed.
+  const noPair = !connectable
+    ? nodes.length === 0
+      ? 'Add a node first — an edge needs two that already exist'
+      : 'No edge type has both of its endpoint types yet — add the other end'
+    : undefined
+  const blocked: Record<number, string | undefined> = {
+    1: undefined, 2: undefined, 3: noPair, 4: undefined,
+  }
+
   return (
     <div className="space-y-4">
+      <StepRail steps={STEPS} step={step} setStep={setStep} blocked={blocked} />
+
+      <div>
+        <h3 className="text-sm theme-text">{STEPS[step - 1].label}</h3>
+        <p className="text-[11px] theme-text-muted">{STEPS[step - 1].hint}</p>
+      </div>
+
       {!status.valid && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5">
           <AlertCircle size={13} className="mt-0.5 shrink-0 text-rose-400" />
@@ -378,11 +442,13 @@ export function AuthoringView() {
         </div>
       )}
 
-      <div className="grid gap-3 @2xl:grid-cols-2">
-        <NodeForm status={status} onDone={refresh} />
-        <EdgeForm status={status} nodes={nodes} onDone={refresh} />
-      </div>
+      {step === 1 && <ProposalQueue onApplied={refresh} />}
+      {step === 2 && <NodeForm status={status} onDone={refresh} />}
+      {step === 3 && <EdgeForm status={status} nodes={nodes} onDone={refresh} />}
 
+      {/* Two blocks in one branch, so a fragment. */}
+      {step === 2 && (
+      <>
       <div className="space-y-1.5">
         <h4 className="text-xs theme-text">Nodes by type</h4>
         <div className="flex flex-wrap gap-1">
@@ -423,6 +489,10 @@ export function AuthoringView() {
         </div>
       </div>
 
+      </>
+      )}
+
+      {step === 3 && (
       <div className="space-y-1.5">
         <h4 className="text-xs theme-text">Delete an edge</h4>
         <div className="max-h-52 space-y-1 overflow-y-auto no-scrollbar">
@@ -449,6 +519,23 @@ export function AuthoringView() {
         </div>
       </div>
 
+      )}
+
+      {step === 4 && (status.coverage.total_gaps as number) > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
+          <ListChecks size={13} className="mt-0.5 shrink-0 text-amber-400" />
+          <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text">
+            {status.coverage.total_gaps as number} structural gap(s) — nodes that are legal but
+            leave a question unanswerable.{' '}
+            <span className="theme-text-muted">
+              The Coverage tab lists them one by one; a hand-authored graph fails by omission, and
+              omission is invisible from the answer side.
+            </span>
+          </p>
+        </div>
+      )}
+
+      {step === 4 && (
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
           <History size={13} className="theme-accent" />
@@ -478,6 +565,9 @@ export function AuthoringView() {
           )}
         </div>
       </div>
+      )}
+
+      <StepFooter steps={STEPS} step={step} setStep={setStep} nextBlocked={blocked[step + 1]} />
     </div>
   )
 }

@@ -59,7 +59,7 @@ to it.
 | `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages — audit rows survive |
 | `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
 | `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
-| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts — backs the sidebar's Data stores section |
+| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts — backs the sidebar's Data stores section. Five stores: chat, audit, sensor, corpus (the ingestion manifest and authoring history) and the Chroma collections. `prefs` is absent on purpose, and `model_endpoints` for the stronger reason that it holds API keys |
 | `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
 | `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
 | `GET`/`POST` | `/api/providers` | List / add a benchmark endpoint |
@@ -100,6 +100,13 @@ to it.
 | `POST`/`PATCH`/`DELETE` | `/api/graph/authoring/nodes` | Author nodes. Validated before the file is written; a node with edges is refused unless `cascade` |
 | `POST`/`DELETE` | `/api/graph/authoring/edges` | Author edges. The domain check is the loader's, so there is one copy of the rule |
 | `GET` | `/api/graph/authoring/history` | Every edit **including the refused ones** — the schema saying no is the informative part |
+| `GET` | `/api/corpus/retrievals` | Vector retrievals, newest first — Track 1's counterpart to `/graph/traversals` |
+| `GET` | `/api/corpus/retrieval/{query_id}` | What one query pulled: chunks, cosine distances as stored, and the document each belongs to. A chunk id the corpus no longer holds is reported `missing`, not dropped |
+| `GET` | `/api/graph/proposals/status` | Queue counts, how much corpus there is to read, and recent proposal runs |
+| `GET` | `/api/graph/proposals` | The queue, filtered by status. Nodes before edges, since an edge is only acceptable once its endpoints exist |
+| `POST` | `/api/graph/proposals/generate` | Reads the ingested corpus under the graph's fixed schema and queues candidates. Writes nothing to the graph |
+| `POST` | `/api/graph/proposals/{id}/accept` | The only write in the assisted path, and it goes through `graph_authoring` — so an accepted proposal is validated and logged to `graph_edits` exactly like a hand edit |
+| `POST` | `/api/graph/proposals/{id}/reject` | Declines one. Kept, not deleted: what the extractor got wrong is the evidence for how well it works |
 | `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can. `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
@@ -207,12 +214,24 @@ tidiness — see `PROJECT.md` §6.3.
 | Sensor | `db/sensor_store.py` | SQLite | **read-only** (`file:…?mode=ro`) |
 | Audit | `db/audit_store.py` | SQLite | read/write |
 | Chat | `db/chat_store.py` | SQLite | read/write |
-| Vector | `db/vector_store.py` | ChromaDB | read/write |
+| Vector | `db/vector_store.py` + `db/corpus_store.py` | ChromaDB + SQLite | read/write |
 | Prefs | `db/prefs_store.py` | SQLite | read/write |
+
+**The Vector store has two halves.** Chroma holds the vectors; `corpus.db` holds
+the manifest of what was ingested — documents, chunk text with its offsets,
+every pipeline run with the recipe it used, and a level-tagged event log. It also
+carries Track 2's authoring history and proposal queue, because those are
+operational records *about* the knowledge layer rather than the knowledge itself.
+It is still one store: the same subsystem's own metadata, beside its vectors, the
+way Chroma keeps its own catalogue. §6.4's safety argument is untouched.
+
+It is deliberately not in `audit`: deleting a document should take its ingestion
+history with it, and that DELETE must never reach the store whose value is that
+nothing deletes from it.
 
 Paths resolve centrally in `db/paths.py`, overridable by environment:
 `DAEDALUS_DATA_DIR`, `DAEDALUS_LOG_DIR`, `DAEDALUS_PREFS_DB`,
-`DAEDALUS_CHAT_DB`, `CHROMA_URL`.
+`DAEDALUS_CHAT_DB`, `DAEDALUS_CORPUS_DB`, `CHROMA_URL`.
 
 Connection handling is shared in `db/sqlite_util.py` — WAL, a 5s busy timeout,
 `foreign_keys=ON` (per-connection, and off by default, so a schema with
@@ -1333,15 +1352,23 @@ Paths are relative to `frontend/src/`.
 | `components/stores/StoreWindow.tsx` | Puts it in a `FloatingWindow` |
 | `components/ui/floating-window.tsx` | The shared window shell: drag, resize, Peek, minimize, Escape. Passes `minimized` to children, because minimize hides rather than unmounts — a window can sit invisible while the state it renders changes, and one whose content goes stale re-reads on the restore edge. Also exports `useMinimizeToDock` for `ThemeModal`, which is off the shell by design |
 | `components/ui/switch.tsx` | The one on/off control — a segmented ON \| OFF, not a pill and knob |
+| `components/ui/stepper.tsx` | The shared step rail and Back/Next footer. Circles joined by a track that fills directionally; used by both tracks' Build tabs so neither invents its own idea of a step |
 | `components/ui/collapse.tsx` | The one collapse/expand animation, and the mount lifetime it needs. Two variants: `domino` for a list of rows (springy, the sidebar's), `flow` for a panel of sections (the container unfolds via `grid-template-rows`, sections settle downward, no overshoot) |
 | `hooks/useDraggable.ts` | Window drag, plus edge snapping: zones, preview rectangle, restore-under-cursor |
 | `components/ui/skeleton.tsx` | Loading placeholders that hold the shape of what is coming |
 | `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |
 | `components/forge/ForgeWindow.tsx` | The Forge (Layer 11) — step 1 of §8.2 |
 | `components/blueprints/BlueprintsWindow.tsx` | Labyrinth Blueprints (MODULES.md §3) — renders the live retrieval track's tabs only, and owns the fallback chain when that track cannot be read or has nothing to show (§3.8) |
-| `lib/blueprintsClient.ts` | `/api/graph`, `/api/corpus` and `/api/rag/config` client. Read-only by construction: there is no "run a traversal" call |
+| `components/blueprints/CorpusView.tsx` | Track 1's inventory: documents, and every chunk as the retriever stores them. States why there is no Coverage tab on this arm |
+| `components/blueprints/IngestView.tsx` | Track 1's Build — the four-step pipeline. Step 3 reports the embedding model and hands management to the Forge rather than duplicating it |
+| `components/blueprints/RetrievalView.tsx` | Track 1's Replay — which passages a query pulled, at what distance, from which document. A retrieved chunk the corpus no longer holds is marked rather than dropped |
+| `components/blueprints/AuthoringView.tsx` | Track 2's Build — Propose → Nodes → Edges → Review. Forms are generated from the backend's schema, so a picker cannot offer an edge the validator refuses |
+| `components/blueprints/ProposalQueue.tsx` | The assisted-authoring review queue. Every row quotes its source sentence; invalid proposals are shown with the schema's refusal rather than hidden |
+| `components/ui/theme-select.tsx` | The themed replacement for `<select>`. A native select's option list is drawn by the OS and ignores the palette entirely |
+| `lib/blueprintsClient.ts` | `/api/graph`, `/api/corpus` and `/api/rag/config` client. Read-only *for retrieval* by construction — there is no "run a traversal" call — while the authoring and ingestion routes it also carries are setup surfaces |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
 | `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
+| `hooks/useElementHeight.ts` | ResizeObserver height. `vh` is wrong anywhere in this app — every panel lives in a window that is draggable, resizable and maximizable, so the viewport's height says nothing about the element's |
 | `lib/systemClient.ts` | Log-browser, observability and provider API client |
 | `components/settings/` | `SettingsSearch`, `DatabasesPanel` (health only), `ModelEndpointsPanel`, `AppearancePanel`, `ShortcutsPanel` |
 
@@ -1448,7 +1475,7 @@ how often each is actually used:
 
 | Surface | Answers | Reached |
 |---|---|---|
-| **Sidebar → Data stores** | "What is in this table right now?" | One click, next to the chats |
+| **Sidebar → Data stores** | "What is in this table right now?" | One click, next to the chats. Includes `corpus` — the ingestion manifest, the per-stage event log, the graph's edit history and the proposal queue, which is where a pipeline question gets answered by reading a row |
 | **Settings → Databases** | "Is every store healthy?" | Settings, occasionally |
 | **Metrics stack** (own port) | "*Why* is this store unhealthy?" | A standing link out of that panel |
 
