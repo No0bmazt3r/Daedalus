@@ -73,13 +73,16 @@ services:
       DAEDALUS_API_URL: http://daedalus:8000
     volumes:
       - ./frontend:/app
-      # An anonymous volume so the container's node_modules is not shadowed by
-      # the host's. They are not interchangeable: native builds (rollup, esbuild,
-      # tailwind's oxide binary) are compiled per platform, and a Linux container
-      # loading a host-built binary fails in a way that reads as a Vite bug.
-      - /app/node_modules
+      # A named volume so the container's node_modules is not shadowed by
+      # the host's, and survives container recreation.
+      - frontend-node-modules:/app/node_modules
+      - frontend-pnpm-store:/root/.local/share/pnpm/store
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
     depends_on:
       - daedalus
     restart: unless-stopped
+
+volumes:
+  frontend-node-modules:
+  frontend-pnpm-store:
