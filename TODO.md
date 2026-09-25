@@ -493,6 +493,40 @@ Layer 9 below for the per-step detail.
       forced to the fixture so a cloud call never carries real plant documents
       off the machine
 - [x] Write the selection to `config/model_config.json`
+- [x] **Forge reorganised by kind of model** — tabs are now Hardware · Chat
+      models · Embedding models · Cloud baselines, replacing Models + Added
+      Models. The seven source tabs became filters on one list (Shortlist /
+      Everything, Installed, SLM / LLM, Runnable only); one card per model with
+      the quantisation picked on it, so the shortlist counts 6 rather than 15;
+      Hugging Face and typed tags moved under the list, searched only on request;
+      run statistics (p50/p95) moved into each card's detail. The shortlist is
+      editable by starring, stored in prefs as edits against the report's six,
+      which keep a "report candidate" badge. Settings → Added Models now opens
+      the same list with Installed on
+- [x] **Hugging Face is a third scope** beside Shortlist and Everything — the
+      search box searches it (debounced) only while it is chosen, so choosing it
+      is the consent to send the query off the machine. "Check tag" sits beside
+      the search box whenever a tag is pasted, in any scope
+- [x] **Embedding catalogue: 4 → 16 models**, every figure read from the tag's
+      own GGUF header on registry.ollama.ai (width, context) and its manifest
+      (size) on 2026-09-25. Adds Arctic Embed 2 / L / M-Long / S, Granite 30M /
+      278M, EmbeddingGemma, Qwen3 Embedding 0.6B / 4B / 8B, BGE Large, Paraphrase
+      Multilingual. **Corrected** nomic-embed-text's context from 8,192 (model
+      card) to 2,048 (what Ollama's file declares). The tab gained filters
+      (All / Installed / English / Multilingual, plus a name filter) and a
+      pull-any-tag box that says so when the pulled model is not an embedder.
+      Fixed selection matching, which cut every tag at `:` and would never have
+      marked `snowflake-arctic-embed:335m` as selected
+- [x] **Installed tab restored, browse tabs made browse-only.** Forge tabs are
+      Hardware · Installed · Chat models · Embedding models. Installed manages
+      (local models with run history, benchmark, delete; embedding selection,
+      verify and the index state; cloud baselines). The two model tabs only
+      search, filter, pull and star; an installed card shows Manage, which
+      switches to Installed, so each control has one home. Settings → Added
+      Models renders the same Installed view
+- [x] **Embedding catalogue moved to `backend/app/data/embedding_catalogue.json`**,
+      beside `model_catalogue.json` and loaded the same way — read fresh per call,
+      a malformed file degrades to no suggestions rather than an error
 - [ ] Average the benchmark over several runs — currently one run per click.
       `GET /api/forge/usage` already aggregates every logged run into
       mean/p50/p95, so this is about the *per-click* figure, not the report's.

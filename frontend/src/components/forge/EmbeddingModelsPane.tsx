@@ -1,18 +1,27 @@
 import { useEffect, useState } from 'react'
 import {
-  Download, Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, RefreshCw,
+  Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, Download, Loader2, Search,
 } from 'lucide-react'
 import {
-  fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel,
-  type EmbeddingConfig, type EmbeddingModel,
+  fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel, verifyEmbeddingModel,
+  type EmbeddingConfig,
   // Aliased: the local component below is also called `IndexState`, and the
   // tone map needs the union to be exhaustively checked.
   type IndexState as IndexStateValue,
 } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
+import { EmbeddingRow } from './EmbeddingRow'
 
 /**
- * Forge → Added Models → Embedding models.
+ * The embedding models, in two modes:
+ *
+ * | mode | where | what it does |
+ * |---|---|---|
+ * | `browse` | Forge → Embedding models | find and pull: the catalogue, filters, pull any tag by name |
+ * | `installed` | Forge → Installed → Embedding models | manage: index state, which model builds the index, verify, cloud baseline |
+ *
+ * One component rather than two so the card, the fetch and the pull logic
+ * exist once; the mode only decides which list and which controls are shown.
  *
  * Which model turns chunks into vectors — `architecture/04` Step 5.
  *
@@ -28,14 +37,13 @@ import { Skeleton } from '../ui/skeleton'
  * Settings → Knowledge Base keeps only what is genuinely a corpus fact: whether
  * the index matches the selected model.
  *
- * ## Inventory and choice, not discovery
+ * ## Browse is for finding, Installed is for managing
  *
- * Finding and pulling one happens in Models → Embeddings, the same way it does
- * for answering models: that tab is *what could run here*, this pane is *what is
- * here now* and which one is in use. Listing the whole catalogue in both places
- * would make neither the answer to "what do I actually have".
+ * Browsing lists the whole catalogue once and offers only Pull. An installed
+ * model there shows Manage, which goes to Installed, rather than repeating the
+ * selection and verify controls — so each control has exactly one home.
  *
- * ## Its own pane, not a tier inside Local models
+ * ## Its own tab, not a tier inside Chat models
  *
  * An embedding model is not a small answering model. It never appears in the
  * composer's picker, is never benchmarked for tokens/sec, and has no fit
@@ -77,14 +85,6 @@ import { Skeleton } from '../ui/skeleton'
  * be comparable — so every question goes out too. A cloud selection therefore
  * writes a separate collection and cannot serve the local system.
  */
-
-function bytes(n: number | null): string {
-  if (!n) return '—'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let v = n, u = 0
-  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++ }
-  return `${v.toFixed(u === 0 ? 0 : 1)} ${units[u]}`
-}
 
 // `unknown` is deliberately not styled as a problem or as an all-clear. Chroma
 // being unreachable says nothing about the index, and an amber "we could not
@@ -140,76 +140,59 @@ function IndexState({ config }: { config: EmbeddingConfig }) {
   )
 }
 
-function ModelRow({
-  model, selected, onSelect, onPull, pulling, progress,
-}: {
-  model: EmbeddingModel
-  selected: boolean
-  onSelect: () => void
-  onPull: () => void
-  pulling: boolean
-  progress: string | null
-}) {
-  // A chunk longer than the window is truncated without error, so the panel
-  // flags the narrow ones against M2's 300-500 token chunks rather than leaving
-  // the reader to compare two numbers in different places.
-  const tooNarrow = (model.max_tokens ?? 0) > 0 && (model.max_tokens as number) < 512
-
-  return (
-    <div
-      className={`rounded-lg border p-2.5 transition-colors ${
-        selected ? 'theme-accent-border theme-surface-strong' : 'theme-border'
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <button onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-          <span className="truncate text-xs theme-text">{model.label}</span>
-          {model.recommended && (
-            <span className="shrink-0 rounded border theme-accent-border px-1.5 py-0.5 text-[9px] theme-accent">
-              recommended
-            </span>
-          )}
-          {selected && <Check size={13} className="shrink-0 theme-accent" />}
-        </button>
-        {model.installed ? (
-          <span className="shrink-0 text-[10px] text-emerald-400">installed</span>
-        ) : (
-          <button
-            onClick={onPull}
-            disabled={pulling}
-            className="inline-flex shrink-0 items-center gap-1 rounded border theme-border px-2 py-1 text-[10px] theme-text-muted transition-colors hover:theme-text disabled:opacity-50"
-          >
-            {pulling ? <RefreshCw size={10} className="animate-spin" /> : <Download size={10} />}
-            {pulling ? (progress ?? 'pulling…') : 'pull'}
-          </button>
-        )}
-      </div>
-
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] theme-text-muted">
-        <code>{model.tag}</code>
-        <span>{model.dimensions ? `${model.dimensions}d` : '—'}</span>
-        <span className={tooNarrow ? 'text-amber-400' : ''}>
-          {model.max_tokens ? `${model.max_tokens} tok` : '—'}
-          {tooNarrow && ' ⚠ narrower than a chunk'}
-        </span>
-        <span>{bytes(model.size_bytes)}</span>
-      </div>
-      <p className="mt-1 text-[10px] leading-relaxed theme-text-muted">{model.note}</p>
-    </div>
-  )
+/**
+ * `nomic-embed-text:latest` and `nomic-embed-text` are one model, but
+ * `snowflake-arctic-embed:335m` and `snowflake-arctic-embed:33m` are two.
+ * Mirrors `normalise_tag` in `services/embedding_models.py`.
+ */
+function normaliseTag(tag: string): string {
+  return tag.endsWith(':latest') ? tag.slice(0, -':latest'.length) : tag
 }
 
-export function EmbeddingModelsPane() {
+type LangFilter = 'all' | 'english' | 'multilingual'
+
+export function EmbeddingModelsPane({
+  mode, onManage, onBrowse,
+}: {
+  mode: 'browse' | 'installed'
+  /** Browse mode: go to where an installed model is managed. */
+  onManage?: () => void
+  /** Installed mode: go to where a model can be pulled. */
+  onBrowse?: () => void
+}) {
   const [config, setConfig] = useState<EmbeddingConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pullingTag, setPullingTag] = useState<string | null>(null)
   const [progress, setProgress] = useState<string | null>(null)
   const [showCloud, setShowCloud] = useState(false)
+  const [verifying, setVerifying] = useState<string | null>(null)
+  const [filter, setFilter] = useState<LangFilter>('all')
+  const [search, setSearch] = useState('')
+  const [typedTag, setTypedTag] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
 
   const load = () => fetchEmbeddingConfig().then(setConfig).catch((e: Error) => setError(e.message))
   useEffect(() => { load() }, [])
 
-  const installed = (config?.local_models ?? []).filter((m) => m.installed)
+  const models = config?.local_models ?? []
+  const isMultilingual = (languages: string | null | undefined) =>
+    !!languages && !languages.startsWith('English')
+  const needle = search.trim().toLowerCase()
+  const shown = models.filter((m) => {
+    if (mode === 'installed') return m.installed
+    if (filter === 'english' && !m.languages?.startsWith('English')) return false
+    if (filter === 'multilingual' && !isMultilingual(m.languages)) return false
+    if (needle && !`${m.label} ${m.tag} ${m.languages ?? ''}`.toLowerCase().includes(needle)) return false
+    return true
+  })
+  // Installed first: those are the ones you can choose between right now.
+  const ordered = [...shown.filter((m) => m.installed), ...shown.filter((m) => !m.installed)]
+  const selectedTag = config?.provider === 'local' ? normaliseTag(config.model) : null
+  const counts: Record<LangFilter, number> = {
+    all: models.length,
+    english: models.filter((m) => m.languages?.startsWith('English')).length,
+    multilingual: models.filter((m) => isMultilingual(m.languages)).length,
+  }
 
   const select = async (provider: 'local' | 'cloud', model: string, endpointId?: string) => {
     setError(null)
@@ -220,10 +203,11 @@ export function EmbeddingModelsPane() {
     }
   }
 
-  const pull = (tag: string) => {
+  const pull = (tag: string, typed = false) => {
     setPullingTag(tag)
     setProgress(null)
     setError(null)
+    setNotice(null)
     const stream = pullEmbeddingModel(tag, (e) => {
       if (e.error) setError(e.error)
       else if (e.total && e.completed) {
@@ -235,14 +219,45 @@ export function EmbeddingModelsPane() {
       .finally(() => {
         setPullingTag(null)
         setProgress(null)
-        load()
+        fetchEmbeddingConfig()
+          .then((next) => {
+            setConfig(next)
+            // The list is built from what Ollama says can embed, so a chat model
+            // pulled here by mistake would vanish without a word. Say so.
+            if (typed && !next.local_models.some((m) => m.installed && m.tag === normaliseTag(tag))) {
+              setNotice(
+                `${tag} was pulled, but Ollama does not report it as an embedding model, so it is not listed here. ` +
+                'If it is a chat model, it is under Installed → Local models; delete it there if it was a mistake.',
+              )
+            } else if (typed) {
+              setTypedTag('')
+            }
+          })
+          .catch((e: Error) => setError(e.message))
       })
+  }
+
+  const verify = (tag: string) => {
+    setVerifying(tag)
+    setError(null)
+    verifyEmbeddingModel(tag)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => { setVerifying(null); load() })
   }
 
   if (!config) return <Skeleton className="h-64 w-full" />
 
   return (
     <div className="space-y-4">
+      {mode === 'browse' ? (
+        <p className="text-sm theme-text-muted">
+          Models that turn document chunks into vectors for Track 1. Pull one here, then
+          choose which one builds the index under{' '}
+          <span className="theme-text">Installed → Embedding models</span>. Every figure is read
+          from the model file; once pulled, it is re-read from the copy on this disk.
+        </p>
+      ) : (
+      <>
       <header>
         <h3 className="text-sm theme-text">Embedding model</h3>
         <p className="mt-1 text-xs leading-relaxed theme-text-muted">
@@ -257,6 +272,8 @@ export function EmbeddingModelsPane() {
       </header>
 
       <IndexState config={config} />
+      </>
+      )}
 
       {!config.ollama_available && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5 text-[11px] theme-text">
@@ -265,41 +282,128 @@ export function EmbeddingModelsPane() {
         </div>
       )}
 
-      {installed.length === 0 ? (
-        <p className="rounded-xl border border-dashed theme-border px-3 py-6 text-center text-xs theme-text-muted">
-          No embedding model installed. Pull one from{' '}
-          <span className="theme-text">Models → Embeddings</span> — Track 1 cannot ingest without
-          one, and Track 2 does not need one at all.
+      {mode === 'installed' && !models.some((m) => m.installed) && (
+        <p className="rounded-xl border border-dashed theme-border px-3 py-3 text-xs theme-text-muted">
+          No embedding model installed yet.{' '}
+          {onBrowse ? (
+            <button onClick={onBrowse} className="theme-accent hover:underline">Browse embedding models</button>
+          ) : (
+            'Pull one from the Forge\'s Embedding models tab'
+          )}{' '}
+          — Track 1 cannot ingest without one, and Track 2 does not need one at all.
         </p>
-      ) : (
-        <div className="space-y-2">
-          {installed.map((m) => (
-            <ModelRow
+      )}
+
+      {/* ── filters, and pulling anything the catalogue does not list ── */}
+      {mode === 'browse' && (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter by name or language…"
+              spellCheck={false}
+              className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted focus:outline-none focus:theme-accent-border"
+            />
+          </div>
+          {([
+            ['all', 'All'],
+            ['english', 'English'],
+            ['multilingual', 'Multilingual'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setFilter(id)}
+              className={`px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
+                filter === id
+                  ? 'theme-accent-border theme-accent theme-surface-strong'
+                  : 'theme-border theme-text-muted hover:theme-text'
+              }`}
+            >
+              {label} <span className="tabular-nums opacity-70">{counts[id]}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            value={typedTag}
+            onChange={(e) => setTypedTag(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && typedTag.trim() && !pullingTag && pull(typedTag.trim(), true)}
+            placeholder="Pull any embedding model by name, e.g. nomic-embed-text:v1.5"
+            spellCheck={false}
+            className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] font-mono rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted focus:outline-none focus:theme-accent-border"
+          />
+          <button
+            onClick={() => pull(typedTag.trim(), true)}
+            disabled={!typedTag.trim() || !!pullingTag || !config.ollama_available}
+            title="Any Ollama tag, or hf.co/{repo}:{quant}. Figures for a model outside the catalogue are read from the file once it is pulled."
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors disabled:opacity-40"
+          >
+            {pullingTag === typedTag.trim() && pullingTag
+              ? <><Loader2 size={12} className="animate-spin" />{progress ?? 'pulling…'}</>
+              : <><Download size={12} />Pull</>}
+          </button>
+        </div>
+
+        {notice && (
+          <div className="flex items-start gap-2 p-2.5 rounded-lg border status-warn-border status-warn-bg text-[11px]">
+            <AlertTriangle size={13} className="status-warn shrink-0 mt-0.5" />
+            <span className="flex-1 break-words">{notice}</span>
+            <button onClick={() => setNotice(null)} className="theme-text-muted hover:theme-text">
+              <X size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+      )}
+
+      <div className="@container space-y-2">
+        {mode === 'browse' && !ordered.length && (
+          <p className="text-xs theme-text-muted py-4 text-center">Nothing matches these filters.</p>
+        )}
+        {ordered.map((m) =>
+          mode === 'installed' ? (
+            <EmbeddingRow
               key={m.tag}
               model={m}
-              selected={config.provider === 'local' && config.model.split(':')[0] === m.tag}
+              selected={selectedTag === m.tag}
               onSelect={() => select('local', m.tag)}
-              onPull={() => pull(m.tag)}
               pulling={pullingTag === m.tag}
               progress={progress}
+              onPull={() => pull(m.tag)}
+              onVerify={() => verify(m.tag)}
+              verifying={verifying === m.tag}
             />
-          ))}
-          {/* The selection may name something that is not installed — a choice
-              recorded before pulling, or a model deleted afterwards. Saying so
-              beats a list that silently does not contain the selected row. */}
-          {config.provider === 'local' &&
-            !installed.some((m) => m.tag === config.model.split(':')[0]) && (
-              <p className="rounded-xl border status-warn-border status-warn-bg px-3 py-2 text-[11px] theme-text">
-                <code>{config.model}</code> is selected but not installed. Pull it from Models →
-                Embeddings, or choose one above.
-              </p>
-            )}
-        </div>
-      )}
+          ) : (
+            <EmbeddingRow
+              key={m.tag}
+              model={m}
+              selected={selectedTag === m.tag}
+              pulling={pullingTag === m.tag}
+              progress={progress}
+              onPull={() => pull(m.tag)}
+              onManage={onManage}
+            />
+          ),
+        )}
+        {/* The selection may name something that is not installed — a choice
+            recorded before pulling, or a model deleted afterwards. Saying so
+            beats a list that silently does not contain the selected row. */}
+        {mode === 'installed' && selectedTag && !models.some((m) => m.installed && m.tag === selectedTag) && (
+          <p className="rounded-xl border status-warn-border status-warn-bg px-3 py-2 text-[11px] theme-text">
+            <code>{config.model}</code> is selected but not installed. Pull it, or choose an
+            installed one.
+          </p>
+        )}
+      </div>
 
       {/* Cloud sits behind a disclosure, below the local list and after the
           explanation. It is a baseline, not an alternative, and presenting it as
           a peer of the local models would be the wrong shape for Rule 1. */}
+      {mode === 'installed' && (
       <div className="rounded-lg border theme-border">
         <button
           onClick={() => setShowCloud((v) => !v)}
@@ -371,6 +475,7 @@ export function EmbeddingModelsPane() {
           </div>
         )}
       </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5 text-[11px] theme-text">

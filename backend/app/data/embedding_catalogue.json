@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "_about": [
+    "Embedding models the Forge offers, with the two figures ingestion needs from",
+    "one: vector width (`dimensions`) and how much text embeds in one pass",
+    "(`max_tokens`). Data, not code, for the same reason as model_catalogue.json:",
+    "these get checked and corrected, and that should never require a commit to a",
+    "Python module. Read fresh on every call, so an edit shows up without a restart.",
+    "",
+    "Every figure was read on 2026-09-25 from the tag's published GGUF header",
+    "(`<arch>.embedding_length`, `<arch>.context_length`) on registry.ollama.ai,",
+    "and `approx_bytes` is the model layer's size from the same manifest. A",
+    "declared value here is what the file says, not what a model card advertises;",
+    "where they differ the file wins, because the file is what Ollama runs.",
+    "nomic-embed-text's card says 8,192 tokens, its header 2,048.",
+    "",
+    "One deliberate exception: all-minilm keeps 256, the length it was trained on,",
+    "although its BERT header allows 512 — a chunk past 256 embeds, but badly.",
+    "",
+    "Declared values are only placeholders. Once a model is pulled, Ollama's",
+    "/api/show reports the real figures and services/embedding_models.py prefers",
+    "them (MODULES.md 2.2: an estimate and a measurement must never look alike).",
+    "A model pulled from outside this list still appears — capability is read from",
+    "Ollama, not matched against these tags.",
+    "",
+    "Fields: tag (Ollama tag), label, dimensions, max_tokens, approx_bytes,",
+    "languages (starts with 'English' or 'Multilingual' — the Forge filters on",
+    "it), recommended (at most one; architecture/04's pick), note."
+  ],
+  "models": [
+    {
+      "tag": "nomic-embed-text",
+      "label": "Nomic Embed Text",
+      "dimensions": 768,
+      "max_tokens": 2048,
+      "approx_bytes": 274290656,
+      "languages": "English",
+      "recommended": true,
+      "note": "architecture/04's recommendation. 2,048 tokens is four times M2's largest chunk, so no chunk truncates."
+    },
+    {
+      "tag": "mxbai-embed-large",
+      "label": "mxbai Embed Large",
+      "dimensions": 1024,
+      "max_tokens": 512,
+      "approx_bytes": 669603712,
+      "languages": "English",
+      "recommended": false,
+      "note": "Wider vectors than nomic at a fraction of the context. Fine for 300-500 token chunks, tight above that."
+    },
+    {
+      "tag": "bge-m3",
+      "label": "BGE-M3",
+      "dimensions": 1024,
+      "max_tokens": 8192,
+      "approx_bytes": 1157671200,
+      "languages": "Multilingual (100+)",
+      "recommended": false,
+      "note": "Wide vectors and long context. Over 1GB — check it against the Forge's memory figures."
+    },
+    {
+      "tag": "all-minilm",
+      "label": "all-MiniLM",
+      "dimensions": 384,
+      "max_tokens": 256,
+      "approx_bytes": 45949216,
+      "languages": "English",
+      "recommended": false,
+      "note": "architecture/04's 'if hardware is weak'. Tiny and fast; 256 tokens truncates a 500-token chunk."
+    },
+    {
+      "tag": "snowflake-arctic-embed2",
+      "label": "Snowflake Arctic Embed 2",
+      "dimensions": 1024,
+      "max_tokens": 8192,
+      "approx_bytes": 1160285024,
+      "languages": "Multilingual",
+      "recommended": false,
+      "note": "Arctic Embed's multilingual second version. Long context with English retrieval kept strong."
+    },
+    {
+      "tag": "snowflake-arctic-embed:335m",
+      "label": "Snowflake Arctic Embed L",
+      "dimensions": 1024,
+      "max_tokens": 512,
+      "approx_bytes": 669481504,
+      "languages": "English",
+      "recommended": false,
+      "note": "The large English Arctic model. Same width and window as mxbai-embed-large."
+    },
+    {
+      "tag": "snowflake-arctic-embed:137m",
+      "label": "Snowflake Arctic Embed M Long",
+      "dimensions": 768,
+      "max_tokens": 2048,
+      "approx_bytes": 274177792,
+      "languages": "English",
+      "recommended": false,
+      "note": "Nomic-BERT base, like nomic-embed-text: the same width and window at the same size."
+    },
+    {
+      "tag": "snowflake-arctic-embed:33m",
+      "label": "Snowflake Arctic Embed S",
+      "dimensions": 384,
+      "max_tokens": 512,
+      "approx_bytes": 67185920,
+      "languages": "English",
+      "recommended": false,
+      "note": "Small and fast, with a full 512-token window — unlike all-minilm, a 500-token chunk fits."
+    },
+    {
+      "tag": "granite-embedding:30m",
+      "label": "Granite Embedding 30M",
+      "dimensions": 384,
+      "max_tokens": 512,
+      "approx_bytes": 62523136,
+      "languages": "English",
+      "recommended": false,
+      "note": "IBM's smallest. The lightest model here with a full 512-token window."
+    },
+    {
+      "tag": "granite-embedding:278m",
+      "label": "Granite Embedding 278M",
+      "dimensions": 768,
+      "max_tokens": 512,
+      "approx_bytes": 562765632,
+      "languages": "Multilingual (12)",
+      "recommended": false,
+      "note": "IBM's multilingual model: English, German, Spanish, French, Japanese, Portuguese, Arabic, Czech, Italian, Korean, Dutch, Chinese."
+    },
+    {
+      "tag": "embeddinggemma",
+      "label": "EmbeddingGemma 300M",
+      "dimensions": 768,
+      "max_tokens": 2048,
+      "approx_bytes": 621867104,
+      "languages": "Multilingual (100+)",
+      "recommended": false,
+      "note": "Google's on-device embedder. Needs a recent Ollama."
+    },
+    {
+      "tag": "qwen3-embedding:0.6b",
+      "label": "Qwen3 Embedding 0.6B",
+      "dimensions": 1024,
+      "max_tokens": 32768,
+      "approx_bytes": 639150592,
+      "languages": "Multilingual (100+)",
+      "recommended": false,
+      "note": "Decoder-based embedder from the same family as the chat model. Very long window."
+    },
+    {
+      "tag": "qwen3-embedding:4b",
+      "label": "Qwen3 Embedding 4B",
+      "dimensions": 2560,
+      "max_tokens": 40960,
+      "approx_bytes": 2496703776,
+      "languages": "Multilingual (100+)",
+      "recommended": false,
+      "note": "2.5GB and 2,560-wide vectors: over three times nomic's index size. Competes with the chat model for VRAM."
+    },
+    {
+      "tag": "qwen3-embedding:8b",
+      "label": "Qwen3 Embedding 8B",
+      "dimensions": 4096,
+      "max_tokens": 40960,
+      "approx_bytes": 4676804928,
+      "languages": "Multilingual (100+)",
+      "recommended": false,
+      "note": "4.7GB — larger than most chat models here. Only worth it on a machine with VRAM to spare."
+    },
+    {
+      "tag": "bge-large",
+      "label": "BGE Large EN v1.5",
+      "dimensions": 1024,
+      "max_tokens": 512,
+      "approx_bytes": 670530624,
+      "languages": "English",
+      "recommended": false,
+      "note": "BAAI's English model; bge-m3 is its long-context multilingual successor."
+    },
+    {
+      "tag": "paraphrase-multilingual",
+      "label": "Paraphrase Multilingual MPNet",
+      "dimensions": 768,
+      "max_tokens": 512,
+      "approx_bytes": 562766080,
+      "languages": "Multilingual (50+)",
+      "recommended": false,
+      "note": "Sentence-similarity model. Tuned for short paraphrases rather than document retrieval."
+    }
+  ]
+}

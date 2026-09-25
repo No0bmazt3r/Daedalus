@@ -1,31 +1,28 @@
 import { useState } from 'react'
-import { Hammer, Cpu, Layers, Boxes } from 'lucide-react'
+import { Hammer, Cpu, MessageSquare, Binary, Boxes } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
 import { HardwareView } from './HardwareView'
 import { ModelsView } from './ModelsView'
-import { AddedModelsView } from './AddedModelsView'
+import { EmbeddingModelsPane } from './EmbeddingModelsPane'
+import { InstalledModelsView } from './InstalledModelsView'
 
 /**
  * The Forge — hardware and model console (Layer 11, PROJECT.md §8.2).
  *
- * All six steps, in the order you work through them:
+ * | tab | what it answers |
+ * |---|---|
+ * | Hardware         | step 1: what is this machine? |
+ * | Chat models      | steps 2–4 for answering models: browse, estimate, score, pull |
+ * | Embedding models | browse and pull the models that turn chunks into vectors |
+ * | Installed        | what is on it — benchmark, delete, choose the embedding model, cloud baselines |
  *
- * | tab | steps | what it answers |
- * |---|---|---|
- * | Hardware     | 1 detect                    | what is this machine? |
- * | Models       | 2 estimate · 3 score · 4 pull · 5 benchmark | what *could* run here, ranked |
- * | Added Models | 4 manage                    | what is here now, grouped and managed |
+ * Installed is for managing; the two model tabs are for browsing. Every control
+ * has one home: a browse card for a model you already have shows Manage, which
+ * switches here, rather than repeating Benchmark and Delete.
  *
- * The split between the last two is by question rather than by kind. Models is
- * a discovery surface: forty-odd candidates with filters, estimates and a
- * ranking, which is the right shape for "what should I pull?" and the wrong one
- * for "I have three models, one is stale, remove it". Added Models is the
- * inventory, grouped by §8.1's own tiers so the console and the report describe
- * the deployment the same way.
- *
- * Grouped this way rather than one tab per step because steps 2-5 are one
- * table: the estimate, the verdict and the measurement are columns on the same
- * row, and separating them would hide the comparison the module exists to make.
+ * The browse tabs are split by kind because the kinds are judged differently: a
+ * chat model gets a fit verdict and a rank, an embedder has neither, because
+ * both measure something that generates text.
  *
  * ## Step 6 has no tab, on purpose
  *
@@ -40,11 +37,10 @@ import { AddedModelsView } from './AddedModelsView'
  * when no browser is choosing (a scripted run, the M8 evaluation harness), and
  * is still hand-editable to pin a model for a reproducible experiment.
  *
- * `MODULES.md` §2.4: the Forge absorbs the Added Models panel rather than
- * duplicating it, so the cloud section renders the same `ModelEndpointsPanel`
- * that Settings does. It sits below the local tiers and behind its own warning,
- * because under Rule 1 a cloud endpoint is an evaluation baseline and never a
- * deployment target. One flat list of "models" would blur exactly the
+ * `MODULES.md` §2.4: Installed's cloud pane renders the same `ModelEndpointsPanel`
+ * that Settings does rather than a second copy of it. It is a pane apart from
+ * local models because under Rule 1 a cloud endpoint is an evaluation baseline
+ * and never a deployment target. One flat list of "models" would blur exactly the
  * distinction that separation exists to make.
  *
  * Rule 5 — this is a setup surface. It writes model configuration and pulls
@@ -54,8 +50,9 @@ import { AddedModelsView } from './AddedModelsView'
 
 const TABS = [
   { id: 'hardware', label: 'Hardware', icon: Cpu, hint: 'Step 1: what this machine is' },
-  { id: 'models', label: 'Models', icon: Layers, hint: 'Steps 2 to 5: what could run here, estimated, scored and ranked' },
-  { id: 'added', label: 'Added Models', icon: Boxes, hint: 'What this machine has: local SLM and LLM tiers, plus the cloud reference endpoints' },
+  { id: 'chat', label: 'Chat models', icon: MessageSquare, hint: 'Browse the models that answer: estimated, scored and ranked against this machine' },
+  { id: 'embedding', label: 'Embedding models', icon: Binary, hint: 'Browse the models that turn document chunks into vectors for Track 1' },
+  { id: 'installed', label: 'Installed', icon: Boxes, hint: 'What this machine has: benchmark, delete, choose the embedding model, cloud baselines' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -133,8 +130,17 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
               className="mx-auto w-full @3xl:max-w-3xl @5xl:max-w-5xl @7xl:max-w-[min(100%,1500px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
             >
               {tab === 'hardware' && <HardwareView isPeek={isPeek} />}
-              {tab === 'models' && <ModelsView />}
-              {tab === 'added' && <AddedModelsView isPeek={isPeek} />}
+              {tab === 'installed' && (
+                <InstalledModelsView
+                  isPeek={isPeek}
+                  onBrowseChat={() => setTab('chat')}
+                  onBrowseEmbeddings={() => setTab('embedding')}
+                />
+              )}
+              {tab === 'chat' && <ModelsView onManage={() => setTab('installed')} />}
+              {tab === 'embedding' && (
+                <EmbeddingModelsPane mode="browse" onManage={() => setTab('installed')} />
+              )}
             </div>
           </div>
         </div>

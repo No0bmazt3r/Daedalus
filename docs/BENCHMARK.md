@@ -286,7 +286,7 @@ and is not covered.
 
 ```bash
 ./daedalus.sh dev          # or start
-# Forge → Models → benchmark (flask icon) on any installed row
+# Forge → Installed → benchmark (flask icon) on any local model
 ```
 
 Then read the numbers from the store rather than the screen:

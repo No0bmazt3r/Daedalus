@@ -252,7 +252,7 @@ function IndexSummary() {
       </div>
       <p className="flex items-center gap-1 text-[11px] theme-text-muted">
         <ArrowUpRight size={11} />
-        Pull or change the embedding model in The Forge → Added Models → Embedding models.
+        Pull an embedding model in The Forge → Embedding models; choose which one builds the index in The Forge → Installed.
       </p>
     </div>
   )

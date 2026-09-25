@@ -24,7 +24,7 @@ Everything below was read off the source, not from memory.
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
 | Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge. Container-aware, with GPU passthrough layered on where the host has one |
-| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Three tabs: Hardware, Models, Added Models |
+| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Four tabs: Hardware, Installed (manage: local, embedding, cloud), Chat models and Embedding models (browse) |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
@@ -1546,6 +1546,7 @@ Six keys, all server-side (`api/prefs.py` rejects any other):
 | `settings-ui` | The Settings rail's width and collapsed state |
 | `keybinds` | The shortcut map — only what was rebound |
 | `ui-chrome` | The appearance switches — only what was changed |
+| `forge-shortlist` | The Forge's starred models — only what was added to or removed from the report's six |
 
 A console whose keyboard map lives in one browser profile cannot be described in
 a write-up, restored from the backup Settings → System takes, or read back when

@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, ChevronDown, Download, FlaskConical, Loader2, RefreshCw, Trash2,
+  AlertTriangle, ChevronDown, Download, Loader2, RefreshCw,
   CircleCheck, CircleAlert, CircleSlash, Cloud, HelpCircle, X, Search, Cpu, ExternalLink,
-  Star, Library, HardDrive, Globe, Terminal, Layers, Binary,
+  Star, Globe, Terminal, Layers, ArrowRight,
 } from 'lucide-react'
 import {
-  modelTable, searchHuggingFace, inspectTag, pullModel, deleteModel, runBenchmark,
-  type ModelTable, type ModelRow, type PullProgress, type BenchmarkResult, type BenchmarkProgress, type ModelSource,
+  modelTable, modelUsage, searchHuggingFace, inspectTag, pullModel,
+  type ModelTable, type ModelRow, type PullProgress, type ModelUsage,
 } from '../../lib/forgeClient'
+import { loadOnePref, savePref, PREF_FORGE_SHORTLIST } from '../../lib/prefsClient'
 import { CapabilityBadges } from '../ui/capability-badges'
 import { ModelArchitecture } from '../ui/model-architecture'
-import { EmbeddingCatalogue } from './EmbeddingCatalogue'
-import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
 
 /**
- * Steps 2–5 of the Forge: estimate · score · manage · benchmark.
+ * Steps 2–5 of the Forge for answering models: estimate · score · manage ·
+ * benchmark. Embedding models and cloud baselines have their own Forge tabs.
  *
  * ## The one rule this screen exists to keep
  *
@@ -25,18 +25,11 @@ import { Collapse } from '../ui/collapse'
  * so every row carries both, styled apart, and "not benchmarked" is a state
  * written in words rather than an empty cell.
  *
- * ## Four lists, one scorer
+ * ## One scorer, whatever the source
  *
- * | source | what it is |
- * |---|---|
- * | Shortlist | the six candidates from §8.1 that the report argues about |
- * | Library | the wider verified Ollama library — what else this machine could run |
- * | Installed | what is on this disk, including models nobody declared |
- * | Hugging Face | a live GGUF search, pullable via `hf.co/{repo}:{quant}` |
- *
- * All four are scored by the same code against the same hardware, so a row from
- * one can be compared with a row from another. Only the provenance differs, and
- * every row says which it is.
+ * The catalogue, models found on this disk, Hugging Face results and a typed
+ * tag are all scored by the same code against the same hardware, so any two
+ * cards can be compared. How the list is filtered is described on `ModelsView`.
  *
  * ## Colours
  *
@@ -81,21 +74,6 @@ const PROVENANCE_HELP: Record<string, string> = {
   measured: 'Real bytes on this disk, read from Ollama.',
   assumed: 'A documented default, because nothing better is available yet.',
 }
-
-const SOURCES: {
-  id: ModelSource | 'all' | 'embedding'
-  label: string
-  icon: typeof Star
-  hint: string
-}[] = [
-  { id: 'shortlist', label: 'Shortlist', icon: Star, hint: "The six candidates from PROJECT.md §8.1, which are what the report argues about" },
-  { id: 'library', label: 'Library', icon: Library, hint: 'The wider Ollama library, every tag verified against the registry' },
-  { id: 'installed', label: 'Installed', icon: HardDrive, hint: 'On this disk right now' },
-  { id: 'huggingface', label: 'Hugging Face', icon: Globe, hint: 'Live GGUF search. Pull any of these with hf.co/{repo}:{quant}' },
-  { id: 'custom', label: 'Custom', icon: Terminal, hint: 'Score a tag you already know: an Ollama tag, or hf.co/{repo}:{quant}' },
-  { id: 'embedding', label: 'Embeddings', icon: Binary, hint: 'Models that turn chunks into vectors for Track 1. Not answering models — no fit score, because fit measures something that generates text' },
-  { id: 'all', label: 'All', icon: Layers, hint: 'Everything except the live search and embeddings' },
-]
 
 function Pill({ children, title, tone = 'muted' }: {
   children: React.ReactNode; title?: string; tone?: 'muted' | 'warn' | 'ok'
@@ -162,7 +140,12 @@ function Section({ title, children, right }: {
   )
 }
 
-function Detail({ row }: { row: ModelRow }) {
+function ms(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '—'
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}s` : `${Math.round(n)}ms`
+}
+
+function Detail({ row, usage }: { row: ModelRow; usage?: ModelUsage }) {
   const est = row.estimate
 
   if (!est) {
@@ -283,6 +266,43 @@ function Detail({ row }: { row: ModelRow }) {
         )}
       </Section>
 
+      {/* Every run model_logs holds for this tag, benchmark and chat alike. The
+          Measured column is the last benchmark; this is the distribution, as
+          mean, p50 and p95 — the three PROJECT.md §9.2 asks for by name. */}
+      {usage && usage.runs > 0 && (
+        <Section
+          title="On this machine"
+          right={
+            <span className="text-[10px] theme-text-muted">
+              {usage.runs} run{usage.runs === 1 ? '' : 's'}
+              {usage.errors > 0 && <span className="status-warn"> · {usage.errors} failed</span>}
+            </span>
+          }
+        >
+          <div className="divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]">
+            <Fact
+              label="TTFT p50 / p95"
+              value={`${ms(usage.time_to_first_token_ms.p50)} / ${ms(usage.time_to_first_token_ms.p95)}`}
+              hint={`mean ${ms(usage.time_to_first_token_ms.mean)}`}
+            />
+            <Fact
+              label="End-to-end p50"
+              value={ms(usage.total_inference_ms.p50)}
+              hint={`mean ${ms(usage.total_inference_ms.mean)} · p95 ${ms(usage.total_inference_ms.p95)}`}
+            />
+            <Fact
+              label="Generation p50"
+              value={usage.tokens_per_sec.p50 ? `${usage.tokens_per_sec.p50} tok/s` : '—'}
+              hint="From the engine's own counters, so it measures the model rather than the machine's other work."
+            />
+            <Fact
+              label="Runs by source"
+              value={Object.entries(usage.by_source).map(([k, v]) => `${v} ${k}`).join(' · ')}
+            />
+          </div>
+        </Section>
+      )}
+
       {row.hf && (
         <Section title="Hugging Face">
           <div className="divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]">
@@ -304,17 +324,114 @@ function Detail({ row }: { row: ModelRow }) {
   )
 }
 
-function Row({
-  row, busy, benchProgress, onPull, onDelete, onBenchmark,
+/**
+ * One model, with its quantisations inside it.
+ *
+ * The table arrives one row per model × quantisation, which is the right shape
+ * for the scorer and the wrong one for a reader: the old list showed Gemma 3 1B
+ * three times and counted the shortlist as fifteen when it holds six. So rows
+ * are grouped by `model_id`, and the quantisation is a choice made on the card.
+ */
+interface ModelGroup {
+  model_id: string
+  /** Every variant, best-ranked first — the order the table already sorted. */
+  variants: ModelRow[]
+  /** One of the six PROJECT.md §8.1 names. Fixed: the report argues about these. */
+  reportCandidate: boolean
+  installed: boolean
+  /** Only catalogue and on-disk models can be starred; a search hit has no stable home. */
+  starrable: boolean
+}
+
+function groupRows(rows: ModelRow[], starrable: boolean): ModelGroup[] {
+  const byId = new Map<string, ModelGroup>()
+  for (const row of rows) {
+    let group = byId.get(row.model_id)
+    if (!group) {
+      group = { model_id: row.model_id, variants: [], reportCandidate: false, installed: false, starrable }
+      byId.set(row.model_id, group)
+    }
+    group.variants.push(row)
+    group.reportCandidate ||= row.shortlist
+    group.installed ||= row.installed
+  }
+  return [...byId.values()]
+}
+
+/**
+ * The shortlist is yours to edit, but stored as edits against the report's six
+ * rather than as a list of its own. A catalogue that later adds a seventh
+ * candidate then reaches everyone who has not removed it, and "what did you
+ * change?" has an answer.
+ */
+interface ShortlistPref {
+  added: string[]
+  removed: string[]
+}
+
+function isShortlistPref(v: unknown): v is ShortlistPref {
+  if (!v || typeof v !== 'object') return false
+  const o = v as Record<string, unknown>
+  return Array.isArray(o.added) && Array.isArray(o.removed)
+}
+
+function useShortlist() {
+  const [pref, setPref] = useState<ShortlistPref>({ added: [], removed: [] })
+
+  useEffect(() => {
+    loadOnePref(PREF_FORGE_SHORTLIST)
+      .then((v) => { if (isShortlistPref(v)) setPref(v) })
+      .catch(() => undefined)
+  }, [])
+
+  const starred = useCallback(
+    (g: ModelGroup) =>
+      (g.reportCandidate && !pref.removed.includes(g.model_id)) || pref.added.includes(g.model_id),
+    [pref],
+  )
+
+  const toggle = useCallback((g: ModelGroup) => {
+    setPref((prev) => {
+      const id = g.model_id
+      const on = (g.reportCandidate && !prev.removed.includes(id)) || prev.added.includes(id)
+      const next: ShortlistPref = g.reportCandidate
+        ? {
+            added: prev.added.filter((x) => x !== id),
+            removed: on ? [...prev.removed, id] : prev.removed.filter((x) => x !== id),
+          }
+        : {
+            added: on ? prev.added.filter((x) => x !== id) : [...prev.added, id],
+            removed: prev.removed.filter((x) => x !== id),
+          }
+      savePref(PREF_FORGE_SHORTLIST, next)
+      return next
+    })
+  }, [])
+
+  return { starred, toggle }
+}
+
+function ModelCard({
+  group, starred, onToggleStar, usage, busy, onPull, onManage,
 }: {
-  row: ModelRow
+  group: ModelGroup
+  starred: boolean
+  onToggleStar: (g: ModelGroup) => void
+  usage: Record<string, ModelUsage>
   busy: string | null
-  benchProgress?: BenchmarkProgress | null
   onPull: (row: ModelRow) => void
-  onDelete: (row: ModelRow) => void
-  onBenchmark: (row: ModelRow) => void
+  /** Installed models are managed in Installed; the browser only points there. */
+  onManage?: () => void
 }) {
   const [open, setOpen] = useState(false)
+  // What is on disk first, because that is what you would benchmark or delete;
+  // otherwise the best-scoring quantisation for this machine.
+  const [picked, setPicked] = useState<string | null>(null)
+  const row =
+    group.variants.find((v) => v.id === picked)
+    ?? group.variants.find((v) => v.installed)
+    ?? group.variants[0]
+
   const verdict = VERDICT[row.verdict.fit] ?? VERDICT.unknown
   const VerdictIcon = verdict.icon
   const measured = row.measured
@@ -323,6 +440,18 @@ function Row({
   return (
     <div className="rounded-xl border theme-border theme-surface overflow-hidden">
       <div className="flex items-start gap-3 p-3">
+        {group.starrable ? (
+          <button
+            onClick={() => onToggleStar(group)}
+            title={starred ? 'Remove from your shortlist' : 'Add to your shortlist'}
+            aria-pressed={starred}
+            className={`shrink-0 pt-0.5 transition-colors ${starred ? 'theme-accent' : 'theme-text-muted hover:theme-text'}`}
+          >
+            <Star size={13} fill={starred ? 'currentColor' : 'none'} />
+          </button>
+        ) : (
+          <span className="w-[13px] shrink-0" />
+        )}
         <span className="text-[11px] font-mono theme-text-muted tabular-nums w-5 shrink-0 pt-0.5">
           {row.score === null ? '—' : row.rank}
         </span>
@@ -330,11 +459,15 @@ function Row({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium truncate">{row.label}</span>
-            <Pill title={`Quantization: ${row.quantization_known ? 'width is tabulated' : 'width inferred from the name'}`}>
-              {row.quantization}
-            </Pill>
-            {row.shortlist && <Pill tone="ok" title="One of the six candidates PROJECT.md §8.1 names.">shortlist</Pill>}
-            {row.installed && <Pill tone="ok" title="Pulled and on this disk.">installed</Pill>}
+            {group.reportCandidate && (
+              <Pill
+                tone="ok"
+                title="One of the six candidates PROJECT.md §8.1 names. Stays marked even if you unstar it, so the report's choices remain traceable."
+              >
+                report candidate
+              </Pill>
+            )}
+            {row.installed && <Pill tone="ok" title="This quantisation is pulled and on this disk.">installed</Pill>}
             <CapabilityBadges capabilities={row.capabilities} />
             {row.tag_exists === false && (
               <Pill tone="warn" title="The Ollama registry has no manifest for this tag, so a pull would fail.">
@@ -342,7 +475,32 @@ function Row({
               </Pill>
             )}
           </div>
-          <code className="text-[10px] theme-text-muted break-all">{row.tag}</code>
+
+          {/* Quantisation: a choice on the card when there is one to make. */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+            {group.variants.length > 1 ? (
+              group.variants.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => setPicked(v.id)}
+                  title={`${v.tag}${v.installed ? ' · installed' : ''}`}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide transition-colors ${
+                    v.id === row.id
+                      ? 'theme-accent-border theme-accent theme-surface-strong'
+                      : 'theme-border theme-text-muted hover:theme-text'
+                  }`}
+                >
+                  {v.quantization}
+                  {v.installed && <span className="status-ok"> ●</span>}
+                </button>
+              ))
+            ) : (
+              <Pill title={`Quantization: ${row.quantization_known ? 'width is tabulated' : 'width inferred from the name'}`}>
+                {row.quantization}
+              </Pill>
+            )}
+            <code className="text-[10px] theme-text-muted break-all">{row.tag}</code>
+          </div>
 
           <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-1 mt-2">
             <div>
@@ -380,27 +538,9 @@ function Row({
               <div className="text-[10px] uppercase tracking-wide theme-accent">
                 Measured
               </div>
-              {isBusy && benchProgress ? (
-                <div className="text-xs font-mono theme-text-muted truncate animate-pulse">
-                  {benchProgress.phase === 'building_prompt' && 'building prompt...'}
-                  {benchProgress.phase === 'warming_up' && 'warming up...'}
-                  {benchProgress.phase === 'generating' && `measuring: ${benchProgress.tokens ?? 0} tokens`}
-                  {benchProgress.phase === 'error' && <span className="status-bad">failed</span>}
-                  {benchProgress.phase === 'done' && 'saving...'}
-                </div>
-              ) : measured?.tokens_per_sec ? (
-                <div
-                  className="text-xs font-mono theme-text"
-                  title={
-                    row.remote
-                      ? `Benchmarked ${measured.at ?? ''} — Ollama's hardware, not this machine`
-                      : `Benchmarked ${measured.at ?? ''}`
-                  }
-                >
+              {measured?.tokens_per_sec ? (
+                <div className="text-xs font-mono theme-text" title={`Benchmarked ${measured.at ?? ''}`}>
                   {measured.time_to_first_token_ms}ms · {measured.tokens_per_sec} tok/s
-                  {/* Without this the figure reads as a property of this
-                      machine, which is the one thing it is not. */}
-                  {row.remote && <span className="theme-text-muted"> · cloud</span>}
                 </div>
               ) : (
                 <div className="text-xs theme-text-muted italic">not benchmarked</div>
@@ -421,40 +561,13 @@ function Row({
 
         <div className="flex items-center gap-1 shrink-0">
           {row.installed ? (
-            <>
-              <button
-                onClick={() => onBenchmark(row)}
-                disabled={!!busy}
-                title="Measure TTFT and tok/s on a ~2k-token RAG prompt. Takes minutes."
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
-              >
-                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
-              </button>
-              <button
-                onClick={() => onDelete(row)}
-                disabled={!!busy}
-                title="Delete from this machine."
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] hover:border-[color-mix(in_srgb,var(--status-bad)_45%,transparent)] transition-colors disabled:opacity-40"
-              >
-                <Trash2 size={13} />
-              </button>
-            </>
-          ) : row.remote ? (
-            <>
-              <Pill title={PLACEMENT_HELP.cloud}>cloud</Pill>
-              {/* Benchmarked but never pulled or deployed. Rule 1 allows a
-                  cloud model as an evaluation baseline, which is exactly what
-                  a measurement of one is. There is no Delete here on purpose:
-                  nothing of it is on this disk to remove. */}
-              <button
-                onClick={() => onBenchmark(row)}
-                disabled={!!busy}
-                title="Benchmark as a baseline — runs on Ollama's servers, logged apart"
-                className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
-              >
-                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
-              </button>
-            </>
+            onManage && <button
+              onClick={onManage}
+              title="Benchmark, see its run history, or delete it — in Installed."
+              className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+            >
+              Manage <ArrowRight size={12} />
+            </button>
           ) : (
             <button
               onClick={() => onPull(row)}
@@ -495,71 +608,77 @@ function Row({
         variant="flow"
         className="border-t theme-border px-4 py-4 theme-surface grid grid-cols-1 @2xl:grid-cols-2 gap-x-8 gap-y-4"
       >
-        <Detail row={row} />
+        <Detail row={row} usage={usage[row.tag]} />
       </Collapse>
     </div>
   )
 }
 
-export function ModelsView() {
+/** Something typed into the search box that Ollama would accept as a tag. */
+function looksLikeTag(q: string): boolean {
+  return q.startsWith('hf.co/') || /^[\w.-]+(\/[\w.-]+)?:[\w.-]+$/.test(q)
+}
+
+type Scope = 'shortlist' | 'all' | 'huggingface'
+
+/**
+ * Chat models: every answering model, one list, filtered rather than tabbed.
+ *
+ * The old screen had seven tabs mixing three different questions — where a
+ * model is listed (Shortlist, Library, Hugging Face, Custom), whether it is on
+ * this disk (Installed), and what kind of model it is (Embeddings) — so
+ * "installed and on the shortlist" was not something you could ask. Now kind is
+ * the Forge's top-level tab, and the rest are filters that combine:
+ *
+ * | control | question |
+ * |---|---|
+ * | Shortlist / Everything / Hugging Face | the models you starred, the whole catalogue, or a live search |
+ * | Installed | only what is on this disk |
+ * | Any size / SLM / LLM | §8.1's two local tiers |
+ * | Runnable only | hide what is estimated not to fit |
+ *
+ * Hugging Face is a scope beside the catalogue rather than a separate tab of
+ * its own kind: the search box searches it once you choose it, and only then.
+ * Choosing it is the consent to send the query off the machine; the catalogue
+ * scopes never do. A typed tag (`qwen3:30b`, `hf.co/…`) can be checked from any
+ * scope, because it is one specific model rather than a list.
+ */
+export function ModelsView({ onManage }: { onManage?: () => void }) {
   const [table, setTable] = useState<ModelTable | null>(null)
+  const [usage, setUsage] = useState<Record<string, ModelUsage>>({})
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [progress, setProgress] = useState<PullProgress | null>(null)
   const [cancelPull, setCancelPull] = useState<(() => void) | null>(null)
-  const [result, setResult] = useState<BenchmarkResult | null>(null)
-  const [benchProgress, setBenchProgress] = useState<BenchmarkProgress | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   // ── filters ──
-  const [source, setSource] = useState<ModelSource | 'all' | 'embedding'>('shortlist')
+  const [scope, setScope] = useState<Scope>('shortlist')
   const [search, setSearch] = useState('')
   const [tier, setTier] = useState<'all' | 'slm' | 'llm'>('all')
   const [runnableOnly, setRunnableOnly] = useState(false)
 
-  // Held here rather than only inside EmbeddingCatalogue so the tab's count is
-  // real. A chip reading 0 above a list of four is worse than no chip: it is the
-  // UI contradicting itself, and the reader has no way to know which half lies.
-  const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(null)
-  const loadEmbeddings = useCallback(() => {
-    fetchEmbeddingConfig().then(setEmbeddingConfig).catch(() => setEmbeddingConfig(null))
-  }, [])
-  useEffect(() => { loadEmbeddings() }, [loadEmbeddings])
+  const { starred, toggle } = useShortlist()
 
-  // ── Hugging Face is its own fetch: it needs the network and can fail ──
-  const [hfRows, setHfRows] = useState<ModelRow[] | null>(null)
+  // ── beyond the catalogue: Hugging Face search, or one typed tag ──
+  const [hfQuery, setHfQuery] = useState<string | null>(null)
+  const [hfRows, setHfRows] = useState<ModelRow[]>([])
   const [hfError, setHfError] = useState<string | null>(null)
   const [hfLoading, setHfLoading] = useState(false)
-
-  // ── Custom: one tag, typed and scored on demand ──
-  const [customTag, setCustomTag] = useState('')
-  const [customRow, setCustomRow] = useState<ModelRow | null>(null)
-  const [customError, setCustomError] = useState<string | null>(null)
-  const [customLoading, setCustomLoading] = useState(false)
-
-  const inspect = useCallback(async () => {
-    const tag = customTag.trim()
-    if (!tag) return
-    setCustomLoading(true)
-    setCustomError(null)
-    try {
-      const res = await inspectTag(tag)
-      setCustomRow(res.row)
-      setCustomError(res.error)
-    } catch (e) {
-      setCustomError(e instanceof Error ? e.message : 'lookup failed')
-      setCustomRow(null)
-    } finally {
-      setCustomLoading(false)
-    }
-  }, [customTag])
+  const [tagRow, setTagRow] = useState<ModelRow | null>(null)
+  const [tagError, setTagError] = useState<string | null>(null)
+  const [tagLoading, setTagLoading] = useState(false)
 
   const load = useCallback(async () => {
-    try {
-      setTable(await modelTable())
+    // Settled, not all: usage comes from the audit log and the table from the
+    // scorer. The list is useful without the usage figures.
+    const [t, u] = await Promise.allSettled([modelTable(), modelUsage()])
+    if (u.status === 'fulfilled') setUsage(u.value.models)
+    if (t.status === 'fulfilled') {
+      setTable(t.value)
       setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'request failed')
+    } else {
+      setError(t.reason instanceof Error ? t.reason.message : 'request failed')
     }
   }, [])
 
@@ -567,72 +686,114 @@ export function ModelsView() {
     void load()
   }, [load])
 
-  // Debounced, because this hits Hugging Face and the box is typed into.
+  // A new search makes an earlier tag check about a different question.
+  const onSearchChange = (value: string) => {
+    setSearch(value)
+    setTagRow(null)
+    setTagError(null)
+  }
+
+  // Hugging Face is searched only while its scope is chosen, debounced because
+  // the box is typed into. Every state change happens inside the timer, so a
+  // keystroke never renders twice.
   useEffect(() => {
-    if (source !== 'huggingface') return
+    if (scope !== 'huggingface') return
+    const q = search.trim()
     let cancelled = false
-    setHfLoading(true)
     const timer = window.setTimeout(async () => {
+      setHfLoading(true)
+      setHfError(null)
       try {
-        const res = await searchHuggingFace(search)
+        const res = await searchHuggingFace(q)
         if (cancelled) return
+        setHfQuery(q)
         setHfRows(res.rows)
         setHfError(res.error)
       } catch (e) {
-        if (!cancelled) setHfError(e instanceof Error ? e.message : 'search failed')
+        if (cancelled) return
+        setHfError(e instanceof Error ? e.message : 'search failed')
+        setHfRows([])
       } finally {
         if (!cancelled) setHfLoading(false)
       }
-    }, 350)
+    }, 400)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [source, search])
+  }, [scope, search])
+
+  const checkTag = useCallback(async () => {
+    const tag = search.trim()
+    if (!tag) return
+    setTagLoading(true)
+    setTagError(null)
+    try {
+      const res = await inspectTag(tag)
+      setTagRow(res.row)
+      setTagError(res.error)
+    } catch (e) {
+      setTagError(e instanceof Error ? e.message : 'lookup failed')
+      setTagRow(null)
+    } finally {
+      setTagLoading(false)
+    }
+  }, [search])
+
+  // Answering models only. Cloud tags have their own tab (Rule 1: a baseline,
+  // never a deployment target) and embedders are a different job entirely.
+  const groups = useMemo(
+    () => groupRows((table?.rows ?? []).filter((r) => !r.remote && r.tier !== 'embedding'), true),
+    [table?.rows],
+  )
+
+  const passesFilters = useCallback((g: ModelGroup) => {
+    const best = g.variants[0]
+    if (tier !== 'all' && best.tier !== tier) return false
+    if (runnableOnly && !g.variants.some((v) => ['safe', 'marginal'].includes(v.verdict.fit))) return false
+    return true
+  }, [tier, runnableOnly])
+
+  const needle = search.trim().toLowerCase()
+  const matches = useCallback((g: ModelGroup) => {
+    if (!needle) return true
+    return g.variants.some((r) =>
+      `${r.label} ${r.tag} ${r.vendor ?? ''} ${r.kind}`.toLowerCase().includes(needle),
+    )
+  }, [needle])
+
+  const hfGroups = useMemo(() => groupRows(hfRows, false), [hfRows])
 
   const visible = useMemo(() => {
-    if (source === 'custom') return customRow ? [customRow] : []
-    const base = source === 'huggingface' ? (hfRows ?? []) : (table?.rows ?? [])
-    const needle = search.trim().toLowerCase()
-    return base.filter((row) => {
-      // `installed` is a state, every other tab is a provenance. Matching it
-      // against `row.source` filtered on the wrong field and left the tab
-      // permanently empty: a model in the shortlist carries source
-      // 'shortlist' whether or not it is on this disk, and 'installed' is
-      // only ever set for one Ollama has that the catalogue never declared.
-      if (source === 'installed') {
-        if (!row.installed) return false
-      } else if (source !== 'all' && source !== 'huggingface' && row.source !== source) {
-        return false
-      }
-      // The HF list is already the result of a server-side search; filtering it
-      // again by the same box would hide rows the search deliberately matched
-      // on a field this one does not see.
-      if (needle && source !== 'huggingface') {
-        const hay = `${row.label} ${row.tag} ${row.vendor ?? ''} ${row.kind}`.toLowerCase()
-        if (!hay.includes(needle)) return false
-      }
-      if (tier !== 'all' && row.tier !== tier) return false
-      if (runnableOnly && !['safe', 'marginal'].includes(row.verdict.fit)) return false
-      return true
-    })
-  }, [source, hfRows, customRow, table?.rows, search, tier, runnableOnly])
+    // The Hugging Face list is already the result of a server-side search;
+    // filtering it again by the same box would hide rows the search matched on
+    // a field this one does not see. Installed means nothing for a search hit.
+    if (scope === 'huggingface') {
+      return hfGroups.filter((g) => {
+        const best = g.variants[0]
+        if (tier !== 'all' && best.tier !== tier) return false
+        if (runnableOnly && !g.variants.some((v) => ['safe', 'marginal'].includes(v.verdict.fit))) return false
+        return true
+      })
+    }
+    return groups.filter((g) => (scope === 'all' || starred(g)) && passesFilters(g) && matches(g))
+  }, [scope, hfGroups, groups, starred, passesFilters, matches, tier, runnableOnly])
 
-  const counts = useMemo(() => {
-    const rows = table?.rows ?? []
-    return {
-      shortlist: rows.filter((r) => r.source === 'shortlist').length,
-      library: rows.filter((r) => r.source === 'library').length,
-      installed: rows.filter((r) => r.installed).length,
-      all: rows.length,
-      huggingface: hfRows?.length ?? 0,
-      custom: customRow ? 1 : 0,
-      // Installed count, not catalogue size: every other chip here counts
-      // things you have or could have, and "4" would claim four embedding
-      // models exist on a machine with none.
-      embedding: (embeddingConfig?.local_models ?? []).filter((e) => e.installed).length,
-    } as Record<string, number>
-  }, [table?.rows, hfRows, customRow, embeddingConfig])
+  // How many a search would find outside the shortlist, so an empty shortlist
+  // result can say where the model is rather than just "nothing".
+  const elsewhere = useMemo(
+    () => (scope === 'shortlist' && needle
+      ? groups.filter((g) => !starred(g) && passesFilters(g) && matches(g)).length
+      : 0),
+    [scope, needle, groups, starred, passesFilters, matches],
+  )
+
+  const counts = useMemo(() => ({
+    shortlist: groups.filter(starred).length,
+    all: groups.length,
+  }), [groups, starred])
+
+  const tagGroups = useMemo(() => groupRows(tagRow ? [tagRow] : [], false), [tagRow])
 
   const handlePull = useCallback(async (row: ModelRow) => {
     setBusy(row.tag)
@@ -642,7 +803,7 @@ export function ModelsView() {
     setCancelPull(() => cancel)
     try {
       await done
-      setNotice(`Pulled ${row.tag}.`)
+      setNotice(`Pulled ${row.tag}. Benchmark or manage it in Installed.`)
       await load()
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'the pull failed')
@@ -650,42 +811,6 @@ export function ModelsView() {
       setBusy(null)
       setProgress(null)
       setCancelPull(null)
-    }
-  }, [load])
-
-  const handleDelete = useCallback(async (row: ModelRow) => {
-    if (!window.confirm(`Delete ${row.tag} from this machine?`)) return
-    setBusy(row.tag)
-    try {
-      await deleteModel(row.tag)
-      setNotice(`Deleted ${row.tag}.`)
-      await load()
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'the delete failed')
-    } finally {
-      setBusy(null)
-    }
-  }, [load])
-
-  const handleBenchmark = useCallback(async (row: ModelRow) => {
-    setBusy(row.tag)
-    setNotice(null)
-    setResult(null)
-    setBenchProgress(null)
-    try {
-      const { done } = runBenchmark(row.tag, (p) => {
-        setBenchProgress(p)
-        if (p.phase === 'done' && p.result) {
-          setResult(p.result)
-        }
-      })
-      await done
-      await load()
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'the benchmark failed')
-    } finally {
-      setBusy(null)
-      setBenchProgress(null)
     }
   }, [load])
 
@@ -710,11 +835,6 @@ export function ModelsView() {
           <Skeleton className="h-7 w-24 rounded-lg shrink-0" />
         </div>
         <Skeleton className="h-3 w-3/4" />
-        <div className="flex gap-2 pb-2 border-b theme-border">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-6 w-20 rounded-lg" />
-          ))}
-        </div>
         <div className="flex gap-2">
           <Skeleton className="h-7 flex-1 rounded-lg" />
           <Skeleton className="h-7 w-20 rounded-lg" />
@@ -732,14 +852,18 @@ export function ModelsView() {
         ? 'theme-accent-border theme-accent theme-surface-strong'
         : 'theme-border theme-text-muted hover:theme-text'
     }`
+  const cardProps = {
+    usage, busy, onManage,
+    onToggleStar: toggle, onPull: handlePull,
+  }
 
   return (
     <div className="space-y-3 animate-in fade-in duration-200">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
-          Every candidate estimated against this machine, ranked. The{' '}
+          The models that answer questions, estimated against this machine and ranked. The{' '}
           <span className="theme-text">Measured</span> column is the one that counts.
-          Estimates are placeholders until a benchmark replaces them.
+          Star a model to add it to your shortlist.
         </p>
         <button
           onClick={() => void load()}
@@ -762,83 +886,58 @@ export function ModelsView() {
         </span>
       </div>
 
-      {/* ── source tabs ── */}
-      {/* Scrolls sideways instead of wrapping. Seven chips wrapped onto a second
-          row inside a floating window, and a tab bar that changes height as the
-          window resizes pushes the content below it around for no reason. */}
-      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b theme-border pb-2">
-        {SOURCES.map((entry) => {
-          const selected = source === entry.id
-          return (
-            <button
-              key={entry.id}
-              onClick={() => setSource(entry.id)}
-              title={entry.hint}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
-                selected ? 'theme-accent theme-surface-strong' : 'theme-text-muted hover:theme-text'
-              }`}
-            >
-              <entry.icon
-                key={selected ? 'on' : 'off'}
-                size={12}
-                className={`tab-icon shrink-0 ${selected ? 'tab-icon-active' : ''}`}
-              />
-              {entry.label}
-              <span className="theme-text-muted tabular-nums">
-                {entry.id === 'huggingface' && hfRows === null ? '' : counts[entry.id] ?? 0}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* ── filters ── */}
-      {/* Embeddings skip the filter row: size tiers, "Runnable only" and the
-          search box all describe a catalogue of forty answering models, and
-          there are four of these with no ranking to filter. */}
-      {source === 'embedding' ? null : source === 'custom' ? (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <input
-              value={customTag}
-              onChange={(e) => setCustomTag(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void inspect()}
-              placeholder="qwen3:30b  ·  hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M"
-              spellCheck={false}
-              className="flex-1 min-w-0 px-2.5 py-1.5 text-[11px] font-mono rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted placeholder: focus:outline-none focus:theme-accent-border"
-            />
-            <button
-              onClick={() => void inspect()}
-              disabled={customLoading || !customTag.trim()}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
-            >
-              {customLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-              Check fit
-            </button>
-          </div>
-          <p className="text-[11px] theme-text-muted">
-            Any tag Ollama would accept. Library tags resolve through Ollama's registry;
-            <code className="theme-text"> hf.co/…</code> tags resolve through Hugging Face.
-            Either way it is scored against this machine like everything else.
-          </p>
-          {customError && (
-            <div className="flex items-start gap-2 p-2.5 rounded-lg border status-warn-border status-warn-bg text-[11px]">
-              <AlertTriangle size={13} className="status-warn shrink-0 mt-0.5" />
-              <span className="break-words">{customError}</span>
-            </div>
-          )}
-        </div>
-      ) : (
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[180px]">
+      {/* ── search ── */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={source === 'huggingface' ? 'Search Hugging Face…' : 'Filter by name, tag or vendor…'}
-            className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted placeholder: focus:outline-none focus:theme-accent-border"
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={
+              scope === 'huggingface'
+                ? 'Search Hugging Face GGUF models…'
+                : 'Filter by name, tag or vendor — or paste a tag like qwen3:30b'
+            }
+            spellCheck={false}
+            className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted focus:outline-none focus:theme-accent-border"
           />
         </div>
+        {looksLikeTag(search.trim()) && (
+          <button
+            onClick={() => void checkTag()}
+            disabled={tagLoading}
+            title="Score this exact tag against this machine. Ollama tags resolve through its registry, hf.co/… tags through Hugging Face."
+            className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors disabled:opacity-40"
+          >
+            {tagLoading ? <Loader2 size={11} className="animate-spin" /> : <Terminal size={11} />}
+            Check tag
+          </button>
+        )}
+      </div>
+
+      {/* ── filters ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center rounded-lg border theme-border overflow-hidden">
+          {([
+            { id: 'shortlist' as const, label: 'Shortlist', icon: Star, n: counts.shortlist, hint: 'The models you starred. Starts as the six PROJECT.md §8.1 names.' },
+            { id: 'all' as const, label: 'Everything', icon: Layers, n: counts.all, hint: 'The whole catalogue, plus anything on this disk it does not declare.' },
+            { id: 'huggingface' as const, label: 'Hugging Face', icon: Globe, n: null, hint: 'Live GGUF search. Needs the internet; the query leaves this machine only while this is chosen. Results pull via hf.co/{repo}:{quant}.' },
+          ]).map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setScope(s.id)}
+              title={s.hint}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] transition-colors ${
+                scope === s.id ? 'theme-accent theme-surface-strong' : 'theme-text-muted hover:theme-text'
+              }`}
+            >
+              <s.icon size={11} className="shrink-0" fill={s.id === 'shortlist' && scope === s.id ? 'currentColor' : 'none'} />
+              {s.label}
+              {s.n !== null && <span className="tabular-nums opacity-70">{s.n}</span>}
+            </button>
+          ))}
+        </div>
+        <span className="h-4 border-l theme-border" aria-hidden />
         {(['all', 'slm', 'llm'] as const).map((t) => (
           <button
             key={t}
@@ -861,7 +960,6 @@ export function ModelsView() {
           Runnable only
         </button>
       </div>
-      )}
 
       {!table.ollama.available && (
         <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
@@ -870,18 +968,6 @@ export function ModelsView() {
             <div className="font-medium">Ollama isn't reachable, so these are estimates only</div>
             <div className="theme-text-muted mt-0.5">
               {table.ollama.error} Nothing can be pulled, measured or deployed until it answers.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {source === 'huggingface' && hfError && (
-        <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
-          <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
-          <div>
-            <div className="font-medium">Hugging Face search unavailable</div>
-            <div className="theme-text-muted mt-0.5">
-              {hfError} The other three lists work offline.
             </div>
           </div>
         </div>
@@ -917,34 +1003,6 @@ export function ModelsView() {
         </div>
       )}
 
-      {result && (
-        <div className="p-3 rounded-xl border theme-border theme-surface-strong text-xs space-y-1">
-          <div className="flex items-center gap-2">
-            <FlaskConical size={13} className="theme-accent" />
-            <span className="font-medium">Benchmarked {result.tag}</span>
-            <button onClick={() => setResult(null)} className="ml-auto theme-text-muted hover:theme-text">
-              <X size={13} />
-            </button>
-          </div>
-          <div className="theme-text-muted">
-            {result.time_to_first_token_ms}ms to first token · {result.tokens_per_sec} tok/s ·{' '}
-            {result.prompt_token_count} prompt tokens
-          </div>
-          <div className="theme-text-muted">
-            Prompt from{' '}
-            {result.prompt.source === 'rag_logs' ? (
-              <span className="theme-text">a real logged retrieval</span>
-            ) : (
-              'the bundled fixture'
-            )}
-            {' · '}
-            {result.warmed_up ? 'warmed up first' : 'cold, so it includes loading the weights'}
-            {' · logged as '}
-            <code>{result.query_id}</code>
-          </div>
-        </div>
-      )}
-
       {notice && (
         <div className="flex items-start gap-2 p-2.5 rounded-lg border theme-border theme-surface-strong text-xs">
           <span className="flex-1 break-words">{notice}</span>
@@ -954,42 +1012,74 @@ export function ModelsView() {
         </div>
       )}
 
-      {/* Keyed on the source so switching lists replays the entry animation
-          instead of swapping rows in place. */}
-      {source === 'embedding' ? (
-        <EmbeddingCatalogue config={embeddingConfig} onChanged={loadEmbeddings} />
-      ) : (
-      <div key={source} className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out">
-        {hfLoading && source === 'huggingface' && (
-          <>
-            <div className="flex items-center gap-2 text-xs theme-text-muted py-2">
-              <Loader2 size={13} className="animate-spin" />
-              Searching Hugging Face…
+      {(tagLoading || tagError || tagGroups.length > 0) && (
+        <div className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest theme-text-muted">Checked tag</p>
+          {tagLoading && <SkeletonList rows={1} label="Checking the tag" />}
+          {tagError && (
+            <div className="flex items-start gap-2 p-2.5 rounded-lg border status-warn-border status-warn-bg text-[11px]">
+              <AlertTriangle size={13} className="status-warn shrink-0 mt-0.5" />
+              <span className="break-words">{tagError}</span>
             </div>
-            <SkeletonList rows={4} label="Searching Hugging Face" />
-          </>
-        )}
-        {visible.map((row) => (
-          <Row
-            key={row.id}
-            row={row}
-            busy={busy}
-            benchProgress={busy === row.tag ? benchProgress : null}
-            onPull={handlePull}
-            onDelete={handleDelete}
-            onBenchmark={handleBenchmark}
-          />
-        ))}
-        {customLoading && source === 'custom' && <SkeletonList rows={1} label="Checking the tag" />}
-        {!visible.length && !hfLoading && !customLoading && (
-          <p className="text-xs theme-text-muted py-6 text-center">
-            {source === 'custom'
-              ? 'Type a model tag above to score it against this machine.'
-              : `Nothing matches these filters.${runnableOnly ? ' Try turning off "Runnable only".' : ''}`}
+          )}
+          {tagGroups.map((group) => (
+            <ModelCard key={group.model_id} group={group} starred={false} {...cardProps} />
+          ))}
+        </div>
+      )}
+
+      {scope === 'huggingface' && hfError && (
+        <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
+          <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium">Hugging Face search unavailable</div>
+            <div className="theme-text-muted mt-0.5">
+              {hfError} Shortlist and Everything work offline.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyed on the scope so switching lists replays the entry animation
+          instead of swapping rows in place. */}
+      <div key={scope} className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out">
+        {scope === 'huggingface' && hfLoading && <SkeletonList rows={4} label="Searching Hugging Face" />}
+        {scope === 'huggingface' && !hfLoading && hfQuery !== null && hfRows.length > 0 && (
+          <p className="text-[10px] uppercase tracking-widest theme-text-muted">
+            {hfRows.length} result{hfRows.length === 1 ? '' : 's'}
+            {hfQuery ? ` for "${hfQuery}"` : ', most downloaded'}
           </p>
         )}
+        {!(scope === 'huggingface' && hfLoading) && visible.map((group) => (
+          <ModelCard
+            key={group.model_id}
+            group={group}
+            starred={starred(group)}
+            {...cardProps}
+          />
+        ))}
+        {!visible.length && !(scope === 'huggingface' && (hfLoading || hfQuery === null || hfError)) && (
+          <div className="text-xs theme-text-muted py-6 text-center space-y-2">
+            <p>
+              {scope === 'huggingface'
+                ? 'No GGUF models found for that search.'
+                : scope === 'shortlist' && !needle && tier === 'all' && !runnableOnly
+                  ? 'Your shortlist is empty. Star models in Everything to add them.'
+                  : `Nothing matches these filters.${runnableOnly ? ' Try turning off "Runnable only".' : ''}`}
+            </p>
+            {elsewhere > 0 && (
+              <button onClick={() => setScope('all')} className="theme-accent hover:underline">
+                {elsewhere} match{elsewhere === 1 ? '' : 'es'} in Everything
+              </button>
+            )}
+            {scope !== 'huggingface' && needle && (
+              <button onClick={() => setScope('huggingface')} className="block mx-auto theme-accent hover:underline">
+                Search Hugging Face for "{search.trim()}"
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      )}
     </div>
   )
 }

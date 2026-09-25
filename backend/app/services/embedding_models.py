@@ -60,6 +60,7 @@ import tempfile
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from ..db import paths
@@ -86,68 +87,43 @@ _MAX_COLLECTION_NAME = 63
 # Ollama reports this in `/api/show` capabilities for models that embed.
 EMBEDDING_CAPABILITY = "embedding"
 
-# Recommended local models, from `architecture/04` Step 5 plus the two figures
-# the ingestion pipeline actually needs from an embedding model: the vector
-# width, and how much text fits in one pass.
+# The embedding models the Forge offers live in `data/embedding_catalogue.json`,
+# beside `model_catalogue.json` and for the same reason: they are data that gets
+# checked and corrected, and that should not need a code change. Where each
+# figure came from is recorded in the file's own `_about`.
 #
 # **These are declared values, and they are the fallback.** For anything pulled,
 # `local_models()` reads the real numbers out of Ollama's `/api/show` —
 # `<arch>.embedding_length` is the vector width and `<arch>.context_length` the
 # window — and every row reports which source answered. This is the same rule
 # `model_fit.py` follows for weight size, and for the same reason (`MODULES.md`
-# §2.2): an estimate and a measurement must never look alike. A catalogue figure
-# is a claim about a tag; a measured one is a fact about the file on this disk,
-# and they do diverge — a re-quantized or repackaged tag can ship a different
-# context window than the model card advertises.
+# §2.2): an estimate and a measurement must never look alike.
 #
-# `max_tokens` matters more than it looks. M2 chunks at 300-500 tokens, so any
-# of these has headroom — but a model with a 512-token window silently truncates
-# a chunk that overran, and a truncated chunk embeds as a different document
-# than the one the citation points at.
-CATALOGUE: tuple[dict[str, Any], ...] = (
-    {
-        "tag": "nomic-embed-text",
-        "label": "Nomic Embed Text",
-        "dimensions": 768,
-        "max_tokens": 8192,
-        "approx_bytes": 274 * 1024 * 1024,
-        "languages": "English",
-        "recommended": True,
-        "note": "architecture/04's recommendation. Long context for an embedder, so no chunk truncates.",
-    },
-    {
-        "tag": "mxbai-embed-large",
-        "label": "mxbai Embed Large",
-        "dimensions": 1024,
-        "max_tokens": 512,
-        "approx_bytes": 670 * 1024 * 1024,
-        "languages": "English",
-        "recommended": False,
-        "note": "Wider vectors than nomic at a fraction of the context. Fine for 300-500 token chunks, tight above that.",
-    },
-    {
-        "tag": "bge-m3",
-        "label": "BGE-M3",
-        "dimensions": 1024,
-        "max_tokens": 8192,
-        "approx_bytes": 1200 * 1024 * 1024,
-        "languages": "Multilingual (100+)",
-        "recommended": False,
-        "note": "Wide vectors and long context. Largest of the four — check it against the Forge's memory figures.",
-    },
-    {
-        "tag": "all-minilm",
-        "label": "all-MiniLM",
-        "dimensions": 384,
-        "max_tokens": 256,
-        "approx_bytes": 46 * 1024 * 1024,
-        "languages": "English",
-        "recommended": False,
-        "note": "architecture/04's 'if hardware is weak'. Tiny and fast; 256 tokens truncates a 500-token chunk.",
-    },
-)
+# `max_tokens` matters more than it looks. M2 chunks at 300-500 tokens, so a
+# model with a 512-token window has headroom — but one that is narrower silently
+# truncates a chunk that overran, and a truncated chunk embeds as a different
+# document than the one the citation points at.
+_CATALOGUE_PATH = Path(__file__).resolve().parent.parent / "data" / "embedding_catalogue.json"
 
-_BY_TAG = {entry["tag"]: entry for entry in CATALOGUE}
+
+def catalogue() -> list[dict[str, Any]]:
+    """The catalogue file. Read fresh every call, like `model_fit.catalogue()`.
+
+    A 5KB file read a few times per panel open, and caching it would mean a
+    hand-corrected figure needs a restart to show up. A malformed file must not
+    take the panel down: it degrades to no suggestions, and installed models are
+    still listed because those come from Ollama, not from here.
+    """
+    try:
+        with open(_CATALOGUE_PATH, encoding="utf-8") as fh:
+            models = json.load(fh).get("models", [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [m for m in models if isinstance(m, dict) and m.get("tag")]
+
+
+def _by_tag() -> dict[str, dict[str, Any]]:
+    return {entry["tag"]: entry for entry in catalogue()}
 
 # Chroma stores float32, so a vector costs 4 bytes per dimension. Spelled out
 # rather than folded into a total, because the point of showing it is that a
@@ -281,7 +257,7 @@ def effective_dimensions(
         return int(record["dimensions"]), "verified"
     if config.get("dimensions"):
         return int(config["dimensions"]), "declared"
-    known = _BY_TAG.get(tag, {}).get("dimensions")
+    known = _by_tag().get(tag, {}).get("dimensions")
     return (int(known), "declared") if known else (None, "unknown")
 
 
@@ -348,7 +324,7 @@ def write(
             "provider": provider,
             "model": model,
             "endpoint_id": endpoint_id if provider == "cloud" else None,
-            "dimensions": dimensions or _BY_TAG.get(normalise_tag(model), {}).get("dimensions"),
+            "dimensions": dimensions or _by_tag().get(normalise_tag(model), {}).get("dimensions"),
         }
         return _persist(payload)
 
@@ -430,9 +406,10 @@ def local_models() -> list[dict[str, Any]]:
 
     Capability comes from Ollama's own `/api/show` rather than from matching
     names against the catalogue: a name match would miss anything a user pulled
-    that is not in the four below, and this is meant to show what the machine
+    that is not in the catalogue, and this is meant to show what the machine
     actually has.
     """
+    by_tag = _by_tag()
     installed: dict[str, dict[str, Any]] = {}
     if ollama_client.available():
         for model in ollama_client.list_models():
@@ -446,7 +423,7 @@ def local_models() -> list[dict[str, Any]]:
             if EMBEDDING_CAPABILITY not in (detail.get("capabilities") or []):
                 continue
             tag = normalise_tag(name)
-            known = _BY_TAG.get(tag, {})
+            known = by_tag.get(tag, {})
 
             # Measured first, declared as the fallback. A model pulled from
             # outside the catalogue has no declared figures at all, so this is
@@ -500,7 +477,7 @@ def local_models() -> list[dict[str, Any]]:
         row.update(_derived(record["dimensions"]))
 
     rows = list(installed.values())
-    for entry in CATALOGUE:
+    for entry in by_tag.values():
         if entry["tag"] in installed:
             continue
         rows.append({

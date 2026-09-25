@@ -1,27 +1,22 @@
 import { useState } from 'react'
-import { Download, RefreshCw, AlertTriangle, Check, ChevronDown, ScanLine } from 'lucide-react'
-import {
-  pullEmbeddingModel, verifyEmbeddingModel,
-  type EmbeddingConfig, type EmbeddingModel, type FigureSource,
-} from '../../lib/embeddingsClient'
-import { Skeleton } from '../ui/skeleton'
+import { Download, RefreshCw, Check, ChevronDown, ScanLine, ArrowRight } from 'lucide-react'
+import type { EmbeddingModel, FigureSource } from '../../lib/embeddingsClient'
 import { Collapse } from '../ui/collapse'
 
 /**
- * Forge → Models → Embeddings: the candidates, and pulling them.
+ * One embedding model's card, as the Forge's Embedding models tab lists it.
  *
- * The Models tab is discovery — *what could run here* — and Added Models is
- * inventory, *what is here now*. Embedding models follow the same split rather
- * than being listed twice: this is where you find and pull one, and the
- * Embedding models pane is where you see what you have and pick which one
- * builds the index.
+ * Discovery and choice are one list here: pull a model, verify its vector
+ * width, and pick which one builds the index, all on the same card. They used
+ * to be split between Models → Embeddings and Added Models → Embedding models,
+ * which listed every installed embedder twice.
  *
  * ## No fit score, and that is the point
  *
- * Every other row in this tab carries an estimate, a verdict and a rank, because
- * the question there is "which of forty candidates should I run?". There are
- * four embedding models and no ranking to do — what decides between them is
- * vector width and context window, both shown, not a score. Inventing one so the
+ * Every chat-model card carries an estimate, a verdict and a rank, because the
+ * question there is "which of forty candidates should I run?". Embedding
+ * models get no rank — what decides between them is vector width, context
+ * window and language coverage, all shown, not a score. Inventing one so the
  * table looked uniform would be the exact failure `MODULES.md` §2.2 is about: a
  * number that looks as authoritative as the measured ones and means nothing.
  *
@@ -31,12 +26,6 @@ import { Collapse } from '../ui/collapse'
  * MMLU figures as `verified: false` precisely so nobody quotes an unchecked
  * number. Printing an unsourced score for embedders would repeat the mistake
  * that flag was added to prevent.
- *
- * ## The state lives in the parent
- *
- * `ModelsView` owns the fetch so the tab's own count is real. This component
- * rendering four rows under a chip reading "0" was the UI contradicting itself,
- * and a reader has no way to know which half is lying.
  */
 
 function bytes(n: number | null | undefined): string {
@@ -95,16 +84,24 @@ function Fact({ label, value, hint, tone, source }: {
   )
 }
 
-function Row({
-  model, selected, pulling, progress, onPull, onVerify, verifying,
+/**
+ * The same card in both places, with different actions. Installed passes
+ * `onSelect` and `onVerify` — managing what you have. Browsing passes
+ * `onManage` instead, so an installed model points to where it is managed
+ * rather than repeating those controls.
+ */
+export function EmbeddingRow({
+  model, selected, pulling, progress, onPull, onVerify, verifying = false, onSelect, onManage,
 }: {
   model: EmbeddingModel
   selected: boolean
   pulling: boolean
   progress: string | null
   onPull: () => void
-  onVerify: () => void
-  verifying: boolean
+  onVerify?: () => void
+  verifying?: boolean
+  onSelect?: () => void
+  onManage?: () => void
 }) {
   const [open, setOpen] = useState(false)
   // M2 chunks at 300-500 tokens. A narrower window truncates without error, and
@@ -170,9 +167,27 @@ function Row({
         </div>
 
         <div className="shrink-0 flex items-center gap-1.5">
+          {model.installed && onManage && (
+            <button
+              onClick={onManage}
+              title="Choose it for the index, or verify it, in Installed."
+              className="inline-flex items-center gap-1.5 rounded-lg border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text"
+            >
+              Manage <ArrowRight size={11} />
+            </button>
+          )}
+          {model.installed && onSelect && !selected && (
+            <button
+              onClick={onSelect}
+              title="Make this the model that embeds the corpus. The index for any other model is kept, not deleted."
+              className="inline-flex items-center gap-1.5 rounded-lg border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
+            >
+              <Check size={11} />Use for index
+            </button>
+          )}
           {/* Only for installed models: verifying means running one, and there
               is nothing on disk to run before a pull. */}
-          {model.installed && (
+          {model.installed && onVerify && (
             <button
               onClick={onVerify}
               disabled={verifying}
@@ -274,81 +289,6 @@ function Row({
             exactly as authoritative as the measured ones elsewhere in the Forge.
           </p>
       </Collapse>
-    </div>
-  )
-}
-
-export function EmbeddingCatalogue({
-  config,
-  onChanged,
-}: {
-  config: EmbeddingConfig | null
-  onChanged: () => void
-}) {
-  const [pulling, setPulling] = useState<string | null>(null)
-  const [progress, setProgress] = useState<string | null>(null)
-  const [verifying, setVerifying] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const verify = (tag: string) => {
-    setVerifying(tag)
-    setError(null)
-    verifyEmbeddingModel(tag)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => { setVerifying(null); onChanged() })
-  }
-
-  const pull = (tag: string) => {
-    setPulling(tag)
-    setProgress(null)
-    setError(null)
-    const stream = pullEmbeddingModel(tag, (e) => {
-      if (e.error) setError(e.error)
-      else if (e.total && e.completed) setProgress(`${Math.round((e.completed / e.total) * 100)}%`)
-      else if (e.status) setProgress(e.status)
-    })
-    stream.done
-      .catch((e: Error) => setError(e.message))
-      .finally(() => { setPulling(null); setProgress(null); onChanged() })
-  }
-
-  if (!config) return <Skeleton className="h-48 w-full" />
-
-  return (
-    <div className="@container space-y-3">
-      <p className="text-xs leading-relaxed theme-text-muted">
-        Turns document chunks into vectors for Track 1 retrieval.{' '}
-        <span className="theme-text">Not answering models</span> — never offered to the assistant,
-        and no fit verdict, because fit, speed and quality all measure something that generates
-        text. Pick which one builds the index in{' '}
-        <span className="theme-text">Added Models → Embedding models</span>.
-      </p>
-
-      {!config.ollama_available && (
-        <div className="flex items-center gap-2 rounded-xl border status-warn-border status-warn-bg p-3 text-xs">
-          <AlertTriangle size={14} className="status-warn shrink-0" />
-          Ollama isn't reachable, so nothing can be pulled.
-        </div>
-      )}
-
-      {config.local_models.map((m) => (
-        <Row
-          key={m.tag}
-          model={m}
-          selected={config.provider === 'local' && config.model.split(':')[0] === m.tag}
-          pulling={pulling === m.tag}
-          progress={progress}
-          onPull={() => pull(m.tag)}
-          onVerify={() => verify(m.tag)}
-          verifying={verifying === m.tag}
-        />
-      ))}
-
-      {error && (
-        <div className="flex items-center gap-2 rounded-xl border status-warn-border status-warn-bg p-3 text-xs">
-          <AlertTriangle size={14} className="status-warn shrink-0" /> {error}
-        </div>
-      )}
     </div>
   )
 }

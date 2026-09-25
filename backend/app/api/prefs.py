@@ -24,7 +24,12 @@ router = APIRouter(prefix="/api/prefs", tags=["prefs"])
 # rest of this file exists: a console whose keyboard map lives in one machine's
 # localStorage cannot be described in a write-up, restored from a backup, or
 # read back when somebody asks what the interface was when a result was taken.
-ALLOWED_KEYS = {"theme", "custom-themes", "ui-scale", "settings-ui", "keybinds", "ui-chrome"}
+# `forge-shortlist` is the Forge's starred models, stored as edits against the
+# report's six candidates so a catalogue change still reaches an untouched list.
+ALLOWED_KEYS = {
+    "theme", "custom-themes", "ui-scale", "settings-ui", "keybinds", "ui-chrome",
+    "forge-shortlist",
+}
 
 
 class PrefBody(BaseModel):

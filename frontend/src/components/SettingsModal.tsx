@@ -26,7 +26,7 @@ import { IntegrationsPanel } from './settings/IntegrationsPanel'
 import { SystemPanel } from './settings/SystemPanel'
 import { AppearancePanel } from './settings/AppearancePanel'
 import { ShortcutsPanel } from './settings/ShortcutsPanel'
-import { AddedModelsView } from './forge/AddedModelsView'
+import { InstalledModelsView } from './forge/InstalledModelsView'
 
 interface SettingsModalProps {
   open: boolean
@@ -205,11 +205,11 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
 
             {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
 
-            {/* The Forge's own inventory view, not a second implementation of
+            {/* The Forge's own Installed view, not a second implementation of
                 it. Same reasoning as ModelEndpointsPanel appearing in both
                 places: one component, two entry points, so the console and the
                 Forge can never describe the deployment differently. */}
-            {activeTab === 'added-models' && <AddedModelsView isPeek={isPeek} />}
+            {activeTab === 'added-models' && <InstalledModelsView isPeek={isPeek} />}
 
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 
