@@ -285,7 +285,10 @@ cmd_dev_host() {
   ensure_chroma
 
   head_ "Starting dev servers on the host"
-  host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend &
+  # --timeout-graceful-shutdown: every open tab holds GET /api/events, and without
+  # it a reload waits for those streams to end — which they never do by themselves.
+  host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend \
+    --timeout-graceful-shutdown 3 &
   local api_pid=$!
   # Stop the backend when this script exits, however it exits.
   trap 'kill $api_pid 2>/dev/null || true' EXIT INT TERM

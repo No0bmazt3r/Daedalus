@@ -1,17 +1,17 @@
-import { useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { Sidebar } from '../components/Sidebar'
 import { Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
-import { ThemeModal } from '../components/ThemeModal'
 import { restoreWindow } from '../components/ui/floating-window'
-import { SettingsModal } from '../components/SettingsModal'
 import { BackgroundEffects } from '../components/BackgroundEffects'
-import { ForgeWindow } from '../components/forge/ForgeWindow'
-import { BlueprintsWindow } from '../components/blueprints/BlueprintsWindow'
 import type { BlueprintsTab } from '../components/blueprints/tabs'
-import { CommandPalette, type PaletteActions } from '../components/CommandPalette'
-import { StoreWindow } from '../components/stores/StoreWindow'
+import type { PaletteActions } from '../components/CommandPalette'
+import {
+  ThemeModal, SettingsModal, ForgeWindow, BlueprintsWindow, StoreWindow, CommandPalette,
+  MountOnce,
+} from '../components/LazyWindows'
+import { prefetchWindows } from '../lib/windowLoaders'
 import { SettingsProvider, useSettings } from '../contexts/SettingsContext'
 import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
@@ -83,6 +83,10 @@ function AppShell() {
   // own dialog rather than `window.confirm`, which ignores the theme and cannot
   // say which conversation it means.
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null)
+
+  // Every window is its own chunk, fetched once the page is idle so that the
+  // first open does not wait on the network. See `lib/windowLoaders.ts`.
+  useEffect(() => prefetchWindows(), [])
 
   const { keybinds } = useUiPrefs()
   const { isIncognito, setIsIncognito } = useSettings()
@@ -215,26 +219,38 @@ function AppShell() {
             </div>
           </main>
 
-          <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
-          <SettingsModal
-            open={settingsModalOpen}
-            onClose={() => setSettingsModalOpen(false)}
-            onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
-            panel={settingsPanel}
-          />
-          <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
-          <BlueprintsWindow
-            open={blueprintsOpen}
-            onClose={() => setBlueprintsOpen(false)}
-            requestedTab={blueprintsTab}
-            onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
-          />
-          <StoreWindow
-            open={storeTarget !== null}
-            store={storeTarget?.store ?? null}
-            table={storeTarget?.table ?? null}
-            onClose={() => setStoreTarget(null)}
-          />
+          {/* Each window mounts the first time it opens and stays mounted, so
+              its state survives a close exactly as it did before splitting. */}
+          <MountOnce when={themeModalOpen}>
+            <ThemeModal open={themeModalOpen} onClose={() => setThemeModalOpen(false)} />
+          </MountOnce>
+          <MountOnce when={settingsModalOpen}>
+            <SettingsModal
+              open={settingsModalOpen}
+              onClose={() => setSettingsModalOpen(false)}
+              onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
+              panel={settingsPanel}
+            />
+          </MountOnce>
+          <MountOnce when={forgeOpen}>
+            <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
+          </MountOnce>
+          <MountOnce when={blueprintsOpen}>
+            <BlueprintsWindow
+              open={blueprintsOpen}
+              onClose={() => setBlueprintsOpen(false)}
+              requestedTab={blueprintsTab}
+              onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
+            />
+          </MountOnce>
+          <MountOnce when={storeTarget !== null}>
+            <StoreWindow
+              open={storeTarget !== null}
+              store={storeTarget?.store ?? null}
+              table={storeTarget?.table ?? null}
+              onClose={() => setStoreTarget(null)}
+            />
+          </MountOnce>
         </div>
 
         {/* Outside the shell's `overflow-hidden`, like ConfirmDialog: it covers
@@ -242,7 +258,9 @@ function AppShell() {
             here rather than inside, so each opening mounts a fresh one — see
             the component for why that is the reset. */}
         {paletteOpen && (
-          <CommandPalette onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+          <Suspense fallback={null}>
+            <CommandPalette onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+          </Suspense>
         )}
 
         <ConfirmDialog

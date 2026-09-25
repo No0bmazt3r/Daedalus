@@ -27,7 +27,7 @@ from ..models.providers import (
     EndpointUpdate,
     ProviderListOut,
 )
-from ..services import model_endpoints
+from ..services import live_events, model_endpoints
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -56,7 +56,7 @@ def list_endpoints() -> dict:
 @router.post("", response_model=EndpointOut, status_code=201)
 def create_endpoint(body: EndpointCreate) -> dict:
     try:
-        return model_endpoints.create_endpoint(
+        created = model_endpoints.create_endpoint(
             provider=body.provider,
             base_url=body.base_url,
             api_key=body.api_key or None,
@@ -70,17 +70,21 @@ def create_endpoint(body: EndpointCreate) -> dict:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except sqlite_util.DatabaseUnavailableError as exc:
         raise _unavailable(exc) from exc
+    live_events.publish("endpoints")
+    return created
 
 
 @router.patch("/{endpoint_id}", response_model=EndpointOut)
 def update_endpoint(endpoint_id: str, body: EndpointUpdate) -> dict:
     changes = body.model_dump(exclude_unset=True)
     try:
-        return model_endpoints.update_endpoint(endpoint_id, **changes)
+        updated = model_endpoints.update_endpoint(endpoint_id, **changes)
     except store.EndpointNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"no endpoint '{endpoint_id}'") from exc
     except sqlite_util.DatabaseUnavailableError as exc:
         raise _unavailable(exc) from exc
+    live_events.publish("endpoints")
+    return updated
 
 
 @router.post("/{endpoint_id}/test", response_model=EndpointOut)
@@ -93,16 +97,20 @@ def test_endpoint(endpoint_id: str) -> dict:
     is the answer, not a fault.
     """
     try:
-        return model_endpoints.test_endpoint(endpoint_id)
+        tested = model_endpoints.test_endpoint(endpoint_id)
     except store.EndpointNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"no endpoint '{endpoint_id}'") from exc
     except sqlite_util.DatabaseUnavailableError as exc:
         raise _unavailable(exc) from exc
+    live_events.publish("endpoints")
+    return tested
 
 
 @router.delete("/{endpoint_id}", response_model=DeleteOut)
 def delete_endpoint(endpoint_id: str) -> dict:
     try:
-        return {"ok": True, "deleted": model_endpoints.delete_endpoint(endpoint_id)}
+        deleted = model_endpoints.delete_endpoint(endpoint_id)
     except sqlite_util.DatabaseUnavailableError as exc:
         raise _unavailable(exc) from exc
+    live_events.publish("endpoints")
+    return {"ok": True, "deleted": deleted}

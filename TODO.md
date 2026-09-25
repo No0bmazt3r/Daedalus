@@ -545,6 +545,25 @@ Layer 9 below for the per-step detail.
 
 ## M10 — Dashboard completion  ▸ Layer 9B
 
+- [x] **Live updates** — `GET /api/events` (SSE, `services/live_events.py`)
+      announces `models` / `embeddings` / `endpoints` changes; views re-fetch
+      rather than receive data, so every list keeps one source of truth.
+      Published by pull, delete, embedding selection/verify and endpoint edits,
+      plus a watcher that polls Ollama every 5s *while a tab is listening*, so
+      `ollama rm` in a terminal reaches the UI too. One EventSource per tab
+      (`lib/liveEvents.ts`, `hooks/useLiveRefresh.ts`); a reconnect re-fetches
+      everything. The composer's picker, every Forge list and the embedding
+      panes follow it; a deleted selected model falls back to the committed one.
+      uvicorn now runs with `--timeout-graceful-shutdown 3`, since open streams
+      would otherwise hold a reload or stop indefinitely
+- [x] **Code-split the floating windows.** Forge, Blueprints, Settings, Theme,
+      Store and the command palette are `React.lazy` chunks
+      (`components/LazyWindows.tsx`, `lib/windowLoaders.ts`), each mounted the
+      first time it opens and kept mounted so its state survives a close as
+      before, and all prefetched on idle so the first open does not wait on the
+      network. React, TanStack and Base UI are separate long-cached chunks. App
+      code on first load went from one 975KB file to 186KB, and the 500KB
+      warning is gone
 - [x] Wire the chat UI to `POST /api/chat` — no longer mocked
 - [x] SSE streaming rendering — tokens append as they arrive; `lib/http.ts`
       `streamEvents()` owns the framing for both streaming endpoints

@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from ..services import benchmark as benchmark_service
 from ..services import forge as forge_service
-from ..services import hardware, model_usage, ollama_client
+from ..services import hardware, live_events, model_usage, ollama_client
 
 router = APIRouter(prefix="/api/forge", tags=["forge"])
 
@@ -160,6 +160,9 @@ def pull_model(tag: str = Body(..., embed=True)) -> StreamingResponse:
         finally:
             # A new model changes what /api/show would answer for it.
             forge_service.invalidate_cache()
+            # Published even for a cancelled pull: Ollama may have finished,
+            # and a view that re-reads finds out either way.
+            live_events.publish("models", source="pull", tag=tag)
 
     return StreamingResponse(
         events(),
@@ -187,6 +190,7 @@ def delete_model(tag: str) -> dict[str, Any]:
     except ollama_client.OllamaUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     forge_service.invalidate_cache()
+    live_events.publish("models", source="delete", tag=tag)
     return {"deleted": True, "tag": tag}
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, Download, Loader2, Search,
+  Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, Download, Loader2, Search, Database, Binary,
 } from 'lucide-react'
 import {
   fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel, verifyEmbeddingModel,
@@ -11,6 +11,8 @@ import {
 } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
 import { EmbeddingRow } from './EmbeddingRow'
+import { PaneIntro, BrowseLink, SectionLabel, EmptyNote } from './paneParts'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 
 /**
  * The embedding models, in two modes:
@@ -97,11 +99,9 @@ const INDEX_TONES: Record<
   // correct state and flagging it red would make "you have not started" look
   // like "something is broken".
   unset: { wrap: 'theme-border', tint: 'theme-text-muted', icon: HelpCircle },
-  stale: { wrap: 'border-rose-400/40 bg-rose-400/10', tint: 'text-rose-400', icon: AlertTriangle },
-  current: {
-    wrap: 'border-emerald-400/40 bg-emerald-400/10', tint: 'text-emerald-400', icon: Check,
-  },
-  unknown: { wrap: 'border-amber-400/40 bg-amber-400/10', tint: 'text-amber-400', icon: HelpCircle },
+  stale: { wrap: 'status-bad-border status-bad-bg', tint: 'status-bad', icon: AlertTriangle },
+  current: { wrap: 'status-ok-border status-ok-bg', tint: 'status-ok', icon: Check },
+  unknown: { wrap: 'status-warn-border status-warn-bg', tint: 'status-warn', icon: HelpCircle },
   empty: { wrap: 'theme-border', tint: 'theme-text-muted', icon: Check },
 }
 
@@ -114,7 +114,7 @@ function IndexState({ config }: { config: EmbeddingConfig }) {
   const others = config.indexes.filter((i) => i.name !== config.collection && i.documents > 0)
 
   return (
-    <div className={`space-y-2 rounded-lg border p-2.5 ${tone.wrap}`}>
+    <div className={`space-y-2 rounded-xl border p-3 ${tone.wrap}`}>
       <div className="flex items-start gap-2">
         <Icon size={13} className={`mt-0.5 shrink-0 ${tone.tint}`} />
         <p className="text-[11px] leading-relaxed theme-text">
@@ -173,6 +173,9 @@ export function EmbeddingModelsPane({
 
   const load = () => fetchEmbeddingConfig().then(setConfig).catch((e: Error) => setError(e.message))
   useEffect(() => { load() }, [])
+  // The Browse and Installed instances of this pane, and Settings → Knowledge
+  // Base, all show the same selection; a change in one reaches the others.
+  useLiveRefresh(['models', 'embeddings'], () => void load())
 
   const models = config?.local_models ?? []
   const isMultilingual = (languages: string | null | undefined) =>
@@ -258,40 +261,24 @@ export function EmbeddingModelsPane({
         </p>
       ) : (
       <>
-      <header>
-        <h3 className="text-sm theme-text">Embedding model</h3>
-        <p className="mt-1 text-xs leading-relaxed theme-text-muted">
-          Turns document chunks into vectors, once, at ingest.{' '}
-          <span className="theme-text">This is not the chat model</span> — changing which model
-          answers questions, even mid-conversation, does not touch the index.
-        </p>
-        <p className="mt-1.5 text-[11px] leading-relaxed theme-text-muted">
-          Used by Track 1 only — Track 2 has no embedding model at all. Never offered to the
-          assistant, and not scored for fit or speed: those measure a model that generates text.
-        </p>
-      </header>
+      <PaneIntro action={onBrowse && <BrowseLink onClick={onBrowse}>Browse embedding models</BrowseLink>}>
+        Turns document chunks into vectors for Track 1, once, at ingest.{' '}
+        <span className="theme-text">Not the chat model</span> — changing which model answers
+        never touches the index. Track 2 uses none.
+      </PaneIntro>
 
-      <IndexState config={config} />
+      <div className="space-y-2">
+        <SectionLabel icon={Database}>Index</SectionLabel>
+        <IndexState config={config} />
+      </div>
       </>
       )}
 
       {!config.ollama_available && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5 text-[11px] theme-text">
-          <AlertTriangle size={13} className="shrink-0 text-amber-400" />
-          Ollama is not reachable, so nothing can be pulled. Installed models cannot be detected either.
+        <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
+          <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
+          Ollama isn't reachable, so nothing can be pulled, and installed models can't be detected.
         </div>
-      )}
-
-      {mode === 'installed' && !models.some((m) => m.installed) && (
-        <p className="rounded-xl border border-dashed theme-border px-3 py-3 text-xs theme-text-muted">
-          No embedding model installed yet.{' '}
-          {onBrowse ? (
-            <button onClick={onBrowse} className="theme-accent hover:underline">Browse embedding models</button>
-          ) : (
-            'Pull one from the Forge\'s Embedding models tab'
-          )}{' '}
-          — Track 1 cannot ingest without one, and Track 2 does not need one at all.
-        </p>
       )}
 
       {/* ── filters, and pulling anything the catalogue does not list ── */}
@@ -361,6 +348,12 @@ export function EmbeddingModelsPane({
       )}
 
       <div className="@container space-y-2">
+        {mode === 'installed' && (
+          <SectionLabel icon={Binary} count={ordered.length}>Installed</SectionLabel>
+        )}
+        {mode === 'installed' && !ordered.length && (
+          <EmptyNote>No embedding models installed yet.</EmptyNote>
+        )}
         {mode === 'browse' && !ordered.length && (
           <p className="text-xs theme-text-muted py-4 text-center">Nothing matches these filters.</p>
         )}
@@ -393,7 +386,7 @@ export function EmbeddingModelsPane({
             recorded before pulling, or a model deleted afterwards. Saying so
             beats a list that silently does not contain the selected row. */}
         {mode === 'installed' && selectedTag && !models.some((m) => m.installed && m.tag === selectedTag) && (
-          <p className="rounded-xl border status-warn-border status-warn-bg px-3 py-2 text-[11px] theme-text">
+          <p className="rounded-xl border status-warn-border status-warn-bg p-3 text-xs">
             <code>{config.model}</code> is selected but not installed. Pull it, or choose an
             installed one.
           </p>
@@ -404,24 +397,28 @@ export function EmbeddingModelsPane({
           explanation. It is a baseline, not an alternative, and presenting it as
           a peer of the local models would be the wrong shape for Rule 1. */}
       {mode === 'installed' && (
-      <div className="rounded-lg border theme-border">
+      <div className="space-y-2">
+      <SectionLabel icon={Cloud}>Cloud baseline</SectionLabel>
+      <div className="rounded-xl border theme-border theme-surface">
         <button
           onClick={() => setShowCloud((v) => !v)}
-          className="flex w-full items-center gap-2 p-2.5 text-left"
+          className="flex w-full items-center gap-2 p-3 text-left"
         >
           {config.provider === 'cloud' ? (
-            <Cloud size={13} className="shrink-0 text-amber-400" />
+            <Cloud size={13} className="shrink-0 status-warn" />
           ) : (
             <CloudOff size={13} className="shrink-0 theme-text-muted" />
           )}
-          <span className="text-xs theme-text">Cloud embedding baseline</span>
+          <span className="text-xs theme-text">
+            {config.provider === 'cloud' ? 'A cloud model is building the index' : 'Not in use'}
+          </span>
           <span className="ml-auto text-[10px] theme-text-muted">
             {showCloud ? 'hide' : 'show'}
           </span>
         </button>
 
         {showCloud && (
-          <div className="space-y-2 border-t theme-border p-2.5">
+          <div className="space-y-2 border-t theme-border p-3">
             <p className="text-[11px] leading-relaxed theme-text-muted">
               Rule 1 allows cloud models as <span className="theme-text">offline evaluation
               baselines only</span>, and embeddings are a bigger exposure than a chat turn:
@@ -438,7 +435,7 @@ export function EmbeddingModelsPane({
 
             {config.cloud_baselines.length === 0 ? (
               <p className="rounded border border-dashed theme-border p-2.5 text-[11px] theme-text-muted">
-                No benchmark endpoints configured. Add one in Settings → Add Models first; the same
+                No benchmark endpoints configured. Add one under Cloud baselines first; the same
                 credentials are reused rather than stored twice.
               </p>
             ) : (
@@ -447,7 +444,7 @@ export function EmbeddingModelsPane({
                   <div
                     key={b.id}
                     className={`flex items-center gap-2 rounded border p-2 ${
-                      config.endpoint_id === b.id ? 'border-amber-400/50 bg-amber-400/10' : 'theme-border'
+                      config.endpoint_id === b.id ? 'status-warn-border status-warn-bg' : 'theme-border'
                     }`}
                   >
                     <span className="min-w-0 flex-1 truncate text-[11px] theme-text">{b.label}</span>
@@ -475,11 +472,12 @@ export function EmbeddingModelsPane({
           </div>
         )}
       </div>
+      </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5 text-[11px] theme-text">
-          <AlertTriangle size={13} className="shrink-0 text-rose-400" /> {error}
+        <div className="flex items-start gap-2 p-3 rounded-xl border status-bad-border status-bad-bg text-xs">
+          <AlertTriangle size={14} className="status-bad shrink-0 mt-0.5" /> {error}
         </div>
       )}
     </div>

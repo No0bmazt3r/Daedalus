@@ -554,7 +554,8 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "index_state": "unset",
             "index_detail": (
                 "no embedding model is selected, so nothing can be embedded and no index "
-                "can be built. Choose one in the Forge → Embedding models."
+                "can be built. Pull one in the Forge → Embedding models, then choose it under "
+                "Installed → Embedding models."
             ),
             "index_source": "none",
             "index_documents": None,
@@ -677,7 +678,7 @@ def resolve_for_runtime() -> dict[str, Any]:
         raise NotProductionSafe(
             "no embedding model is selected. The model is stamped onto the index it builds and "
             "changing it later invalidates every vector, so it is chosen rather than defaulted — "
-            "pick one in the Forge → Embedding models."
+            "choose one in the Forge → Installed → Embedding models."
         )
     if config["provider"] != "local":
         raise NotProductionSafe(

@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
-    chat, corpus, embeddings, forge, graph, health, logs, maintenance, mcp, prefs,
+    chat, corpus, embeddings, events, forge, graph, health, logs, maintenance, mcp, prefs,
     providers, search, sessions, system, tools,
 )
 from .db import migrations, paths, sqlite_util
@@ -28,7 +28,7 @@ from .services import app_logs
 # Aliased: `api.forge` is already imported above under that name, and the two
 # shadowing each other broke router registration at import time.
 from .services import forge as forge_service
-from .services import chat_service, hardware
+from .services import chat_service, hardware, live_events
 
 # The same records that go to stdout also go to a rotating file, so Settings →
 # System can read them back without a second terminal and a container name.
@@ -82,12 +82,17 @@ async def lifespan(_app: FastAPI):
     # A thread, not the event loop: these are blocking HTTP reads.
     registry_task = asyncio.create_task(asyncio.to_thread(forge_service.warm_registry))
 
+    # Notices model changes made outside the app — `ollama rm` in a terminal —
+    # and tells every open view. Polls only while a browser is listening; see
+    # `services/live_events.py`.
+    watch_task = asyncio.create_task(live_events.watch_ollama())
+
     try:
         yield
     finally:
         # Ordinary shutdown. Without this the task is garbage-collected
         # mid-sleep and asyncio complains about it on the way out.
-        for task in (hardware_task, registry_task):
+        for task in (hardware_task, registry_task, watch_task):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -132,6 +137,7 @@ app.include_router(tools.router)
 app.include_router(mcp.router)
 app.include_router(maintenance.router)
 app.include_router(chat.router)
+app.include_router(events.router)
 
 
 # ── Serve the built dashboard ────────────────────────────────────────────────

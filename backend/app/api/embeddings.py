@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..services import embedding_models, ollama_client
+from ..services import embedding_models, live_events, ollama_client
 
 router = APIRouter(prefix="/api/embeddings", tags=["embeddings"])
 
@@ -49,6 +49,7 @@ def set_config(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    live_events.publish("embeddings")
     return embedding_models.status()
 
 
@@ -70,6 +71,8 @@ def pull(tag: str = Body(..., embed=True)) -> StreamingResponse:
             yield f"data: {json.dumps({'error': str(exc), 'done': True})}\n\n"
         except Exception as exc:  # noqa: BLE001
             yield f"data: {json.dumps({'error': f'{exc.__class__.__name__}: {exc}', 'done': True})}\n\n"
+        finally:
+            live_events.publish("models", source="pull", tag=tag)
 
     return StreamingResponse(
         events(),
@@ -96,4 +99,5 @@ def verify(tag: str = Body(..., embed=True)) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"{exc.__class__.__name__}: {exc}") from exc
+    live_events.publish("embeddings")
     return {"ok": True, **record, **embedding_models.status()}

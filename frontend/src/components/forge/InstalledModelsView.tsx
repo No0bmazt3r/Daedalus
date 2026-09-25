@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ChevronDown, Cloud, Cpu, FlaskConical, Loader2, RefreshCw, Trash2, X,
-  CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Binary, ArrowRight,
+  CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Binary,
 } from 'lucide-react'
 import {
   modelTable, modelUsage, deleteModel, runBenchmark,
@@ -13,6 +13,8 @@ import { EmbeddingModelsPane } from './EmbeddingModelsPane'
 import { CloudModelsView } from './CloudModelsView'
 import { SkeletonList } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
+import { PaneIntro, BrowseLink, EmptyNote } from './paneParts'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 
 /**
  * Forge → Installed: what this machine has, and what it has been doing.
@@ -293,6 +295,9 @@ export function InstalledModelsView({
   const [notice, setNotice] = useState<string | null>(null)
   const [result, setResult] = useState<BenchmarkResult | null>(null)
   const [benchProgress, setBenchProgress] = useState<BenchmarkProgress | null>(null)
+  // Bumped by Refresh. The embedding and cloud panes fetch their own data, so
+  // remounting them is what makes the one Refresh button refresh every pane.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const load = useCallback(async () => {
     // Settled, not all: usage is derived from the audit log and the inventory
@@ -314,6 +319,9 @@ export function InstalledModelsView({
   useEffect(() => {
     void load()
   }, [load])
+  // Deleting here updates at once through `load`; this covers everything else —
+  // a pull in Chat models, or a model removed from a terminal.
+  useLiveRefresh(['models'], () => void load())
 
   const { slm, llm, visible } = useMemo(() => {
     const all = rows ?? []
@@ -369,13 +377,11 @@ export function InstalledModelsView({
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
-          What this machine has, and what it has been running. Benchmark, delete, or choose
-          the embedding model here. To find something new, browse{' '}
-          <span className="theme-text">Chat models</span> or{' '}
-          <span className="theme-text">Embedding models</span>.
+          What this machine has, and what it has been running. Benchmark and delete models,
+          choose the embedding model, and compare against cloud baselines.
         </p>
         <button
-          onClick={() => void load()}
+          onClick={() => { setRefreshKey((k) => k + 1); void load() }}
           disabled={!!busy}
           className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
         >
@@ -412,13 +418,20 @@ export function InstalledModelsView({
         ))}
       </div>
 
-      <div key={pane} className="animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out space-y-3">
+      <div key={`${pane}-${refreshKey}`} className="animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out space-y-3">
         {pane === 'embedding' ? (
           <EmbeddingModelsPane mode="installed" onBrowse={onBrowseEmbeddings} />
         ) : pane === 'cloud' ? (
           <CloudModelsView isPeek={isPeek} />
         ) : (
           <>
+            <PaneIntro
+              action={onBrowseChat && <BrowseLink onClick={onBrowseChat}>Browse chat models</BrowseLink>}
+            >
+              Models that answer questions, with what each has run. Both sizes are on the
+              production path; the composer offers every one of them.
+            </PaneIntro>
+
             {error && (
               <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
                 <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
@@ -489,14 +502,6 @@ export function InstalledModelsView({
                         : `${t.toUpperCase()} ${t === 'slm' ? slm.length : llm.length}`}
                     </button>
                   ))}
-                  {onBrowseChat && (
-                    <button
-                      onClick={onBrowseChat}
-                      className="ml-auto flex items-center gap-1 text-[11px] theme-text-muted hover:theme-text"
-                    >
-                      Browse chat models <ArrowRight size={11} />
-                    </button>
-                  )}
                 </div>
 
                 <div key={tier} className="space-y-3 animate-in fade-in duration-200 ease-out">
@@ -513,11 +518,11 @@ export function InstalledModelsView({
                       />
                     ))
                   ) : (
-                    <p className="text-xs theme-text-muted italic px-3 py-5 rounded-xl border border-dashed theme-border">
+                    <EmptyNote>
                       {rows.length
                         ? `No ${tier.toUpperCase()} models installed.`
-                        : 'Nothing installed yet. Pull one from Chat models.'}
-                    </p>
+                        : 'No chat models installed yet.'}
+                    </EmptyNote>
                   )}
                 </div>
               </>

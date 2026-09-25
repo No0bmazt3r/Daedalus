@@ -9,6 +9,7 @@ import {
   type ModelTable, type ModelRow, type PullProgress, type ModelUsage,
 } from '../../lib/forgeClient'
 import { loadOnePref, savePref, PREF_FORGE_SHORTLIST } from '../../lib/prefsClient'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import { CapabilityBadges } from '../ui/capability-badges'
 import { ModelArchitecture } from '../ui/model-architecture'
 import { Skeleton, SkeletonList } from '../ui/skeleton'
@@ -685,6 +686,9 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
   useEffect(() => {
     void load()
   }, [load])
+  // A pull or delete anywhere — here, in Installed, or `ollama rm` in a
+  // terminal — changes what is installed, so the badges and Manage buttons follow.
+  useLiveRefresh(['models'], () => void load())
 
   // A new search makes an earlier tag check about a different question.
   const onSearchChange = (value: string) => {

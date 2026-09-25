@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, Cloud, ExternalLink, FlaskConical, Loader2, Plus, RefreshCw, X,
+  ArrowLeft, Cloud, ExternalLink, FlaskConical, Loader2, Plus, X,
   CircleCheck, CircleAlert, HelpCircle, Activity, Settings2,
 } from 'lucide-react'
 import {
@@ -11,6 +11,8 @@ import { ModelEndpointsPanel } from '../settings/ModelEndpointsPanel'
 import { listEndpoints, type ModelEndpoint } from '../../lib/systemClient'
 import { CapabilityBadges } from '../ui/capability-badges'
 import { SkeletonList } from '../ui/skeleton'
+import { PaneIntro, SectionLabel, EmptyNote } from './paneParts'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 
 /**
  * Forge → Cloud baselines: the hosted models the evaluation compares against.
@@ -273,6 +275,7 @@ export function CloudModelsView({ isPeek }: { isPeek: boolean }) {
   useEffect(() => {
     void load()
   }, [load])
+  useLiveRefresh(['models', 'endpoints'], () => void load())
 
   const handleBenchmark = useCallback(async (row: ModelRow) => {
     setBusy(row.tag)
@@ -321,21 +324,11 @@ export function CloudModelsView({ isPeek }: { isPeek: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-sm theme-text-muted">
-          Reference baselines for the evaluation chapter. None of these is on the
-          production path: picking one in chat logs the turn as{' '}
-          <code>chat_cloud</code> and keeps it out of the local latency figures.
-        </p>
-        <button
-          onClick={() => void load()}
-          disabled={!!busy}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
-        >
-          <RefreshCw size={12} />
-          Refresh
-        </button>
-      </div>
+      <PaneIntro>
+        Reference baselines for the evaluation chapter, never the production path. Picking
+        one in chat logs the turn as <code>chat_cloud</code> and keeps it out of the local
+        latency figures.
+      </PaneIntro>
 
       {result && (
         <div className="p-3 rounded-xl border theme-border theme-surface-strong text-xs space-y-1">
@@ -364,12 +357,7 @@ export function CloudModelsView({ isPeek }: { isPeek: boolean }) {
 
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Cloud size={12} className="theme-text-muted" />
-            <span className="text-[10px] uppercase tracking-wide theme-text-muted">
-              Via Ollama · {cloudRows.length}
-            </span>
-          </div>
+          <SectionLabel icon={Cloud} count={cloudRows.length}>Via Ollama</SectionLabel>
           {cloudRows.length ? (
             cloudRows.map((row) => (
               <CloudModel
@@ -384,26 +372,28 @@ export function CloudModelsView({ isPeek }: { isPeek: boolean }) {
               />
             ))
           ) : (
-            <p className="text-xs theme-text-muted italic px-3 py-5 rounded-xl border border-dashed theme-border">
+            <EmptyNote>
               No cloud tags. Pull one with <code>ollama pull gpt-oss:120b-cloud</code>.
-            </p>
+            </EmptyNote>
           )}
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Settings2 size={12} className="theme-text-muted" />
-            <span className="text-[10px] uppercase tracking-wide theme-text-muted">
-              API endpoints · {endpoints.length}
-            </span>
-            <button
-              onClick={() => setManagingApi(true)}
-              className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
-            >
-              <Plus size={12} />
-              Add API model
-            </button>
-          </div>
+          <SectionLabel
+            icon={Settings2}
+            count={endpoints.length}
+            action={
+              <button
+                onClick={() => setManagingApi(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+              >
+                <Plus size={12} />
+                Add API model
+              </button>
+            }
+          >
+            API endpoints
+          </SectionLabel>
           {!endpointsLoaded ? (
             <SkeletonList rows={2} />
           ) : endpoints.length ? (
@@ -411,9 +401,7 @@ export function CloudModelsView({ isPeek }: { isPeek: boolean }) {
               <ApiEndpoint key={ep.id} ep={ep} onManage={() => setManagingApi(true)} />
             ))
           ) : (
-            <p className="text-xs theme-text-muted italic px-3 py-5 rounded-xl border border-dashed theme-border">
-              None configured. Add one to benchmark against a hosted model.
-            </p>
+            <EmptyNote>None configured. Add one to benchmark against a hosted model.</EmptyNote>
           )}
         </div>
       </div>

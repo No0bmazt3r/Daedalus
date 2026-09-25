@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
 import { listModels, type SystemModel } from '../lib/systemClient';
 import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 
 /**
  * Per-session UI state, including which model the composer will use.
@@ -31,6 +32,15 @@ import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
  * Defaulting to "the first model in the list" would silently disagree with the
  * Forge's Deployment tab, and the two would drift. So the default is asked for,
  * and `deployedModel` keeps the reasoning around so the UI can show it.
+ *
+ * ## Why the list follows the machine, not the page load
+ *
+ * It is re-fetched whenever the backend reports a model change (`models`, or a
+ * cloud `endpoints` edit) — a pull or delete in the Forge, or `ollama rm` in a
+ * terminal. It used to be fetched once, so a deleted model stayed in the picker
+ * until a reload and a send to it failed. If the selected model is the one that
+ * went, the selection falls back the same way the first load chooses: the
+ * committed model, else the first local one.
  */
 
 interface SettingsContextType {
@@ -59,14 +69,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [deployedModel, setDeployedModel] = useState<ActiveChatModel | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Only the newest response is applied. Two changes in quick succession start
+  // two fetches, and the older one must not land last and win.
+  const latest = useRef(0);
+
+  const refreshModels = useCallback(() => {
+    const ticket = ++latest.current;
 
     // Both in flight together: the list and the default are independent, and
     // the picker should not wait on two serial round trips to become usable.
     void Promise.allSettled([listModels(), activeChatModel()]).then(
       ([listed, active]) => {
-        if (cancelled) return;
+        if (ticket !== latest.current) return;
 
         const deployed = active.status === 'fulfilled' ? active.value : null;
         setDeployedModel(deployed);
@@ -80,6 +94,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const local = listed.value.filter((m) => m.type === 'local');
         setModels(local);
         setReferenceModels(listed.value.filter((m) => m.type === 'cloud'));
+        setModelsError(null);
         setModelsLoading(false);
 
         setSelectedModel((prev) => {
@@ -94,11 +109,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         });
       },
     );
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    refreshModels();
+    // Invalidate any response still in flight when the provider unmounts.
+    const counter = latest;
+    return () => { counter.current++; };
+  }, [refreshModels]);
+
+  useLiveRefresh(['models', 'endpoints'], refreshModels);
 
   return (
     <SettingsContext.Provider value={{
