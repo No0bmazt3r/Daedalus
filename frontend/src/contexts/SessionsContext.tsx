@@ -19,7 +19,7 @@ import {
   type ChatSession,
 } from '../lib/sessionsClient';
 import { useSettings } from './SettingsContext';
-import { sendChat, checkChatStatus } from '../lib/chatClient';
+import { sendChat, checkChatStatus, asEvidence, type StoredEvidence } from '../lib/chatClient';
 
 /**
  * Conversation state for the whole app.
@@ -45,6 +45,8 @@ export interface DisplayMessage {
   failed?: boolean;
   /** The tag of the model that generated this message, if known. */
   modelTag?: string;
+  /** The evidence pack the orchestrator stored with an assistant turn — its citations. */
+  evidence?: StoredEvidence;
 }
 
 export type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -84,6 +86,7 @@ function toDisplay(message: ChatMessage): DisplayMessage {
     content: message.content,
     persisted: true,
     modelTag: message.model_tag,
+    evidence: asEvidence(message.evidence),
   };
 }
 

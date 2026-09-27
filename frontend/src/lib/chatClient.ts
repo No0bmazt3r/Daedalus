@@ -37,6 +37,32 @@ export interface ChatValidation {
   control_claim: string | null;
 }
 
+/**
+ * The evidence pack stored with an assistant turn (`message.evidence`). Shown
+ * as citations under the answer; never replayed into a prompt.
+ */
+export interface StoredEvidence {
+  citations: { label: string; kind: string; tool: string; [detail: string]: unknown }[]
+  /** label → the line the model was shown, prefixed with its own label. */
+  lines: Record<string, string>
+  failures: string[]
+  notes: string[]
+  tools_used: string[]
+}
+
+export function asEvidence(value: unknown): StoredEvidence | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const v = value as Partial<StoredEvidence>
+  if (!Array.isArray(v.citations) || !v.lines || typeof v.lines !== 'object') return undefined
+  return {
+    citations: v.citations,
+    lines: v.lines,
+    failures: v.failures ?? [],
+    notes: v.notes ?? [],
+    tools_used: v.tools_used ?? [],
+  }
+}
+
 export interface ChatReply {
   query_id: string;
   session_id: string;

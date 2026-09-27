@@ -64,7 +64,9 @@ def local_tag() -> str | None:
         return None
 
 
-def ask_json(system: str, prompt: str, *, max_tokens: int = 120) -> tuple[dict[str, Any] | None, str | None]:
+def ask_json(
+    system: str, prompt: str, *, max_tokens: int = 120, timeout: float = TIMEOUT_S
+) -> tuple[dict[str, Any] | None, str | None]:
     """One JSON object from the local model, and the tag that produced it.
 
     Returns (None, tag-or-None) on any failure. Never raises.
@@ -79,7 +81,7 @@ def ask_json(system: str, prompt: str, *, max_tokens: int = 120) -> tuple[dict[s
             system=system,
             json_format=True,
             temperature=0.0,
-            timeout=TIMEOUT_S,
+            timeout=timeout,
             think=False if _supports_thinking(tag) else None,
             max_tokens=max_tokens,
         )

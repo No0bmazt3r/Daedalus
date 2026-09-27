@@ -41,6 +41,17 @@ import { useLiveRefresh } from '../hooks/useLiveRefresh';
  * until a reload and a send to it failed. If the selected model is the one that
  * went, the selection falls back the same way the first load chooses: the
  * committed model, else the first local one.
+ *
+ * ## "There is no model" is a prompt, not a disabled button
+ *
+ * With zero local models nothing can answer, summarise or benchmark, and every
+ * task fails at its first model call with an error that names a symptom rather
+ * than the cause. So the app says it once, up front: `noModel` is true once the
+ * list has loaded and holds no local model, and `noModelPromptOpen` drives the
+ * dialog `AppShell` renders. Dismissing it is allowed — the Forge is where a
+ * model gets added, and the operator may be on their way there — but trying to
+ * send a message reopens it. Cloud models do not count: they are evaluation
+ * overrides, and the default path and the background summariser are local.
  */
 
 interface SettingsContextType {
@@ -56,6 +67,12 @@ interface SettingsContextType {
   modelsError: string | null;
   /** What the Forge committed, and why. Null until resolved. */
   deployedModel: ActiveChatModel | null;
+  /** The list loaded and there is no local model. False while loading or on error. */
+  noModel: boolean;
+  noModelPromptOpen: boolean;
+  /** Reopen the "add a model first" prompt — e.g. on a send with nothing to answer it. */
+  showNoModelPrompt: () => void;
+  dismissNoModelPrompt: () => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -68,6 +85,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [deployedModel, setDeployedModel] = useState<ActiveChatModel | null>(null);
+  // Dismissed rather than open: the prompt shows whenever `noModel` is true
+  // and this is false, so it appears on its own once the list says so.
+  const [noModelDismissed, setNoModelDismissed] = useState(false);
 
   // Only the newest response is applied. Two changes in quick succession start
   // two fetches, and the older one must not land last and win.
@@ -120,6 +140,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useLiveRefresh(['models', 'endpoints'], refreshModels);
 
+  const noModel = !modelsLoading && !modelsError && models.length === 0;
+  const showNoModelPrompt = useCallback(() => setNoModelDismissed(false), []);
+  const dismissNoModelPrompt = useCallback(() => setNoModelDismissed(true), []);
+
   return (
     <SettingsContext.Provider value={{
       isIncognito,
@@ -131,6 +155,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       modelsLoading,
       modelsError,
       deployedModel,
+      noModel,
+      noModelPromptOpen: noModel && !noModelDismissed,
+      showNoModelPrompt,
+      dismissNoModelPrompt,
     }}>
       {children}
     </SettingsContext.Provider>

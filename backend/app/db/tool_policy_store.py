@@ -216,3 +216,36 @@ def enable_all() -> int:
         cursor = conn.execute("DELETE FROM tool_disabled")
         conn.commit()
         return cursor.rowcount
+
+
+# ── Simple / Advanced (009) ──────────────────────────────────────────────────
+
+MODES: Final[tuple[str, ...]] = ("simple", "advanced")
+DEFAULT_MODE: Final = "simple"
+
+
+def mode() -> dict[str, Any]:
+    """The tool mode and when it was chosen. No row means Simple, the default."""
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT mode, changed_at FROM tool_mode WHERE id = 1").fetchone()
+    if row is None:
+        return {"mode": DEFAULT_MODE, "changed_at": None}
+    return {"mode": row["mode"], "changed_at": row["changed_at"]}
+
+
+def set_mode(value: str) -> dict[str, Any]:
+    chosen = (value or "").strip().lower()
+    if chosen not in MODES:
+        raise ToolPolicyError(f"mode must be one of {', '.join(MODES)}; got {value!r}")
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO tool_mode (id, mode, changed_at) VALUES (1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET mode = excluded.mode, changed_at = excluded.changed_at
+            """,
+            (chosen, _now()),
+        )
+        conn.commit()
+    return mode()

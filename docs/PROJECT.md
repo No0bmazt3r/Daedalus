@@ -233,7 +233,7 @@ evaluation harness are administrative. They never sit in the live query path.
 | 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); waiting on the real corpus |
 | 5 | Retrieval — vector + graph | 3 | **Wired into chat** — Track 1 top-k over the current index, Track 2 a fixed logged walk (`graph_walk`), gated by the selected track. Advanced Track 1 techniques and Track 2's agent loop not built |
 | 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
-| 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback. Background summariser still missing |
+| 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback, background summariser; citations shown in the chat |
 | 8 | Deterministic tool layer | 3 | **Built** — the three sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
 | 9A | PyQt5 chat tab | 4 | Deferred / optional |
 | 9B | React web dashboard | 4 | **Partially built** — see §11 |

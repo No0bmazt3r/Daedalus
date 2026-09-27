@@ -1,0 +1,148 @@
+import { Fragment, useState, type ReactNode } from 'react'
+import { AlertTriangle, BookOpen, ChevronDown, Database, Network, Siren } from 'lucide-react'
+import { Collapse } from './ui/collapse'
+import type { StoredEvidence } from '../lib/chatClient'
+
+/**
+ * Citations under an assistant answer — PROJECT.md §7.1 step 11 made visible.
+ *
+ * The orchestrator stores the evidence pack with the turn (`message.evidence`,
+ * never replayed into a prompt). Each line carries the label the model was told
+ * to cite — `[S1]` a sensor reading, `[A1]` an anomaly, `[D1]` a document
+ * passage, `[G1]` a graph node — so an answer's claims can be traced to what the
+ * tools actually returned without opening the audit store.
+ *
+ * Labels in the text become chips that show their evidence on hover. Only
+ * labels the pack issued are linked: the validator already rejects an answer
+ * citing one it did not, so an unlinked label here would mean a stored turn
+ * predating that check, and it is left as plain text rather than dressed up.
+ */
+
+// `[S1]`, and the grouped form small models also write: `[G6, G7]`. Same
+// pattern the validator parses (orchestration/validator.py).
+const CITATION_RE = /\[\s*([A-Z]\d+(?:\s*[,;]\s*[A-Z]\d+)*)\s*\]/g
+
+const KIND_ICON: Record<string, typeof Database> = {
+  sensor: Database,
+  anomaly: Siren,
+  document: BookOpen,
+  graph: Network,
+}
+
+function lineText(evidence: StoredEvidence, label: string): string {
+  return (evidence.lines[label] ?? '').replace(/^\[[A-Z]\d+\]\s*/, '')
+}
+
+/** The answer text with its citation labels turned into chips. */
+export function withCitations(text: string, evidence: StoredEvidence | undefined): ReactNode {
+  if (!evidence) return text
+  const out: ReactNode[] = []
+  let last = 0
+  for (const match of text.matchAll(CITATION_RE)) {
+    const labels = match[1].split(/[,;]/).map((l) => l.trim())
+    if (!labels.every((l) => l in evidence.lines)) continue
+    out.push(text.slice(last, match.index))
+    out.push(
+      <Fragment key={match.index}>
+        {labels.map((label) => (
+          <sup
+            key={label}
+            title={lineText(evidence, label)}
+            className="mx-[1px] px-1 rounded text-[10px] font-medium theme-surface-strong theme-text-muted cursor-help align-super"
+          >
+            {label}
+          </sup>
+        ))}
+      </Fragment>,
+    )
+    last = match.index + match[0].length
+  }
+  if (!out.length) return text
+  out.push(text.slice(last))
+  return out
+}
+
+/** Labels the answer actually cited, in order of first use. */
+function citedLabels(text: string, evidence: StoredEvidence): string[] {
+  const seen = new Set<string>()
+  for (const match of text.matchAll(CITATION_RE)) {
+    for (const label of match[1].split(/[,;]/).map((l) => l.trim())) {
+      if (label in evidence.lines) seen.add(label)
+    }
+  }
+  return [...seen]
+}
+
+function SourceLine({ evidence, label }: { evidence: StoredEvidence; label: string }) {
+  const kind = evidence.citations.find((c) => c.label === label)?.kind ?? ''
+  const Icon = KIND_ICON[kind] ?? Database
+  return (
+    <li className="flex items-start gap-2">
+      <code className="shrink-0 text-[10px] mt-0.5 px-1 rounded theme-surface-strong theme-text">{label}</code>
+      <Icon size={11} className="shrink-0 mt-1 theme-text-muted" />
+      <span className="leading-relaxed">{lineText(evidence, label)}</span>
+    </li>
+  )
+}
+
+/** The collapsible source list under an answer. Renders nothing without evidence. */
+export function Sources({ text, evidence }: { text: string; evidence: StoredEvidence | undefined }) {
+  const [open, setOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  if (!evidence) return null
+
+  const cited = citedLabels(text, evidence)
+  const all = evidence.citations.map((c) => c.label)
+  const uncited = all.filter((l) => !cited.includes(l))
+  if (!all.length && !evidence.failures.length) return null
+
+  const summary = cited.length
+    ? `${cited.length} source${cited.length === 1 ? '' : 's'} cited`
+    : all.length
+      ? `${all.length} piece${all.length === 1 ? '' : 's'} of evidence gathered, none cited`
+      : 'no evidence found'
+
+  return (
+    <div className="mt-2 text-[12px] theme-text-muted">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 hover:theme-text transition-colors"
+      >
+        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : '-rotate-90'}`} />
+        {summary}
+        <span className="opacity-60">· {evidence.tools_used.join(', ')}</span>
+      </button>
+      <Collapse open={open} className="mt-1.5 pl-4 space-y-2">
+        {cited.length > 0 && (
+          <ul className="space-y-1.5">
+            {cited.map((label) => <SourceLine key={label} evidence={evidence} label={label} />)}
+          </ul>
+        )}
+        {uncited.length > 0 && (
+          <div>
+            <button
+              onClick={() => setShowAll((s) => !s)}
+              className="text-[11px] underline underline-offset-2 hover:theme-text transition-colors"
+            >
+              {showAll ? 'hide' : 'show'} {uncited.length} gathered but not cited
+            </button>
+            <Collapse open={showAll} className="mt-1.5">
+              <ul className="space-y-1.5 opacity-75">
+                {uncited.map((label) => <SourceLine key={label} evidence={evidence} label={label} />)}
+              </ul>
+            </Collapse>
+          </div>
+        )}
+        {evidence.failures.map((f) => (
+          <p key={f} className="flex items-start gap-1.5 status-warn text-[11px]">
+            <AlertTriangle size={11} className="shrink-0 mt-0.5" /> {f}
+          </p>
+        ))}
+        {evidence.notes.map((n) => (
+          <p key={n} className="text-[11px] opacity-75">{n}</p>
+        ))}
+      </Collapse>
+    </div>
+  )
+}

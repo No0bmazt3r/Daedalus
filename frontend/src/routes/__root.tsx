@@ -89,7 +89,9 @@ function AppShell() {
   useEffect(() => prefetchWindows(), [])
 
   const { keybinds } = useUiPrefs()
-  const { isIncognito, setIsIncognito } = useSettings()
+  const {
+    isIncognito, setIsIncognito, noModelPromptOpen, dismissNoModelPrompt,
+  } = useSettings()
   const { sessions, activeSessionId, newChat, remove, selectSession } = useSessions()
 
   /** Close whatever is in front, in the order the windows stack. */
@@ -280,6 +282,28 @@ function AppShell() {
             setConfirmDelete(null)
           }}
           onCancel={() => setConfirmDelete(null)}
+        />
+
+        {/* Zero local models: nothing can answer, summarise or benchmark. */}
+        <ConfirmDialog
+          open={noModelPromptOpen && confirmDelete === null}
+          title="No model installed"
+          body={
+            <>
+              There are zero models in the system. Please add a model first, before starting
+              any task — open <strong className="theme-text">The Forge</strong>, pick one that
+              fits this machine, and pull it. If you already have models, check that Ollama is
+              running.
+            </>
+          }
+          confirmLabel="Open The Forge"
+          cancelLabel="Later"
+          danger
+          onConfirm={() => {
+            dismissNoModelPrompt()
+            openWindow('forge', () => setForgeOpen(true))
+          }}
+          onCancel={dismissNoModelPrompt}
         />
     </>
   )

@@ -21,6 +21,7 @@ import { useSettings } from '../contexts/SettingsContext'
 import { useUiPrefs } from '../contexts/UiPrefsContext'
 import { FOCUS_COMPOSER_EVENT } from '../lib/keybinds'
 import { useSessions } from '../contexts/SessionsContext'
+import { Sources, withCitations } from './Citations'
 
 function TypewriterText({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
@@ -241,7 +242,7 @@ function ComposerControls({
 export function ChatInterface() {
   // The picker lives in ComposerControls now; only `referenceModels` is needed
   // here, to mark which transcript turns came from off the machine.
-  const { isIncognito, setIsIncognito, referenceModels } = useSettings()
+  const { isIncognito, setIsIncognito, referenceModels, noModel, showNoModelPrompt } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
   const { messages, sendMessage, sending, error, modelNotice } = useSessions()
   const [input, setInput] = useState('')
@@ -272,6 +273,12 @@ export function ChatInterface() {
 
   const handleSend = () => {
     if (!input.trim() || sending) return
+    // Nothing can answer. Keep what was typed and say why, rather than sending
+    // a turn that fails at the model call with an error about the symptom.
+    if (noModel) {
+      showNoModelPrompt()
+      return
+    }
     const content = input
     setInput('')
     void sendMessage(content)
@@ -385,8 +392,16 @@ export function ChatInterface() {
                   >
                     {msg.role === 'assistant' && msg.content === '' && !msg.persisted ? (
                       <span className="theme-text-muted animate-pulse">Thinking…</span>
+                    ) : msg.role === 'assistant' && msg.persisted ? (
+                      // Chips only once the turn is stored: while tokens are
+                      // streaming there is no evidence pack on the client yet.
+                      withCitations(msg.content, msg.evidence)
                     ) : (
                       msg.content
+                    )}
+
+                    {msg.role === 'assistant' && msg.persisted && (
+                      <Sources text={msg.content} evidence={msg.evidence} />
                     )}
 
                     {msg.role === 'assistant' && msg.persisted && msg.content !== '' && (

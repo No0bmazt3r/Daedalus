@@ -71,7 +71,21 @@ export interface AgentTool {
    * different sentences, and only the first one has a switch to flip back.
    */
   disabled: boolean;
+  /** Which retrieval track this tool *is*; null for everything that is not retrieval. */
+  track: 'vector' | 'graph' | null;
   params: ToolParam[];
+}
+
+/**
+ * The tools the chat path actually plans with: the sensor reads, and the
+ * selected track's retrieval. Read from the backend planner, so the simple
+ * view lists exactly what answers a question — no more, no fewer.
+ */
+export interface AnsweringTools {
+  track: 'vector' | 'graph';
+  sensor: string[];
+  retrieval: string;
+  tools: string[];
 }
 
 /** A tool the reference implementation has and this one deliberately does not. */
@@ -115,7 +129,24 @@ export interface ToolCatalogue {
    * which tools the model should be choosing between. Empty is the default.
    */
   disabled: DisabledTool[];
+  /** Null only if the backend could not work it out; the advanced view still renders. */
+  answering: AnsweringTools | null;
+  /**
+   * Enforced, not cosmetic. `simple` (the default) refuses every tool outside
+   * `answering` at runtime; `advanced` defers to `locked` and `disabled`, which
+   * switching modes never rewrites.
+   */
+  mode: { mode: ToolMode; changed_at: string | null };
 }
+
+export type ToolMode = 'simple' | 'advanced';
+
+/** Switch Simple ↔ Advanced. Takes effect on the next tool call. */
+export const setToolMode = (mode: ToolMode) =>
+  request<ToolCatalogue>('/api/tools/policy/mode', {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
+  });
 
 /** What a dispatched tool hands back. Never the raw value — see `citable`. */
 export interface ToolResult {

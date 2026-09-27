@@ -42,11 +42,34 @@ def _blank(pattern: re.Pattern[str], text: str) -> str:
 
 def extract(text: str) -> list[Number]:
     """Every quantity in `text`, in order."""
+    return [n for n, _ in _scan(text)]
+
+
+def redact(text: str, *, keep_small: int = 10, mask: str = "…") -> str:
+    """`text` with every quantity above `keep_small` replaced by `mask`.
+
+    For text that will be replayed into a prompt without being evidence — the
+    rolling summary. A number there was true once and is stale by the time it
+    is read again; removing it is simpler and safer than hoping the model treats
+    it as history.
+    """
+    out, last = [], 0
+    for n, (start, end) in _scan(text):
+        if n.decimals == 0 and n.value <= keep_small:
+            continue
+        out.append(text[last:start])
+        out.append(mask)
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
+def _scan(text: str) -> list[tuple[Number, tuple[int, int]]]:
     cleaned = text.replace("₂", "2")
     for pattern in (_LABEL_RE, _ISO_RE, _CLOCK_RE, _LIST_MARKER_RE):
         cleaned = _blank(pattern, cleaned)
 
-    out: list[Number] = []
+    out: list[tuple[Number, tuple[int, int]]] = []
     for m in _NUMBER_RE.finditer(cleaned):
         before = cleaned[m.start() - 1] if m.start() else " "
         before2 = cleaned[m.start() - 2] if m.start() > 1 else " "
@@ -58,7 +81,7 @@ def extract(text: str) -> list[Number]:
             continue  # the tail of a version string, 1.2.3
         raw = m.group(0).replace(",", "")
         decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
-        out.append(Number(text=m.group(0), value=float(raw), decimals=decimals))
+        out.append((Number(text=m.group(0), value=float(raw), decimals=decimals), (m.start(), m.end())))
     return out
 
 

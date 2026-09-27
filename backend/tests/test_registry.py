@@ -42,6 +42,15 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(rows[0]["hop_count"], path["hop_count"])
         self.assertTrue(json.loads(rows[0]["retrieved_chunk_ids"]))
 
+    def test_simple_view_lists_exactly_what_the_planner_uses(self) -> None:
+        for track, retrieval in (("vector", "search_corpus"), ("graph", "graph_walk")):
+            fixtures.set_track(track)
+            answering = agent_tools.catalogue()["answering"]
+            self.assertEqual(answering["track"], track)
+            self.assertEqual(answering["tools"],
+                             ["get_live_reading", "get_trend", "get_anomaly_summary", retrieval])
+        fixtures.set_track("vector")
+
     def test_sensor_category_is_listed(self) -> None:
         self.assertIn("sensor", [c for c, _ in registry.CATEGORIES])
 

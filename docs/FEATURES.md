@@ -31,10 +31,10 @@ Everything below was read off the source, not from memory.
 | Data stores (×5) | Built and containerised, each with a versioned schema. The Vector store gained a relational half — `corpus.db`, the ingestion manifest — which is that store's own record, not a sixth store |
 | Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
-| Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
-| Agent tools | Built — 33 tools in six categories, including the three sensor tools and Track 2's `graph_walk`, two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
+| Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, answers carry citation chips and a *Sources* list from the stored evidence pack, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
+| Agent tools | Built — 33 tools in six categories, including the three sensor tools and Track 2's `graph_walk`. **Simple** (the default) is a runtime mode, not just a view: only the tools that answer questions can run, everything else is refused at dispatch. **Advanced** restores the full list under the per-tool switches and locks. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
-| Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Background summarising is the one §7.4 piece still missing |
+| Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
 | Retrieval (M6) | Both tracks are wired into the chat path through the planner. Track 1 needs a current vector index to return anything; Track 2 runs a fixed, logged walk. The advanced Track 1 techniques and Track 2's agent loop are not built |
 
 ---
@@ -77,6 +77,7 @@ to it.
 | `POST` | `/api/forge/models/pull` | Pull via Ollama, streaming progress as SSE |
 | `DELETE` | `/api/forge/models/{tag}` | Remove a local model |
 | `POST` | `/api/forge/benchmark` | Benchmark on a RAG-sized prompt; **SSE**; writes `model_logs`. See [`BENCHMARK.md`](BENCHMARK.md) |
+| `POST` | `/api/tools/policy/mode` | `{"mode": "simple" | "advanced"}` — Simple refuses every runtime tool outside the answering set |
 | `POST` | `/api/chat` | Answer a message, **streamed as SSE** — the full §7.1 flow (see *Orchestration* in §3). The `done` result carries `intent`, `tools_used`, `citations`, `grounded`, `validation` and `latency_ms` |
 | `GET` | `/api/chat/model` | Which model would answer right now, and why |
 | `GET` | `/api/chat/{id}/status` | Whether a generation is still running for that session. A generation outlives the request that started it, so a reconnecting client polls this |
@@ -876,6 +877,33 @@ hazard. First-person action claims ("I have opened ABV-1") fail as
 `control_claim`. A failed answer becomes *"I could not generate a grounded
 answer from the available data."* Its known blind spots — clock times, integers
 0–10, causal claims — are listed in `validator.py` and TODO M5.
+
+**Citations are shown, not just stored.** The pack is saved with the assistant
+turn (`message.evidence`, never replayed). The chat turns `[S1]` into a chip
+whose tooltip is the evidence line, and a *Sources* list under the answer shows
+what was cited, what was gathered but not cited, and any tool that failed.
+
+**The rolling summary** (`services/summariser.py`) folds turns that no longer fit
+the history budget into `chat_sessions.summary`, on its own thread after the
+`done` event. It asks the local model for referents — sensors, times,
+procedures — and then redacts every quantity anyway, because the summary is
+replayed into every later prompt and is not evidence. Without a local model it
+stores the operator's earlier questions instead. Each run is a `memory_logs` row
+with `kind='summary'`.
+
+**Settings → Agent Tools → Simple** shows only `catalogue.answering` — the three
+sensor tools and the selected track's retrieval — read-only and in plain words.
+The backend takes that list from the planner (`planner.answering_tools()`), so
+the view cannot list a tool the chat path never calls. **It is also enforced**:
+the mode is stored server-side (`tool_mode`, prefs migration 009, default
+Simple) and the registry gate refuses every runtime tool outside that set while
+Simple is on — Advanced's per-tool switches are ignored in Simple and restored,
+untouched, in Advanced. `POST /api/tools/policy/mode` switches it.
+
+**No model, no task.** When the model list loads with zero local models, the
+app shows a dialog asking for a model to be added first, with a button into The
+Forge; a send attempted with no model reopens it rather than failing at the
+model call.
 
 ### MCP — `services/mcp_client.py` · `services/mcp_servers.py`
 
@@ -1735,7 +1763,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **61 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, and the chat path end to end with Ollama faked. Everything else is still verified by direct API calls |
+| Backend | **75 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time) and the simple view's tool list. Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

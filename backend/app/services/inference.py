@@ -61,7 +61,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from ..db import audit_store
-from . import chat_service, model_config, ollama_client, orchestration, query_pipeline
+from . import chat_service, model_config, ollama_client, orchestration, query_pipeline, summariser
 
 # Long enough for a large model on a slow machine, short enough that a hung
 # daemon does not hold a worker forever.
@@ -211,6 +211,7 @@ def _finish_without_model(
         **pipeline_log,
     )
     stored = chat_service.add_assistant_message(session_id, reply, query_id=query_id)
+    summary_scheduled = _maybe_summarise(session_id)
     reason = {
         "too_long": "the message was too long to answer",
         "out_of_scope": "the question is outside what Daedalus covers",
@@ -241,6 +242,7 @@ def _finish_without_model(
                 "dropped": window.dropped,
                 "estimated_tokens": window.estimated_tokens,
                 "needs_summary": window.needs_summary,
+                "summary_scheduled": summary_scheduled,
             },
             "understanding": understood.as_event(),
             "intent": understood.intent,
@@ -252,6 +254,22 @@ def _finish_without_model(
             "latency_ms": total_ms,
         },
     })
+
+
+def _maybe_summarise(session_id: str) -> bool:
+    """Fold turns that no longer fit the history budget — in the background.
+
+    Checked against the window *after* this turn was stored, since the two
+    messages just written are what usually pushes the oldest out. The check is
+    one read; the summary itself runs on its own thread (`summariser`), so the
+    `done` event is never held for it.
+    """
+    try:
+        if chat_service.build_context(session_id).needs_summary:
+            return summariser.schedule(session_id)
+    except Exception:  # noqa: BLE001 — memory upkeep must not fail a turn
+        pass
+    return False
 
 
 # Sessions with a generation in flight, keyed by session id. The worker owns the
@@ -468,8 +486,13 @@ def answer_stream(
             verdict: orchestration.Validation | None = None
             delivered = text
             if not error:
+                # The rolling summary is history too: a number that survived its
+                # redaction is as stale as one in a replayed turn.
+                history = window.messages + (
+                    [{"role": "system", "content": window.summary}] if window.summary else []
+                )
                 verdict = orchestration.validator.validate(
-                    text, pack, question=understood.standalone, history=window.messages,
+                    text, pack, question=understood.standalone, history=history,
                 )
                 if not verdict.passed:
                     delivered = orchestration.FALLBACK
@@ -515,6 +538,7 @@ def answer_stream(
             stored = chat_service.add_assistant_message(
                 session_id, delivered, query_id=query_id, evidence=pack.as_json(), model_tag=tag
             )
+            summary_scheduled = _maybe_summarise(session_id)
 
             events.put({
                 "phase": "done",
@@ -539,8 +563,9 @@ def answer_stream(
                         "history_messages": len(window.messages),
                         "dropped": window.dropped,
                         "estimated_tokens": window.estimated_tokens,
-                        # Layer 7 should summarise after responding, never here.
                         "needs_summary": window.needs_summary,
+                        # Folding happens on its own thread, after this event.
+                        "summary_scheduled": summary_scheduled,
                     },
                     "understanding": understood.as_event(),
                     # architecture/07's response contract.

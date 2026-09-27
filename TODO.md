@@ -434,7 +434,13 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [x] Conversation memory — session store, transcripts, token-budgeted context assembly (`services/chat_service.py`, `docs/PROJECT.md` §7.4)
 - [x] Wire `build_context()` into the prompt builder — summary + history before the evidence block
 - [x] Follow-up condensation — rewrite "and the pressure?" into a standalone query **before** intent classification, and send the *same* rewritten query to both retrieval tracks. Stored on the turn (`chat_messages.standalone_query`) so the next follow-up is rewritten against it
-- [ ] Background summariser — fold turns that fell out of the budget into `chat_sessions.summary` **after** responding, never on the request path
+- [x] Background summariser (`services/summariser.py`) — folds turns that fell
+      out of the budget into `chat_sessions.summary` on its own thread, after the
+      `done` event. Always the local model; with none, a deterministic floor (the
+      operator's earlier questions). **Every quantity is redacted before storing**
+      — the summary is replayed into every later prompt and is not evidence — and
+      the validator counts the summary as history. One `memory_logs` row
+      (`kind='summary'`) per run. qwen3:1.7b folds 26 turns in ~20 s
 - [ ] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values
 - [x] Response validator — empty · too long · a number absent from the evidence ·
       a citation label the pack never issued · a first-person control claim.
@@ -449,7 +455,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       frame per token. The model call runs on a worker thread, so a generation
       outlives the request that started it and a client that navigated away can
       rejoin via `GET /api/chat/{id}/status`
-- [x] Tests (`backend/tests/`, stdlib `unittest`, 61 cases): every unsafe
+- [x] Tests (`backend/tests/`, stdlib `unittest`, 75 cases): every unsafe
       phrasing is refused (28, English and Malay) and never reaches a model ·
       questions about control are allowed · a response containing an invented
       number is caught and replaced · a stale number replayed from history is
@@ -460,8 +466,29 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       prompt rule only — nothing checks a causal claim semantically. qwen3:1.7b
       was seen attributing a CO₂ spike to NDIR calibration when the evidence
       only listed both
-- [ ] Surface citations in the chat UI — the `done` result carries them and the
-      transcript stores the pack; nothing renders them yet
+- [x] Citations in the chat UI (`components/Citations.tsx`) — `[S1]` labels in an
+      answer become chips that show their evidence line on hover, and a
+      collapsible *Sources* list sits under each answer: what it cited, what was
+      gathered but not cited, any tool that failed, and how the window was chosen.
+      Read from the stored pack, so a reopened chat shows them too
+- [x] Settings → Agent Tools has **Simple** (default) and **Advanced** views.
+      Simple lists only what answers a question — the three sensor reads and the
+      selected track's retrieval (Vector RAG or Graph RAG) — in plain words,
+      read-only. The list is `catalogue.answering`, read from the planner, so it
+      cannot drift from what actually runs. Advanced is the full panel as before
+      - [x] **The mode is enforced, not drawn.** Stored server-side (prefs
+            migration 009, `tool_mode`; no row = Simple) and checked by the
+            registry gate: in Simple every runtime tool outside the answering
+            set is refused and left out of the schema list, and Advanced's
+            per-tool switches are not consulted. Advanced defers to the switches
+            and locks again — a mode change never rewrites them. Fails closed
+            to Simple if the mode cannot be read. Trial runs in Settings (setup
+            surface) are unaffected. 8 tests
+- [x] **"No model installed" prompt.** With zero local models the app opens a
+      themed dialog on load — *add a model first, before starting any task* —
+      with a button straight into The Forge. Dismissable, but sending a message
+      with no model reopens it instead of sending a turn that would fail at the
+      model call. Cloud models do not count; the default path is local
 
 ## M6 — Retrieval tracks  ▸ Layer 5
 

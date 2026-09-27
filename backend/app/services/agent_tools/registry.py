@@ -194,6 +194,32 @@ def _disabled_tools() -> frozenset[str]:
         return frozenset()
 
 
+def _tool_mode() -> str:
+    """'simple' or 'advanced' — Settings → Agent Tools' switch, read per call.
+
+    Fails **closed**, to Simple. An unreadable mode must not quietly widen the
+    tool list: Simple only ever removes tools the chat path does not use, so the
+    worst a wrong "simple" can do is refuse something an operator wanted, which
+    they can see and fix.
+    """
+    from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
+
+    try:
+        return tool_policy_store.mode()["mode"]
+    except Exception:  # noqa: BLE001 — see above
+        return "simple"
+
+
+def _answering_names() -> frozenset[str] | None:
+    """The tools Simple mode keeps — the planner's set. None if it cannot be read."""
+    try:
+        from ..orchestration import planner  # noqa: PLC0415 — the planner imports this package
+
+        return frozenset(planner.answering_tools()["tools"])
+    except Exception:  # noqa: BLE001 — the caller falls back to the static set
+        return None
+
+
 class ToolError(RuntimeError):
     """A tool could not run, with a reason meant to be read by a model."""
 
@@ -384,7 +410,31 @@ def catalogue(*, surface: Surface = Surface.RUNTIME) -> dict[str, Any]:
         "locked": sorted(closed.values(), key=lambda p: p["effect"]),
         "unlockable": list(tool_policy_store.UNLOCKABLE),
         "disabled": sorted(switched_off.values(), key=lambda t: t["tool"]),
+        # The subset the chat path actually plans — Settings' simple view. Read
+        # from the planner rather than restated, so the two cannot disagree.
+        "answering": _answering(),
+        # Simple refuses everything outside `answering` at runtime; Advanced
+        # defers to `locked` and `disabled`.
+        "mode": _mode_record(),
     }
+
+
+def _mode_record() -> dict[str, Any]:
+    from ...db import tool_policy_store  # noqa: PLC0415
+
+    try:
+        return tool_policy_store.mode()
+    except Exception:  # noqa: BLE001 — same fail-closed reading as `_tool_mode`
+        return {"mode": "simple", "changed_at": None}
+
+
+def _answering() -> dict[str, Any] | None:
+    try:
+        from ..orchestration import planner  # noqa: PLC0415 — the planner imports this package
+
+        return planner.answering_tools()
+    except Exception:  # noqa: BLE001 — a panel that cannot say this still renders the rest
+        return None
 
 
 def schemas(*, surface: Surface = Surface.RUNTIME) -> list[dict[str, Any]]:
@@ -447,10 +497,38 @@ def _refusal(tool: Tool, surface: Surface, *, switched_off: frozenset[str] | Non
     the operator did not break. `switched_off` is passed in by callers that
     check every tool at once, so a catalogue is one read rather than thirty.
     """
+    if surface is Surface.RUNTIME and _tool_mode() == "simple":
+        return _simple_refusal(tool, surface)
     off = _disabled_tools() if switched_off is None else switched_off
     if tool.name in off:
         return f"{tool.name} is switched off in Settings → Agent Tools."
     return _surface_refusal(tool, surface) or _track_refusal(tool, surface)
+
+
+def _simple_refusal(tool: Tool, surface: Surface) -> str | None:
+    """Simple mode: the answering tools run, and nothing else does.
+
+    The per-tool switches and effect locks are Advanced's controls and are not
+    consulted here — Simple is a fixed, known set, not a filter over whatever
+    Advanced last left behind. The answering set only contains the selected
+    track's retrieval already, but the track gate still runs first so a refused
+    retrieval tool explains itself as a track decision rather than a mode one.
+    """
+    names = _answering_names()
+    if names is None:
+        # Planner unreadable: keep the sensor tools and the selected track's
+        # retrieval by declaration rather than refusing everything.
+        if tool.category == "sensor":
+            return None
+        if tool.category == "search" and tool.track is not None:
+            return _track_refusal(tool, surface)
+        names = frozenset()
+    if tool.name in names:
+        return None
+    return _track_refusal(tool, surface) or (
+        f"{tool.name} is not one of the answering tools, and Settings → Agent Tools is in "
+        f"Simple mode. Switch to Advanced to use it."
+    )
 
 
 def _track_refusal(tool: Tool, surface: Surface) -> str | None:

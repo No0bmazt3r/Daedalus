@@ -58,6 +58,24 @@ _SENSOR_KEYS = {
     "mode": "mode",
 }
 
+# The tools the chat path can plan, and nothing else. Settings → Agent Tools'
+# simple view is drawn from this, so it cannot list a tool the planner never
+# calls or miss one it does.
+SENSOR_TOOLS = ("get_live_reading", "get_trend", "get_anomaly_summary")
+RETRIEVAL_TOOLS = {"vector": "search_corpus", "graph": "graph_walk"}
+
+
+def answering_tools() -> dict[str, Any]:
+    """What answers a chat question right now: the sensor tools, and the selected track's retrieval."""
+    track = rag_config.resolve()
+    return {
+        "track": track,
+        "sensor": list(SENSOR_TOOLS),
+        "retrieval": RETRIEVAL_TOOLS[track],
+        "tools": [*SENSOR_TOOLS, RETRIEVAL_TOOLS[track]],
+    }
+
+
 # Enough to answer, few enough to fit an SLM's context next to the history.
 MAX_SENSORS = 4
 RETRIEVAL_TOP_K = 5
@@ -162,12 +180,12 @@ def plan(understood: Understanding, *, now: datetime | None = None) -> Plan:
         p.track, p.retrieval_query = track, understood.standalone
         if track == "graph":
             p.calls.append(PlannedCall(
-                "graph_walk", {"query": understood.standalone, "limit": GRAPH_LIMIT},
+                RETRIEVAL_TOOLS["graph"], {"query": understood.standalone, "limit": GRAPH_LIMIT},
                 "Track 2 is selected: enter the graph from the question and walk to procedures",
             ))
         else:
             p.calls.append(PlannedCall(
-                "search_corpus", {"query": understood.standalone, "top_k": RETRIEVAL_TOP_K},
+                RETRIEVAL_TOOLS["vector"], {"query": understood.standalone, "top_k": RETRIEVAL_TOP_K},
                 "Track 1 is selected: find the corpus passages nearest the question",
             ))
 

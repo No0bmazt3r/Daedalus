@@ -166,3 +166,18 @@ def enable_tool(tool: str | None = Body(default=None, embed=True)) -> dict[str, 
     except tool_policy_store.ToolPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return agent_tools.catalogue()
+
+
+@router.post("/policy/mode")
+def set_tool_mode(mode: str = Body(embed=True)) -> dict[str, Any]:
+    """Simple or Advanced — and it is enforced, not only displayed.
+
+    Simple refuses every tool outside the answering set on the runtime surface.
+    Advanced defers to the locks and per-tool switches, which switching modes
+    never rewrites, so going back to Advanced restores exactly what was there.
+    """
+    try:
+        tool_policy_store.set_mode(mode)
+    except tool_policy_store.ToolPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return agent_tools.catalogue()

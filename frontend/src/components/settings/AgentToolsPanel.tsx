@@ -5,21 +5,36 @@ import {
 import { Skeleton } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
 import { Switch } from '../ui/switch'
+import { AgentToolsSimple } from './AgentToolsSimple'
 import {
   disableTool,
   enableTool,
   fetchToolCatalogue,
   lockEffect,
+  setToolMode,
   tryTool,
   unlockEffect,
   type AgentTool,
   type ToolCatalogue,
   type ToolEffect,
+  type ToolMode,
   type ToolResult,
 } from '../../lib/toolsClient'
 
 /**
  * Settings → Agent Tools.
+ *
+ * ## Simple and Advanced
+ *
+ * Simple (the default) is `AgentToolsSimple`: the few tools that answer a chat
+ * question, read-only. Advanced is everything below — all tools, per-tool
+ * switches, trial runs and the capability locks.
+ *
+ * The switch is a **runtime policy**, stored on the server (`tool_mode`,
+ * prefs migration 009) and enforced by the registry: in Simple every tool
+ * outside the answering set is refused at dispatch and left out of the schema
+ * list, whatever Advanced's switches say. Advanced defers to those switches and
+ * locks again, which a mode change never rewrites.
  *
  * Layer 8, made inspectable. The list is generated on the backend from the same
  * declarations the dispatcher gates on, so this panel cannot show a permission
@@ -370,9 +385,48 @@ function ToolRow({ tool, onChange }: {
   )
 }
 
+type Mode = ToolMode
+
+function ModeSwitch({ mode, onChange, busy }: { mode: Mode; onChange: (m: Mode) => void; busy?: boolean }) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Agent Tools mode"
+      title="Simple: only the answering tools can run. Advanced: every tool, under your switches and locks."
+      className={`inline-flex p-0.5 rounded-lg border theme-border shrink-0 ${busy ? 'opacity-60 pointer-events-none' : ''}`}
+    >
+      {(['simple', 'advanced'] as const).map((m) => (
+        <button
+          key={m}
+          role="radio"
+          aria-checked={mode === m}
+          onClick={() => onChange(m)}
+          className={`px-2.5 py-1 rounded-md text-[11px] capitalize transition-colors ${
+            mode === m ? 'theme-surface-strong theme-text' : 'theme-text-muted hover:theme-text'
+          }`}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
   const [catalogue, setCatalogue] = useState<ToolCatalogue | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [switchingMode, setSwitchingMode] = useState(false)
+  const mode: Mode = catalogue?.mode?.mode ?? 'simple'
+  const setMode = useCallback(async (next: Mode) => {
+    setSwitchingMode(true)
+    try {
+      setCatalogue(await setToolMode(next))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not change the mode')
+    } finally {
+      setSwitchingMode(false)
+    }
+  }, [])
 
   useEffect(() => {
     fetchToolCatalogue()
@@ -427,10 +481,30 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
     )
   }
 
+  if (mode === 'simple') {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-200">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-medium mb-1">Agent Tools</h3>
+            <p className="text-sm theme-text-muted">
+              What the assistant can look up when you ask it something.
+            </p>
+          </div>
+          <ModeSwitch mode={mode} onChange={(m) => void setMode(m)} busy={switchingMode} />
+        </div>
+        <AgentToolsSimple catalogue={catalogue} card={card} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       <div>
-        <h3 className="text-xl font-medium mb-1">Agent Tools</h3>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-xl font-medium mb-1">Agent Tools</h3>
+          <ModeSwitch mode={mode} onChange={(m) => void setMode(m)} busy={switchingMode} />
+        </div>
         <p className="text-sm theme-text-muted">
           {catalogue.tools.length} tools. Each declares what it may touch and whether its
           result can be cited; dispatch checks that before the call and logs every one.
