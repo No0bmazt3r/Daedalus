@@ -405,8 +405,20 @@ def generate(
     json_format: bool = False,
     temperature: float = 0.0,
     timeout: float = 180.0,
+    think: bool | None = None,
+    max_tokens: int | None = None,
 ) -> str:
-    """One blocking completion. Setup surfaces only.
+    """One blocking completion, for callers that want the whole answer at once.
+
+    Setup jobs use it, and so does the query pipeline's two short model steps
+    (follow-up rewriting and the intent tiebreaker) — neither has anyone
+    watching tokens appear, and both need the answer before anything else runs.
+
+    `think=False` turns off a reasoning model's chain of thought (qwen3,
+    gpt-oss). Pass it only for a model that reports the `thinking` capability:
+    Ollama rejects the field on one that does not. `max_tokens` caps the reply,
+    so a model that ignores "answer in one line" cannot hold the caller for a
+    page of output.
 
     The orchestrator streams (`inference.answer_stream`) because a person is
     watching tokens appear. A setup job is the opposite: nobody is reading it
@@ -434,6 +446,10 @@ def generate(
         payload["system"] = system
     if json_format:
         payload["format"] = "json"
+    if think is not None:
+        payload["think"] = think
+    if max_tokens:
+        payload["options"]["num_predict"] = max_tokens
 
     data = _request("POST", "/api/generate", timeout=timeout, json=payload)
     response = data.get("response")

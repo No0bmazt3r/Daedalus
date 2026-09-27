@@ -32,9 +32,10 @@ Everything below was read off the source, not from memory.
 | Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
 | Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
-| Agent tools | Built — 29 tools, two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
+| Agent tools | Built — 33 tools in six categories, including the three sensor tools and Track 2's `graph_walk`, two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
-| Orchestration and RAG | **Not started.** Chat answers from conversation history alone: no evidence pack, and nothing calls the tool layer during an answer |
+| Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Background summarising is the one §7.4 piece still missing |
+| Retrieval (M6) | Both tracks are wired into the chat path through the planner. Track 1 needs a current vector index to return anything; Track 2 runs a fixed, logged walk. The advanced Track 1 techniques and Track 2's agent loop are not built |
 
 ---
 
@@ -76,7 +77,7 @@ to it.
 | `POST` | `/api/forge/models/pull` | Pull via Ollama, streaming progress as SSE |
 | `DELETE` | `/api/forge/models/{tag}` | Remove a local model |
 | `POST` | `/api/forge/benchmark` | Benchmark on a RAG-sized prompt; **SSE**; writes `model_logs`. See [`BENCHMARK.md`](BENCHMARK.md) |
-| `POST` | `/api/chat` | Answer a message, **streamed as SSE**. Resolves the model, replays history, logs the call as `chat` or `chat_cloud` |
+| `POST` | `/api/chat` | Answer a message, **streamed as SSE** — the full §7.1 flow (see *Orchestration* in §3). The `done` result carries `intent`, `tools_used`, `citations`, `grounded`, `validation` and `latency_ms` |
 | `GET` | `/api/chat/model` | Which model would answer right now, and why |
 | `GET` | `/api/chat/{id}/status` | Whether a generation is still running for that session. A generation outlives the request that started it, so a reconnecting client polls this |
 | `GET` | `/api/graph/schema` | Node and edge types with live counts — drives the Blueprints legend |
@@ -155,7 +156,10 @@ Each frame is `data: {json}\n\n`, carrying a `phase`:
 
 | phase | payload |
 |---|---|
+| `understood` | chat only — steps 1–4: standalone question, intent, guard verdict |
+| `evidence` | chat only — steps 5–7: tools run, citation labels, failures, track |
 | `generating` | one token (`piece`), or a running `tokens` count |
+| `validated` | chat only — step 10's verdict, and the answer that will be kept |
 | `done` | `result` — the same object the endpoint used to return synchronously |
 | `error` | `error`, plus `signin_url` when Ollama refused a cloud tag for want of an account |
 
@@ -168,6 +172,11 @@ On the client, `lib/http.ts` owns the framing in `streamEvents()`. It lives
 beside `request()` for the same reason: two copies of "how do we read a stream"
 would eventually disagree about a frame split across two chunks, which is the
 case that only shows up under a slow model.
+
+**Streamed chat tokens are provisional.** The validator runs after the last
+token, so a client must replace what it streamed with `done.result.answer` —
+which is §7.1's fallback when validation rejected the answer. The chat UI
+already does this by swapping in the stored turn.
 
 `/api/chat` deliberately **outlives its request**. The model call runs on a
 worker thread, so a browser navigating away does not lose the turn: the worker
@@ -273,6 +282,15 @@ is what answers *"prove this response was grounded"*.
 response; logging is evidence, not control flow.
 
 > `memory_logs` is an addition — it appears in neither historical spec set.
+
+**`conversation_logs` records every decision the orchestrator made**, including
+for turns no model answered. Migration `006` adds `standalone_query`,
+`rewrite_method`, `intent_method` and `guard_reason`; `007` adds
+`validation_json` and `model_response_text`. `response_text` is always what the
+operator was given; when the validator replaced an answer, the model's own text
+sits beside it in `model_response_text`, so the evaluation can report the
+hallucination rate *produced* as well as the rate *delivered*. A refused command
+is still a row, so "the guard refused N% of control phrasings" is countable.
 
 **`model_logs.source` is the column the latency chapter turns on.** Benchmark
 and live rows share one table on purpose, so the two are comparable; `source`
@@ -658,9 +676,24 @@ code walks into willingly.
 
 ### Agent tools — `services/agent_tools/`
 
-Layer 8. Five categories (`search` · `knowledge` · `session` · `system` ·
-`other`), twenty-six tools, and a dispatcher that checks three declarations
-before the function is entered.
+Layer 8. Six categories (`sensor` · `search` · `knowledge` · `session` ·
+`system` · `other`), thirty-three tools, and a dispatcher that checks three
+declarations before the function is entered.
+
+**The sensor tools** (`sensor.py`) are §7.2's `get_live_reading`, `get_trend`
+and `get_anomaly_summary`, and the only source of a number in an answer. They
+declare `read_sensor` and nothing else, read through the `mode=ro` connection,
+put only enum-checked column names into SQL, abort any statement past 2 s, and
+cap a series at 100 points by bucketing — keeping each bucket's most extreme
+value, so a spike survives. A historical reading is the nearest row within ±5
+minutes, returned with its offset; the latest reading is marked `stale` with its
+age once the feed has stopped.
+
+**`graph_walk`** is Track 2's baseline retrieval: entry search, then the
+schema's fixed path (anomaly type → resolving SOP → its steps; sensor → its
+thresholds) as **one** call, so the walk is one `rag_logs` row with the whole
+`traversal_path` — the shape Blueprints replays. M6's agent loop will be
+measured against it.
 
 **Effects, and the surface gate.** Every tool declares what it touches
 (`read_corpus`, `read_graph`, `read_transcript`, `read_system`, `clock`,
@@ -797,6 +830,52 @@ Nothing, now. The list has emptied three times over, most recently when MCP
 was implemented — see below. It is kept as an explicit empty rather than
 deleted, because a stated "nothing" is a claim and a missing section is an
 absence somebody has to interpret.
+
+### Orchestration — `services/query_pipeline/` · `services/orchestration/`
+
+`PROJECT.md` §7.1's eleven steps, split by whether a model can be involved:
+
+| steps | module | model? |
+|---|---|---|
+| 1–4 normalise · rewrite follow-up · classify · guard | `query_pipeline` | only as a tiebreaker, never for the guard |
+| 5 plan | `orchestration/planner.py` + `timeparse.py` | no |
+| 6 execute | `orchestration/executor.py` → `agent_tools.call` | no |
+| 7 evidence pack | `orchestration/evidence.py` | no |
+| 8 prompt | `orchestration/prompt.py` | no |
+| 9 answer | `inference.py` | **yes** |
+| 10 validate | `orchestration/validator.py` + `numbers.py` | no |
+| 11 log + store | `inference.py` | no |
+
+Everything except step 9 is deterministic, so the same question against the
+same stores yields the same plan, evidence and verdict — an answer is
+replayable from its logs.
+
+**The guard runs before anything can call a model**, on the raw text and again
+on the rewritten follow-up. A command is a control verb *and* a plant target at
+the start of a clause, so "how do I open ABV-1?" is answered and "open ABV-1"
+gets the fixed refusal with no tool and no model call. Malay control verbs are
+covered.
+
+**Times are resolved by rules, not the model.** "At 10:00", "between 23:00 and
+23:30", "the last 15 minutes", "this morning", "yesterday" become UTC bounds on
+the site clock (`DAEDALUS_TZ`, else the machine's zone; "UTC" in the question
+overrides). When the feed has stopped, relative times count back from its last
+reading and the evidence says so. A phrase it cannot place ("during the last
+run") ends the turn with a clarifying question.
+
+**Evidence is labelled lines, not JSON.** `[S1]` a reading, `[A1]` an anomaly,
+`[D1]` a document passage, `[G1]` a graph node — each tool's block still fenced
+by `render_for_prompt()`. The model must cite labels; the validator checks every
+cited label exists.
+
+**The validator checks numbers against what the model was shown this turn.**
+Every quantity in the answer must match a number in the rendered evidence at
+the precision written (rounding is allowed; arithmetic is not). A number found
+only in replayed history fails separately, as `stale_history_number` — §7.4's
+hazard. First-person action claims ("I have opened ABV-1") fail as
+`control_claim`. A failed answer becomes *"I could not generate a grounded
+answer from the available data."* Its known blind spots — clock times, integers
+0–10, causal claims — are listed in `validator.py` and TODO M5.
 
 ### MCP — `services/mcp_client.py` · `services/mcp_servers.py`
 
@@ -1656,6 +1735,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **No automated tests.** Verified by direct API calls |
+| Backend | **61 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, and the chat path end to end with Ollama faked. Everything else is still verified by direct API calls |
+| Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
-The absence of an automated test suite on both sides is the biggest gap.
+The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

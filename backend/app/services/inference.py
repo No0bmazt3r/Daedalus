@@ -1,8 +1,22 @@
-"""The serving path: what actually answers a chat message.
+"""The serving path: what actually answers a chat message — PROJECT.md §7.1, all 11 steps.
 
-This is the thin slice of M4, and deliberately only that. It resolves which
-model to run, sends the conversation to Ollama, and records what the call cost.
-Tool-calling, retrieval and the rest of Layer 7's orchestration are not here.
+    1–4   query_pipeline.understand   normalise, rewrite a follow-up, classify, guard
+    5–8   orchestration               plan, run tools, build evidence, build prompt
+    9     here                        stream the answer from Ollama
+    10    orchestration.validator     numbers, citations, control claims
+    11    here                        transcript + audit rows, one `query_id`
+
+A turn can end before the model at three points, each with a fixed reply and no
+model call: the pipeline refuses it or finds it out of scope, or the planner
+cannot place the time it asks about and asks instead. A turn that reaches the
+model can still end in §7.1's fallback, when the validator rejects the answer —
+the operator then reads the fallback, and the audit row keeps what the model
+actually said.
+
+Events on the stream, in order: `understood` (steps 1–4), `evidence` (5–7),
+`generating` per token (9), `validated` (10), then exactly one `done` or
+`error`. A client that shows tokens as they arrive must replace them with
+`done.result.answer`, which is the fallback when validation failed.
 
 ## Why this exists now, before the rest of M4
 
@@ -47,25 +61,14 @@ from collections.abc import Iterator
 from typing import Any
 
 from ..db import audit_store
-from . import chat_service, model_config, ollama_client
+from . import chat_service, model_config, ollama_client, orchestration, query_pipeline
 
 # Long enough for a large model on a slow machine, short enough that a hung
 # daemon does not hold a worker forever.
 GENERATE_TIMEOUT = 300.0
 
-SYSTEM_PROMPT = (
-    "You are Daedalus, an assistant for reactor operators. Answer only from the "
-    "evidence and conversation you are given. If you do not have what you need, "
-    "say so plainly rather than estimating. Never invent a sensor reading. "
-    # Replayed assistant turns are prefixed with a "[time UTC]" stamp so the
-    # model can tell how old a referenced value is (see chat_service). Small
-    # models copy the format straight into their own replies, which is how
-    # llama3.2 opened an answer with "[2026-09-16 10:05 UTC]" in testing.
-    "Earlier turns are shown with a timestamp in square brackets so you can "
-    "judge how stale a value is. Never write one yourself; reply in plain prose."
-)
-
-# Belt and braces for the above. A one-line instruction is not reliable on a 1B
+# Belt and braces for the prompt's "never write a timestamp" line
+# (`orchestration.prompt`). A one-line instruction is not reliable on a 1B
 # model, and a leaked stamp is visible in the transcript and in the report.
 _LEADING_STAMP = re.compile(r"^\s*\[\s*\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
 
@@ -169,6 +172,88 @@ def choose_model(requested: str | None = None) -> dict[str, Any]:
     }
 
 
+def _finish_without_model(
+    session_id: str,
+    query_id: str,
+    question: str,
+    understood: query_pipeline.Understanding,
+    user_turn: dict[str, Any],
+    window: chat_service.ContextWindow,
+    pipeline_log: dict[str, Any],
+    turn_started: float,
+    events: queue.Queue[dict[str, Any] | None],
+    *,
+    reply: str | None = None,
+    stop: str | None = None,
+    plan: orchestration.Plan | None = None,
+) -> None:
+    """End a turn without a model: a refusal, out of scope, or a clarifying question.
+
+    No model ran, so there is no `model_logs` row — a refusal has no inference
+    to time, and an empty row would read as a model call that took 0ms. The
+    `conversation_logs` row carries the intent and the guard's reason, which is
+    what "the guard refused N% of control phrasings" is counted from.
+
+    `reply`/`stop` default to the pipeline's; the planner passes its own when it
+    ends the turn to ask which time was meant.
+    """
+    total_ms = int((time.perf_counter() - turn_started) * 1000)
+    reply = reply if reply is not None else (understood.reply or "")
+    stop = stop or understood.stop
+    audit_store.log(
+        "conversation_logs",
+        query_id=query_id,
+        session_id=session_id,
+        user_query=question,
+        model_used=None,
+        response_text=reply,
+        total_latency_ms=total_ms,
+        **pipeline_log,
+    )
+    stored = chat_service.add_assistant_message(session_id, reply, query_id=query_id)
+    reason = {
+        "too_long": "the message was too long to answer",
+        "out_of_scope": "the question is outside what Daedalus covers",
+        "clarify": "the question's time could not be placed, so it asked",
+    }.get(stop or "", f"refused by the safety guard ({stop})")
+    events.put({
+        "phase": "done",
+        "result": {
+            "query_id": query_id,
+            "session_id": session_id,
+            "user_message": user_turn,
+            "message": stored,
+            "answer": reply,
+            "model": None,
+            "model_choice": {
+                "tag": None,
+                "source": "pipeline",
+                "reason": f"answered without a model: {reason}",
+            },
+            "timings": {
+                "time_to_first_token_ms": None,
+                "total_inference_ms": None,
+                "prefill_ms": None,
+                "generation_ms": None,
+            },
+            "context": {
+                "history_messages": len(window.messages),
+                "dropped": window.dropped,
+                "estimated_tokens": window.estimated_tokens,
+                "needs_summary": window.needs_summary,
+            },
+            "understanding": understood.as_event(),
+            "intent": understood.intent,
+            "plan": plan.as_dict() if plan else None,
+            "tools_used": [],
+            "citations": [],
+            "grounded": False,
+            "validation": None,
+            "latency_ms": total_ms,
+        },
+    })
+
+
 # Sessions with a generation in flight, keyed by session id. The worker owns the
 # entry: it is added before the thread starts and removed in the thread's
 # `finally`, so `GET /api/chat/{id}/status` can answer truthfully even after the
@@ -181,11 +266,10 @@ def answer_stream(
     question: str,
     *,
     model: str | None = None,
-    evidence: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Answer one message, yielding progress events as the model produces them.
 
-    Yields `{"phase": "generating", "piece": ...}` per token, then exactly one
+    Yields the phase events listed in the module docstring, then exactly one
     terminal event — `{"phase": "done", "result": {...}}` or
     `{"phase": "error", "error": ...}`. Errors are yielded rather than raised:
     by the time the first token is out the HTTP response has already begun, so
@@ -197,11 +281,6 @@ def answer_stream(
     mid-flight. The worker finishes, writes the assistant turn, and clears its
     `ACTIVE_GENERATIONS` entry regardless; a returning client polls `/status`
     and picks the transcript back up.
-
-    `evidence` is where retrieval will plug in. It is a parameter now, unused by
-    any caller, so the prompt is assembled in its final shape rather than being
-    rearranged later — the evidence block goes last, immediately before the
-    question, because that is the ordering `chat_service` already documents.
     """
     if session_id in ACTIVE_GENERATIONS:
         yield {
@@ -210,33 +289,12 @@ def answer_stream(
         }
         return
 
-    choice = choose_model(model)
-    tag = choice["tag"]
-    if not tag:
-        yield {"phase": "error", "error": choice["reason"]}
-        return
-
     query_id = audit_store.new_query_id()
 
-    # History first, then record the question. The order matters both ways:
-    # `build_context` must not see this turn (it is appended to the prompt
-    # separately, and would otherwise appear twice), and the store must have it
-    # before the answer so the transcript reads user-then-assistant.
-    #
-    # Recording it before the model call rather than after is deliberate. A
-    # failed call then leaves the question in the transcript with no answer,
-    # which is what actually happened and is recoverable; writing it afterwards
-    # would lose the turn entirely whenever Ollama was down.
+    # History before this turn is recorded, so `build_context` does not see the
+    # question twice. Read here rather than in the worker because an unknown
+    # session raises, and that has to reach the caller as an error event.
     window = chat_service.build_context(session_id)
-    user_turn = chat_service.add_user_message(session_id, question)
-
-    messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.extend(window.as_prompt_messages())
-    if evidence:
-        messages.append({"role": "system", "content": f"EVIDENCE:\n{evidence}"})
-    messages.append({"role": "user", "content": question})
-
-    payload = {"model": tag, "messages": messages, "stream": True}
 
     # `None` is the sentinel that closes the stream. Unbounded on purpose: the
     # worker must never block on a consumer that has gone away.
@@ -245,12 +303,91 @@ def answer_stream(
     state: dict[str, Any] = {
         "pieces": [],
         "started_at": time.time(),
-        "model": tag,
+        # Filled in once the pipeline has decided a model is needed.
+        "model": None,
     }
     ACTIVE_GENERATIONS[session_id] = state
 
     def _worker() -> None:
         try:
+            turn_started = time.perf_counter()
+
+            # Steps 1–4. Before the question is recorded, because the record
+            # carries its standalone form — the next follow-up is rewritten
+            # against that. A refused command never reaches a model here: the
+            # pipeline guards the raw text before any model step it might run.
+            understood = query_pipeline.understand(question, window.messages)
+
+            # Recorded before any model call rather than after. A failed call
+            # then leaves the question in the transcript with no answer, which
+            # is what actually happened and is recoverable; writing it
+            # afterwards would lose the turn entirely whenever Ollama was down.
+            user_turn = chat_service.add_user_message(
+                session_id,
+                question,
+                standalone_query=understood.standalone if understood.rewritten else None,
+            )
+            events.put({"phase": "understood", **understood.as_event()})
+
+            pipeline_log = {
+                "intent": understood.intent,
+                "standalone_query": understood.standalone,
+                "rewrite_method": understood.rewrite_method,
+                "intent_method": understood.intent_method,
+                "guard_reason": understood.guard_reason,
+            }
+
+            if understood.reply is not None:
+                _finish_without_model(
+                    session_id, query_id, question, understood, user_turn, window,
+                    pipeline_log, turn_started, events,
+                )
+                return
+
+            # Steps 5–7. Deterministic and model-free: every call goes through
+            # the registry's gates and logs its own `tool_logs` / `rag_logs` row.
+            t = time.perf_counter()
+            plan = orchestration.planner.plan(understood)
+            pipeline_log["selected_tools"] = [c.tool for c in plan.calls]
+            if plan.clarify:
+                _finish_without_model(
+                    session_id, query_id, question, understood, user_turn, window,
+                    pipeline_log, turn_started, events,
+                    reply=plan.clarify, stop="clarify", plan=plan,
+                )
+                return
+            envelopes = orchestration.executor.execute(plan, query_id)
+            pack = orchestration.evidence.build(envelopes, notes=plan.notes)
+            pipeline_log["selected_tools"] = pack.tools_used
+            evidence_ms = int((time.perf_counter() - t) * 1000)
+            events.put({
+                "phase": "evidence",
+                "intent": plan.intent,
+                "tools_used": pack.tools_used,
+                "citations": pack.citations(),
+                "failures": pack.failures,
+                "track": plan.track,
+                "elapsed_ms": evidence_ms,
+            })
+
+            # Only now, and only for a turn that needs a model. Resolving `auto`
+            # scores every installed model and costs seconds on a cold start;
+            # a refusal or a greeting must not wait for it.
+            choice = choose_model(model)
+            tag = choice["tag"]
+            state["model"] = tag
+            if not tag:
+                events.put({"phase": "error", "error": choice["reason"]})
+                audit_store.log(
+                    "conversation_logs", query_id=query_id, session_id=session_id,
+                    user_query=question, error_message=choice["reason"], **pipeline_log,
+                )
+                return
+
+            # Step 8.
+            messages = orchestration.prompt.build(window, pack, understood)
+            payload = {"model": tag, "messages": messages, "stream": True}
+
             started = time.perf_counter()
             first_token_at: float | None = None
             pieces: list[str] = state["pieces"]
@@ -326,15 +463,39 @@ def answer_stream(
                 error_message=error,
             )
 
+            # Step 10. Only on a completed answer: a failed call has nothing to
+            # check, and its error already went out as the terminal event.
+            verdict: orchestration.Validation | None = None
+            delivered = text
+            if not error:
+                verdict = orchestration.validator.validate(
+                    text, pack, question=understood.standalone, history=window.messages,
+                )
+                if not verdict.passed:
+                    delivered = orchestration.FALLBACK
+                events.put({"phase": "validated", **verdict.as_dict(),
+                            "answer": delivered})
+            grounded = bool(verdict and orchestration.validator.grounded(verdict, pack))
+
             audit_store.log(
                 "conversation_logs",
                 query_id=query_id,
                 session_id=session_id,
                 user_query=question,
                 model_used=tag,
-                response_text=text if not error else None,
-                total_latency_ms=total_ms,
+                # What the operator was given. When validation replaced the
+                # answer, the model's own text is kept beside it — the
+                # evaluation counts what the model tried to say, not only what
+                # got through.
+                response_text=delivered if not error else None,
+                model_response_text=text if verdict and not verdict.passed else None,
+                grounded_flag=int(grounded) if verdict else None,
+                hallucination_flag=int(verdict.hallucination) if verdict else None,
+                validation_json=verdict.as_dict() if verdict else None,
+                # The whole turn, pipeline included — what the operator waited.
+                total_latency_ms=int((ended - turn_started) * 1000),
                 error_message=error,
+                **pipeline_log,
             )
 
             if error:
@@ -348,8 +509,11 @@ def answer_stream(
             # `model_logs` row and, later, to the retrieval and tool rows Ariadne's
             # Thread reassembles. Losing it here would make the transcript and the
             # evidence two unrelated tables.
+            #
+            # The evidence pack is stored with the turn for the UI and for
+            # Ariadne's Thread; `build_context` never replays it (§7.4).
             stored = chat_service.add_assistant_message(
-                session_id, text, query_id=query_id, evidence=evidence, model_tag=tag
+                session_id, delivered, query_id=query_id, evidence=pack.as_json(), model_tag=tag
             )
 
             events.put({
@@ -362,7 +526,7 @@ def answer_stream(
                     # re-read the transcript.
                     "user_message": user_turn,
                     "message": stored,
-                    "answer": text,
+                    "answer": delivered,
                     "model": tag,
                     "model_choice": choice,
                     "timings": {
@@ -378,6 +542,15 @@ def answer_stream(
                         # Layer 7 should summarise after responding, never here.
                         "needs_summary": window.needs_summary,
                     },
+                    "understanding": understood.as_event(),
+                    # architecture/07's response contract.
+                    "intent": plan.intent,
+                    "plan": plan.as_dict(),
+                    "tools_used": pack.tools_used,
+                    "citations": pack.citations(),
+                    "grounded": grounded,
+                    "validation": verdict.as_dict() if verdict else None,
+                    "latency_ms": int((ended - turn_started) * 1000),
                 }
             })
         except Exception as exc:  # noqa: BLE001

@@ -17,6 +17,26 @@ export interface ChatTimings {
   generation_ms: number | null;
 }
 
+/** One evidence label an answer may cite — `[S1]` a reading, `[A1]` an anomaly, `[D1]` a passage, `[G1]` a graph node. */
+export interface ChatCitation {
+  label: string;
+  kind: 'sensor' | 'anomaly' | 'document' | 'graph';
+  tool: string;
+  type: 'sqlite' | 'document' | 'graph';
+  [detail: string]: unknown;
+}
+
+/** Step 10's verdict. When `passed` is false the answer is the fixed fallback. */
+export interface ChatValidation {
+  passed: boolean;
+  reasons: string[];
+  unsupported_numbers: string[];
+  stale_numbers: string[];
+  unknown_citations: string[];
+  cited: string[];
+  control_claim: string | null;
+}
+
 export interface ChatReply {
   query_id: string;
   session_id: string;
@@ -25,11 +45,11 @@ export interface ChatReply {
   /** The stored assistant turn. */
   message: ChatMessage;
   answer: string;
-  /** Which model actually answered. Not necessarily the one requested. */
-  model: string;
+  /** Which model actually answered. Not necessarily the one requested; null when none ran (a refusal). */
+  model: string | null;
   model_choice: {
     tag: string | null;
-    source: 'auto' | 'pinned' | 'config' | 'override';
+    source: 'auto' | 'pinned' | 'config' | 'override' | 'pipeline';
     reason: string;
     rejected?: string;
   };
@@ -40,11 +60,25 @@ export interface ChatReply {
     estimated_tokens: number;
     needs_summary: boolean;
   };
+  /** architecture/07's response contract — PROJECT.md §7.1 steps 3–11. */
+  intent: string | null;
+  tools_used: string[];
+  citations: ChatCitation[];
+  /** Validation passed, there was evidence, and the answer cited it. */
+  grounded: boolean;
+  validation: ChatValidation | null;
+  latency_ms: number;
 }
 
 /** One event from the answer stream. Exactly one `done` or `error` arrives. */
 export interface ChatProgress {
-  phase: 'generating' | 'done' | 'error';
+  /**
+   * In order: `understood` (steps 1–4), `evidence` (5–7), `generating` per
+   * token, `validated` (10), then `done` or `error`. Streamed tokens are
+   * provisional — `done` carries the stored answer, which is the fallback when
+   * validation rejected what streamed.
+   */
+  phase: 'understood' | 'evidence' | 'generating' | 'validated' | 'done' | 'error';
   piece?: string;
   result?: ChatReply;
   error?: string;

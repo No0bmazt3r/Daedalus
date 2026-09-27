@@ -157,9 +157,17 @@ def delete_session(session_id: str) -> bool:
     return chat_store.delete_session(session_id)
 
 
-def add_user_message(session_id: str, content: str) -> dict[str, Any]:
-    """Record what the user asked. Safe to expose over HTTP."""
-    return chat_store.append_message(session_id, "user", content)
+def add_user_message(
+    session_id: str, content: str, *, standalone_query: str | None = None
+) -> dict[str, Any]:
+    """Record what the user asked. Safe to expose over HTTP.
+
+    `standalone_query` is the orchestrator's rewrite of a follow-up (§7.4); the
+    next follow-up is condensed against it. The HTTP route never sets it.
+    """
+    return chat_store.append_message(
+        session_id, "user", content, standalone_query=standalone_query
+    )
 
 
 def add_assistant_message(

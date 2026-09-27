@@ -5,10 +5,10 @@ the API that runs a model on behalf of a user, which makes it the boundary Rule 
 draws: everything under `/api/forge` configures this path and must never be
 called from it.
 
-Currently the thin slice of M4 — model resolution, conversation history, and the
-call itself. Retrieval and tool-calling mount here as they land; `evidence` is
-already threaded through `services/inference.py` so the prompt does not have to
-be rearranged when they do.
+The route is HTTP only. The whole of `PROJECT.md` §7.1 — understanding the
+question, the safety guard, tool planning, the evidence pack, the model call and
+the validator — runs in `services/inference.answer_stream`, so the flow is the
+same whether this endpoint or a test drives it.
 """
 
 from __future__ import annotations
@@ -56,10 +56,14 @@ def chat(
 ) -> StreamingResponse:
     """Answer one message in a session, streamed as server-sent events.
 
-    `model` overrides the committed choice for this request only. It is honoured
-    only for a locally installed model: the `done` event says which model
-    actually answered and why, so an override that was refused is visible rather
-    than silent. Rule 1 means a cloud endpoint can never serve this path.
+    `model` overrides the committed choice for this request only: the `done`
+    event says which model actually answered and why, so an override that was
+    refused is visible rather than silent, and a cloud override is logged as
+    `chat_cloud` (see `inference.choose_model`).
+
+    Tokens stream as the model produces them, but they are provisional — the
+    validator runs after the last one, and `done.result.answer` is what the
+    operator keeps.
 
     The only failure that gets a status code is the empty message, because it is
     the only one detectable before the response starts. Everything after that is

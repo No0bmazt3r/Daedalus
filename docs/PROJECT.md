@@ -230,14 +230,14 @@ evaluation harness are administrative. They never sit in the live query path.
 | 1 | Physical reactor & sensors | 1 | Pre-existing, untouched |
 | 2 | SCADA acquisition | 2 | Pre-existing (teammates) |
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
-| 4 | Knowledge ingestion (offline) | Setup | **Not started** |
-| 5 | Retrieval — vector + graph | 3 | **Store running** (Chroma); retrieval not started |
+| 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); waiting on the real corpus |
+| 5 | Retrieval — vector + graph | 3 | **Wired into chat** — Track 1 top-k over the current index, Track 2 a fixed logged walk (`graph_walk`), gated by the selected track. Advanced Track 1 techniques and Track 2's agent loop not built |
 | 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
-| 7 | FastAPI orchestration | 3 | **Answering, not orchestrating** — history replay and a model call; no retrieval or tool-calling yet |
-| 8 | Deterministic tool layer | 3 | **Not started** |
+| 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback. Background summariser still missing |
+| 8 | Deterministic tool layer | 3 | **Built** — the three sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
 | 9A | PyQt5 chat tab | 4 | Deferred / optional |
 | 9B | React web dashboard | 4 | **Partially built** — see §11 |
-| 10 | Observability & evaluation | Support | **Store built** — 7 log tables + query_id tracing |
+| 10 | Observability & evaluation | Support | **Logging wired** — every chat turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags; evaluation harness not built |
 | 11 | Admin utilities | Setup | **Built** — The Forge: all six §8.2 steps, plus model discovery and per-model usage |
 
 ---

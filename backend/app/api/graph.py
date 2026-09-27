@@ -207,10 +207,10 @@ def graph_traversal(query_id: str) -> dict[str, Any]:
     if row is None:
         return {
             "available": False,
-            "blocked_by": "M5 / M6",
             "reason": (
-                f"no retrieval was recorded for {query_id}. Nothing writes rag_logs "
-                "yet — the orchestrator is not wired."
+                f"no retrieval was recorded for {query_id}. The question was answered "
+                "from sensor tools alone, refused, or asked which time was meant — "
+                "none of which retrieves."
             ),
         }
 

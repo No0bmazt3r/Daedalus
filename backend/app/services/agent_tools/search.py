@@ -170,3 +170,84 @@ def search_graph(query: str, limit: int) -> dict[str, Any]:
         "detail": f"{len(nodes)} entry points via {strategy}"
                   if nodes else f"nothing matched ({strategy})",
     }
+
+
+# How many nodes of one type a hop may walk from. The graph is tens of nodes;
+# this bounds a question that happens to alias-match many of them.
+_WALK_FROM = 4
+
+
+@register(
+    name="graph_walk",
+    category="search",
+    summary=(
+        "Track 2's baseline retrieval: find the graph's entry points for a question, then "
+        "walk the schema's fixed path — anomaly type → resolving SOP → its steps, and "
+        "sensor → its thresholds. One call, one recorded traversal."
+    ),
+    effects={Effect.READ_GRAPH},
+    integrity=Integrity.SYSTEM,
+    track="graph",
+    params=(
+        Param("query", str, "The question to find entry points for.", required=True,
+              max_length=500, example="what should I do about high CO2"),
+        Param("limit", int, "How many entry points to start from.",
+              default=6, minimum=1, maximum=_MAX_TOP_K),
+    ),
+)
+def graph_walk(query: str, limit: int) -> dict[str, Any]:
+    """Entry search plus a deterministic walk, recorded as one `TraversalPath`.
+
+    Why one tool rather than `search_graph` followed by `graph_traverse` calls:
+    Blueprints replays a query from **one** `rag_logs` row holding the whole
+    path (the seeder writes exactly that shape), and the dispatch boundary
+    writes one row per retrieval call. Split across four calls, the walk became
+    four rows of which the replay could show only the last hop.
+
+    The path is fixed on purpose. It is the baseline M6's agent loop — which
+    chooses each hop and records a sufficiency verdict — is measured against, so
+    it must not be clever. Every hop is still recorded, dead ends included.
+    """
+    if not knowledge_graph.schema()["total_nodes"]:
+        return {"data": {"nodes": [], "track": "graph"}, "detail": "the graph is empty"}
+
+    path = graph_tools.TraversalPath(entry_query=query)
+    entries, strategy = graph_tools.graph_query_natural(query, limit=limit)
+    path.entry_strategy = strategy
+    path.entry_nodes = [n["id"] for n in entries]
+
+    sub = graph_tools.Subgraph()
+    for node in entries:
+        sub.add_node(node["id"])
+
+    def ids(node_type: str, among: list[dict[str, Any]] | None = None) -> list[str]:
+        pool = among if among is not None else sub.of_type(node_type)
+        return [n["id"] for n in pool if n.get("type") == node_type][:_WALK_FROM]
+
+    anomaly_types = ids("AnomalyType")
+    if anomaly_types:
+        sub = graph_tools.graph_traverse(anomaly_types, "RESOLVED_BY", subgraph=sub, path=path)
+    sops = ids("SOPDocument")
+    if sops:
+        sub = graph_tools.graph_traverse(sops, "CONTAINS", subgraph=sub, path=path)
+    sensors = ids("Sensor", entries)
+    if sensors:
+        sub = graph_tools.graph_traverse(sensors, "HAS_THRESHOLD", subgraph=sub, path=path)
+
+    walked = sub.as_dict()
+    return {
+        "data": {
+            # Entry points first, then what the walk reached, so the evidence
+            # pack cites them in the order the walk found them.
+            "nodes": walked["nodes"],
+            "edges": walked["edges"],
+            "entry_nodes": path.entry_nodes,
+            "entry_strategy": strategy,
+            "path": path.as_dict(),
+            "track": "graph",
+        },
+        "detail": (
+            f"{len(walked['nodes'])} nodes, {path.hop_count} hops from {len(entries)} entry points via {strategy}"
+            if entries else f"nothing matched ({strategy})"
+        ),
+    }

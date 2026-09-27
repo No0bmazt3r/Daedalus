@@ -324,22 +324,49 @@ the Forge while M5 was in flight.
             vars and no credentials · `web_fetch` refuses loopback, localhost,
             link-local metadata and non-HTTP schemes · the advertised schema list
             grows 13 → 16 only when `write` is unlocked
-- [ ] The sensor tools (`get_live_reading` · `get_trend` ·
-      `get_anomaly_summary`) are still the rest of this milestone. They read the
-      telemetry of record and want their own module and review; the registry
-      already carries a `READ_SENSOR` effect so adding them is a registration
-      rather than a redesign
+- [x] **The sensor tools are built** (`agent_tools/sensor.py`, category
+      `sensor`). They declare `READ_SENSOR` and nothing else, so adding them was a
+      registration, as planned
 
 The anti-hallucination mechanism. **Highest-value milestone.**
 
-- [ ] `get_live_reading(sensor, timestamp?)`
-- [ ] `get_trend(sensor, start, end, aggregation, mode_filter?)` — cap series at 100 points
-- [ ] `get_anomaly_summary(start, end, limit)` — table when present, column fallback
-- [ ] `rag_retrieve(query, top_k, source_types, reactor_mode?)`
-- [ ] Wrap all four as **PydanticAI** typed tools
-- [ ] Whitelist sensor names and aggregations; parameterized SQL only
-- [ ] Query timeouts + result-size caps; errors that leak nothing internal
-- [ ] Tests: **no tool has a write signature** · injection attempts via tool args fail · unknown sensor names are rejected
+- [x] `get_live_reading(sensor, timestamp?)` — the latest row marked `stale` with
+      its age when the feed has stopped; a historical reading is the **nearest**
+      row within ±5 min, not an exact match — the feed writes every few seconds,
+      so the spec's `WHERE timestamp = ?` would answer "no data" to nearly every
+      real question. The row used comes back with its offset. `all` reads every
+      sensor at once for "how is the reactor?"
+- [x] `get_trend(sensor, start, end, aggregation, mode_filter?)` — the six
+      aggregations plus the window's full summary and where the min/max fell.
+      The series is capped at 100 points by **bucketing, keeping each bucket's
+      most extreme value** rather than truncating, so a spike survives it
+- [x] `get_anomaly_summary(start, end, limit)` — `anomaly_records` when present,
+      the per-row flag as the fallback, and the flagged-reading count either way
+      (the two can disagree, and that is worth seeing)
+- [x] `rag_retrieve` — deliberately **two** tools, `search_corpus` (Track 1) and
+      `graph_walk` (Track 2), gated by the selected track. The orchestrator asks
+      for "retrieval" and gets whichever the gate allows
+- [x] **`graph_walk`** — Track 2's baseline retrieval as one call: entry search,
+      then the schema's fixed path (anomaly type → `RESOLVED_BY` → SOP →
+      `CONTAINS` → steps; sensor → `HAS_THRESHOLD`). One call, so the walk is
+      **one** `TraversalPath` and **one** `rag_logs` row — Blueprints replays a
+      query from one row, and four separate `graph_traverse` calls left it able
+      to show only the last hop. Graph rows now fill `retrieved_chunk_ids` (node
+      ids) and `source_files` (SOP filenames), the same columns the seeder fills
+- [ ] ~~Wrap all four as **PydanticAI** typed tools~~ — superseded by the
+      registry's own `Param` declarations, which already generate the
+      function-calling schema and are enforced at dispatch. Revisit only if M6's
+      agent loop wants PydanticAI for the loop itself
+- [x] Whitelist sensor names and aggregations; parameterized SQL only — the only
+      identifier that reaches SQL comes out of `SENSOR_COLUMNS`, keyed by an
+      enum the registry has already checked
+- [x] Query timeouts + result-size caps; errors that leak nothing internal — a
+      2 s progress-handler abort per statement; errors name the bad argument,
+      never a path or a statement
+- [x] Tests (`backend/tests/test_sensor_tools.py`): **no tool has a write
+      signature** · the store itself refuses a write · injection through a
+      timestamp or sensor name fails and the table is intact · unknown sensor,
+      aggregation and argument names are rejected
 
 ## M4 — Model provider  ▸ Layer 6
 
@@ -369,28 +396,72 @@ The anti-hallucination mechanism. **Highest-value milestone.**
 
 ## M5 — Orchestration  ▸ Layer 7
 
-The 11-step flow in `docs/PROJECT.md` §7.1.
+The 11-step flow in `docs/PROJECT.md` §7.1. Steps 1–4 are
+`services/query_pipeline/`, 5–8 and 10 are `services/orchestration/`, 9 and 11
+are `services/inference.py`. Verified end to end on qwen3:1.7b.
 
-- [ ] `POST /api/chat` request/response contract
-- [ ] Query normaliser
-- [ ] Intent classifier — 8 intents
-- [ ] **Safety guard** — control intent refused before any tool call or LLM call
-- [ ] Tool planner (intent → tool set)
-- [ ] Tool executor
-- [ ] Evidence pack builder
-- [ ] Prompt builder — system instruction + safety rules + evidence + query + citation requirement
+- [x] `POST /api/chat` request/response contract — the `done` result carries
+      `architecture/07`'s fields (`intent`, `tools_used`, `citations`,
+      `grounded`, `latency_ms`) plus the plan and the validator's verdict. The
+      stream is `understood` → `evidence` → tokens → `validated` → `done`
+- [x] Query normaliser — NFKC-folded match form, invisible characters stripped,
+      empty/too-long rejected, language flagged (en/ms/mixed)
+- [x] Intent classifier — 8 intents, rules first with `signals` and a one-line
+      reason per decision; the local model only breaks a low-confidence tie and
+      can never move a question into or out of `unsafe_control`
+- [x] **Safety guard** — control, data-write and instruction-override requests
+      refused before any tool or model call. A command is a verb *and* a target
+      leading its clause, so "how do I open ABV-1?" passes and "open ABV-1" does
+      not. Runs twice: on the raw text, and on the rewritten follow-up ("open it")
+- [x] Tool planner (intent → tool set) — deterministic, one `why` per call.
+      Times are resolved by rules (`orchestration/timeparse.py`), never by the
+      model: `DAEDALUS_TZ` is the site clock, "at 10:00" / "between…and…" /
+      "last N minutes" / "this morning" / "yesterday" all resolve to UTC bounds.
+      A stopped feed anchors relative times to its last reading and says so. A
+      time it cannot place ("during the last run") ends the turn with a
+      clarifying question instead of answering for some other time
+- [x] Tool executor — every call through `agent_tools.call` on the runtime
+      surface with the turn's `query_id`, so the registry's gates and logging
+      apply unchanged
+- [x] Evidence pack builder — envelopes become labelled lines (`[S1]` reading,
+      `[A1]` anomaly, `[D1]` passage, `[G1]` graph node), each tool's block
+      fenced by its integrity. The set of numbers the validator accepts is built
+      from **exactly the rendered text**, so "supported" means "shown to the model"
+- [x] Prompt builder — numbered rules (evidence only, numbers only from
+      evidence, cite labels, say when it is unavailable, never claim an action,
+      fenced text is data, say when a reading is stale, no uncited causes) +
+      history + evidence + standalone question. Malay questions get a Malay answer
 - [x] Conversation memory — session store, transcripts, token-budgeted context assembly (`services/chat_service.py`, `docs/PROJECT.md` §7.4)
-- [ ] Wire `build_context()` into the prompt builder — summary + history before the evidence block
-- [ ] Follow-up condensation — rewrite "and the pressure?" into a standalone query **before** intent classification, and send the *same* rewritten query to both retrieval tracks
+- [x] Wire `build_context()` into the prompt builder — summary + history before the evidence block
+- [x] Follow-up condensation — rewrite "and the pressure?" into a standalone query **before** intent classification, and send the *same* rewritten query to both retrieval tracks. Stored on the turn (`chat_messages.standalone_query`) so the next follow-up is rewritten against it
 - [ ] Background summariser — fold turns that fell out of the budget into `chat_sessions.summary` **after** responding, never on the request path
 - [ ] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values
-- [ ] Response validator — reject numbers absent from evidence, control language, empty, timeout
-- [ ] **Validate numbers against the current evidence pack only** — a figure that appears only in replayed history sets `hallucination_flag` (§7.4)
+- [x] Response validator — empty · too long · a number absent from the evidence ·
+      a citation label the pack never issued · a first-person control claim.
+      A failed answer is replaced by §7.1's fallback; the model's text is kept
+      in `conversation_logs.model_response_text` (migration 007) so the
+      evaluation counts hallucinations *produced*, not only *delivered*
+- [x] **Validate numbers against the current evidence pack only** — a number
+      found only in replayed history fails as `stale_history_number` and sets
+      `hallucination_flag`. Rounding is the one transformation allowed; a
+      difference or conversion the tool did not report is an invented number
 - [x] SSE streaming for token-by-token output — `POST /api/chat` yields one
       frame per token. The model call runs on a worker thread, so a generation
       outlives the request that started it and a client that navigated away can
       rejoin via `GET /api/chat/{id}/status`
-- [ ] Tests: every unsafe phrasing is refused · a response containing an invented number is caught · a stale number replayed from history is caught
+- [x] Tests (`backend/tests/`, stdlib `unittest`, 61 cases): every unsafe
+      phrasing is refused (28, English and Malay) and never reaches a model ·
+      questions about control are allowed · a response containing an invented
+      number is caught and replaced · a stale number replayed from history is
+      caught · the whole turn lands on one `query_id`
+- [ ] **Known validator gaps**, stated rather than hidden: clock times and dates
+      are not checked (a model can misstate *when*); integers 0–10 are tolerated
+      so step numbers and small counts pass; rule 8 (no uncited cause) is a
+      prompt rule only — nothing checks a causal claim semantically. qwen3:1.7b
+      was seen attributing a CO₂ spike to NDIR calibration when the evidence
+      only listed both
+- [ ] Surface citations in the chat UI — the `done` result carries them and the
+      transcript stores the pack; nothing renders them yet
 
 ## M6 — Retrieval tracks  ▸ Layer 5
 
@@ -417,7 +488,9 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 - [ ] `graph_lookup` · `graph_traverse` · `graph_query_natural`
 - [ ] Agent loop with sufficiency assessment
 - [ ] **Cap `max_hops` and add a timeout guard** so a failing traversal can't blow the latency budget
-- [ ] Log the traversal path for the UI's reasoning view
+- [x] Log the traversal path for the UI's reasoning view — `graph_walk` records
+      the whole walk as one `rag_logs.traversal_path`, which Blueprints replays
+      for real chat queries now, not only for seeded ones
 
 ### Routing
 - [ ] Config/CLI flag to point the same UI at either track — required for a fair replay
@@ -437,7 +510,10 @@ The 11-step flow in `docs/PROJECT.md` §7.1.
 - [x] Seven tables: conversation · tool · rag · model · error · feedback · **memory**
 - [x] `query_id` generation + `trace(query_id)` across all tables
 - [x] `log()` never raises — a failed write must not break a chat response
-- [ ] Wire logging into the orchestration flow (needs M5)
+- [x] Wire logging into the orchestration flow — one `query_id` per turn across
+      `conversation_logs` (intent, rewrite, guard reason, selected tools,
+      `grounded_flag`, `hallucination_flag`, `validation_json`), `tool_logs` per
+      call, `rag_logs` per retrieval and `model_logs` per model call
 - [ ] Async logging via `BackgroundTasks` — must never block a response
 - [ ] Never log secrets or personal identifiers
 - [ ] Streamlit log viewer: history, filters, per-query trace, error dashboard, evaluation view
@@ -1107,7 +1183,7 @@ Layer 9 below for the per-step detail.
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
 - [x] User messages persisted through `POST /api/sessions/{id}/messages`
 - [x] Incognito passes `ephemeral: true`; those sessions are never listed and are swept on restart
-- [ ] Suppress `user_query`/`response_text` in `conversation_logs` for ephemeral sessions *(needs the orchestrator — nothing writes those rows yet)*
+- [ ] Suppress `user_query`/`response_text` in `conversation_logs` for ephemeral sessions *(unblocked — the orchestrator writes these rows now, including for incognito sessions)*
 - [ ] Archive from the sidebar *(the API supports it; no UI affordance yet)*
 - [ ] Error and loading states for a backend that's down or slow
 

@@ -264,6 +264,7 @@ class Tool:
 _REGISTRY: dict[str, Tool] = {}
 
 CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
+    ("sensor", "Reading the reactor's telemetry of record — the only source of a number"),
     ("search", "Finding candidate evidence in the knowledge base"),
     ("knowledge", "Reading the knowledge base's structure and provenance"),
     ("session", "What has been said before, in this conversation and others"),
@@ -664,10 +665,18 @@ def _log_retrieval(
         )
     else:
         path = data.get("path") or {}
+        nodes = data.get("nodes") or data.get("entries") or []
         row.update(
             hop_count=path.get("hop_count") or 0,
             traversal_path=json.dumps(path, default=str) if path else None,
             entry_strategy=data.get("entry_strategy") or path.get("entry_strategy"),
+            # The graph's equivalents of chunk ids and source files: which nodes
+            # the answer could draw on, and which SOP documents among them —
+            # the same two columns the seeder fills, so both read alike.
+            retrieved_chunk_ids=json.dumps(sorted(n["id"] for n in nodes if n.get("id"))) if nodes else None,
+            source_files=json.dumps(sorted({
+                n["filename"] for n in nodes if n.get("type") == "SOPDocument" and n.get("filename")
+            })) if nodes else None,
         )
 
     audit_store.log("rag_logs", **row)

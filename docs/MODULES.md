@@ -119,10 +119,11 @@ returns every row across all seven:
 | `feedback_logs` | user rating | the evaluation signal (Method A, §9.3) |
 | `memory_logs` | context assembly | what history was replayed into the prompt |
 
-Nothing writes to these yet — that is M5. **The UI can be built now against a
-seeder** that produces realistic traces, the same way `POST /api/system/seed-demo`
-already seeds sensor telemetry. Build the viewer first and the orchestrator
-lands into a surface that can already inspect it.
+**M5 writes these now** — every chat turn lands `conversation_logs`,
+`tool_logs`, `rag_logs` and `model_logs` rows on one `query_id` (`error_logs`,
+`feedback_logs` and `memory_logs` still have no writer on the chat path). The
+seeder remains useful for building the viewer against scenarios a live session
+would take a while to produce.
 
 ### 1.3 The two views
 
@@ -201,7 +202,7 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 
 | | |
 |---|---|
-| **Blocked by** | M5 (orchestrator writing rows). Viewer buildable now against a seeder |
+| **Blocked by** | ~~M5 (orchestrator writing rows)~~ — **unblocked**: the chat path writes the trace. Only the viewer itself remains |
 | **Unblocks** | §9.2 hallucination-rate metric; the "glass box" demo; Method A evaluation (§9.3) |
 | **Risk** | Ephemeral/incognito sessions must never appear here. TODO already carries "suppress `user_query`/`response_text` for ephemeral sessions" — the Thread is the surface that makes getting this wrong visible and embarrassing |
 | **Risk** | A trace can be large (retrieved chunk text especially). Page the steps; truncate cell content as `log_browser.py` already does at 4000 chars |
