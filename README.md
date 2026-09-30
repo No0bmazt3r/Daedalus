@@ -57,28 +57,27 @@ All documentation lives in **[`docs/`](docs/)** — start at [`docs/README.md`](
 ```bash
 git clone <repo> && cd Daedalus
 ./daedalus.sh setup      # one-time: checks tools, installs deps, creates .env
-./daedalus.sh start      # build and run
+./daedalus.sh dev        # run it, hot-reloading
 ```
 
-Open **<http://localhost:8000>**.
+Open **<http://localhost:5173>**.
 
-Two ways to run it, and both are containers:
+Everything runs directly on your machine — **no Docker**. The API is one
+uvicorn process with ChromaDB embedded in it, the UI is Vite, and Ollama is your
+own install. Two ways to run it:
 
 | | Command | What you get |
 |---|---|---|
-| **Run it** | `./daedalus.sh start` | One image serving the API and the built dashboard on **:8000** |
-| **Work on it** | `./daedalus.sh dev` | Same image, source bind-mounted, `uvicorn --reload` on **:8000** and Vite on **:5173** |
+| **Work on it** | `./daedalus.sh dev` | `uvicorn --reload` on **:8000** and Vite on **:5173**; saving a file reloads in place |
+| **Use it** | `./daedalus.sh start` | The dashboard built once and served by the API on **:8000** — one process, no file watchers |
 
-`dev` is the one to use while editing — saving a file reloads the backend in
-place, and Vite hot-reloads the UI. Ctrl-C stops Vite; `./daedalus.sh stop`
-stops everything.
+Both run in the foreground; Ctrl-C stops everything.
 
-Optional extras, off by default:
+Optional, off by default — and the one thing that still needs Docker:
 
 ```bash
-./daedalus.sh start --with-ollama    # run Ollama in a container too
-./daedalus.sh start --with-search    # run SearXNG, for sourcing corpus documents
-./daedalus.sh dev   --host           # dev the old way: two processes, no containers
+./daedalus.sh dev --with-search    # also run SearXNG, for sourcing corpus documents
+./daedalus.sh stop                 # stop it again
 ```
 
 `setup` is safe to re-run. It never overwrites your `.env` and never touches a
@@ -90,19 +89,15 @@ database that already has data — re-running just tops up any settings added to
 | Command | Does |
 |---|---|
 | `./daedalus.sh setup` | One-time: verify prerequisites, install deps, create `.env`, make runtime dirs |
-| `./daedalus.sh start` | Build (if needed) and start the container stack |
-| `./daedalus.sh dev` | Hot-reload dev stack in containers — source bind-mounted, uvicorn and Vite reload in place |
-| `./daedalus.sh stop` | Stop the stack |
-| `./daedalus.sh logs` | Follow logs |
-| `./daedalus.sh rebuild` | Force a clean image rebuild, then start |
-| `./daedalus.sh status` | What's running, plus health of all five databases |
+| `./daedalus.sh dev` | Hot reload: uvicorn and Vite on the host (the default command) |
+| `./daedalus.sh start` | Build the dashboard, serve it and the API on one port |
+| `./daedalus.sh stop` | Stop the optional SearXNG container |
+| `./daedalus.sh status` | Health of all five databases |
 | `./daedalus.sh migrate` | Apply pending schema migrations (`status`, `check`, `backup`, `new`) |
 
 | Flag | On | Does |
 |---|---|---|
-| `--with-ollama` | `start`, `dev` | Run Ollama as a container instead of on the host |
-| `--with-search` | `start`, `dev` | Run SearXNG — a self-hosted search engine for finding corpus documents. Off by default: Rule 1 says the runtime is offline, so it is started while sourcing and stopped afterwards |
-| `--host` | `dev` | Run the two dev servers on your machine instead of in containers. Quickest way to attach a debugger |
+| `--with-search` | `start`, `dev` | Run SearXNG — a self-hosted search engine for finding corpus documents. Needs Docker. Off by default: Rule 1 says the runtime is offline, so it is started while sourcing and stopped afterwards |
 
 Two more scripts sit alongside it:
 
@@ -115,7 +110,7 @@ Two more scripts sit alongside it:
 
 `reset.sh` leaves the sensor database alone by default: Daedalus does not own
 that file, and on a lab machine it may hold real reactor telemetry. It also
-refuses to run while the stack is up, because deleting a SQLite file out from
+refuses to run while Daedalus is up, because deleting a SQLite file out from
 under a live process leaves it writing to a deleted inode.
 
 Shared helpers live in `scripts/common.sh`, so a fix to the `.env` backfill or
@@ -124,22 +119,14 @@ the path handling reaches all three scripts at once.
 **Every command, every flag, and why each safeguard is there:**
 [`docs/SCRIPTS.md`](docs/SCRIPTS.md).
 
-> **Host and container see the same data.** The paths in `.env` are as seen
-> *inside the container* (`/data`, `/logs`, `/app/data`). The scripts map them
-> back to `./data`, `./logs` and `./backend/data` when running the backend on
-> your machine, so `dev` and `start` are not quietly two different databases.
-
 ### Prerequisites
 
 | Tool | Needed for |
 |---|---|
-| **Docker** | The container stack. `setup` checks the daemon is reachable |
+| **Python 3.11+** | The backend |
 | **Node 20+** and **pnpm** | Frontend. `setup` enables pnpm via corepack if missing |
-| **Python 3.11+** | Only for `./daedalus.sh dev --host` and the `migrate`/`sync`/`reset` scripts. The container path does not need it |
 | **Ollama** *(optional)* | Model inference. The dashboard runs fine without it |
-
-Ollama runs on the **host** by default — GPU passthrough is far simpler there
-and the model cache survives container rebuilds:
+| **Docker** *(optional)* | Only for SearXNG web search. Nothing else uses it |
 
 ```bash
 ollama serve
@@ -151,31 +138,29 @@ ollama pull qwen3:1.7b
 ## Configuration
 
 Everything lives in **`.env`**, created from [`.env.example`](.env.example) by
-`setup`. Both `docker compose` and `daedalus.sh` read it, so one edit reaches
-the container stack and the dev servers alike.
+`setup`. `daedalus.sh`, `sync.sh` and `reset.sh` all read it.
 
 | Setting | Default | Controls |
 |---|---|---|
-| `DAEDALUS_PORT` | `8000` | Dashboard + API |
-| `CHROMA_PORT` | `8001` | ChromaDB on the host |
-| `BACKEND_PORT` / `FRONTEND_PORT` | `8000` / `5173` | `dev` mode only |
-| `DAEDALUS_DATA_DIR` | `/data` | Sensor DB, documents, embedded Chroma |
-| `DAEDALUS_LOG_DIR` | `/logs` | Audit logs |
-| `CHROMA_URL` | `http://chromadb:8000` | Vector store. Unset it for embedded mode |
-| `DAEDALUS_PREFS_DB` | `/app/data/prefs.db` | UI preferences |
-| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Model runtime |
+| `DAEDALUS_PORT` | `8000` | Dashboard + API under `start` |
+| `BACKEND_PORT` / `FRONTEND_PORT` | `8000` / `5173` | `dev` mode |
+| `CHROMA_URL` | *(empty)* | Vector store. Empty = embedded in the API, in `data/chroma`; set it to use a separate Chroma server |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Model runtime |
+| `SEARXNG_URL` | `http://127.0.0.1:8081` | Optional web search |
 
-Paths are as seen **inside the container**. The host directories backing them
-are the volume mounts in `docker-compose.yml`:
+The five stores live in the repo, and the scripts set their paths themselves:
 
 ```
-./data          ->  /data       sensor DB, documents, embedded chroma
-./logs          ->  /logs       audit logs
-./backend/data  ->  /app/data   UI preferences
+data/sqlite/sensor_readings.db   sensor telemetry (read-only)
+logs/ai_logs.db                  audit logs
+data/chroma/                     vector store
+data/sqlite/chat.db              chat transcripts
+backend/data/prefs.db            UI preferences
 ```
 
-To point Daedalus at a **real reactor database**, change the `./data` mount to
-the directory holding it. It is opened read-only regardless.
+To point Daedalus at a **real reactor database**, put it at
+`data/sqlite/sensor_readings.db` (or symlink it there). It is opened read-only
+regardless.
 
 There are no secrets in `.env.example`, deliberately — Daedalus runs fully
 local with no cloud APIs. `.env` is gitignored if that ever changes.
@@ -258,15 +243,13 @@ plausible run offline. It refuses if data already exists.
 ├── scripts/
 │   └── common.sh        Shared shell helpers for the three scripts below
 │
-├── data/                Runtime: sensor DB, chat DB, documents  (gitignored)
+├── data/                Runtime: sensor DB, chat DB, documents, chroma  (gitignored)
 ├── logs/                Runtime: audit logs                     (gitignored)
 ├── backups/             Snapshots from `migrate backup`         (gitignored)
 │
 ├── .env.example         Configuration template
-├── Dockerfile           Multi-stage: builds frontend, served by backend
-├── docker-compose.yml   App + ChromaDB (+ optional Ollama)
-├── daedalus.sh          Entry point — setup, start, dev, migrate
-├── docker-compose.dev.yml  Dev overlay — bind-mounted source, hot reload
+├── daedalus.sh          Entry point — setup, dev, start, migrate
+├── docker-compose.yml   The optional SearXNG container — nothing else
 ├── config/searxng/      Settings template for the optional search container
 ├── sync.sh              Get a checkout working after a pull (safe)
 ├── reset.sh             Wipe and rebuild the databases (destructive)
@@ -275,8 +258,8 @@ plausible run offline. It refuses if data already exists.
 ```
 
 Frontend and backend are fully separated: the frontend is a pure client of the
-API, and the backend has no knowledge of React. The container proves it —
-`Dockerfile` builds the bundle in one stage and serves it from the other.
+API, and the backend has no knowledge of React. `start` proves it — the bundle
+is built on its own and served as static files.
 
 ---
 
@@ -303,7 +286,7 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Collapse animation** | One cascade for every collapsible thing: rows arrive from below with a small overshoot, staggered, and leave bottom-up without one. The exit waits on the real animations rather than a timeout, so a two-row section does not sit through a twelve-row section's timing |
 | **Loading skeletons** | Placeholders shaped like the content they precede, in a pixel or smooth style — switchable in Theme → Customize |
 | **Data stores** | Four browsable stores in the sidebar under the chats — chat · audit · sensor · vector. Expand one, click a table, read its rows in a floating window. Preferences is the fifth store and is deliberately absent: it holds this UI's own settings, not evidence |
-| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. Settings → Hardware, and **The Forge**. In a container it says which machine it is describing: GPU passthrough is layered on automatically where the host has one (`--gpu` / `--no-gpu`), and where it is absent the panel names the flag instead of reporting no GPU |
+| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. Settings → Hardware, and **The Forge**. Reads the host directly, so the GPU it reports is the real card |
 | **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` |
 | **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
 | **Model manager** | What is installed, badged SLM or LLM, with per-model usage: runs split by chat and benchmark, token totals, and latency as mean / p50 / p95 |
@@ -312,15 +295,15 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Every panel is built — Databases reports health only |
 | **Keyboard shortcuts** | 11 rebindable actions across navigation, conversations and windows. Click a chord, press keys, Enter saves and Escape abandons — nothing commits on the first keypress. Duplicates are shown with the rule that resolves them, unbinding is Backspace, and AltGr is not mistaken for Ctrl+Alt |
 | **Appearance** | Nine switches over the app's own furniture — sidebar brand, New, core modules, chat list, data stores, bottom bar; welcome message, incognito button, full-width transcript. Chrome only: nothing switchable can hide an answer, a citation or a refusal |
-| **Web search** | Six providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper) with an ordered fallback chain, per-provider credentials and a live probe. A **setup** surface for sourcing corpus documents — SearXNG ships as an optional container tuned for technical literature |
+| **Web search** | Six providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper) with an ordered fallback chain, per-provider credentials and a live probe. A **setup** surface for sourcing corpus documents — SearXNG ships as an optional Docker container tuned for technical literature |
 | **Agent tools** | 29 tools in five categories behind a dispatcher that checks declared effects, validates arguments and stamps result integrity before the function is entered. Every call writes a `tool_logs` row. Untrusted output is fenced with a per-call nonce before it reaches a prompt |
 | **Tool policy** | Two axes, deliberately separate: four capability locks (`network_egress` · `write` · `admin` · `execute_code`) that say what the machine may do while a result is recorded, and a per-tool switch that says which tools the model is offered. A switched-off tool leaves the schema list and is refused if asked for by name. Every parameter carries a working example, so a trial run is one click |
 | **System maintenance** | Settings → System: a filterable viewer over the backend's own rotating log, a credential-free backup/restore, and a per-category Danger Zone with typed confirmation. The sensor database is absent from all three by rule |
-| **Container control** | Settings → Search can start and stop the SearXNG container, when a Docker socket is mounted. Off by default — the socket is a host-level privilege, and the agent's `bash` tool runs in the same container |
+| **Container control** | Settings → Search can start and stop the SearXNG container, when `DOCKER_SOCKET` is set. Off by default — the socket is a host-level privilege, and the agent's `bash` tool runs as the same user |
 | **MCP** | Connect to external tool servers over stdio or HTTP. Each server's tool list is **pinned and hashed**, so a server that grows a tool is reported as drift and the new tool is refused — the protocol is designed to be dynamic, and §7.2 needs it not to be |
 | **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
 | **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |
-| **Data stores** | All five wired, containerised, health-reported, each with a versioned schema |
+| **Data stores** | All five wired, health-reported, each with a versioned schema |
 | **Migrations** | Numbered SQL files, applied in a transaction at startup, with drift and gap detection |
 | **Deployment** | Single-image build + ChromaDB, one-command startup, and a dev overlay that runs the same image with hot reload |
 
@@ -403,39 +386,16 @@ Zone 4  Presentation ─ React dashboard                  ← this project
 ./daedalus.sh dev
 ```
 
-Layers `docker-compose.dev.yml` over the base stack: the same image at its `dev`
-stage with `backend/app` bind-mounted read-only, `uvicorn --reload` watching it
-on :8000, and Vite in its own container on :5173 proxying `/api` across. Saving a
-file reloads the backend in place; the UI hot-reloads. Ctrl-C ends the Vite
-session and leaves the backend running — `./daedalus.sh stop` stops everything.
-
-**Why the container rather than your machine.** Every address in `.env` is
-written from the container's point of view — `http://chromadb:8000`,
-`http://searxng:8080` — and none of them resolve on the host, so the host path
-needs three helpers in `scripts/common.sh` whose only job is rewriting them back
-to published ports. In here they are simply the addresses, and `/data`, `/logs`
-and `/config` mean what they mean in the image that ships. It also puts the
-agent's `bash` and `python` tools behind a kernel boundary instead of a pattern
-denylist.
-
-<details>
-<summary>Running the dev servers on your machine instead</summary>
+Two processes on your machine: `uvicorn --reload` watching `backend/app` on
+:8000, and Vite on :5173 proxying `/api` across. Saving a file reloads the
+backend in place; the UI hot-reloads. Ctrl-C stops both. A debugger attaches to
+either in one step.
 
 ```bash
-./daedalus.sh dev --host
-```
-
-Kept because a debugger attaches to a local process in one step, and a container
-that will not start should not stop you working. Needs `backend/.venv` and
-`frontend/node_modules`, both created by `setup`.
-
-```bash
-# Or drive the two yourself
-backend/.venv/bin/uvicorn app.main:app --reload --port 8000 --app-dir backend
+# Or drive the two yourself (host_uvicorn sets the data paths — see docs/SCRIPTS.md)
+. ./scripts/common.sh && host_uvicorn app.main:app --reload --port 8000 --app-dir backend
 cd frontend && pnpm dev
 ```
-
-</details>
 
 <details>
 <summary>Checks</summary>
@@ -459,7 +419,7 @@ cd ../backend
 **Frontend** — React 19 · TypeScript · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui · Lucide
 **Backend** — FastAPI · Pydantic/PydanticAI · SQLite (WAL) · Uvicorn
 **AI** — Ollama (Qwen3 1.7B · Phi-3 Mini · Gemma 3 1B, Q4_K_M) · ChromaDB · NetworkX · nomic-embed-text
-**Ops** — Docker · single-image multi-stage build
+**Ops** — runs on the host: one uvicorn process, embedded ChromaDB · Docker only for optional SearXNG
 
 ---
 

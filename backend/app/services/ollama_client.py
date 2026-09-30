@@ -20,10 +20,10 @@ and quantization here, so anything pulled can be scored and recommended.
 
 ## Where Ollama is
 
-`OLLAMA_BASE_URL` is `host.docker.internal` so the container can reach the
-host's daemon, and that name does not resolve when `./daedalus.sh dev` runs the
-backend on the host itself. Every call therefore tries the configured URL and
-then localhost, and reports which one answered — the same fallback
+`OLLAMA_BASE_URL` defaults to localhost. A .env from when the backend ran in a
+container still says `host.docker.internal`, which does not resolve on the
+host, so every call tries the configured URL and then localhost, and reports
+which one answered — the same fallback
 `services/hardware.py` uses, and it lives here so the two can never disagree
 about where Ollama is.
 """
@@ -76,9 +76,9 @@ class OllamaUnavailable(RuntimeError):
 
 # How long to wait on *connecting*, as opposed to waiting for an answer.
 #
-# These are separate for a measured reason. `OLLAMA_BASE_URL` defaults to
+# These are separate for a measured reason. `OLLAMA_BASE_URL` used to default to
 # `host.docker.internal`, which does not resolve when the backend runs on the
-# host in dev mode — so every call paid a full DNS timeout before falling back
+# host — so every call paid a full DNS timeout before falling back
 # to localhost. With one model installed that made `GET /api/forge/models` take
 # 15.2 seconds: five for the tag list, ten for the /api/show behind it, all of
 # it spent failing to resolve a name. A connect attempt that is going to fail
@@ -97,18 +97,16 @@ def candidate_base_urls() -> list[str]:
 
     Three fallbacks, each for a failure that actually happens:
 
-    - **localhost**, because `host.docker.internal` does not resolve when
-      `./daedalus.sh dev` runs the backend on the host rather than in a
-      container, which is how most development happens.
+    - **localhost**, because a configured `host.docker.internal` (an old,
+      container-era .env) does not resolve on the host.
     - **127.0.0.1**, because `localhost` resolves to `::1` first on a dual-stack
       machine and Ollama binds IPv4 only by default. The connection is refused
       on a machine where the daemon is running perfectly well, which is a
       genuinely confusing way to be told nothing is there.
     - **`host.docker.internal` last** when it is not the configured value, so a
-      containerised backend still finds a host daemon if the configuration is
-      pointed somewhere else.
+      backend someone does run in a container still finds a host daemon.
     """
-    base = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     candidates = [base]
 
     def add(url: str) -> None:

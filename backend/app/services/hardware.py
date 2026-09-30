@@ -457,12 +457,11 @@ def _ollama() -> dict[str, Any]:
     render promptly whether or not Ollama is running, and "not reachable" is a
     perfectly normal answer during development.
     """
-    base = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 
-    # `host.docker.internal` is how the container reaches the host's Ollama, and
-    # it does not resolve when `./daedalus.sh dev` runs the backend on the host
-    # itself. Rather than report a false "not reachable" in the mode most of the
-    # development happens in, fall back to localhost and say which one answered.
+    # A container-era .env says `host.docker.internal`, which does not resolve
+    # on the host. Rather than report a false "not reachable", fall back to
+    # localhost and say which one answered.
     candidates = [base]
     if "host.docker.internal" in base:
         candidates.append(base.replace("host.docker.internal", "localhost"))

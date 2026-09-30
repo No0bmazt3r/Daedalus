@@ -1362,7 +1362,7 @@ Layer 9 below for the per-step detail.
       rather than the handful of files a previous entry had checked
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
 - [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
-- [ ] `daedalus.sh` assumes the Docker daemon is running — it reports the failure but can't start it
+- [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container
 - [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**
       SearXNG volume gets. An instance that has already booted keeps its own
       copy, on purpose — so applying a template change means

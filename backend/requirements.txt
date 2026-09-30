@@ -1,16 +1,17 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 
-# Thin HTTP client for the ChromaDB service (Layer 5). This is deliberately
-# `chromadb-client` and not the full `chromadb`: the container talks to the
-# chromadb compose service over HTTP, and the full package drags in
-# onnxruntime/tokenizers for embedded mode — hundreds of MB the image never
-# uses. For embedded mode (no CHROMA_URL), install `chromadb` instead.
-# Either package satisfies the lazy import in app/db/vector_store.py.
-chromadb-client>=0.5
+# The vector store (Layer 5), embedded in the API process and writing to
+# $DAEDALUS_DATA_DIR/chroma — no separate server. The full package, not
+# `chromadb-client`, which only speaks HTTP to a Chroma server; the two install
+# the same `chromadb` module and must not both be present, which is why
+# `ensure_embedded_chroma` in scripts/common.sh removes the client from venvs
+# created before this changed. Setting CHROMA_URL still selects server mode
+# (app/db/vector_store.py), for anyone who runs Chroma separately.
+chromadb>=1.5,<2
 
 # HTTP client for the connection test in app/services/model_endpoints.py.
-# It arrives transitively via chromadb-client, but this module imports it
+# It arrives transitively via chromadb, but this module imports it
 # directly and a transitive dependency is not a contract — a Chroma release
 # that dropped it would break the Settings panel with a confusing error.
 httpx>=0.27
@@ -39,7 +40,7 @@ nvidia-ml-py>=12.535
 # count stays at five. Pure Python, no C extensions, no network — Rule 1 clean.
 networkx>=3.2
 
-# Parses that graph file. It arrives transitively via chromadb-client, but
+# Parses that graph file. It arrives transitively via chromadb, but
 # knowledge_graph.py imports it directly and — as with httpx above — a
 # transitive dependency is not a contract.
 pyyaml>=6.0

@@ -22,8 +22,7 @@ fast enough to run over twenty candidates. So Track 1 becomes two stages:
   a 404), and a generative model prompted to score passages is a slower,
   less calibrated imitation of the real thing.
 - **sentence-transformers** would do it in three lines and pull in PyTorch —
-  over a gigabyte in a container that otherwise installs `chromadb-client`
-  precisely to avoid a few hundred megabytes of ONNX runtime.
+  over a gigabyte, for a model that needs none of it.
 - **onnxruntime + tokenizers** is the same model, exported by its authors, run
   by ~80 MB of CPU-only runtime. MiniLM-L6 scores twenty passages in tens of
   milliseconds on a laptop CPU, which is the latency budget this has.

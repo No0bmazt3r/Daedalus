@@ -43,10 +43,10 @@ ensure_dirs
 # A SQLite file deleted while a process holds it open leaves that process
 # writing to a deleted inode — the app appears to work, then loses everything
 # on restart. Refuse rather than produce that.
-if have docker && docker info >/dev/null 2>&1 && stack_running; then
-  err "the container stack is running."
-  info "Stop it first so nothing is holding the database files open:"
-  info "  ./daedalus.sh stop && ./reset.sh"
+if curl -fsS --max-time 2 "http://localhost:${DAEDALUS_PORT:-8000}/api/health" >/dev/null 2>&1 \
+   || curl -fsS --max-time 2 "http://localhost:${BACKEND_PORT:-8000}/api/health" >/dev/null 2>&1; then
+  err "Daedalus is running."
+  info "Stop it first (Ctrl+C in its terminal) so nothing is holding the database files open."
   exit 1
 fi
 

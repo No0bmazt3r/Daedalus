@@ -1,139 +1,32 @@
-# Daedalus — one container for the app, plus the stores it depends on.
+# Daedalus runs on the host — see ./daedalus.sh. This file holds the one
+# service that has no host install: SearXNG, the self-hosted web search used
+# while sourcing the corpus. Nothing else here, and nothing in the answer path
+# depends on it; without Docker, web search reports itself unavailable and
+# everything else works.
 #
-#   docker compose up                          # app + vector DB
-#   docker compose --profile with-ollama up    # also run Ollama in a container
-#   docker compose --profile with-search up    # also run SearXNG (setup only)
+#   ./daedalus.sh dev --with-search    start it alongside the app
+#   ./daedalus.sh stop                 stop it
 #
-# Five separate databases, on purpose (docs/PROJECT.md §6.3):
+# Five separate databases, on purpose (docs/PROJECT.md §6.3), all on the host:
 #
-#   sensor  SQLite  /data/sqlite/sensor_readings.db  IoT telemetry   READ-ONLY to the AI
-#   audit   SQLite  /logs/ai_logs.db                 chat/tool/RAG/model/error/feedback/memory logs
-#   chat    SQLite  /data/sqlite/chat.db             conversations and transcripts
-#   vector  Chroma  chromadb service                 RAG knowledge chunks
-#   prefs   SQLite  /app/data/prefs.db               UI state
-#
-# Keeping them apart is the safety argument: a bug in ingestion or logging
-# physically cannot reach the sensor data of record.
+#   sensor  SQLite  data/sqlite/sensor_readings.db  IoT telemetry   READ-ONLY to the AI
+#   audit   SQLite  logs/ai_logs.db                 chat/tool/RAG/model/error/feedback/memory logs
+#   chat    SQLite  data/sqlite/chat.db             conversations and transcripts
+#   vector  Chroma  data/chroma (embedded)          RAG knowledge chunks
+#   prefs   SQLite  backend/data/prefs.db           UI state
 
 services:
-  daedalus:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # Named explicitly. A Dockerfile's default target is its *last* stage, so
-      # adding the `dev` stage at the bottom silently made `docker compose up`
-      # build the development image — which sets DAEDALUS_STATIC_DIR away from
-      # the bundle and serves a working API with no dashboard behind it.
-      target: runtime
-    image: daedalus:latest
-    pull_policy: build
-    container_name: daedalus
-    ports:
-      # Bound to localhost. Drop the 127.0.0.1 prefix only if you deliberately
-      # want the lab LAN to reach it.
-      - "127.0.0.1:${DAEDALUS_PORT:-8000}:8000"
-    environment:
-      # Every value here comes from .env (see .env.example), with the shipped
-      # default as a fallback. Hardcoding them would silently override the
-      # file that documents them as configurable.
-      # host.docker.internal resolves to the host via the extra_hosts entry.
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      CHROMA_URL: ${CHROMA_URL:-http://chromadb:8000}
-      DAEDALUS_DATA_DIR: ${DAEDALUS_DATA_DIR:-/data}
-      DAEDALUS_LOG_DIR: ${DAEDALUS_LOG_DIR:-/logs}
-      DAEDALUS_CHAT_DB: ${DAEDALUS_CHAT_DB:-/data/sqlite/chat.db}
-      DAEDALUS_PREFS_DB: ${DAEDALUS_PREFS_DB:-/app/data/prefs.db}
-      # Where the Forge writes the deployed model choice, and where FastAPI
-      # reads it. Mounted from the repo below, so a choice committed in the
-      # container survives a rebuild and is visible in a diff.
-      DAEDALUS_CONFIG_DIR: ${DAEDALUS_CONFIG_DIR:-/config}
-      # Hardware detection cadence. Defaults are fine; passed through so that
-      # tuning them in .env works in the container too, not only in dev mode.
-      DAEDALUS_HW_LIVE_INTERVAL: ${DAEDALUS_HW_LIVE_INTERVAL:-30}
-      DAEDALUS_HW_SLOW_INTERVAL: ${DAEDALUS_HW_SLOW_INTERVAL:-300}
-      DAEDALUS_HW_IDLE_AFTER: ${DAEDALUS_HW_IDLE_AFTER:-120}
-      # Where the self-hosted search engine is, when the `with-search` profile
-      # is running one. Only a default: a URL saved in Settings → Search wins,
-      # and with neither, SearXNG is simply unconfigured.
-      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
-      # Where the Docker socket is *inside* this container, when one is mounted.
-      # Empty unless the mount below is real — see the volume's note.
-      DOCKER_SOCKET: ${DOCKER_SOCKET:+/var/run/docker.sock}
-    volumes:
-      # Sensor SQLite + documents. Mount the SCADA machine's real database
-      # here (read-only at the driver level regardless).
-      - ./data:/data
-      # Audit/evaluation logs — ai_logs.db.
-      - ./logs:/logs
-      # The model choice the Forge commits — config, not data, so it lives in
-      # the repo rather than in a volume nobody can read.
-      - ./config:/config
-      # UI preferences.
-      - ./backend/data:/app/data
-      # Optional, and off by default. Setting DOCKER_SOCKET in .env to
-      # /var/run/docker.sock lets Settings → Search start and stop the SearXNG
-      # container from the UI. Unset, this mounts /dev/null, which is a file
-      # that exists and is not a socket, so the feature reports itself
-      # unavailable and nothing else changes.
-      #
-      # Read `services/containers.py` before turning it on. A process that can
-      # reach this socket can do anything Docker can do on this host, and the
-      # agent's `bash` tool runs in this same container.
-      - ${DOCKER_SOCKET:-/dev/null}:/var/run/docker.sock
-    depends_on:
-      # service_started, not service_healthy: the dashboard and preference API
-      # must boot even when the vector store is down, and vector_store.py
-      # reports that as a status rather than failing. See the Databases panel.
-      - chromadb
-    # The socket is root:docker mode 660 and this image runs as uid 1000, so a
-    # mounted socket is unopenable without membership of the host's docker
-    # group. Harmless when no socket is mounted — the container simply belongs
-    # to one more group that owns nothing.
-    group_add:
-      - "${DOCKER_GID:-999}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Caps, not reservations. Without them a container may take everything the
-    # WSL VM has (.wslconfig), and the VM is shared with Ollama and the editor.
-    # The API is I/O-bound — it waits on Ollama and Chroma — so this is generous.
-    mem_limit: ${DAEDALUS_MEM_LIMIT:-1g}
-    cpus: ${DAEDALUS_CPUS:-1.5}
-    restart: unless-stopped
-
-  # RAG vector store. Runs as a server so the index survives app rebuilds and
-  # the ingestion pipeline can write to it independently of the API.
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: daedalus-chromadb
-    ports:
-      # Exposed so the offline ingestion pipeline can reach it from the host.
-      - "127.0.0.1:${CHROMA_PORT:-8001}:8000"
-    volumes:
-      - chroma-data:/data
-    environment:
-      ANONYMIZED_TELEMETRY: "FALSE"   # local-first: no outbound telemetry
-      IS_PERSISTENT: "TRUE"
-    # No healthcheck: the chroma image is minimal (dash only — no curl, wget,
-    # python or bash), so nothing inside it can probe the port. Readiness is
-    # reported by the app instead, via /api/system/databases.
-    mem_limit: ${CHROMA_MEM_LIMIT:-1g}
-    cpus: ${CHROMA_CPUS:-1.0}
-    restart: unless-stopped
-
-  # Optional: only starts with `--profile with-search`.
-  #
-  # Behind a profile rather than in the default stack, unlike Odysseus, which
-  # runs it always. Rule 1 says the production runtime is offline, so a
+  # Started deliberately — `./daedalus.sh dev --with-search`, or automatically
+  # once it is the selected provider in Settings → Search — and stopped with
+  # `./daedalus.sh stop`. Rule 1 says the production runtime is offline, so a
   # deployed reactor assistant should not have a search engine sitting next to
-  # it by default. It is started deliberately, while somebody is sourcing the
-  # corpus, and stopped afterwards.
+  # it by default; it runs while somebody is sourcing the corpus.
   #
   # Self-hosted for the reason that makes SearXNG the recommended provider in
   # the panel: the query goes to a container on this machine, which fans out to
   # public engines without a key, an account, or a third party holding a log of
   # what a reactor operator searched for.
   searxng:
-    profiles: ["with-search"]
     # Pinned, not :latest. A search engine that silently changes behaviour
     # between two runs of a project whose results chapter cites what it found
     # is not a dependency, it is a variable.
@@ -185,36 +78,5 @@ services:
     cpus: ${SEARXNG_CPUS:-1.0}
     restart: unless-stopped
 
-  # Optional: only starts with `--profile with-ollama`.
-  ollama:
-    profiles: ["with-ollama"]
-    image: ollama/ollama:latest
-    container_name: daedalus-ollama
-    ports:
-      - "127.0.0.1:11434:11434"
-    volumes:
-      - ollama-models:/root/.ollama
-    # Sized for the SLM tier on an 8GB VM. A model larger than this gets
-    # OOM-killed instead of taking the whole machine down with it.
-    mem_limit: ${OLLAMA_MEM_LIMIT:-5g}
-    cpus: ${OLLAMA_CPUS:-3.0}
-    environment:
-      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
-      # 2, not 1: a RAG turn embeds the query and then generates, so the
-      # embedding model and the chat model are both in use on every question.
-      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
-    restart: unless-stopped
-    # Uncomment for an NVIDIA GPU (needs the NVIDIA Container Toolkit):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-
 volumes:
-  chroma-data:
-  ollama-models:
   searxng-data:

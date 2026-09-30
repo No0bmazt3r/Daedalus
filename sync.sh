@@ -28,9 +28,7 @@ for arg in "$@"; do
 done
 
 # Two lists, because they end differently: WOULD is what `./sync.sh` fixes
-# by itself, MANUAL is what it can only tell you about. Lumping them together
-# produced a summary that promised to rebuild a container image it never
-# touches.
+# by itself, MANUAL is what it can only tell you about.
 WOULD=()
 MANUAL=()
 note()   { WOULD+=("$1"); }
@@ -50,16 +48,6 @@ if have pnpm; then
   ok "pnpm $(pnpm --version)"
 else
   warn "pnpm not found — frontend dependencies will be skipped"
-fi
-
-# Docker is optional for sync: the dev servers and the migration CLI both run
-# on the host, so a checkout can be brought up to date with Docker stopped.
-if have docker && docker info >/dev/null 2>&1; then
-  ok "Docker is running"
-  DOCKER_UP=1
-else
-  warn "Docker is not running — container checks skipped"
-  DOCKER_UP=0
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -105,6 +93,7 @@ if [ ! -d backend/.venv ]; then
     python3 -m venv backend/.venv
     backend/.venv/bin/pip install --quiet --upgrade pip
     backend/.venv/bin/pip install --quiet -r backend/requirements.txt
+    ensure_embedded_chroma
     touch "$BACKEND_STAMP"
     ok "virtualenv created and requirements installed"
   fi
@@ -114,6 +103,7 @@ elif backend_deps_stale || [ "$FORCE_DEPS" -eq 1 ]; then
     note "reinstall backend requirements"
   else
     backend/.venv/bin/pip install --quiet -r backend/requirements.txt
+    ensure_embedded_chroma
     # pip leaves no reliable marker of its own, so stamp it ourselves —
     # otherwise this would report stale on every future run.
     touch "$BACKEND_STAMP"
@@ -221,30 +211,6 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-head_ "Containers"
-# ─────────────────────────────────────────────────────────────────────────────
-# The image bakes in the built frontend and the backend source, so a running
-# stack keeps serving pre-pull code until it is rebuilt. The dev servers do
-# not have this problem — they reload from disk.
-if [ "$DOCKER_UP" -eq 0 ]; then
-  info "not checked"
-elif ! stack_running; then
-  if image_is_stale; then
-    ok "stack is not running — rebuild before starting, or use ./daedalus.sh dev"
-    manual "./daedalus.sh rebuild   — the image predates your current code"
-  else
-    ok "stack is not running — the image is current"
-  fi
-elif image_is_stale; then
-  warn "the running image predates your current source"
-  info "the image bakes in the backend source and the built frontend, so it"
-  info "keeps serving the old code until rebuilt"
-  manual "./daedalus.sh rebuild   — the image predates your current code"
-else
-  ok "running, and the image matches your source"
-fi
-
-# ─────────────────────────────────────────────────────────────────────────────
 if [ "$CHECK_ONLY" -eq 1 ]; then
   head_ "Summary"
   if [ ${#WOULD[@]} -eq 0 ] && [ ${#MANUAL[@]} -eq 0 ]; then
@@ -271,8 +237,8 @@ if [ ${#MANUAL[@]} -gt 0 ]; then
   for m in "${MANUAL[@]}"; do info "- $m"; done
   printf '\n'
 fi
-say "  ${DIM}Containers:${RESET}  ./daedalus.sh start"
 say "  ${DIM}Hot reload:${RESET}  ./daedalus.sh dev"
+say "  ${DIM}One port:${RESET}    ./daedalus.sh start"
 say ""
 say "  ${DIM}If something still looks wrong:${RESET}"
 say "    ./daedalus.sh setup    reinstall dependencies from scratch"

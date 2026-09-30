@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Shared helpers for daedalus.sh, sync.sh and reset.sh. Sourced, not run.
 #
-# These three scripts need the same handful of things — coloured output, a
-# working `docker compose`, and a .env that has every key .env.example
-# declares. Keeping one copy here means a fix reaches all three, and a new
+# These three scripts need the same handful of things — coloured output, the
+# host path mapping, and a .env that has every key .env.example declares. Keeping one copy here means a fix reaches all three, and a new
 # setting is handled by whichever script the developer happens to run.
 #
 # Callers must `cd` to the repo root before sourcing.
@@ -60,17 +59,19 @@ fail()  { err "$*"; exit 1; }
 
 have()  { command -v "$1" >/dev/null 2>&1; }
 
-# Support both `docker compose` (v2) and the legacy `docker-compose`.
-# COMPOSE_FILES — extra `-f` arguments, set by a command that needs an overlay.
-# `dev` sets it to layer docker-compose.dev.yml; everything else leaves it empty
-# and gets the shipping stack.
-COMPOSE_FILES=${COMPOSE_FILES:-}
+# Docker is optional: the app runs on the host, and docker-compose.yml holds
+# only SearXNG, which has no host install. So "no Docker" is a normal answer
+# here, not an error — callers check `have_compose` and carry on without it.
+# Supports both `docker compose` (v2) and the legacy `docker-compose`.
+have_compose() {
+  { have docker && docker compose version >/dev/null 2>&1 && docker info >/dev/null 2>&1; } \
+    || have docker-compose
+}
 
 compose() {
-  # shellcheck disable=SC2086 — COMPOSE_FILES is a deliberate word-split list.
-  if docker compose version >/dev/null 2>&1; then docker compose $COMPOSE_FILES "$@"
-  elif have docker-compose; then docker-compose $COMPOSE_FILES "$@"
-  else err "docker compose is not installed or not on PATH."; exit 1
+  if docker compose version >/dev/null 2>&1; then docker compose "$@"
+  elif have docker-compose; then docker-compose "$@"
+  else err "docker compose is not installed or not on PATH."; return 1
   fi
 }
 
@@ -146,11 +147,19 @@ load_env() {
   # …and put them back over whatever the file just wrote.
   local kv
   for kv in ${preserved[@]+"${preserved[@]}"}; do export "${kv?}"; done
+
+  # A .env from before the move off Docker names the chromadb container, which
+  # no longer exists. Unset is what selects the embedded store, so say so and
+  # drop it rather than have the vector store report itself unreachable.
+  if [ "${CHROMA_URL:-}" = "http://chromadb:8000" ]; then
+    warn "CHROMA_URL in .env names the old chromadb container — ignoring it (embedded store)."
+    info "Delete the value in .env to silence this: CHROMA_URL="
+    unset CHROMA_URL
+  fi
 }
 
 # ── runtime state ────────────────────────────────────────────────────────────
-# Created on the host so a rebuild never loses data, and so Docker does not
-# create them as root-owned bind-mount sources.
+# Created up front so the first write to each store has somewhere to land.
 ensure_dirs() { mkdir -p data/sqlite data/documents logs backend/data; }
 
 # ── dependency staleness ─────────────────────────────────────────────────────
@@ -179,21 +188,18 @@ require_venv() {
   [ -x "$PY" ] || fail "backend/.venv is missing — run './daedalus.sh setup' first"
 }
 
-# host_py — run the backend's interpreter against the HOST's data directories.
+# host_py — run the backend's interpreter against the repo's data directories.
 #
-# The paths in .env are as seen *inside the container* (`/data`, `/logs`,
-# `/app/data`). Sourcing .env and then running the backend on the host points
-# it at directories that do not exist there — or, worse, at real ones. The
-# mapping below is the same one docker-compose.yml mounts, so the dev servers
-# and the container read and write exactly the same files.
-#
-# Applied per-command rather than exported, because `docker compose` reads the
-# shell environment in preference to .env: exporting host paths globally would
-# hand them to the container, which is precisely backwards.
+# The five stores live under the repo: data/ (sensor, chat, documents, chroma),
+# logs/ (audit) and backend/data/ (prefs). The paths are set here, absolute and
+# per-command, rather than read from .env, so every entry point — the servers,
+# the migration CLI, reset.sh — resolves the same files whatever the working
+# directory, and an old .env still holding container paths (`/data`, `/logs`)
+# cannot point the app at directories that do not exist on this machine.
 # host_ollama_url — where Ollama is, as seen *from the host*.
 #
-# .env holds the container's view, `host.docker.internal`, which does not
-# resolve outside Docker. Left as-is the backend pays a full DNS timeout on
+# An older .env holds the container's view, `host.docker.internal`, which does
+# not resolve outside Docker. Left as-is the backend pays a full DNS timeout on
 # every call before falling back. Unset stays unset rather than becoming the
 # empty string: the backend reads that literally and ends up with no candidate
 # URL at all, which is worse than the default it would otherwise use.
@@ -205,74 +211,13 @@ host_ollama_url() {
   esac
 }
 
-# host_chroma_url — where ChromaDB is, as seen *from the host*.
+# ensure_embedded_chroma — make sure the venv runs ChromaDB in-process.
 #
-# Same problem as Ollama above and the same cure. .env holds the container's
-# view, `http://chromadb:8000`, which is a compose service name: it does not
-# resolve on the host, so the dev servers report the vector store as
-# unreachable rather than as "not running". docker-compose.yml publishes the
-# service on 127.0.0.1:${CHROMA_PORT:-8001}, and that is the host's address for
-# the same container.
-#
-# Unset stays unset — but note that embedded mode needs the full `chromadb`
-# package, and requirements.txt ships `chromadb-client`, which is HTTP-only. So
-# on a default install an unset URL is not a working fallback; it is no vector
-# store at all. `ensure_chroma` below is what makes the URL true.
-host_chroma_url() {
-  case "${CHROMA_URL:-}" in
-    "") return 0 ;;
-    "http://chromadb:8000") printf 'http://127.0.0.1:%s' "${CHROMA_PORT:-8001}" ;;
-    *) printf '%s' "$CHROMA_URL" ;;
-  esac
-}
-
-# ensure_chroma — start just the vector store, for `dev --host`.
-#
-# `dev --host` deliberately runs the app without Docker, but ChromaDB is a
-# server the app talks to rather than part of the app, and there is no host
-# equivalent
-# short of installing the full package. So the one container starts, and the
-# dev servers point at its published port.
-#
-# Not fatal when it cannot start: Track 2 (GraphRAG), the chat path, the Forge
-# and every SQLite store work without a vector store, and refusing to run the
-# whole stack because the RAG half is unavailable would be the wrong trade. It
-# says so and carries on.
-ensure_chroma() {
-  [ -n "${CHROMA_URL:-}" ] || { info "CHROMA_URL is unset — skipping the vector store."; return 0; }
-  local url; url="$(host_chroma_url)"
-  if curl -fsS --max-time 2 "${url}/api/v2/heartbeat" >/dev/null 2>&1; then
-    ok "chromadb  ${url}  (already running)"
-    return 0
-  fi
-  if ! have docker; then
-    warn "docker not found — the vector store will be unreachable at ${url}."
-    warn "Track 1 (vector RAG) needs it; Track 2 (GraphRAG) does not."
-    return 0
-  fi
-  info "starting chromadb"
-  if compose up -d chromadb >/dev/null 2>&1; then
-    for _ in $(seq 1 30); do
-      if curl -fsS --max-time 2 "${url}/api/v2/heartbeat" >/dev/null 2>&1; then
-        ok "chromadb  ${url}"
-        return 0
-      fi
-      sleep 1
-    done
-    warn "chromadb started but did not answer at ${url} within 30s."
-  else
-    warn "could not start chromadb — the vector store will be unreachable."
-  fi
-}
-
-# ensure_embedded_chroma — make the venv able to run ChromaDB in-process.
-#
-# `./daedalus.sh local` runs without Docker, so there is no chromadb container
-# to talk to: the vector store runs embedded, which needs the full `chromadb`
-# package (backend/requirements-local.txt). `chromadb-client` — what
-# requirements.txt installs, and what sync.sh reinstalls after a pull — puts
-# files under the same `chromadb` module, so it is removed first, and if it was
-# found alongside the full package the full package is reinstalled over it.
+# The vector store is embedded in the API (data/chroma), which needs the full
+# `chromadb` package. Venvs created before the move off Docker have
+# `chromadb-client` instead — HTTP-only, and it installs files under the same
+# `chromadb` module — so it is removed, and if it was found alongside the full
+# package the full package is reinstalled over the files it shared.
 # Cheap when nothing needs doing: two `pip show` calls.
 ensure_embedded_chroma() {
   local pip="backend/.venv/bin/pip"
@@ -284,26 +229,25 @@ ensure_embedded_chroma() {
     return 0
   fi
   info "installing the embedded vector store (full chromadb — one-time, a few minutes)"
-  [ "$had_client" = "1" ] && "$pip" uninstall --quiet -y chromadb-client
-  "$pip" install --quiet -r backend/requirements-local.txt \
+  if [ "$had_client" = "1" ]; then "$pip" uninstall --quiet -y chromadb-client; fi
+  "$pip" install --quiet "chromadb>=1.5,<2" \
     || fail "could not install chromadb — see the pip output above"
   # The client's uninstall removed files the full package also owns.
   if [ "$had_client" = "1" ] && [ "$had_full" = "1" ]; then
-    "$pip" install --quiet --force-reinstall --no-deps -r backend/requirements-local.txt
+    "$pip" install --quiet --force-reinstall --no-deps "chromadb>=1.5,<2"
   fi
   ok "chromadb  embedded  (data/chroma)"
 }
 
 # host_searxng_url — where SearXNG is, as seen *from the host*.
 #
-# Third instance of the same problem as Ollama and Chroma: .env holds the
-# container's view, `http://searxng:8080`, which is a compose service name and
-# does not resolve on the host. docker-compose.yml publishes it on
-# 127.0.0.1:${SEARXNG_PORT:-8081}.
+# An older .env holds the container network's view, `http://searxng:8080`,
+# which is a compose service name and does not resolve on the host.
+# docker-compose.yml publishes it on 127.0.0.1:${SEARXNG_PORT:-8081}.
 #
 # `ensure_searxng` below starts it, but only when it has been selected as the
 # search provider — see the note there for why that is different from starting
-# one every time somebody runs the dev servers.
+# one every time somebody runs the servers.
 host_searxng_url() {
   case "${SEARXNG_URL:-}" in
     "") return 0 ;;
@@ -314,8 +258,8 @@ host_searxng_url() {
 
 # ensure_searxng — start the search container, but only if it is the choice.
 #
-# There deliberately was no equivalent of `ensure_chroma`, on the reasoning that
-# a project whose first rule is "the runtime is offline" should not quietly
+# There deliberately was no auto-start at first, on the reasoning that a
+# project whose first rule is "the runtime is offline" should not quietly
 # start a search engine. That reasoning still holds for *quietly*. It stops
 # holding once an operator has gone into Settings and selected SearXNG as their
 # provider: at that point refusing to start it is ignoring a stated choice, and
@@ -336,8 +280,20 @@ ensure_searxng() {
   printf '%s' "$state" | python3 -c 'import json,sys; c=json.load(sys.stdin); sys.exit(0 if c.get("provider") == "searxng" and not c.get("ready") else 1)' 2>/dev/null || return 0
 
   info "SearXNG is the selected search provider but is not answering — starting it"
-  if compose --profile with-search up -d searxng >/dev/null 2>&1; then
+  start_searxng
+}
+
+# start_searxng — the one container Daedalus still has. Without Docker this
+# warns and returns: web search is a setup surface, not the answer path.
+start_searxng() {
+  if ! have_compose; then
+    warn "SearXNG needs Docker, which is not available — web search will be unavailable."
+    warn "Everything else works: it is a setup surface, not the answer path."
+    return 0
+  fi
+  if compose up -d searxng >/dev/null 2>&1; then
     local url; url="$(host_searxng_url)"
+    [ -n "$url" ] || url="http://127.0.0.1:${SEARXNG_PORT:-8081}"
     for _ in $(seq 1 30); do
       if curl -fsS --max-time 2 "${url}/" >/dev/null 2>&1; then
         ok "searxng   ${url}"
@@ -352,11 +308,15 @@ ensure_searxng() {
   fi
 }
 
+stop_searxng() {
+  if ! have_compose; then ok "nothing running in Docker"; return 0; fi
+  compose down --remove-orphans
+}
+
 host_py() {
   local root="$PWD"
   (cd backend && env \
       ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
-      ${CHROMA_URL:+CHROMA_URL="$(host_chroma_url)"} \
       ${SEARXNG_URL:+SEARXNG_URL="$(host_searxng_url)"} \
       DAEDALUS_DATA_DIR="$root/data" \
       DAEDALUS_LOG_DIR="$root/logs" \
@@ -370,7 +330,6 @@ host_uvicorn() {
   local root="$PWD"
   env \
     ${OLLAMA_BASE_URL:+OLLAMA_BASE_URL="$(host_ollama_url)"} \
-    ${CHROMA_URL:+CHROMA_URL="$(host_chroma_url)"} \
     ${SEARXNG_URL:+SEARXNG_URL="$(host_searxng_url)"} \
     DAEDALUS_DATA_DIR="$root/data" \
     DAEDALUS_LOG_DIR="$root/logs" \
@@ -427,8 +386,7 @@ check_ollama() {
         return 0
       fi
     fi
-    info "Could not start it automatically. Start it with 'ollama serve' in another terminal,"
-    info "or use '--with-ollama' to run it via Docker."
+    info "Could not start it automatically. Start it with 'ollama serve' in another terminal."
   else
     info "Ollama is not installed on your machine."
     if [ -t 0 ]; then
@@ -467,52 +425,4 @@ check_ollama() {
       info "Install it from https://ollama.com/download to enable model inference."
     fi
   fi
-}
-
-# stack_running — true when the app container is up.
-stack_running() {
-  compose ps --status running 2>/dev/null | grep -q daedalus
-}
-
-# Touched after every successful build, and compared against source mtimes.
-BUILD_STAMP=".daedalus-build-stamp"
-
-mark_build() { touch "$BUILD_STAMP" 2>/dev/null || true; }
-
-# image_is_stale — true when source files are newer than the last build.
-#
-# The image bakes in the backend source and the built frontend, so a running
-# stack serves whatever it was built with. This answers "would rebuilding
-# actually change anything?" — far more useful than warning on every run just
-# because the stack happens to be up.
-#
-# The reference time is the *later* of the image's creation date and our own
-# build stamp, and the stamp is what makes this correct. Docker keys its COPY
-# layers on file **content**, so a rebuild after a whitespace-only change is a
-# full cache hit: it returns the existing image, with its original Created
-# date, and an mtime comparison alone would then report "stale" forever.
-# Touching the stamp on a successful build records "you have rebuilt since
-# these edits", which is the question actually being asked.
-#
-# Unknown (no image, no docker, unparseable date) is reported as *not* stale:
-# a check that cannot tell should stay quiet rather than cry wolf.
-image_is_stale() {
-  have docker || return 1
-
-  local created epoch stamp newest
-  created=$(docker image inspect daedalus:latest --format '{{.Created}}' 2>/dev/null) || return 1
-  [ -n "$created" ] || return 1
-
-  epoch=$(date -d "$created" +%s 2>/dev/null) || return 1
-
-  if [ -f "$BUILD_STAMP" ]; then
-    stamp=$(stat -c %Y "$BUILD_STAMP" 2>/dev/null || echo 0)
-    [ "$stamp" -gt "$epoch" ] && epoch="$stamp"
-  fi
-
-  # Newest mtime across everything the Dockerfile copies in.
-  newest=$(find backend/app frontend/src frontend/package.json frontend/index.html \
-             backend/requirements.txt -type f -newermt "@$epoch" -print -quit 2>/dev/null)
-
-  [ -n "$newest" ]
 }

@@ -142,10 +142,11 @@ app.include_router(background_jobs.router)
 
 
 # ── Serve the built dashboard ────────────────────────────────────────────────
-# In the container the Vite bundle is copied to DAEDALUS_STATIC_DIR, and this
-# one process serves both the API and the UI — same origin, one port, no CORS.
-# In development the directory doesn't exist and this block is skipped, because
-# the Vite dev server owns the UI and proxies /api back here.
+# `./daedalus.sh start` builds the Vite bundle into frontend/dist and points
+# DAEDALUS_STATIC_DIR at it, and this one process serves both the API and the
+# UI — same origin, one port, no CORS. Under `dev` the directory doesn't exist
+# and this block is skipped, because the Vite dev server owns the UI and
+# proxies /api back here.
 _static_dir = Path(os.environ.get("DAEDALUS_STATIC_DIR", "static"))
 
 if _static_dir.is_dir():
