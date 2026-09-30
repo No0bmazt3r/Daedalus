@@ -253,9 +253,49 @@ export interface RagConfig {
   frozen: boolean;
   note: string;
   tracks: TrackStatus[];
+  /** Track 1's cross-encoder stage — frozen with the track. */
+  rerank: RerankSettings;
+  rerankers: RerankerModel[];
+  rerank_runtime: { available: boolean; detail: string };
+}
+
+export interface RerankSettings {
+  enabled: boolean;
+  model: string;
+  /** How many chunks Chroma returns for the cross-encoder to choose top-k from. */
+  candidates: number;
+}
+
+export interface RerankerModel {
+  id: string;
+  label: string;
+  repo: string;
+  revision: string;
+  languages: string;
+  size_bytes: number;
+  note: string;
+  installed: boolean;
+  downloaded_at: string | null;
+  download: {
+    status: 'downloading' | 'done' | 'error';
+    bytes: number;
+    total: number;
+    error: string | null;
+  } | null;
 }
 
 export const fetchRagConfig = () => request<RagConfig>('/api/rag/config');
+
+export const setRerank = (rerank: Partial<RerankSettings>) =>
+  request<RagConfig>('/api/rag/config', { method: 'PUT', body: JSON.stringify({ rerank }) });
+
+export const downloadReranker = (id: string) =>
+  request<{ ok: boolean; started: boolean }>(
+    `/api/rag/rerankers/${encodeURIComponent(id)}/download`, { method: 'POST' });
+
+export const deleteReranker = (id: string) =>
+  request<{ ok: boolean; deleted: boolean }>(
+    `/api/rag/rerankers/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 /**
  * Fired after the track actually changes, so anything showing it can re-read.

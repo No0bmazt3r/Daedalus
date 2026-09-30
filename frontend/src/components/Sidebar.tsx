@@ -3,7 +3,7 @@ import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { Collapse } from './ui/collapse'
-import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
 import { Skeleton } from './ui/skeleton'
 import {
   DropdownMenu,
@@ -36,12 +36,15 @@ function SessionRow({
   active,
   onSelect,
   onRename,
+  onRetitle,
   onDelete,
 }: {
   session: ChatSession
   active: boolean
   onSelect: () => void
   onRename: (title: string) => void
+  /** Ask the background title job to name it from the conversation. */
+  onRetitle: () => void
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -97,6 +100,13 @@ function SessionRow({
         <DropdownMenuContent align="end" className="w-40 theme-card theme-border theme-text border p-1">
           <DropdownMenuItem onClick={() => setEditing(true)} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm">
             <Pencil size={14} className="mr-2 theme-text-muted" /> Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onRetitle}
+            title="Name this chat from what it is about — a model writes it in the background"
+            className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm"
+          >
+            <Sparkles size={14} className="mr-2 theme-text-muted" /> Auto-name
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onDelete} className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm status-bad">
             <Trash2 size={14} className="mr-2" /> Delete
@@ -252,7 +262,7 @@ function DataStores({
 }
 
 export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenStore, activeStore }: SidebarProps) {
-  const { sessions, activeSessionId, status, newChat, selectSession, rename, remove } = useSessions()
+  const { sessions, activeSessionId, status, newChat, selectSession, rename, retitle, remove } = useSessions()
   const { isIncognito } = useSettings()
   const { show } = useUiPrefs()
   const [filter, setFilter] = useState('')
@@ -410,6 +420,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
                 active={session.session_id === activeSessionId}
                 onSelect={() => selectSession(session.session_id)}
                 onRename={(title) => void rename(session.session_id, title)}
+                onRetitle={() => void retitle(session.session_id)}
                 onDelete={() => void remove(session.session_id)}
               />
             ))}

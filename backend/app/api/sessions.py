@@ -30,7 +30,7 @@ from ..models.chat import (
     SessionOut,
     SessionUpdate,
 )
-from ..services import chat_service
+from ..services import background_models, chat_service, session_titles
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -148,3 +148,24 @@ def add_message(session_id: str, body: MessageCreate) -> dict:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     except sqlite_util.DatabaseUnavailableError as exc:
         raise _unavailable(exc) from exc
+
+
+@router.post("/{session_id}/title", status_code=202)
+def regenerate_title(session_id: str) -> dict:
+    """Ask the title job to name this chat again, now.
+
+    Accepted, not done: the job runs on its own thread, and the sidebar hears
+    about the new title through the `sessions` live event. Reclaims a title the
+    operator typed — asking for a new one is changing your mind about it.
+    """
+    try:
+        chat_service.get_session(session_id)
+    except chat_store.SessionNotFoundError as exc:
+        raise _not_found(session_id) from exc
+    if background_models.read()["title"]["mode"] != "model":
+        raise HTTPException(
+            status_code=409,
+            detail="chat titles are set to use the first message — change that in "
+                   "Settings → Background Jobs to have a model name chats",
+        )
+    return {"ok": True, "scheduled": session_titles.schedule(session_id, force=True)}

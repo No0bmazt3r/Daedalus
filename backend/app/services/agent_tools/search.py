@@ -54,14 +54,20 @@ SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "any")
     ),
 )
 def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
-    """Track 1 retrieval.
+    """Track 1 retrieval: nearest chunks by cosine, then re-ranked by a cross-encoder.
 
     Reads through the guarded `get_collection()`, so an index built by a
     different embedding model raises rather than returning results ranked by
     comparing two vector spaces. For a project whose claim is groundedness, a
     confident wrong ranking is the worst available outcome.
+
+    With re-ranking on (`rag_config`, the default), Chroma is asked for a wider
+    pool — `candidates`, at least `top_k` — and `reranker` keeps the `top_k`
+    the cross-encoder scores highest. With it off or unable to run, Chroma's
+    top `top_k` stand, and the detail says which happened and why: an answer
+    built on un-reranked chunks is fine to give, but not to give silently.
     """
-    from .. import embedding_models, ingestion  # noqa: PLC0415 — avoids an import cycle at boot
+    from .. import embedding_models, ingestion, rag_config, reranker  # noqa: PLC0415 — avoids an import cycle at boot
 
     state = embedding_models.index_state()
     if state["index_state"] != "current":
@@ -100,7 +106,9 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
             "detail": f"the query could not be embedded, so the corpus was not searched: {exc}",
         }
 
-    found = collection.query(query_embeddings=[vector], n_results=top_k, where=where)
+    settings = rag_config.rerank_settings()
+    pool = max(top_k, settings["candidates"]) if settings["enabled"] else top_k
+    found = collection.query(query_embeddings=[vector], n_results=pool, where=where)
 
     documents = (found.get("documents") or [[]])[0]
     metadatas = (found.get("metadatas") or [[]])[0]
@@ -122,14 +130,37 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
             "source_type": (meta or {}).get("source_type"),
         })
 
+    rerank: dict[str, Any] = {"enabled": settings["enabled"], "model": None,
+                              "candidates": len(chunks), "latency_ms": None, "reason": None}
+    if settings["enabled"] and chunks:
+        try:
+            chunks, rerank["latency_ms"] = reranker.rerank(
+                query, chunks, model_id=settings["model"], keep=top_k)
+            rerank["model"] = settings["model"]
+        except reranker.RerankUnavailable as exc:
+            chunks = chunks[:top_k]
+            rerank["reason"] = str(exc)
+    else:
+        chunks = chunks[:top_k]
+        if not settings["enabled"]:
+            rerank["reason"] = "re-ranking is off"
+
+    if not chunks:
+        detail = "no passage matched"
+    elif rerank["model"]:
+        detail = (f"{len(chunks)} passages from {state['collection']}, re-ranked from "
+                  f"{rerank['candidates']} by {rerank['model']}")
+    else:
+        detail = f"{len(chunks)} passages from {state['collection']} (vector order: {rerank['reason']})"
+
     return {
         # `collection` travels with the result so the dispatch boundary can
         # record *which index* answered without re-deriving it — two callers
         # resolving the collection separately is how a log ends up naming one
         # index while the query read another.
-        "data": {"chunks": chunks, "track": "vector", "collection": state["collection"]},
-        "detail": f"{len(chunks)} passages from {state['collection']}"
-                  if chunks else "no passage matched",
+        "data": {"chunks": chunks, "track": "vector", "collection": state["collection"],
+                 "rerank": rerank},
+        "detail": detail,
     }
 
 

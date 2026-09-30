@@ -24,6 +24,7 @@ import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
 import { IntegrationsPanel } from './settings/IntegrationsPanel'
 import { SystemPanel } from './settings/SystemPanel'
+import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
 import { AppearancePanel } from './settings/AppearancePanel'
 import { ShortcutsPanel } from './settings/ShortcutsPanel'
 import { InstalledModelsView } from './forge/InstalledModelsView'
@@ -212,6 +213,8 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
             {activeTab === 'added-models' && <InstalledModelsView isPeek={isPeek} />}
 
             {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
+
+            {activeTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
 
             {activeTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
             {activeTab === 'knowledge' && <KnowledgeBasePanel />}

@@ -14,12 +14,17 @@ import {
   getMessages,
   listSessions,
   renameSession as apiRenameSession,
+  regenerateTitle,
   SessionApiError,
   type ChatMessage,
   type ChatSession,
 } from '../lib/sessionsClient';
 import { useSettings } from './SettingsContext';
-import { sendChat, checkChatStatus, asEvidence, type StoredEvidence } from '../lib/chatClient';
+import {
+  sendChat, checkChatStatus, asEvidence, fetchRatings, rateAnswer,
+  type Rating, type StoredEvidence,
+} from '../lib/chatClient';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 
 /**
  * Conversation state for the whole app.
@@ -47,6 +52,8 @@ export interface DisplayMessage {
   modelTag?: string;
   /** The evidence pack the orchestrator stored with an assistant turn — its citations. */
   evidence?: StoredEvidence;
+  /** The turn's audit id — what a rating is recorded against. Assistant turns only. */
+  queryId?: string;
 }
 
 export type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -64,8 +71,13 @@ interface SessionsContextValue {
   /** Set when the server answered with a different model than was asked for. */
   modelNotice: string | null;
   rename: (id: string, title: string) => Promise<void>;
+  /** Have the background title job name this chat now. */
+  retitle: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
+  /** Thumbs on the open chat's answers, by query id. */
+  ratings: Record<string, number>;
+  rate: (queryId: string, rating: Rating) => Promise<void>;
 }
 
 const SessionsContext = createContext<SessionsContextValue | null>(null);
@@ -87,6 +99,7 @@ function toDisplay(message: ChatMessage): DisplayMessage {
     persisted: true,
     modelTag: message.model_tag,
     evidence: asEvidence(message.evidence),
+    queryId: message.role === 'assistant' ? message.query_id ?? undefined : undefined,
   };
 }
 
@@ -104,6 +117,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [modelNotice, setModelNotice] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   // Guards against a slow transcript fetch landing after the user has already
   // clicked a different chat, which would show the wrong conversation.
@@ -137,6 +151,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // Titles are written by a background job after the answer, so the refresh
+  // that follows a send usually lands before the new title does. The backend
+  // says when one changes.
+  useLiveRefresh(['sessions'], () => void refresh());
+
   const newChat = useCallback(() => {
     loadToken.current += 1;
     stopPolling();
@@ -144,6 +163,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     setActiveSessionId(null);
     setActiveEphemeral(null);
     setMessages([]);
+    setRatings({});
     setError(null);
   }, [stopPolling]);
 
@@ -171,6 +191,13 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         if (loadToken.current !== token) return; // superseded by a newer click
         setMessages(loaded.map(toDisplay));
         setStatus('ready');
+        setRatings({});
+        // Not worth failing the load over: without them the thumbs start blank.
+        fetchRatings(id)
+          .then((r) => {
+            if (loadToken.current === token) setRatings(r);
+          })
+          .catch(() => undefined);
 
         // The generation outlives the request that started it, so reopening a
         // chat mid-answer has to pick it back up rather than show a transcript
@@ -336,6 +363,41 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const retitle = useCallback(
+    async (id: string) => {
+      try {
+        await regenerateTitle(id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'could not rename that chat');
+      }
+    },
+    [],
+  );
+
+  const rate = useCallback(
+    async (queryId: string, rating: Rating) => {
+      const previous = ratings[queryId];
+      setRatings((prev) => {
+        const next = { ...prev };
+        if (rating) next[queryId] = rating;
+        else delete next[queryId];
+        return next;
+      });
+      try {
+        await rateAnswer(queryId, rating, activeSessionId);
+      } catch (err) {
+        setRatings((prev) => {
+          const next = { ...prev };
+          if (previous) next[queryId] = previous;
+          else delete next[queryId];
+          return next;
+        });
+        setError(err instanceof Error ? err.message : 'could not record that rating');
+      }
+    },
+    [activeSessionId, ratings],
+  );
+
   const remove = useCallback(
     async (id: string) => {
       setSessions((prev) => prev.filter((s) => s.session_id !== id));
@@ -364,8 +426,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       sendMessage,
       modelNotice,
       rename,
+      retitle,
       remove,
       refresh,
+      ratings,
+      rate,
     }),
     [
       sessions,
@@ -380,8 +445,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       selectSession,
       sendMessage,
       rename,
+      retitle,
       remove,
       refresh,
+      ratings,
+      rate,
     ],
   );
 

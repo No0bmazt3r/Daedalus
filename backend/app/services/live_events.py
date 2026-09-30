@@ -17,6 +17,7 @@ view per change, on a machine with one user.
 | `models` | the set of models Ollama has changed — pulled, deleted, in the app or not |
 | `embeddings` | the selected embedding model, or a verified vector width, changed |
 | `endpoints` | a cloud endpoint was added, edited, tested or removed |
+| `sessions` | a background job renamed a chat — the sidebar re-reads its list |
 
 ## Two sources, one topic
 
@@ -50,7 +51,7 @@ from . import ollama_client
 
 log = logging.getLogger("daedalus.events")
 
-TOPICS = ("models", "embeddings", "endpoints")
+TOPICS = ("models", "embeddings", "endpoints", "sessions")
 
 # How often the watcher asks Ollama, while somebody is listening. Five seconds
 # is quick enough that a terminal `ollama rm` shows up before anyone goes

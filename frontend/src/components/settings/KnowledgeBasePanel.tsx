@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, HelpCircle, ArrowUpRight,
+  Download, Trash2, Loader2, ListOrdered,
 } from 'lucide-react'
 import {
-  fetchRagConfig, setRagTrack, type RagConfig, type RagTrack, type TrackStatus,
+  deleteReranker, downloadReranker, fetchRagConfig, setRagTrack, setRerank,
+  type RagConfig, type RagTrack, type RerankerModel, type RerankSettings, type TrackStatus,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
+import { Switch } from '../ui/switch'
+import { ThemeSelect } from '../ui/theme-select'
 import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 
 /**
@@ -176,6 +180,10 @@ export function KnowledgeBasePanel() {
         in Labyrinth Blueprints → Replay.
       </p>
 
+      <div className="border-t theme-border pt-4">
+        <RerankSection config={config} onChange={setConfig} />
+      </div>
+
       {/* The index, not the model. Choosing and pulling an embedding model is
           the Forge's job — it is a model, and the Forge is the model console.
           What belongs here is the corpus fact: whether the vectors currently
@@ -253,6 +261,222 @@ function IndexSummary() {
       <p className="flex items-center gap-1 text-[11px] theme-text-muted">
         <ArrowUpRight size={11} />
         Pull an embedding model in The Forge → Embedding models; choose which one builds the index in The Forge → Installed.
+      </p>
+    </div>
+  )
+}
+
+const CANDIDATE_OPTIONS = [10, 20, 30, 50].map((n) => ({ value: String(n), label: `${n} candidates` }))
+
+function mb(bytes: number) {
+  return `${Math.round(bytes / 1_000_000)} MB`
+}
+
+/**
+ * Track 1's second stage: a cross-encoder re-scores the chunks Chroma returns.
+ *
+ * Vector search compares two embeddings made separately — the question's and
+ * the chunk's — so it confuses "about the same topic" with "answers this". A
+ * cross-encoder reads the pair together and scores relevance directly: too
+ * slow for a whole corpus, fast enough for twenty candidates.
+ *
+ * Frozen with the track, because it changes what Track 1 retrieves: switching
+ * it on after seeing the results is the tuning §5 forbids.
+ */
+function RerankSection({
+  config,
+  onChange,
+}: {
+  config: RagConfig
+  onChange: (config: RagConfig) => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const rerank = config.rerank
+  const selected = config.rerankers.find((m) => m.id === rerank.model)
+  const downloading = config.rerankers.some((m) => m.download?.status === 'downloading')
+  const locked = config.frozen || busy
+
+  // While a download runs, re-read until it lands. The backend does the work
+  // on its own thread; this only watches.
+  const onChangeRef = useRef(onChange)
+  useEffect(() => {
+    onChangeRef.current = onChange
+  })
+  useEffect(() => {
+    if (!downloading) return
+    const timer = window.setInterval(() => {
+      fetchRagConfig().then((c) => onChangeRef.current(c)).catch(() => undefined)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [downloading])
+
+  const save = async (patch: Partial<RerankSettings>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      onChange(await setRerank(patch))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const act = async (fn: () => Promise<unknown>) => {
+    setError(null)
+    try {
+      await fn()
+      onChange(await fetchRagConfig())
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <header className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="flex items-center gap-1.5 text-sm theme-text">
+            <ListOrdered size={14} className="theme-text-muted" /> Re-ranking
+            <span className="rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">Track 1</span>
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed theme-text-muted">
+            Vector search fetches the {rerank.candidates} nearest chunks; a cross-encoder then reads the
+            question and each chunk together and keeps the ones that actually answer it. Runs on this
+            machine's CPU, typically well under a second.
+          </p>
+        </div>
+        <Switch
+          checked={rerank.enabled}
+          onChange={(next) => void save({ enabled: next })}
+          disabled={locked}
+          label="Re-ranking on or off"
+        />
+      </header>
+
+      {!config.rerank_runtime.available && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
+          <p className="text-[11px] leading-relaxed theme-text">{config.rerank_runtime.detail}</p>
+        </div>
+      )}
+
+      {rerank.enabled && selected && !selected.installed && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
+          <p className="text-[11px] leading-relaxed theme-text">
+            {selected.label} is selected but not downloaded, so Track 1 is answering in plain vector
+            order. Download it below.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {config.rerankers.map((m) => (
+          <RerankerCard
+            key={m.id}
+            model={m}
+            selected={m.id === rerank.model}
+            disabled={locked || !rerank.enabled}
+            onSelect={() => void save({ model: m.id })}
+            onDownload={() => void act(() => downloadReranker(m.id))}
+            onDelete={() => void act(() => deleteReranker(m.id))}
+          />
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <ThemeSelect
+          value={String(rerank.candidates)}
+          onChange={(v) => void save({ candidates: Number(v) })}
+          options={
+            CANDIDATE_OPTIONS.some((o) => o.value === String(rerank.candidates))
+              ? CANDIDATE_OPTIONS
+              : [...CANDIDATE_OPTIONS, { value: String(rerank.candidates), label: `${rerank.candidates} candidates` }]
+          }
+          ariaLabel="Candidate pool size"
+          size="sm"
+          className={`w-44 ${locked || !rerank.enabled ? 'pointer-events-none opacity-50' : ''}`}
+        />
+        <p className="text-[11px] leading-relaxed theme-text-muted">
+          More candidates can recover a chunk vector search ranked low, at a cost in latency.
+        </p>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5 text-[11px] theme-text">
+          <AlertCircle size={13} className="shrink-0 text-rose-400" /> {error}
+        </div>
+      )}
+
+      <p className="text-[11px] leading-relaxed theme-text-muted">
+        Recorded per query in <code className="theme-text">rag_logs.rerank_model</code> and{' '}
+        <code className="theme-text">rerank_scores</code>. Weights are pinned to a Hugging Face commit and
+        stored under <code className="theme-text">data/models/rerankers</code>; after the download nothing
+        here uses the network.
+      </p>
+    </div>
+  )
+}
+
+function RerankerCard({
+  model, selected, disabled, onSelect, onDownload, onDelete,
+}: {
+  model: RerankerModel
+  selected: boolean
+  disabled: boolean
+  onSelect: () => void
+  onDownload: () => void
+  onDelete: () => void
+}) {
+  const job = model.download
+  const pct = job && job.total ? Math.min(100, Math.round((job.bytes / job.total) * 100)) : 0
+  return (
+    <div
+      className={`rounded-lg border p-3 transition-colors ${
+        selected ? 'theme-accent-border theme-surface-strong' : 'theme-border'
+      } ${disabled ? 'opacity-70' : ''}`}
+    >
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSelect}
+          disabled={disabled || selected}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
+        >
+          <span className="truncate text-sm theme-text">{model.label}</span>
+          <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">
+            {model.languages}
+          </span>
+          {selected && <Check size={14} className="ml-auto shrink-0 theme-accent" />}
+        </button>
+        {job?.status === 'downloading' ? (
+          <span className="flex shrink-0 items-center gap-1 text-[11px] theme-text-muted">
+            <Loader2 size={12} className="animate-spin" /> {pct}%
+          </span>
+        ) : model.installed ? (
+          <button
+            onClick={onDelete}
+            className="shrink-0 rounded p-1 theme-text-muted hover:theme-text"
+            title="Delete the downloaded weights"
+            aria-label={`Delete ${model.label}`}
+          >
+            <Trash2 size={13} />
+          </button>
+        ) : (
+          <button
+            onClick={onDownload}
+            className="flex shrink-0 items-center gap-1 rounded border theme-border px-2 py-1 text-[11px] theme-text hover:theme-surface"
+          >
+            <Download size={12} /> {mb(model.size_bytes)}
+          </button>
+        )}
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed theme-text-muted">{model.note}</p>
+      <p className="mt-1 text-[10px] theme-text-muted">
+        <code className="theme-text">{model.repo}</code> @ {model.revision.slice(0, 7)}
+        {model.installed ? ' · downloaded' : ' · not downloaded'}
+        {job?.status === 'error' && <span className="text-rose-400"> · download failed: {job.error}</span>}
       </p>
     </div>
   )

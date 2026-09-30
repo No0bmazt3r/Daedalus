@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud } from 'lucide-react'
+import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -48,7 +48,17 @@ function TypewriterText({ text }: { text: string }) {
   )
 }
 
-function MessageActions({ text, modelTag, fromCloud }: { text: string, modelTag?: string, fromCloud?: boolean }) {
+function MessageActions({
+  text, modelTag, fromCloud, rating, onRate,
+}: {
+  text: string
+  modelTag?: string
+  fromCloud?: boolean
+  /** +1, -1, or undefined when unrated. */
+  rating?: number
+  /** Absent when the turn has no query id to rate against. */
+  onRate?: (rating: -1 | 0 | 1) => void
+}) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -66,6 +76,32 @@ function MessageActions({ text, modelTag, fromCloud }: { text: string, modelTag?
       >
         {copied ? <Check size={14} /> : <Copy size={14} />}
       </button>
+      {/* Recorded in feedback_logs against the turn's query_id — the operator
+          side of the evaluation. Clicking the lit thumb again withdraws it. */}
+      {onRate && (
+        <>
+          <button
+            onClick={() => onRate(rating === 1 ? 0 : 1)}
+            aria-pressed={rating === 1}
+            className={`p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors ${
+              rating === 1 ? 'theme-accent' : 'theme-text-muted hover:theme-text'
+            }`}
+            title={rating === 1 ? 'Rated helpful — click to withdraw' : 'Helpful and correct'}
+          >
+            <ThumbsUp size={14} fill={rating === 1 ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            onClick={() => onRate(rating === -1 ? 0 : -1)}
+            aria-pressed={rating === -1}
+            className={`p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors ${
+              rating === -1 ? 'status-bad' : 'theme-text-muted hover:theme-text'
+            }`}
+            title={rating === -1 ? 'Rated unhelpful — click to withdraw' : 'Unhelpful or wrong'}
+          >
+            <ThumbsDown size={14} fill={rating === -1 ? 'currentColor' : 'none'} />
+          </button>
+        </>
+      )}
       {/* Not wired up yet. Disabled rather than inert: a button that quietly
           does nothing reads as a bug, and these are the shape the branching
           work in MODULES.md will fill in. */}
@@ -314,7 +350,7 @@ export function ChatInterface() {
   // here, to mark which transcript turns came from off the machine.
   const { isIncognito, setIsIncognito, referenceModels, noModel, showNoModelPrompt } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
-  const { messages, sendMessage, sending, error, modelNotice } = useSessions()
+  const { messages, sendMessage, sending, error, modelNotice, ratings, rate } = useSessions()
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { show } = useUiPrefs()
@@ -491,6 +527,8 @@ export function ChatInterface() {
                         // the turn: a tag's locality is a property of the
                         // machine, and it can change under a saved transcript.
                         fromCloud={referenceModels.some((m) => m.name === msg.modelTag)}
+                        rating={msg.queryId ? ratings[msg.queryId] : undefined}
+                        onRate={msg.queryId ? (r) => void rate(msg.queryId!, r) : undefined}
                       />
                     )}
 

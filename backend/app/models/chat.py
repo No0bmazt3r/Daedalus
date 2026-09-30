@@ -93,6 +93,8 @@ class SessionOut(BaseModel):
     ephemeral: bool
     archived_at: str | None = None
     message_count: int | None = None
+    #: 'first_message' | 'model' | 'user', or None — see chat migration 004.
+    title_source: str | None = None
 
 
 class SessionDetail(SessionOut):

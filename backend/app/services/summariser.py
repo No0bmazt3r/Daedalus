@@ -27,9 +27,11 @@ history, so a number that somehow survived would be flagged as stale.
 
 ## Always local, and a floor when there is no model
 
-It uses `query_pipeline.local_model`, the committed local model — never a
-per-turn cloud override, which the operator chose for an *answer* and not for
-sending the whole transcript off the machine. With no local model, or on any
+It uses the model Settings → Background Jobs names for it (`background_models`),
+which is `auto` — the committed local chat model — unless changed, and is only
+ever a model on this machine: never a per-turn cloud override, which the
+operator chose for an *answer* and not for sending the whole transcript off
+the machine. With no local model, or on any
 failure, it falls back to a deterministic summary: the operator's own earlier
 questions, in order. That loses the assistant's side but keeps every referent,
 and it is never wrong about what was asked.
@@ -46,7 +48,7 @@ import uuid
 from typing import Any
 
 from ..db import audit_store, chat_store
-from . import chat_service
+from . import background_models, chat_service
 from .orchestration import numbers
 from .query_pipeline import local_model
 
@@ -85,6 +87,7 @@ def schedule(session_id: str) -> bool:
             summarise(session_id)
         except Exception as exc:  # noqa: BLE001 — a background pass must never surface
             log.warning("summarising %s failed: %s", session_id, exc)
+            audit_store.log_error("summariser", exc, level="warning")
         finally:
             with _lock:
                 _running.discard(session_id)
@@ -132,7 +135,10 @@ def summarise(session_id: str) -> dict[str, Any] | None:
         f"Previous summary: {window.summary or '(none)'}\n\n"
         "Turns to fold in:\n" + "\n".join(_turn_line(m) for m in folded)
     )
-    data, tag = local_model.ask_json(_SYSTEM, prompt, max_tokens=220, timeout=TIMEOUT_S)
+    # None falls through to the committed model inside `ask_json`, and to the
+    # deterministic floor below when there is none.
+    chosen = background_models.configured_tag("summary")
+    data, tag = local_model.ask_json(_SYSTEM, prompt, max_tokens=220, timeout=TIMEOUT_S, tag=chosen)
     text = str((data or {}).get("summary") or "").strip()
     method = "model" if text else "fallback"
     if not text:

@@ -265,6 +265,35 @@ ensure_chroma() {
   fi
 }
 
+# ensure_embedded_chroma — make the venv able to run ChromaDB in-process.
+#
+# `./daedalus.sh local` runs without Docker, so there is no chromadb container
+# to talk to: the vector store runs embedded, which needs the full `chromadb`
+# package (backend/requirements-local.txt). `chromadb-client` — what
+# requirements.txt installs, and what sync.sh reinstalls after a pull — puts
+# files under the same `chromadb` module, so it is removed first, and if it was
+# found alongside the full package the full package is reinstalled over it.
+# Cheap when nothing needs doing: two `pip show` calls.
+ensure_embedded_chroma() {
+  local pip="backend/.venv/bin/pip"
+  local had_client=0 had_full=0
+  "$pip" show chromadb-client >/dev/null 2>&1 && had_client=1
+  "$pip" show chromadb >/dev/null 2>&1 && had_full=1
+  if [ "$had_client" = "0" ] && [ "$had_full" = "1" ]; then
+    ok "chromadb  embedded  (data/chroma)"
+    return 0
+  fi
+  info "installing the embedded vector store (full chromadb — one-time, a few minutes)"
+  [ "$had_client" = "1" ] && "$pip" uninstall --quiet -y chromadb-client
+  "$pip" install --quiet -r backend/requirements-local.txt \
+    || fail "could not install chromadb — see the pip output above"
+  # The client's uninstall removed files the full package also owns.
+  if [ "$had_client" = "1" ] && [ "$had_full" = "1" ]; then
+    "$pip" install --quiet --force-reinstall --no-deps -r backend/requirements-local.txt
+  fi
+  ok "chromadb  embedded  (data/chroma)"
+}
+
 # host_searxng_url — where SearXNG is, as seen *from the host*.
 #
 # Third instance of the same problem as Ollama and Chroma: .env holds the

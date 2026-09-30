@@ -56,3 +56,14 @@ pyyaml>=6.0
 # There is deliberately no OCR dependency: a scanned PDF has no text layer, and
 # the pipeline says so rather than storing a document whose chunks are blank.
 pypdf>=4.0
+
+# Track 1 re-ranking (app/services/reranker.py): a cross-encoder re-scores the
+# candidates Chroma returns before the best top_k go into the evidence pack.
+# ONNX runtime + the Rust tokenizer rather than sentence-transformers, which
+# would bring PyTorch — over a gigabyte — for the same model. ~80 MB, CPU only.
+# The weights are not a dependency: they are downloaded on request from
+# Settings → Knowledge Base, pinned to a commit, into DATA_DIR/models/rerankers.
+# Without these two packages re-ranking reports itself unavailable and Track 1
+# keeps Chroma's order.
+onnxruntime>=1.18
+tokenizers>=0.19

@@ -25,6 +25,15 @@ the value that produced a reported result has to be recoverable afterwards. A
 file under version control is legible in a diff and quotable in the report; a
 row in `prefs.db` is neither.
 
+## Re-ranking is Track 1's, and lives here for the same reason
+
+Whether Track 1 re-scores its candidates with a cross-encoder (`reranker`), with
+which model, and how wide the candidate pool is, all change what Track 1
+retrieves — they are part of the arm being compared. So they sit in this file,
+are recorded per query in `rag_logs.rerank_model`, and are frozen with the
+track: a re-ranker switched on after seeing Track 1's scores is exactly the
+tuning §5 forbids.
+
 ## `freeze`, and why it is here
 
 §5's sequencing discipline: *build Track 1 → build Track 2 → freeze both → run
@@ -58,11 +67,34 @@ CONFIG_PATH = paths.CONFIG_DIR / "rag_config.json"
 # Vector is the default because it is the control arm. PROJECT.md §5 calls Track
 # 1 the baseline, and a comparison whose default is the experimental arm reports
 # the experiment as if it were the status quo.
+# How many chunks Chroma returns for the cross-encoder to choose `top_k` from.
+# Wide enough to recover a relevant chunk vector search ranked 15th; narrow
+# enough that re-scoring stays in the tens of milliseconds on a CPU.
+DEFAULT_CANDIDATES = 20
+CANDIDATE_RANGE = (5, 50)
+
 DEFAULT: dict[str, Any] = {
     "track": "vector",
     "frozen": False,
     "note": "Track 1 (vector) is the baseline/control arm — see PROJECT.md §5.",
+    "rerank": {"enabled": True, "model": "ms-marco-minilm-l6", "candidates": DEFAULT_CANDIDATES},
 }
+
+
+def _rerank(raw: Any) -> dict[str, Any]:
+    from . import reranker  # noqa: PLC0415 — keeps this module importable without it
+
+    out = dict(DEFAULT["rerank"])
+    if not isinstance(raw, dict):
+        return out
+    if isinstance(raw.get("enabled"), bool):
+        out["enabled"] = raw["enabled"]
+    if raw.get("model") in reranker.CATALOGUE:
+        out["model"] = raw["model"]
+    n = raw.get("candidates")
+    if isinstance(n, int) and not isinstance(n, bool) and CANDIDATE_RANGE[0] <= n <= CANDIDATE_RANGE[1]:
+        out["candidates"] = n
+    return out
 
 _lock = threading.Lock()
 
@@ -80,22 +112,30 @@ def read() -> dict[str, Any]:
     try:
         raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT)
+        return {**DEFAULT, "rerank": _rerank(None)}
 
     track = raw.get("track")
     if track not in TRACKS:
-        return dict(DEFAULT)
+        return {**DEFAULT, "rerank": _rerank(raw.get("rerank") if isinstance(raw, dict) else None)}
     return {
         "track": track,
         "frozen": bool(raw.get("frozen", False)),
         "note": raw.get("note", DEFAULT["note"]),
+        "rerank": _rerank(raw.get("rerank")),
     }
 
 
-def write(track: Track, *, note: str | None = None) -> dict[str, Any]:
-    """Commit a track choice. Refuses while frozen."""
-    if track not in TRACKS:
+def write(
+    track: Track | None = None,
+    *,
+    note: str | None = None,
+    rerank: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Commit a track choice and/or Track 1's re-ranking. Refuses while frozen."""
+    if track is not None and track not in TRACKS:
         raise ValueError(f"unknown track {track!r}; expected one of {TRACKS}")
+    if rerank is not None:
+        _validate_rerank(rerank)
 
     with _lock:
         current = read()
@@ -105,9 +145,10 @@ def write(track: Track, *, note: str | None = None) -> dict[str, Any]:
                 "PROJECT.md §5: tuning a track after seeing its results invalidates the comparison."
             )
         payload = {
-            "track": track,
+            "track": track or current["track"],
             "frozen": False,
             "note": note or current.get("note") or DEFAULT["note"],
+            "rerank": _rerank({**current["rerank"], **(rerank or {})}),
         }
         # Written the same way `model_config` writes: temp file, fsync, atomic
         # rename. This is read on the chat path, and a half-written config read
@@ -128,6 +169,25 @@ def write(track: Track, *, note: str | None = None) -> dict[str, Any]:
                 pass
             raise
         return payload
+
+
+def _validate_rerank(raw: dict[str, Any]) -> None:
+    from . import reranker  # noqa: PLC0415
+
+    if "enabled" in raw and not isinstance(raw["enabled"], bool):
+        raise ValueError("rerank.enabled must be true or false")
+    if "model" in raw and raw["model"] not in reranker.CATALOGUE:
+        raise ValueError(f"unknown re-ranker {raw['model']!r}; expected one of {sorted(reranker.CATALOGUE)}")
+    if "candidates" in raw:
+        n = raw["candidates"]
+        low, high = CANDIDATE_RANGE
+        if not isinstance(n, int) or isinstance(n, bool) or not low <= n <= high:
+            raise ValueError(f"rerank.candidates must be a whole number from {low} to {high}")
+
+
+def rerank_settings() -> dict[str, Any]:
+    """Track 1's re-ranking, as the search tool reads it on every query."""
+    return read()["rerank"]
 
 
 def resolve() -> Track:
@@ -219,8 +279,13 @@ def status() -> dict[str, Any]:
         vector_detail = str(exc)
         vector_blocker = "the corpus store"
 
+    from . import reranker  # noqa: PLC0415
+
+    runtime_ok, runtime_detail = reranker.runtime_available()
     return {
         **read(),
+        "rerankers": reranker.models(),
+        "rerank_runtime": {"available": runtime_ok, "detail": runtime_detail},
         "tracks": [
             {
                 "id": "vector",

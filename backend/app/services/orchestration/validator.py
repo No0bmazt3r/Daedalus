@@ -9,6 +9,8 @@
 | citations | a label like `[S7]` that the pack never issued | `unknown_citation` |
 | control language | "I have opened ABV-1", "I'll set the temperature" | `control_claim` |
 | reading citations | a sentence cites `[S1]` but states nothing on S1's line | `citation_mismatch` |
+| times and dates | a clock time or date nowhere in the evidence, question or history | `unsupported_time` |
+| causes | "because…", "caused by…" with no cited source that itself states a cause | `uncited_cause` |
 
 A failed answer is replaced by §7.1's fixed fallback — *"I could not generate a
 grounded answer from the available data."* — and the model's text is kept in
@@ -35,20 +37,45 @@ So every `S` citation is checked against its own line: the sentence it sits in
 that line's numbers, its mode *as a mode*, its anomaly flag, or its staleness.
 Naming the sensor is not enough, because that is exactly the failure. `A`, `D`
 and `G` lines are prose, where a fair check needs meaning rather than tokens,
-so they are not checked this way — a known gap, like clock times.
+so they are not checked this way.
+
+## Times are moments, checked like numbers
+
+A model can get every quantity right and misstate *when* — "the spike at
+10:45" for one the evidence puts at 10:30. So every clock time and calendar
+date in the answer must denote a moment written somewhere the model was shown:
+the evidence (which states each one in UTC *and* site time, so either reading
+matches), the question, or the replayed history. History counts here, unlike
+for numbers: "the 10:30 spike you asked about" names a referent, it does not
+restate a measurement. Formats are normalised (`10:30`, `10:30:00`, `10.30am`;
+`2026-09-12`, `12 September`), time zones are not.
+
+## A cause needs a source that states one
+
+Rule 8 of the prompt says: do not claim a cause the evidence does not state.
+Seen on qwen3:1.7b — the CO₂ spike "was caused by NDIR calibration", when the
+anomaly record only listed the spike and, separately, its resolution. A
+sentence making a causal claim ("because", "due to", "caused by", "led to",
+Malay "disebabkan"/"kerana"/"akibat") therefore has to cite at least one
+non-reading line (`A`, `D`, `G` — a sensor value cannot establish causation)
+that itself uses causal language *and* shares a content word with the claim.
+Sentences saying a cause is unknown or not in the evidence are exempt.
+
+This is lexical, not semantic, and says so: a cited SOP that states *some*
+cause sharing a word with the claim passes even if it is a different cause.
+It closes the observed failure — a cause stitched together from lines that
+state none — without pretending to read meaning.
 
 ## What is tolerated, and why
 
 - **Numbers in the question.** "Is 900 ppm high?" — echoing 900 is not a claim.
-- **Small integers (0–10) with no decimal point.** "Step 3", "two anomalies",
-  "1 record". Rejecting these made nearly every procedural answer fail in
+- **Small counts (0–10, no decimal point, no unit).** "Step 3", "1 record",
+  "2 anomalies". Rejecting these made nearly every procedural answer fail in
   testing, and a count that matters (anomalies, readings) is in the evidence
-  anyway. This is the validator's known blind spot, stated rather than hidden.
+  anyway. A small number *with a unit* is a measurement and is checked like
+  any other — "pressure is 2 bar" must be in the evidence. So the remaining
+  blind spot is a small bare count, not a small value.
 - **Rounding.** `540` for `539.931`. See `numbers.supported`.
-- **Clock times and dates are not checked.** They are stripped before numbers
-  are compared. A model can therefore misstate *when* while every quantity is
-  right; catching that needs time-aware matching, which is listed as future
-  work rather than approximated here.
 """
 
 from __future__ import annotations
@@ -115,11 +142,16 @@ class Validation:
     mismatched_citations: list[str] = field(default_factory=list)
     cited: list[str] = field(default_factory=list)
     control_claim: str | None = None
+    unsupported_times: list[str] = field(default_factory=list)
+    uncited_causes: list[str] = field(default_factory=list)
 
     @property
     def hallucination(self) -> bool:
-        """A number or source the evidence cannot account for."""
-        return bool(self.unsupported or self.stale or self.unknown_citations or self.mismatched_citations)
+        """A number, moment, cause or source the evidence cannot account for."""
+        return bool(
+            self.unsupported or self.stale or self.unknown_citations or self.mismatched_citations
+            or self.unsupported_times or self.uncited_causes
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -131,6 +163,8 @@ class Validation:
             "mismatched_citations": self.mismatched_citations,
             "cited": self.cited,
             "control_claim": self.control_claim,
+            "unsupported_times": self.unsupported_times,
+            "uncited_causes": self.uncited_causes,
         }
 
 
@@ -143,6 +177,7 @@ def validate(
 ) -> Validation:
     v = Validation(passed=True)
     text = answer.strip()
+    history_text = "\n".join(str(h.get("content") or "") for h in (history or []))
 
     if not text:
         v.reasons.append("empty")
@@ -162,11 +197,9 @@ def validate(
         v.reasons.append("control_claim")
 
     asked = numbers.values(question)
-    history_numbers = numbers.values(
-        "\n".join(str(h.get("content") or "") for h in (history or []))
-    )
+    history_numbers = numbers.values(history_text)
     for n in numbers.extract(text):
-        if n.decimals == 0 and n.value <= _SMALL_INT:
+        if n.decimals == 0 and n.value <= _SMALL_INT and n.unit is None:
             continue
         if n.value in asked or numbers.supported(n, pack.numbers):
             continue
@@ -183,8 +216,105 @@ def validate(
     if v.mismatched_citations:
         v.reasons.append("citation_mismatch")
 
+    v.unsupported_times = _unsupported_moments(text, pack, question + "\n" + history_text)
+    if v.unsupported_times:
+        v.reasons.append("unsupported_time")
+
+    v.uncited_causes = _uncited_causes(text, pack)
+    if v.uncited_causes:
+        v.reasons.append("uncited_cause")
+
     v.passed = not v.reasons
     return v
+
+
+def _unsupported_moments(text: str, pack: EvidencePack, context: str) -> list[str]:
+    shown = pack.render() + "\n" + context
+    known_times = {m.key for m in numbers.times(shown)}
+    known_dates = {m.key for m in numbers.dates(shown)}  # type: ignore[misc]
+    bad: list[str] = []
+    for m in numbers.times(text):
+        if m.key not in known_times and m.text not in bad:
+            bad.append(m.text)
+    for m in numbers.dates(text):
+        if not numbers.date_supported(m, known_dates) and m.text not in bad:  # type: ignore[arg-type]
+            bad.append(m.text)
+    return bad
+
+
+# Markers after which the *cause* is written ("X because Y"); the rest put it
+# before ("Y led to X"). Only the cause's side is compared with the source, or
+# the effect — which every relevant line names — would match on its own.
+_CAUSE_AFTER_RE = re.compile(
+    r"\b(?:because(?:\s+of)?|due\s+to|caused\s+by|as\s+a\s+result\s+of|resulted\s+from|results?\s+from"
+    r"|owing\s+to|attributed\s+to|attributable\s+to|triggered\s+by|stems?\s+from|disebabkan(?:\s+oleh)?"
+    r"|kerana|akibat)\b",
+    re.IGNORECASE,
+)
+_CAUSE_BEFORE_RE = re.compile(
+    r"\b(?:led\s+to|leads?\s+to|leading\s+to|resulted\s+in|results?\s+in|causes|caused|causing|menyebabkan)\b",
+    re.IGNORECASE,
+)
+_CAUSAL_RE = re.compile(
+    r"\b(?:because|due\s+to|caused\s+by|causes?|caused|causing|as\s+a\s+result\s+of|resulted\s+(?:in|from)"
+    r"|results?\s+(?:in|from)|led\s+to|leads?\s+to|leading\s+to|owing\s+to|attributed\s+to|attributable\s+to"
+    r"|triggered\s+by|stems?\s+from|root\s+cause|disebabkan|kerana|akibat|punca|menyebabkan)\b",
+    re.IGNORECASE,
+)
+# A sentence *about* the absence of a cause is the answer rule 4 asks for, not a claim.
+_NO_CAUSE_RE = re.compile(
+    r"\b(?:not|no|unknown|unclear|cannot|can't|isn't|doesn't|does\s+not|do\s+not|without|neither|nor"
+    r"|tidak|bukan|tiada)\b",
+    re.IGNORECASE,
+)
+_STOPWORDS = frozenset(
+    "the a an and or of to in on at by for from with was were is are be been being this that these those "
+    "it its as into than then there their which who what when where why how may might could would should "
+    "can will due because caused cause causes causing result resulted results led lead leads leading owing "
+    "attributed attributable triggered stem stems from root reactor reading readings value level high low "
+    "during after before about also".split()
+)
+
+
+def _content_words(text: str) -> set[str]:
+    words = re.findall(r"[a-z][a-z0-9₂]+", _CITATION_RE.sub(" ", text.lower()))
+    return {w for w in words if len(w) > 2 and w not in _STOPWORDS}
+
+
+def _uncited_causes(text: str, pack: EvidencePack) -> list[str]:
+    lines = {i.label: (i.kind, i.line) for i in pack.items}
+    sentences = [s for s in _SENTENCE_RE.split(text) if s.strip()]
+    bad: list[str] = []
+    for index, sentence in enumerate(sentences):
+        if not _CAUSAL_RE.search(sentence) or _NO_CAUSE_RE.search(sentence):
+            continue
+        labels = _labels_in(sentence)
+        # A label written after the full stop belongs to this sentence.
+        following = sentences[index + 1] if index + 1 < len(sentences) else ""
+        lead = re.match(r"\s*((?:\[[^\]]+\]\s*)+)", following)
+        if lead:
+            labels |= _labels_in(lead.group(1))
+        claim = _cause_side(sentence)
+        sources = [lines[label][1] for label in labels if label in lines and lines[label][0] != "sensor"]
+        if not any(_CAUSAL_RE.search(line) and claim & _content_words(line) for line in sources):
+            bad.append(" ".join(sentence.split())[:160])
+    return bad
+
+
+def _cause_side(sentence: str) -> set[str]:
+    after = _CAUSE_AFTER_RE.search(sentence)
+    if after:
+        return _content_words(sentence[after.end():]) or _content_words(sentence)
+    before = _CAUSE_BEFORE_RE.search(sentence)
+    if before:
+        return _content_words(sentence[:before.start()]) or _content_words(sentence)
+    return _content_words(sentence)
+
+
+def _labels_in(text: str) -> set[str]:
+    return {
+        label.strip() for group in _CITATION_RE.findall(text) for label in re.split(r"[,;]", group)
+    }
 
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")

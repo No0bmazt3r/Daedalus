@@ -180,3 +180,21 @@ export interface ChatStatus {
 export function checkChatStatus(sessionId: string): Promise<ChatStatus> {
   return request<ChatStatus>(`/api/chat/${encodeURIComponent(sessionId)}/status`);
 }
+
+/** +1 up, -1 down, 0 withdrawn. Appended to `feedback_logs`; the newest counts. */
+export type Rating = -1 | 0 | 1;
+
+export function rateAnswer(queryId: string, rating: Rating, sessionId: string | null): Promise<unknown> {
+  return request('/api/chat/feedback', {
+    method: 'POST',
+    body: JSON.stringify({ query_id: queryId, rating, session_id: sessionId }),
+  });
+}
+
+/** The current rating of every rated answer in a chat, `{query_id: ±1}`. */
+export async function fetchRatings(sessionId: string): Promise<Record<string, number>> {
+  const data = await request<{ ratings: Record<string, number> }>(
+    `/api/chat/feedback?session_id=${encodeURIComponent(sessionId)}`,
+  );
+  return data.ratings;
+}

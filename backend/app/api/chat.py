@@ -17,9 +17,10 @@ import json
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
+from ..db import audit_store
 from ..services import inference, model_config
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -91,6 +92,41 @@ def chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/feedback")
+def feedback(
+    query_id: str = Body(..., embed=True),
+    rating: int = Body(..., embed=True),
+    session_id: str | None = Body(default=None, embed=True),
+    comment: str | None = Body(default=None, embed=True, max_length=2000),
+) -> dict[str, Any]:
+    """Rate an answer up (+1) or down (-1), or withdraw a rating (0).
+
+    Appended to `feedback_logs`, never updated: the audit store is append-only,
+    and a changed mind is itself a data point. The newest row is the rating.
+    The answer must be a logged turn — a rating that points at nothing would
+    land in the evaluation set as though it were about something.
+    """
+    if rating not in (-1, 0, 1):
+        raise HTTPException(status_code=400, detail="rating must be -1, 0 or 1")
+    if not audit_store.has_query(query_id):
+        raise HTTPException(status_code=404, detail=f"no logged answer '{query_id}'")
+    audit_store.log(
+        "feedback_logs",
+        query_id=query_id,
+        session_id=session_id,
+        rating=rating,
+        evaluator_role="operator",
+        comment=(comment or "").strip() or None,
+    )
+    return {"ok": True, "query_id": query_id, "rating": rating}
+
+
+@router.get("/feedback")
+def feedback_for_session(session_id: str = Query(...)) -> dict[str, Any]:
+    """The current rating of each rated answer in a chat, for redrawing the thumbs."""
+    return {"session_id": session_id, "ratings": audit_store.latest_ratings(session_id)}
 
 
 @router.get("/{session_id}/status")

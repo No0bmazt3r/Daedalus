@@ -235,6 +235,63 @@ class EvidenceAndValidatorTest(unittest.TestCase):
     def test_empty_answer_fails(self) -> None:
         self.assertEqual(self.validate("   ").reasons, ["empty"])
 
+    def test_small_number_with_a_unit_is_a_measurement(self) -> None:
+        self.assertNotIn(7.0, self.pack.numbers)
+        v = self.validate("CO2 rose by 7 ppm [S1].")
+        self.assertEqual(v.unsupported, ["7"])
+        # The same digit as a bare count is still tolerated.
+        self.assertTrue(self.validate(f"There were 7 steps; CO2 peaked at {fixtures.co2(34)} ppm [S1].").passed)
+
+    def test_unit_is_read_after_and_ph_before(self) -> None:
+        units = {n.text: n.unit for n in numbers.extract("3 ppm, 4% and 5 °C; pH of 6; 2 anomalies")}
+        self.assertEqual(units, {"3": "ppm", "4": "%", "5": "°c", "6": "ph", "2": None})
+
+    def test_time_in_the_evidence_passes_in_any_format(self) -> None:
+        for when in ("10:30", "10:30:00", "10.30am", "10:30 UTC"):
+            with self.subTest(when=when):
+                v = self.validate(f"The High CO2 anomaly began at {when} [A2].")
+                self.assertTrue(v.passed, (v.reasons, v.unsupported_times))
+
+    def test_misstated_time_is_caught(self) -> None:
+        v = self.validate("The High CO2 anomaly began at 10:47 [A2].")
+        self.assertIn("unsupported_time", v.reasons)
+        self.assertEqual(v.unsupported_times, ["10:47"])
+        self.assertTrue(v.hallucination)
+
+    def test_dates_are_checked_as_days(self) -> None:
+        self.assertTrue(self.validate("The anomaly was on 12 September [A2].").passed)
+        self.assertIn("unsupported_time", self.validate("The anomaly was on 14 September [A2].").reasons)
+
+    def test_a_time_from_the_question_or_history_is_a_referent(self) -> None:
+        history = [{"role": "user", "content": "what happened at 09:15?"}]
+        self.assertTrue(self.validate("Nothing is recorded for 09:15 in this evidence [A1].", history=history).passed)
+
+    def test_cause_from_lines_that_state_none_is_caught(self) -> None:
+        # The live failure: a cause stitched from a spike and an unrelated resolution.
+        v = self.validate("The CO2 spike was caused by NDIR calibration [A2].")
+        self.assertIn("uncited_cause", v.reasons)
+        self.assertTrue(v.hallucination)
+
+    def test_cause_cited_only_to_a_reading_is_caught(self) -> None:
+        v = self.validate(f"CO2 reached {fixtures.co2(34)} ppm because of absorption [S1].")
+        self.assertIn("uncited_cause", v.reasons)
+
+    def test_saying_the_cause_is_unknown_is_not_a_claim(self) -> None:
+        self.assertTrue(self.validate("The evidence does not state what caused the spike [A2].").passed)
+
+    def test_cause_stated_by_a_document_passes(self) -> None:
+        pack = orchestration.evidence.build([{
+            "tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus", "citable": True,
+            "data": {"track": "vector", "chunks": [{
+                "chunk_id": "c1", "source_file": "SOP-04.pdf",
+                "text": "A CO2 excursion is usually caused by sorbent saturation in the absorber.",
+            }]},
+        }])
+        ok = validator.validate("The excursion is usually caused by sorbent saturation [D1].", pack)
+        self.assertTrue(ok.passed, ok.reasons)
+        off = validator.validate("The excursion is caused by a heater fault [D1].", pack)
+        self.assertIn("uncited_cause", off.reasons)
+
     def test_identifiers_and_times_are_not_quantities(self) -> None:
         found = [n.text for n in numbers.extract("ABV-1 and CO2 at 10:30 on 2026-09-12 [S1]; step 1.")]
         self.assertEqual(found, ["1"])  # "step 1." — a small integer, tolerated by the validator

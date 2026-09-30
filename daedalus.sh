@@ -4,6 +4,7 @@
 #   ./daedalus.sh setup      one-time: install dependencies for local development
 #   ./daedalus.sh start      build (if needed) and start the container stack
 #   ./daedalus.sh dev        hot-reload dev stack, in containers
+#   ./daedalus.sh local      hot-reload on the host, no Docker at all (lightest)
 #   ./daedalus.sh stop       stop the stack
 #   ./daedalus.sh logs       follow the stack's logs
 #   ./daedalus.sh rebuild    force a clean image rebuild, then start
@@ -45,7 +46,7 @@ PORT="${DAEDALUS_PORT:-8000}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ── argument parsing ─────────────────────────────────────────────────────────
 CMD="${1:-start}"
@@ -143,10 +144,11 @@ compose_up() {
 cmd_setup() {
   head_ "Checking prerequisites"
   local missing=0
-  for tool in docker node; do
-    if have "$tool"; then ok "$tool $($tool --version 2>/dev/null | head -1)"
-    else err "$tool is not installed"; missing=1; fi
-  done
+  if have node; then ok "node $(node --version 2>/dev/null | head -1)"
+  else err "node is not installed"; missing=1; fi
+  # Docker is only for the container commands; `local` runs without it.
+  if have docker && docker --version >/dev/null 2>&1; then ok "$(docker --version | head -1)"
+  else warn "docker not available — use './daedalus.sh local' (start/dev need Docker)"; fi
   have python3 && ok "python3 $(python3 --version 2>&1 | cut -d' ' -f2)" \
                 || { err "python3 is not installed"; missing=1; }
   if have pnpm; then ok "pnpm $(pnpm --version)"
@@ -185,6 +187,7 @@ cmd_setup() {
   check_ollama
 
   head_ "Done"
+  say "  ${DIM}No Docker:${RESET}   ./daedalus.sh local"
   say "  ${DIM}Containers:${RESET}  ./daedalus.sh start"
   say "  ${DIM}Hot reload:${RESET}  ./daedalus.sh dev"
   say "  ${DIM}After a pull:${RESET} ./sync.sh"
@@ -298,6 +301,39 @@ cmd_dev_host() {
   (cd frontend && pnpm dev --port "$FRONTEND_PORT")
 }
 
+# Everything on the host, nothing in Docker: uvicorn and vite reloading in
+# place, ChromaDB embedded in the API process (data/chroma), Ollama on the host.
+# The lightest way to run — no Docker VM holding memory under WSL — and for a
+# single-user localhost install it loses nothing but the resource caps in
+# docker-compose.yml.
+#
+# The same as `dev --host` except for the vector store: that still starts the
+# chromadb container and talks to it over HTTP. Here CHROMA_URL is dropped, which
+# is what selects embedded mode in app/db/vector_store.py. The two stores are
+# separate — vectors indexed in the container are not in data/chroma — so after
+# switching, re-index from Settings -> Knowledge Base.
+cmd_local() {
+  require_venv
+  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run './daedalus.sh setup' first"
+  ensure_env
+  ensure_dirs
+  unset CHROMA_URL
+  ensure_embedded_chroma
+  migrate_cli up >/dev/null || fail "migrations failed — run './daedalus.sh migrate status'"
+  check_ollama
+
+  head_ "Starting Daedalus on the host (no Docker)"
+  host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend \
+    --reload-dir backend/app --timeout-graceful-shutdown 3 &
+  local api_pid=$!
+  trap 'kill $api_pid 2>/dev/null || true' EXIT INT TERM
+  ok "backend   http://localhost:${BACKEND_PORT}  (pid $api_pid)"
+  ok "frontend  http://localhost:${FRONTEND_PORT}"
+  say "  ${DIM}Stop:${RESET} Ctrl+C"
+  say ""
+  (cd frontend && pnpm dev --port "$FRONTEND_PORT")
+}
+
 # `--remove-orphans` is what makes one `stop` cover both stacks. `dev` layers an
 # overlay that adds a service and renames a container; without the flag, a
 # `down` run from the base file alone leaves those behind as containers compose
@@ -355,6 +391,7 @@ case "$CMD" in
   setup)        cmd_setup ;;
   start|up)     cmd_start ;;
   dev)          cmd_dev ;;
+  local)        cmd_local ;;
   stop|down)    cmd_stop ;;
   logs)         cmd_logs ;;
   rebuild)      cmd_rebuild ;;

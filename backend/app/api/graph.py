@@ -35,7 +35,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from ..db import audit_store, paths, sqlite_util
 from ..services import graph_seed
 from ..services import knowledge_graph as kg
-from ..services import graph_authoring, graph_proposals, rag_config
+from ..services import graph_authoring, graph_proposals, rag_config, reranker
 
 router = APIRouter(prefix="/api", tags=["blueprints"])
 
@@ -441,7 +441,10 @@ def rag_track() -> dict[str, Any]:
 
 
 @router.put("/rag/config")
-def set_rag_track(track: str = Body(..., embed=True)) -> dict[str, Any]:
+def set_rag_track(
+    track: str | None = Body(default=None, embed=True),
+    rerank: dict[str, Any] | None = Body(default=None, embed=True),
+) -> dict[str, Any]:
     """Select a retrieval track.
 
     Refuses while the comparison is frozen (`PROJECT.md` §5): after the two arms
@@ -453,9 +456,37 @@ def set_rag_track(track: str = Body(..., embed=True)) -> dict[str, Any]:
     switch unusable in exactly the window it is most useful, while Track 1 waits
     on M2 and you want to demonstrate Track 2.
     """
+    if track is None and rerank is None:
+        raise HTTPException(status_code=400, detail="send 'track' and/or 'rerank'")
     try:
-        return {**rag_config.write(track), **rag_config.status()}
+        rag_config.write(track, rerank=rerank)  # type: ignore[arg-type]
+        return rag_config.status()
     except rag_config.ConfigFrozen as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Track 1 re-ranker models ─────────────────────────────────────────────────
+
+
+@router.post("/rag/rerankers/{model_id}/download", status_code=202)
+def download_reranker(model_id: str) -> dict[str, Any]:
+    """Fetch a re-ranker's weights in the background; poll `GET /rag/config`.
+
+    Not frozen: downloading changes nothing about retrieval until the config
+    names the model, and that write is the one the freeze guards.
+    """
+    try:
+        started = reranker.download(model_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "started": started}
+
+
+@router.delete("/rag/rerankers/{model_id}")
+def delete_reranker(model_id: str) -> dict[str, Any]:
+    try:
+        return {"ok": True, "deleted": reranker.delete(model_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

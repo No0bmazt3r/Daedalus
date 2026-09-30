@@ -741,6 +741,17 @@ def _log_retrieval(
                 sorted({c.get("source_file") for c in chunks if c.get("source_file")})
             ),
         )
+        rerank = data.get("rerank") or {}
+        if rerank:
+            # Migration 008. The model is NULL whenever re-ranking did not run,
+            # so "was this arm re-ranked" is one IS NOT NULL away.
+            row.update(
+                rerank_model=rerank.get("model"),
+                rerank_scores=json.dumps([c.get("rerank_score") for c in chunks])
+                if rerank.get("model") else None,
+                candidate_count=rerank.get("candidates"),
+                rerank_latency_ms=rerank.get("latency_ms"),
+            )
     else:
         path = data.get("path") or {}
         nodes = data.get("nodes") or data.get("entries") or []

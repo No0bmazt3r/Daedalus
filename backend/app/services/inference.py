@@ -57,11 +57,20 @@ import queue
 import re
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 from typing import Any
 
 from ..db import audit_store
-from . import chat_service, model_config, ollama_client, orchestration, query_pipeline, summariser
+from . import (
+    chat_service,
+    model_config,
+    ollama_client,
+    orchestration,
+    query_pipeline,
+    session_titles,
+    summariser,
+)
 
 # Long enough for a large model on a slow machine, short enough that a hung
 # daemon does not hold a worker forever.
@@ -212,6 +221,7 @@ def _finish_without_model(
     )
     stored = chat_service.add_assistant_message(session_id, reply, query_id=query_id)
     summary_scheduled = _maybe_summarise(session_id)
+    session_titles.schedule(session_id)
     reason = {
         "too_long": "the message was too long to answer",
         "out_of_scope": "the question is outside what Daedalus covers",
@@ -267,9 +277,37 @@ def _maybe_summarise(session_id: str) -> bool:
     try:
         if chat_service.build_context(session_id).needs_summary:
             return summariser.schedule(session_id)
-    except Exception:  # noqa: BLE001 — memory upkeep must not fail a turn
-        pass
+    except Exception as exc:  # noqa: BLE001 — memory upkeep must not fail a turn
+        audit_store.log_error("summariser", exc, level="warning")
     return False
+
+
+def _log_context(query_id: str, session_id: str, window: chat_service.ContextWindow) -> None:
+    """One `memory_logs` row per prompt: what history this turn replayed.
+
+    The transcript says what was *said*; this says what the model was *shown*
+    of it — which is less, once turns fall out of the budget — so a claim in
+    an answer can be traced to whether the turn it echoes was even in view.
+    """
+    seqs = [m["seq"] for m in window.messages]
+    audit_store.log(
+        "memory_logs",
+        memory_id=f"ctx_{uuid.uuid4().hex[:12]}",
+        session_id=session_id,
+        query_id=query_id,
+        kind="context",
+        content={
+            "summary_included": bool(window.summary),
+            "summary_upto_seq": window.summary_upto_seq,
+            "replayed_seqs": [seqs[0], seqs[-1]] if seqs else [],
+            "replayed_messages": len(seqs),
+            "dropped": window.dropped,
+            "estimated_tokens": window.estimated_tokens,
+            "chars_per_token": window.chars_per_token,
+            "calibration": window.calibration_source,
+        },
+        source="build_context",
+    )
 
 
 # Sessions with a generation in flight, keyed by session id. The worker owns the
@@ -375,6 +413,13 @@ def answer_stream(
                 )
                 return
             envelopes = orchestration.executor.execute(plan, query_id)
+            for env in envelopes:
+                # A refusal is policy working; an error is something broken.
+                if not env.get("ok") and env.get("status") == "error":
+                    audit_store.log_error(
+                        f"tool:{env.get('tool')}", str(env.get("detail") or "tool failed"),
+                        query_id=query_id, level="warning",
+                    )
             pack = orchestration.evidence.build(envelopes, notes=plan.notes)
             pipeline_log["selected_tools"] = pack.tools_used
             evidence_ms = int((time.perf_counter() - t) * 1000)
@@ -400,11 +445,16 @@ def answer_stream(
                     "conversation_logs", query_id=query_id, session_id=session_id,
                     user_query=question, error_message=choice["reason"], **pipeline_log,
                 )
+                audit_store.log_error("model_selection", choice["reason"], query_id=query_id)
                 return
 
             # Step 8.
             messages = orchestration.prompt.build(window, pack, understood)
             payload = {"model": tag, "messages": messages, "stream": True}
+            # Beside Ollama's token count, this is what calibrates the history
+            # budget's characters-per-token (`token_calibration`).
+            prompt_chars = sum(len(m["content"]) for m in messages)
+            _log_context(query_id, session_id, window)
 
             started = time.perf_counter()
             first_token_at: float | None = None
@@ -453,6 +503,7 @@ def answer_stream(
             except Exception as exc:  # noqa: BLE001
                 error = f"{exc.__class__.__name__}: {exc}"
                 events.put({"phase": "error", "error": error})
+                audit_store.log_error("inference", exc, query_id=query_id)
 
             ended = time.perf_counter()
             total_ms = int((ended - started) * 1000)
@@ -469,6 +520,7 @@ def answer_stream(
                 model_name=tag,
                 temperature=None,
                 prompt_token_count=final.get("prompt_eval_count"),
+                prompt_chars=prompt_chars,
                 completion_token_count=final.get("eval_count") or (len(pieces) or None),
                 time_to_first_token_ms=ttft_ms,
                 total_inference_ms=total_ms,
@@ -542,6 +594,9 @@ def answer_stream(
                 session_id, delivered, query_id=query_id, evidence=pack.as_json(), model_tag=tag
             )
             summary_scheduled = _maybe_summarise(session_id)
+            # After the answer is stored, on its own thread — like the summary,
+            # the operator never waits for a title.
+            session_titles.schedule(session_id)
 
             events.put({
                 "phase": "done",
@@ -569,6 +624,8 @@ def answer_stream(
                         "needs_summary": window.needs_summary,
                         # Folding happens on its own thread, after this event.
                         "summary_scheduled": summary_scheduled,
+                        "chars_per_token": window.chars_per_token,
+                        "calibration": window.calibration_source,
                     },
                     "understanding": understood.as_event(),
                     # architecture/07's response contract.
@@ -587,6 +644,7 @@ def answer_stream(
             # a failure there would otherwise leave the consumer blocked on a
             # sentinel that never arrives.
             events.put({"phase": "error", "error": f"{exc.__class__.__name__}: {exc}"})
+            audit_store.log_error("orchestrator", exc, query_id=query_id)
         finally:
             ACTIVE_GENERATIONS.pop(session_id, None)
             # Always last, and always exactly once: this is what ends the stream.

@@ -65,13 +65,20 @@ def local_tag() -> str | None:
 
 
 def ask_json(
-    system: str, prompt: str, *, max_tokens: int = 120, timeout: float = TIMEOUT_S
+    system: str,
+    prompt: str,
+    *,
+    max_tokens: int = 120,
+    timeout: float = TIMEOUT_S,
+    tag: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """One JSON object from the local model, and the tag that produced it.
 
-    Returns (None, tag-or-None) on any failure. Never raises.
+    `tag` names a different local model — a background job's own, from
+    `background_models`; the caller is responsible for it being local. Returns
+    (None, tag-or-None) on any failure. Never raises.
     """
-    tag = local_tag()
+    tag = tag or local_tag()
     if not tag:
         return None, None
     try:

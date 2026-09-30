@@ -7,6 +7,7 @@
 
 import {
   Cpu,
+  Clock,
   Database,
   Globe,
   Keyboard,
@@ -68,6 +69,13 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   panel({
     id: 'added-models', label: 'Added Models', group: 'models', icon: List, implemented: true,
     keywords: ['models', 'configured', 'installed', 'quantization', 'benchmark', 'cloud', 'inventory'],
+  }),
+  panel({
+    id: 'background', label: 'Background Jobs', group: 'models', icon: Clock, implemented: true,
+    keywords: [
+      'background', 'jobs', 'title', 'titles', 'rename', 'naming', 'chat', 'session', 'history',
+      'summary', 'summariser', 'summarizer', 'memory', 'model',
+    ],
   }),
   panel({
     id: 'hardware', label: 'Hardware', group: 'models', icon: Cpu, implemented: true,

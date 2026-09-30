@@ -240,7 +240,7 @@ class _Builder:
             lines.append(self.add("D", "document", "search_corpus", f"{where}: {text}", {
                 "type": "document", "chunk_id": c.get("chunk_id"), "source_file": c.get("source_file"),
                 "page_number": c.get("page_number"), "section_title": c.get("section_title"),
-                "distance": c.get("distance"),
+                "distance": c.get("distance"), "rerank_score": c.get("rerank_score"),
             }))
         return lines
 
