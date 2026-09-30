@@ -8,6 +8,7 @@
 | stale numbers | …and that quantity *is* in the replayed history | `stale_history_number` |
 | citations | a label like `[S7]` that the pack never issued | `unknown_citation` |
 | control language | "I have opened ABV-1", "I'll set the temperature" | `control_claim` |
+| reading citations | a sentence cites `[S1]` but states nothing on S1's line | `citation_mismatch` |
 
 A failed answer is replaced by §7.1's fixed fallback — *"I could not generate a
 grounded answer from the available data."* — and the model's text is kept in
@@ -22,6 +23,19 @@ turn 3. A model that repeats 470.2 as the current value has stated a number
 nobody re-fetched. So history is not evidence here — a number found only in
 history fails, and gets its own reason, because "the model recycled a stale
 value" and "the model invented a value" are different findings for §9.
+
+## A reading citation must support its sentence
+
+A label only proves the line exists, not that the sentence says what the line
+says. Seen on qwen3:1.7b with an empty corpus: *"[S1] The reactor's
+temperature sensor measures ambient temperature, monitoring thermal
+dynamics."* — no number, a cited reading, and an explanation nobody retrieved.
+So every `S` citation is checked against its own line: the sentence it sits in
+(or the one before, for a label written after the full stop) must state one of
+that line's numbers, its mode *as a mode*, its anomaly flag, or its staleness.
+Naming the sensor is not enough, because that is exactly the failure. `A`, `D`
+and `G` lines are prose, where a fair check needs meaning rather than tokens,
+so they are not checked this way — a known gap, like clock times.
 
 ## What is tolerated, and why
 
@@ -49,6 +63,26 @@ from .evidence import EvidencePack
 FALLBACK = "I could not generate a grounded answer from the available data."
 MAX_ANSWER_CHARS = 4000
 _SMALL_INT = 10
+
+# The other shapes small models give a citation, seen from qwen3:1.7b among
+# others: `[EVIDENCE: S1]`, `[Source S1, D2]`, `(S1)`, `[S1 and S2]`. All mean
+# `[S1]`, and are rewritten to it before the answer is checked or stored, so the
+# validator, the transcript and the UI's citation chips see one format.
+_LABELS = r"[A-Z]\d+(?:\s*(?:[,;&/]|and)\s*[A-Z]\d+)*"
+_LOOSE_CITATION_RE = re.compile(
+    rf"\[\s*(?:(?:evidence|source|sources|ref|refs|reference|citation|cite|see)\s*[:#\-]?\s*)?({_LABELS})\s*\]"
+    rf"|\(\s*(?:(?:evidence|source|sources|ref|see)\s*[:#\-]?\s*)?({_LABELS})\s*\)",
+    re.IGNORECASE,
+)
+
+
+def normalise_citations(text: str) -> str:
+    """Rewrite every citation shape to `[S1]` / `[S1, D2]`. Labels are upper-cased."""
+    def fix(m: re.Match[str]) -> str:
+        labels = re.split(r"\s*(?:[,;&/]|\band\b)\s*", (m.group(1) or m.group(2)).strip(), flags=re.IGNORECASE)
+        return "[" + ", ".join(label.upper() for label in labels if label) + "]"
+    return _LOOSE_CITATION_RE.sub(fix, text)
+
 
 # `[S1]`, and the grouped form small models also write: `[G6, G7]`.
 _CITATION_RE = re.compile(r"\[\s*([A-Z]\d+(?:\s*[,;]\s*[A-Z]\d+)*)\s*\]")
@@ -78,13 +112,14 @@ class Validation:
     unsupported: list[str] = field(default_factory=list)
     stale: list[str] = field(default_factory=list)
     unknown_citations: list[str] = field(default_factory=list)
+    mismatched_citations: list[str] = field(default_factory=list)
     cited: list[str] = field(default_factory=list)
     control_claim: str | None = None
 
     @property
     def hallucination(self) -> bool:
         """A number or source the evidence cannot account for."""
-        return bool(self.unsupported or self.stale or self.unknown_citations)
+        return bool(self.unsupported or self.stale or self.unknown_citations or self.mismatched_citations)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +128,7 @@ class Validation:
             "unsupported_numbers": self.unsupported,
             "stale_numbers": self.stale,
             "unknown_citations": self.unknown_citations,
+            "mismatched_citations": self.mismatched_citations,
             "cited": self.cited,
             "control_claim": self.control_claim,
         }
@@ -143,8 +179,54 @@ def validate(
     if v.stale:
         v.reasons.append("stale_history_number")
 
+    v.mismatched_citations = _mismatched_reading_citations(text, pack)
+    if v.mismatched_citations:
+        v.reasons.append("citation_mismatch")
+
     v.passed = not v.reasons
     return v
+
+
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_MODES = ("manual", "absorption", "desorption")
+_FLAG_RE = re.compile(r"anomaly flag (\w+)", re.IGNORECASE)
+
+
+def _supports(sentence: str, line: str) -> bool:
+    """Does `sentence` state something that is on this reading's `line`?"""
+    said = sentence.lower()
+    shown = line.lower()
+    line_numbers = numbers.values(line)
+    for n in numbers.extract(sentence):
+        if numbers.supported(n, line_numbers):
+            return True
+    # The mode, said as a mode — "critical for desorption processes" is not.
+    if "mode" in said and any(m in said and m in shown for m in _MODES):
+        return True
+    flag = _FLAG_RE.search(line)
+    if flag and flag.group(1).lower() in said and ("flag" in said or "normal" in said or "anomal" in said):
+        return True
+    if "stale" in shown and ("stale" in said or " old" in said or "days ago" in said):
+        return True
+    return False
+
+
+def _mismatched_reading_citations(text: str, pack: EvidencePack) -> list[str]:
+    lines = {i.label: i.line for i in pack.items if i.kind == "sensor"}
+    if not lines:
+        return []
+    sentences = [s for s in _SENTENCE_RE.split(text) if s.strip()]
+    bad: list[str] = []
+    for index, sentence in enumerate(sentences):
+        labels = {
+            label.strip() for group in _CITATION_RE.findall(sentence)
+            for label in re.split(r"[,;]", group)
+        }
+        context = sentence + (" " + sentences[index - 1] if index else "")
+        for label in sorted(labels):
+            if label in lines and not _supports(context, lines[label]) and label not in bad:
+                bad.append(label)
+    return bad
 
 
 def grounded(v: Validation, pack: EvidencePack) -> bool:

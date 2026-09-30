@@ -180,9 +180,18 @@ SMALLTALK_RE = re.compile(
     r"^(?:hi|hello|hey|hai|helo|yo|good\s+(?:morning|afternoon|evening|day)|selamat\s+\w+"
     r"|thanks?|thank\s+you|thx|ty|terima\s+kasih|ok|okay|cool|great|nice|bye|goodbye)\b[\s!.?]*$"
 )
+# Questions about the assistant itself. Conversational fillers in front ("so
+# yea what is this about") are allowed, because that is how people actually
+# open a chat, and without them the question fell through to `out_of_scope` —
+# the one reply that tells a new operator nothing about what to ask.
+_FILLER = r"(?:(?:so|ok|okay|yeah|yea|ya|um|uh|hmm|hey|hi|hello|and|but|well|then)[\s,.!]+)*"
 ABOUT_RE = re.compile(
-    r"^(?:who\s+are\s+you|what\s+are\s+you|what\s+can\s+you\s+do|what\s+do\s+you\s+do|help|how\s+do\s+i\s+use\s+you"
-    r"|what\s+can\s+i\s+ask(?:\s+you)?)\b[\s!.?]*$"
+    rf"^{_FILLER}(?:who\s+are\s+you|what\s+are\s+you(?:\s+for)?|what\s+can\s+you\s+do|what\s+do\s+you\s+do"
+    r"|help|how\s+do\s+i\s+use\s+(?:you|this)|what\s+can\s+i\s+ask(?:\s+you)?"
+    r"|what(?:'s|\s+is)\s+(?:this|this\s+(?:about|for|app|thing|system|tool|chat)|it\s+about|daedalus)"
+    r"|what(?:'s|\s+is)\s+(?:your|the)\s+(?:purpose|job|role|function|point)"
+    r"|what\s+(?:does|do)\s+(?:this|daedalus|it)\s+do|why\s+(?:are\s+you\s+here|do\s+you\s+exist)"
+    r"|tell\s+me\s+about\s+(?:yourself|you|daedalus|this\s+(?:app|system|tool)))\b[\s!.?]*$"
 )
 
 # Malay function words, for flagging the language rather than refusing it.

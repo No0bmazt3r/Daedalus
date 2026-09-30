@@ -85,6 +85,13 @@ class ChatPathTest(unittest.TestCase):
         self.assertIn("EVIDENCE:", messages[-2]["content"])
         self.assertIn("Every number you write must appear", messages[0]["content"])
 
+    def test_prefixed_citation_is_stored_in_the_plain_form(self) -> None:
+        events, _ = self.run_turn("What is the CO2 level now?",
+                                  f"[EVIDENCE: S1] CO2 is {fixtures.co2(119)} ppm.")
+        result = self.done(events)
+        self.assertTrue(result["grounded"])
+        self.assertTrue(result["message"]["content"].startswith("[S1]"))
+
     def test_invented_number_is_replaced_by_the_fallback(self) -> None:
         events, _ = self.run_turn("What is the CO2 level now?", "CO2 is 777.7 ppm [S1].")
         result = self.done(events)

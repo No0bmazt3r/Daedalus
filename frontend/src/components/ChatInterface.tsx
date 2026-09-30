@@ -1,10 +1,10 @@
 import { LabyrinthIcon } from "./LabyrinthIcon";
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud } from 'lucide-react'
+import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -239,6 +239,76 @@ function ComposerControls({
   )
 }
 
+// How close to the bottom still counts as "at the bottom". A few lines of
+// slack, so a reader who nudged the wheel by one notch is still followed.
+const STICK_THRESHOLD_PX = 96
+
+/**
+ * Keep the transcript pinned to its newest line — but only while the reader is
+ * already there.
+ *
+ * Following unconditionally is the usual bug: somebody scrolls up to reread an
+ * earlier answer and every streamed token yanks them back down. So the pin is a
+ * property of where the reader *is*: at the bottom, new content follows; scrolled
+ * up, it does not, and `hasUnseen` offers a way back instead. Sending a message
+ * always re-pins — you asked for the next answer, so you want to see it arrive.
+ *
+ * The viewport is found from a sentinel at the end of the list rather than by
+ * threading a ref through `ScrollArea`, which renders its own Viewport.
+ */
+function useStickToBottom(
+  messages: { key: string; role: 'user' | 'assistant'; content: string }[],
+  sending: boolean,
+) {
+  const endRef = useRef<HTMLDivElement>(null)
+  const stuck = useRef(true)
+  const [hasUnseen, setHasUnseen] = useState(false)
+  const lastCount = useRef(0)
+
+  const viewport = () =>
+    endRef.current?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]') ?? null
+
+  const scrollToEnd = useCallback((behavior: ScrollBehavior) => {
+    const el = viewport()
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+    stuck.current = true
+    setHasUnseen(false)
+  }, [])
+
+  // Track whether the reader is at the bottom. Re-attached when the transcript
+  // first appears, because the greeting screen has no scroll area to watch.
+  const hasMessages = messages.length > 0
+  useEffect(() => {
+    const el = viewport()
+    if (!el) return
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX
+      stuck.current = atBottom
+      if (atBottom) setHasUnseen(false)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [hasMessages])
+
+  // Follow new content. A new turn (or a freshly opened chat) jumps; streamed
+  // tokens follow instantly, because a smooth scroll per token never settles.
+  const lastKey = messages[messages.length - 1]?.key
+  const lastLength = messages[messages.length - 1]?.content.length ?? 0
+  useEffect(() => {
+    const grew = messages.length > lastCount.current
+    const opened = lastCount.current === 0 || messages.length < lastCount.current
+    lastCount.current = messages.length
+    if (opened) return scrollToEnd('auto')
+    if (grew && messages[messages.length - 1]?.role === 'user') return scrollToEnd('smooth')
+    if (stuck.current) scrollToEnd(sending ? 'auto' : 'smooth')
+    else setHasUnseen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, lastKey, lastLength])
+
+  return { endRef, hasUnseen, jumpToLatest: () => scrollToEnd('smooth') }
+}
+
 export function ChatInterface() {
   // The picker lives in ComposerControls now; only `referenceModels` is needed
   // here, to mark which transcript turns came from off the machine.
@@ -248,6 +318,7 @@ export function ChatInterface() {
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { show } = useUiPrefs()
+  const { endRef, hasUnseen, jumpToLatest } = useStickToBottom(messages, sending)
 
   // Settings → Appearance. `chat-fullwidth` is the one that is off by default:
   // a measured column is easier to read, and the full window is the choice you
@@ -371,11 +442,19 @@ export function ChatInterface() {
         </div>
       ) : (
         <>
-          <ScrollArea className="flex-1 w-full">
+          {/* The transcript ends where the composer begins. The composer used to
+              be absolutely positioned over it, so the newest lines scrolled
+              underneath and could not be brought back above it; now it is a
+              flex sibling and the scroll area simply stops short of it. The
+              mask fades the last few lines out rather than cutting them. */}
+          <ScrollArea
+            className="flex-1 min-h-0 w-full"
+            viewportClassName="[mask-image:linear-gradient(to_bottom,black_calc(100%-40px),transparent)]"
+          >
             {/* pt-20 clears the control cluster pinned at top-4: the incognito
                 toggle is always there, and minimized-window chips sit beside
                 it, so the first message has to start below both. */}
-            <div className={`flex flex-col pt-20 px-4 gap-6 pb-32 ${columnWidth}`}>
+            <div className={`flex flex-col pt-20 px-4 gap-6 pb-10 ${columnWidth}`}>
               {messages.map((msg) => (
                 <div key={msg.key} className={`flex w-full group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (
@@ -434,10 +513,20 @@ export function ChatInterface() {
               {error && !messages.some((m) => m.failed) && (
                 <div className="text-[13px] status-warn px-1">{error}</div>
               )}
+              <div ref={endRef} aria-hidden />
             </div>
           </ScrollArea>
-          
-          <div className="absolute bottom-0 left-0 right-0 p-4">
+
+          <div className="relative shrink-0 px-4 pb-4 pt-1">
+            {hasUnseen && (
+              <button
+                onClick={jumpToLatest}
+                className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full border theme-border theme-card text-[12px] theme-text-muted hover:theme-text shadow-lg animate-in fade-in duration-150"
+              >
+                <ArrowDown size={12} />
+                Jump to latest
+              </button>
+            )}
             <div className={columnWidth}>
               <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
                 <Textarea 

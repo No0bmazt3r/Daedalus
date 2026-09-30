@@ -33,6 +33,8 @@ export interface ChatValidation {
   unsupported_numbers: string[];
   stale_numbers: string[];
   unknown_citations: string[];
+  /** Reading labels (`S…`) cited on a sentence that states nothing from that reading. */
+  mismatched_citations: string[];
   cited: string[];
   control_claim: string | null;
 }

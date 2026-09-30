@@ -458,6 +458,9 @@ def answer_stream(
             total_ms = int((ended - started) * 1000)
             ttft_ms = int((first_token_at - started) * 1000) if first_token_at else None
             text = _LEADING_STAMP.sub("", "".join(pieces)).strip()
+            # One citation format for the validator, the transcript and the UI:
+            # `[EVIDENCE: S1]` and friends become `[S1]`.
+            text = orchestration.validator.normalise_citations(text)
 
             ns = 1_000_000
             audit_store.log(

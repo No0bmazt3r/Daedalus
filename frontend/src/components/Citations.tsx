@@ -18,15 +18,31 @@ import type { StoredEvidence } from '../lib/chatClient'
  * predating that check, and it is left as plain text rather than dressed up.
  */
 
-// `[S1]`, and the grouped form small models also write: `[G6, G7]`. Same
-// pattern the validator parses (orchestration/validator.py).
-const CITATION_RE = /\[\s*([A-Z]\d+(?:\s*[,;]\s*[A-Z]\d+)*)\s*\]/g
+// `[S1]` and `[G6, G7]`. New answers arrive in only this form — the backend
+// rewrites `[EVIDENCE: S1]` and the like (`validator.normalise_citations`) —
+// but turns stored before that still carry the prefixed shape, so it is
+// accepted here too.
+const CITATION_RE =
+  /\[\s*(?:(?:evidence|sources?|refs?|reference|citation|cite|see)\s*[:#-]?\s*)?([A-Z]\d+(?:\s*(?:[,;&/]|and)\s*[A-Z]\d+)*)\s*\]/gi
+const SPLIT_RE = /\s*(?:[,;&/]|\band\b)\s*/i
 
 const KIND_ICON: Record<string, typeof Database> = {
   sensor: Database,
   anomaly: Siren,
   document: BookOpen,
   graph: Network,
+}
+
+/**
+ * What each label letter means. `S` is a **sensor reading** from the telemetry
+ * database — not "source". Documents are `D`, which only appears when retrieval
+ * actually returned a passage.
+ */
+const KIND_NAME: Record<string, string> = {
+  S: 'Sensor reading',
+  A: 'Anomaly record',
+  D: 'Document passage',
+  G: 'Knowledge-graph node',
 }
 
 function lineText(evidence: StoredEvidence, label: string): string {
@@ -39,19 +55,21 @@ export function withCitations(text: string, evidence: StoredEvidence | undefined
   const out: ReactNode[] = []
   let last = 0
   for (const match of text.matchAll(CITATION_RE)) {
-    const labels = match[1].split(/[,;]/).map((l) => l.trim())
+    const labels = match[1].split(SPLIT_RE).map((l) => l.trim().toUpperCase())
     if (!labels.every((l) => l in evidence.lines)) continue
     out.push(text.slice(last, match.index))
     out.push(
       <Fragment key={match.index}>
         {labels.map((label) => (
-          <sup
+          // Inline on the baseline, not a superscript: raised chips at the start
+          // of a wrapped line read as stray footnote marks floating in the gap.
+          <span
             key={label}
-            title={lineText(evidence, label)}
-            className="mx-[1px] px-1 rounded text-[10px] font-medium theme-surface-strong theme-text-muted cursor-help align-super"
+            title={`${KIND_NAME[label[0]] ?? 'Evidence'} ${label}: ${lineText(evidence, label)}`}
+            className="inline-block align-baseline mx-0.5 px-1 rounded border theme-border text-[10px] leading-[1.35] font-medium theme-surface-strong theme-text-muted cursor-help"
           >
             {label}
-          </sup>
+          </span>
         ))}
       </Fragment>,
     )
@@ -66,7 +84,7 @@ export function withCitations(text: string, evidence: StoredEvidence | undefined
 function citedLabels(text: string, evidence: StoredEvidence): string[] {
   const seen = new Set<string>()
   for (const match of text.matchAll(CITATION_RE)) {
-    for (const label of match[1].split(/[,;]/).map((l) => l.trim())) {
+    for (const label of match[1].split(SPLIT_RE).map((l) => l.trim().toUpperCase())) {
       if (label in evidence.lines) seen.add(label)
     }
   }
@@ -113,6 +131,11 @@ export function Sources({ text, evidence }: { text: string; evidence: StoredEvid
         {summary}
         <span className="opacity-60">· {evidence.tools_used.join(', ')}</span>
       </button>
+      {open && (
+        <p className="mt-1 pl-4 text-[10px] opacity-60">
+          S sensor reading · A anomaly record · D document passage · G knowledge-graph node
+        </p>
+      )}
       <Collapse open={open} className="mt-1.5 pl-4 space-y-2">
         {cited.length > 0 && (
           <ul className="space-y-1.5">

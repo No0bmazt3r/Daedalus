@@ -88,6 +88,19 @@ class IntentTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(query_pipeline.understand(text, [], use_model=False).intent, intent)
 
+    def test_questions_about_the_assistant_get_the_introduction(self) -> None:
+        for text in ("so yea what is this about", "so what is your purpose", "who are you",
+                     "what is this", "what are you for", "what is daedalus", "ok what can you do?"):
+            with self.subTest(text=text):
+                u = query_pipeline.understand(text, [], use_model=False)
+                self.assertTrue(u.reply and u.reply.startswith("I'm Daedalus"), u.reply)
+
+    def test_domain_questions_are_not_about_the_assistant(self) -> None:
+        for text in ("What is pH?", "what is the purpose of the NDIR", "what does this valve do"):
+            with self.subTest(text=text):
+                self.assertNotEqual(query_pipeline.understand(text, [], use_model=False).intent,
+                                    "out_of_scope")
+
     def test_co2_level_is_one_sensor(self) -> None:
         u = query_pipeline.understand("What is the CO2 level now?", [], use_model=False)
         self.assertEqual(list(u.signals.get("sensors")), ["co2"])

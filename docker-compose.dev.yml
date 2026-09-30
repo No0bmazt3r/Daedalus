@@ -81,6 +81,9 @@ services:
       - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
     depends_on:
       - daedalus
+    # `pnpm install` and Vite's dependency pre-bundling are the peaks here.
+    mem_limit: ${FRONTEND_MEM_LIMIT:-1g}
+    cpus: ${FRONTEND_CPUS:-1.5}
     restart: unless-stopped
 
 volumes:

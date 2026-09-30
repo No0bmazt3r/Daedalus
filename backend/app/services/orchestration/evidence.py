@@ -35,6 +35,16 @@ from typing import Any
 from .. import agent_tools
 from . import numbers, timeparse
 
+RETRIEVAL_TOOLS = ("search_corpus", "graph_walk", "search_graph")
+
+NO_DOCUMENTS = (
+    "NO DOCUMENTS FOUND. The knowledge base returned nothing for this question, so there is no "
+    "evidence about procedures, purposes, functions, causes or explanations. Do not describe any "
+    "of those from your own knowledge. Say plainly that the documents do not cover it, and answer "
+    "only what the readings below show. A reading label such as [S1] supports only the value, "
+    "time, mode and flag written on its own line."
+)
+
 # A passage long enough to carry a procedure, short enough that five fit.
 _PASSAGE_CHARS = 700
 # Points of a series shown to the model. The tool keeps up to 100.
@@ -60,6 +70,10 @@ class EvidencePack:
     notes: list[str] = field(default_factory=list)
     numbers: set[float] = field(default_factory=set)
     tools_used: list[str] = field(default_factory=list)
+    #: Retrieval ran and returned no passage or node. The prompt says so first,
+    #: in capitals, because a small model given only sensor rows will otherwise
+    #: explain the reactor from its own training and cite a reading for it.
+    no_documents: bool = False
 
     @property
     def empty(self) -> bool:
@@ -70,7 +84,10 @@ class EvidencePack:
         return {i.label for i in self.items}
 
     def render(self) -> str:
-        parts = list(self.blocks)
+        parts = []
+        if self.no_documents:
+            parts.append(NO_DOCUMENTS)
+        parts += self.blocks
         if self.failures:
             parts.append("Tools that did not return evidence:\n" + "\n".join(f"- {f}" for f in self.failures))
         if self.notes:
@@ -90,6 +107,7 @@ class EvidencePack:
             "failures": self.failures,
             "notes": self.notes,
             "tools_used": self.tools_used,
+            "no_documents": self.no_documents,
         }
 
 
@@ -279,6 +297,11 @@ def build(envelopes: list[dict[str, Any]], *, notes: list[str] | None = None) ->
         # shown too, so they count.
         shown.extend(lines)
         shown.append(env.get("detail") or "")
+
+    retrieved = any(t in RETRIEVAL_TOOLS for t in pack.tools_used)
+    pack.no_documents = retrieved and not any(i.kind in ("document", "graph") for i in pack.items)
+    if pack.no_documents:
+        shown.append(NO_DOCUMENTS)
 
     pack.numbers = numbers.values("\n".join(shown))
     return pack

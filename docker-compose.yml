@@ -93,6 +93,11 @@ services:
       - "${DOCKER_GID:-999}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Caps, not reservations. Without them a container may take everything the
+    # WSL VM has (.wslconfig), and the VM is shared with Ollama and the editor.
+    # The API is I/O-bound — it waits on Ollama and Chroma — so this is generous.
+    mem_limit: ${DAEDALUS_MEM_LIMIT:-1g}
+    cpus: ${DAEDALUS_CPUS:-1.5}
     restart: unless-stopped
 
   # RAG vector store. Runs as a server so the index survives app rebuilds and
@@ -111,6 +116,8 @@ services:
     # No healthcheck: the chroma image is minimal (dash only — no curl, wget,
     # python or bash), so nothing inside it can probe the port. Readiness is
     # reported by the app instead, via /api/system/databases.
+    mem_limit: ${CHROMA_MEM_LIMIT:-1g}
+    cpus: ${CHROMA_CPUS:-1.0}
     restart: unless-stopped
 
   # Optional: only starts with `--profile with-search`.
@@ -174,6 +181,8 @@ services:
       timeout: 6s
       retries: 20
       start_period: 10s
+    mem_limit: ${SEARXNG_MEM_LIMIT:-512m}
+    cpus: ${SEARXNG_CPUS:-1.0}
     restart: unless-stopped
 
   # Optional: only starts with `--profile with-ollama`.
@@ -185,6 +194,16 @@ services:
       - "127.0.0.1:11434:11434"
     volumes:
       - ollama-models:/root/.ollama
+    # Sized for the SLM tier on an 8GB VM. A model larger than this gets
+    # OOM-killed instead of taking the whole machine down with it.
+    mem_limit: ${OLLAMA_MEM_LIMIT:-5g}
+    cpus: ${OLLAMA_CPUS:-3.0}
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      # 2, not 1: a RAG turn embeds the query and then generates, so the
+      # embedding model and the chat model are both in use on every question.
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
     restart: unless-stopped
     # Uncomment for an NVIDIA GPU (needs the NVIDIA Container Toolkit):
     # deploy:

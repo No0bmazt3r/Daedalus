@@ -138,6 +138,15 @@ class EvidenceAndValidatorTest(unittest.TestCase):
     def validate(self, answer: str, history=None):  # noqa: ANN001, ANN201
         return validator.validate(answer, self.pack, question=self.question, history=history)
 
+    def test_empty_retrieval_is_announced(self) -> None:
+        pack = orchestration.evidence.build([{
+            "tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus",
+            "citable": True, "data": {"chunks": [], "track": "vector"}, "detail": "no passage matched",
+        }])
+        self.assertTrue(pack.no_documents)
+        self.assertTrue(pack.render().startswith("NO DOCUMENTS FOUND"))
+        self.assertFalse(self.pack.no_documents)  # no retrieval ran for that pack
+
     def test_pack_labels_and_numbers(self) -> None:
         self.assertIn("S1", self.pack.labels)
         self.assertIn("A1", self.pack.labels)
@@ -175,6 +184,45 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         v = self.validate("See [S1, A1] and [A2; S9].")
         self.assertEqual(v.cited, ["A1", "A2", "S1", "S9"])
         self.assertEqual(v.unknown_citations, ["S9"])
+
+    def test_loose_citation_shapes_are_normalised(self) -> None:
+        cases = {
+            "[EVIDENCE: S1] CO2 peaked.": "[S1] CO2 peaked.",
+            "See [Source S1, A1].": "See [S1, A1].",
+            "(S1) and (a2)": "[S1] and [A2]",
+            "[S1 and A1]": "[S1, A1]",
+            "Valve [ABV-1] and footnote [1]": "Valve [ABV-1] and footnote [1]",
+        }
+        for raw, want in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(validator.normalise_citations(raw), want)
+
+    def test_normalised_citation_counts_as_grounded(self) -> None:
+        text = validator.normalise_citations(f"[EVIDENCE: S1] CO2 peaked at {fixtures.co2(34)} ppm.")
+        v = self.validate(text)
+        self.assertTrue(v.passed, v.reasons)
+        self.assertTrue(validator.grounded(v, self.pack))
+
+    def test_reading_citation_must_support_its_sentence(self) -> None:
+        # The shape seen live: a cited reading under an explanation nobody retrieved.
+        v = self.validate("[S1] The CO2 sensor monitors capture efficiency at the outlet.")
+        self.assertFalse(v.passed)
+        self.assertIn("citation_mismatch", v.reasons)
+        self.assertEqual(v.mismatched_citations, ["S1"])
+        self.assertTrue(v.hallucination)
+
+    def test_reading_citation_after_the_full_stop_is_attached_to_its_sentence(self) -> None:
+        self.assertTrue(self.validate(f"CO2 peaked at {fixtures.co2(34)} ppm. [S1]").passed)
+
+    def test_mode_word_counts_only_as_a_mode(self) -> None:
+        live = orchestration.evidence.build(orchestration.executor.execute(
+            orchestration.planner.plan(
+                query_pipeline.understand("How is the reactor?", [], use_model=False), now=NOW),
+            None))
+        ok = validator.validate("The reactor is in Desorption mode [S1].", live)
+        loose = validator.validate("Pressure matters for desorption processes [S2].", live)
+        self.assertTrue(ok.passed, ok.reasons)
+        self.assertIn("citation_mismatch", loose.reasons)
 
     def test_control_claim_is_caught(self) -> None:
         for text in ("I have opened ABV-1.", "I'll reduce the flow now.", "Done. The valve is now open."):
