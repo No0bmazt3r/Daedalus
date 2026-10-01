@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, RefreshCw, Check, ChevronDown, ScanLine, ArrowRight } from 'lucide-react'
+import { Download, RefreshCw, Check, ChevronDown, ScanLine, ArrowRight, CircleCheck, CircleAlert, CircleSlash, Gauge } from 'lucide-react'
 import type { EmbeddingModel, FigureSource } from '../../lib/embeddingsClient'
 import { Collapse } from '../ui/collapse'
 
@@ -84,6 +84,12 @@ function Fact({ label, value, hint, tone, source }: {
   )
 }
 
+const VERDICT = {
+  safe: { icon: CircleCheck, tone: 'status-ok', label: 'safe' },
+  marginal: { icon: CircleAlert, tone: 'status-warn', label: 'marginal' },
+  will_not_fit: { icon: CircleSlash, tone: 'status-bad', label: 'will not fit' },
+} as const
+
 /**
  * The same card in both places, with different actions. Installed passes
  * `onSelect` and `onVerify` — managing what you have. Browsing passes
@@ -92,6 +98,7 @@ function Fact({ label, value, hint, tone, source }: {
  */
 export function EmbeddingRow({
   model, selected, pulling, progress, onPull, onVerify, verifying = false, onSelect, onManage,
+  onBenchmark, benchmarking = false,
 }: {
   model: EmbeddingModel
   selected: boolean
@@ -102,12 +109,16 @@ export function EmbeddingRow({
   verifying?: boolean
   onSelect?: () => void
   onManage?: () => void
+  /** Installed: time embedding one question on this machine. */
+  onBenchmark?: () => void
+  benchmarking?: boolean
 }) {
   const [open, setOpen] = useState(false)
-  // M2 chunks at 300-500 tokens. A narrower window truncates without error, and
-  // a truncated chunk embeds as a different document than its citation points
-  // at — so it is flagged before the model is pulled, not after.
-  const tooNarrow = (model.max_tokens ?? 0) > 0 && (model.max_tokens as number) < 512
+  // A window shorter than a chunk truncates without error, and a truncated
+  // chunk embeds as a different document than its citation points at — so the
+  // fit verdict fails it on any machine, and the figure is flagged here too.
+  const tooNarrow = model.fit.reasons.some((r) => r.includes('cut short'))
+  const verdict = VERDICT[model.fit.verdict]
 
   return (
     <div className="rounded-xl border theme-border theme-surface overflow-hidden">
@@ -118,11 +129,21 @@ export function EmbeddingRow({
             <span className="text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 theme-border theme-text-muted">
               embedding
             </span>
-            {model.recommended && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 theme-accent-border theme-accent">
-                recommended
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] shrink-0 ${verdict.tone}`}
+              title={model.fit.reasons.join(' · ') || 'Fits this machine'}
+            >
+              <verdict.icon size={11} /> {verdict.label}
+            </span>
+            {model.recommended_for.map((r) => (
+              <span
+                key={r}
+                title={`The strongest embedding model this machine can run${r === 'malay' ? ' that also understands Malay' : ''}`}
+                className="text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide shrink-0 theme-accent-border theme-accent"
+              >
+                recommended{r === 'malay' ? ' for malay' : ''}
               </span>
-            )}
+            ))}
             {model.installed && <span className="text-[11px] status-ok">installed</span>}
             {selected && (
               <span className="inline-flex items-center gap-1 text-[11px] theme-accent">
@@ -159,11 +180,19 @@ export function EmbeddingRow({
               hint={model.installed ? 'Real bytes on this disk.' : 'Published size; the pull may differ.'}
             />
             <Fact
-              label="per vector"
-              value={bytes(model.bytes_per_vector)}
-              hint="dimensions x 4 bytes, because Chroma stores float32."
+              label="per question"
+              source={model.fit.latency_source === 'measured' ? 'measured' : 'declared'}
+              value={`${model.fit.latency_source === 'measured' ? '' : '~'}${model.fit.latency_ms} ms`}
+              hint={
+                model.fit.latency_source === 'measured'
+                  ? 'Measured on this machine: median time to embed one question.'
+                  : 'Estimated from the model\'s size. Benchmark it once installed to measure this machine.'
+              }
             />
           </div>
+          {model.fit.reasons.length > 0 && (
+            <p className={`mt-1.5 text-[10px] leading-relaxed ${verdict.tone}`}>{model.fit.reasons.join(' · ')}</p>
+          )}
         </div>
 
         <div className="shrink-0 flex items-center gap-1.5">
@@ -183,6 +212,18 @@ export function EmbeddingRow({
               className="inline-flex items-center gap-1.5 rounded-lg border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
             >
               <Check size={11} />Use for index
+            </button>
+          )}
+          {model.installed && onBenchmark && (
+            <button
+              onClick={onBenchmark}
+              disabled={benchmarking}
+              title="Time embedding one question on this machine; replaces the estimate in its verdict"
+              className="inline-flex items-center gap-1.5 rounded-lg border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text disabled:opacity-40"
+            >
+              {benchmarking
+                ? <><RefreshCw size={11} className="animate-spin" />timing…</>
+                : <><Gauge size={11} />Benchmark</>}
             </button>
           )}
           {/* Only for installed models: verifying means running one, and there
@@ -238,6 +279,11 @@ export function EmbeddingRow({
             <Fact label="tag" value={model.tag} />
             <Fact label="languages" value={model.languages ?? '—'} />
             <Fact
+              label="per vector"
+              value={bytes(model.bytes_per_vector)}
+              hint="dimensions x 4 bytes, because Chroma stores float32."
+            />
+            <Fact
               label={`index @ ${model.illustrative_chunks ?? 200} chunks`}
               value={bytes(model.index_bytes_estimate)}
               hint="Illustrative, not a measurement: bytes-per-vector times a corpus of that size. The real figure depends on how many chunks ingestion produces."
@@ -284,9 +330,10 @@ export function EmbeddingRow({
             </p>
           )}
           <p className="text-[10px] leading-relaxed theme-text-muted">
-            No retrieval-quality score is shown. Ranking these honestly needs verified MTEB
-            figures, and the catalogue does not carry any — an unsourced number here would look
-            exactly as authoritative as the measured ones elsewhere in the Forge.
+            The recommendation orders models by an approximate rank from published MTEB retrieval
+            results, among those judged safe on this machine. The rank is not shown as a score: it
+            is a sourced ordering, not a measurement, and would otherwise look exactly as
+            authoritative as the measured figures.
           </p>
       </Collapse>
     </div>

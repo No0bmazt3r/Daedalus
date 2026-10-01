@@ -465,8 +465,10 @@ def local_models() -> list[dict[str, Any]]:
                 "family": detail.get("family"),
                 "parameter_size": detail.get("parameter_size"),
                 "quantization": detail.get("quantization_level"),
-                "recommended": known.get("recommended", False),
-                "note": known.get("note", "Pulled locally; not in the recommended set."),
+                "params_m": known.get("params_m"),
+                "compute_m": known.get("compute_m"),
+                "quality": known.get("quality", 0),
+                "note": known.get("note", "Pulled locally; not in the catalogue, so its strength is unknown."),
                 **_derived(dimensions),
             }
 
@@ -508,15 +510,176 @@ def local_models() -> list[dict[str, Any]]:
             "family": None,
             "parameter_size": None,
             "quantization": None,
-            "recommended": entry["recommended"],
+            "params_m": entry.get("params_m"),
+            "compute_m": entry.get("compute_m"),
+            "quality": entry.get("quality", 0),
             "note": entry["note"],
             **_derived(entry["dimensions"]),
         })
 
-    # Installed first, then the recommendation, then the rest — the order you
-    # would work down when deciding what to pull.
-    rows.sort(key=lambda r: (not r["installed"], not r["recommended"], r["tag"]))
+    # Each row judged against this machine — `fit()` — and marked when it is the
+    # recommendation. Then installed first, then the recommendation, then the
+    # strongest: the order you would work down when deciding what to pull.
+    judged = fit(rows)
+    for row in rows:
+        row["fit"] = judged["models"][row["tag"]]
+        row["recommended_for"] = [k for k, v in judged["recommended"].items() if v == row["tag"]]
+        row["recommended"] = bool(row["recommended_for"])
+    rows.sort(key=lambda r: (not r["installed"], not r["recommended"], -(r.get("quality") or 0), r["tag"]))
     return rows
+
+
+# ── fit — docs/MODEL_FIT.md ──────────────────────────────────────────────────
+
+# Embedding one question is Track 1's first step on every answer; with the
+# re-ranker's 1 s and the model's generation, this is its share of §9.2's 3 s.
+QUERY_BUDGET_MS = 300
+# Ollama's runtime beside the weights: context buffers and the graph.
+_MEMORY_FACTOR = 1.2
+# A chunk's size in tokens, from the corpus config's characters — the same
+# 4-characters-a-token estimate `chunking.py` uses for `token_estimate`.
+CHARS_PER_TOKEN = 4
+# Two measured points, and the line through them: `benchmark()` on the dev
+# laptop (i5-11400H, 8 GB, RTX 3050 4 GB, Ollama choosing the device), median
+# of 7 after a warm-up — nomic-embed-text (110 M compute) 35 ms, and
+# qwen3-embedding:0.6b (440 M) 95 ms. So ~15 ms of round trip every model pays,
+# plus ~0.18 ms per million compute parameters. A model too big for the GPU
+# would fall back to the CPU and run slower than this line says; such models
+# already fail on memory here, and a benchmark replaces the estimate anyway.
+_FLOOR_MS = 15.0
+_MS_PER_COMPUTE_M = 0.182
+_CALIBRATION_NOTE = (
+    "estimates scale from two benchmarks on the development laptop: "
+    "nomic-embed-text 35 ms, qwen3-embedding:0.6b 95 ms per question"
+)
+_BENCH_QUERY = "What should the operator do if the NDIR CO2 reading drifts during absorption?"
+_BENCH_PATH = paths.DATA_DIR / "embedding_benchmarks.json"
+
+
+def _benchmarks() -> dict[str, Any]:
+    try:
+        return json.loads(_BENCH_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _chunk_tokens() -> int:
+    try:
+        from . import corpus_config  # noqa: PLC0415
+
+        return int(corpus_config.read()["chunk_size"]) // CHARS_PER_TOKEN
+    except Exception:  # noqa: BLE001
+        from . import chunking  # noqa: PLC0415
+
+        return chunking.DEFAULT_CHUNK_SIZE // CHARS_PER_TOKEN
+
+
+def estimate_ms(compute_m: float | None, size_bytes: int | None = None) -> int:
+    """Estimated milliseconds to embed one question, from transformer size.
+
+    A model outside the catalogue has no `compute_m`; its file size stands in —
+    F16 is two bytes a parameter, and `size / 2.5` leaves out roughly the share
+    an embedding table takes. An estimate, labelled as one until `benchmark()`
+    measures this machine.
+    """
+    if compute_m is None:
+        compute_m = (size_bytes or 0) / 2_500_000
+    return int(_FLOOR_MS + _MS_PER_COMPUTE_M * compute_m)
+
+
+def fit(rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Every embedding model judged against this machine, and the recommendations.
+
+    Three tests (`fit_verdict.verdict`): memory against the RAM free now; the
+    time to embed one question against `QUERY_BUDGET_MS` — measured when this
+    machine has benchmarked it, estimated otherwise; and the window, which must
+    hold a whole chunk (a hard failure on any machine). The recommendation is the
+    strongest model judged safe, once over all models and once over the
+    multilingual ones, for Malay questions.
+    """
+    from . import fit_verdict  # noqa: PLC0415
+
+    rows = rows if rows is not None else local_models_without_fit()
+    machine = fit_verdict.machine()
+    chunk = _chunk_tokens()
+    benches = _benchmarks()
+    judged: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        tag = row["tag"]
+        bench = benches.get(tag) if row.get("installed") else None
+        measured = bool(bench and bench.get("ms") is not None)
+        latency = int(bench["ms"]) if measured else estimate_ms(row.get("compute_m"), row.get("size_bytes"))
+        memory = int((row.get("size_bytes") or 0) * _MEMORY_FACTOR)
+        hard = []
+        window = row.get("max_tokens")
+        if window and window < chunk:
+            hard.append(f"reads {window} tokens and a chunk is ~{chunk} — every chunk would be cut short")
+        verdict, reasons = fit_verdict.verdict(
+            memory_bytes=memory, available_bytes=machine["available_bytes"],
+            latency_ms=latency, budget_ms=QUERY_BUDGET_MS, hard_failures=hard,
+        )
+        judged[tag] = {
+            "verdict": verdict,
+            "reasons": reasons,
+            "latency_ms": latency,
+            "latency_source": "measured" if measured else "estimated",
+            "memory_bytes": memory,
+            "benchmark": bench,
+        }
+
+    quality = {r["tag"]: r.get("quality") or 0 for r in rows}
+    multilingual = [r["tag"] for r in rows if str(r.get("languages") or "").startswith("Multilingual")]
+    return {
+        "machine": machine,
+        "budget_ms": QUERY_BUDGET_MS,
+        "chunk_tokens": chunk,
+        "calibration": _CALIBRATION_NOTE,
+        "models": judged,
+        "recommended": {
+            "english": fit_verdict.recommend([r["tag"] for r in rows], judged, quality.__getitem__),
+            "malay": fit_verdict.recommend(multilingual, judged, quality.__getitem__),
+        },
+    }
+
+
+def local_models_without_fit() -> list[dict[str, Any]]:
+    """`local_models()` minus the fit columns — what `fit()` judges when called alone."""
+    return [
+        {k: v for k, v in row.items() if k not in ("fit", "recommended_for", "recommended")}
+        for row in local_models()
+    ]
+
+
+def benchmark(tag: str, *, runs: int = 5) -> dict[str, Any]:
+    """Time embedding one question with an installed model; keep the result.
+
+    One warm-up — loading the model is not what a question pays when it is
+    resident — then the median of `runs`. Stored per machine under DATA_DIR,
+    not in the git-tracked config: it describes this machine, not the project.
+    """
+    tag = normalise_tag(tag)
+    row = next((r for r in local_models_without_fit() if r["tag"] == tag and r["installed"]), None)
+    if row is None:
+        raise ValueError(f"{tag} is not installed — pull it before benchmarking")
+    name = row["installed_tag"] or tag
+    ollama_client.embed(name, _BENCH_QUERY)
+    timings = []
+    for _ in range(max(1, runs)):
+        started = time.perf_counter()
+        ollama_client.embed(name, _BENCH_QUERY)
+        timings.append((time.perf_counter() - started) * 1000)
+    timings.sort()
+    result = {
+        "ms": int(timings[len(timings) // 2]),
+        "runs_ms": [int(t) for t in timings],
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    with _lock:
+        benches = _benchmarks()
+        benches[tag] = result
+        _BENCH_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _BENCH_PATH.write_text(json.dumps(benches, indent=2) + "\n", encoding="utf-8")
+    return result
 
 
 def cloud_baselines() -> list[dict[str, Any]]:
@@ -652,6 +815,8 @@ def status() -> dict[str, Any]:
 
     config = read()
     models = local_models()
+    # The verdicts are on each row; this is what they were judged against.
+    judged = fit(models)
     chosen_tag = normalise_tag(config["model"])
     chosen = next((m for m in models if m["tag"] == chosen_tag), None)
 
@@ -673,6 +838,7 @@ def status() -> dict[str, Any]:
         # same corpus coexist by design, and comparing them is the point.
         "indexes": vector_store.collections(),
         "local_models": models,
+        "fit": {k: judged[k] for k in ("machine", "budget_ms", "chunk_tokens", "calibration", "recommended")},
         "cloud_baselines": cloud_baselines(),
         "ollama_available": ollama_client.available(),
     }

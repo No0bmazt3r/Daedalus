@@ -3,7 +3,7 @@ import {
   Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, Download, Loader2, Search, Database, Binary,
 } from 'lucide-react'
 import {
-  fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel, verifyEmbeddingModel,
+  fetchEmbeddingConfig, setEmbeddingModel, pullEmbeddingModel, verifyEmbeddingModel, benchmarkEmbeddingModel,
   type EmbeddingConfig,
   // Aliased: the local component below is also called `IndexState`, and the
   // tone map needs the union to be exhaustively checked.
@@ -155,6 +155,39 @@ function normaliseTag(tag: string): string {
   return tag.endsWith(':latest') ? tag.slice(0, -':latest'.length) : tag
 }
 
+function gb(bytes: number | null | undefined) {
+  return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : '—'
+}
+
+/**
+ * What the browse list's verdicts were judged against — `docs/MODEL_FIT.md`.
+ * Said once at the top so each card can carry a one-word verdict.
+ */
+function FitSummary({ config }: { config: EmbeddingConfig }) {
+  const fit = config.fit
+  const pick = (tag: string | null) =>
+    config.local_models.find((m) => m.tag === tag)?.label ?? tag ?? 'none fits'
+  return (
+    <div className="rounded-xl border theme-border p-3 text-[11px] leading-relaxed theme-text-muted space-y-1">
+      <p>
+        Judged for <span className="theme-text">{fit.machine.cpu ?? 'this machine'}</span> with{' '}
+        <span className="theme-text">{gb(fit.machine.available_bytes)}</span> free: a question should
+        embed in under <span className="theme-text">{fit.budget_ms} ms</span>, and a model must read a
+        whole chunk (~<span className="theme-text">{fit.chunk_tokens} tokens</span>) or every chunk is
+        cut short. Times are estimates until a model is benchmarked under Installed.
+      </p>
+      <p>
+        Recommended: <span className="theme-text">{pick(fit.recommended.english)}</span>
+        {fit.recommended.malay && fit.recommended.malay !== fit.recommended.english && (
+          <> · for Malay questions <span className="theme-text">{pick(fit.recommended.malay)}</span></>
+        )}
+        {fit.recommended.malay && fit.recommended.malay === fit.recommended.english && ' — multilingual, so it covers Malay too'}
+        .
+      </p>
+    </div>
+  )
+}
+
 /**
  * Settings → Vector RAG's choice: one dropdown over the installed embedders and
  * a line about the chosen one. The full cards — figures, verify, pull — are the
@@ -173,7 +206,7 @@ function EmbeddingPicker({
   const chosen = models.find((m) => m.tag === current)
   const options = models.map((m) => ({
     value: m.tag,
-    label: `${m.label}${m.dimensions ? ` · ${m.dimensions}d` : ''}${m.recommended ? ' · recommended' : ''}`,
+    label: `${m.label}${m.dimensions ? ` · ${m.dimensions}d` : ''} · ${m.fit.verdict === 'will_not_fit' ? 'will not fit' : m.fit.verdict}${m.recommended ? ' · recommended' : ''}`,
   }))
   // The selection may name a model that is not installed — a choice recorded
   // before pulling, or one deleted since. It stays visible rather than the
@@ -201,11 +234,23 @@ function EmbeddingPicker({
           </div>
           {chosen ? (
             <p className="text-[11px] leading-relaxed theme-text-muted">
+              <span className={
+                chosen.fit.verdict === 'safe' ? 'status-ok' : chosen.fit.verdict === 'marginal' ? 'status-warn' : 'status-bad'
+              }>
+                {chosen.fit.verdict === 'will_not_fit' ? 'will not fit' : chosen.fit.verdict} on this machine
+              </span>
+              {' '}({chosen.fit.latency_source === 'measured' ? '' : '~'}{chosen.fit.latency_ms} ms a question
+              {chosen.fit.reasons.length > 0 && `; ${chosen.fit.reasons[0]}`}) ·{' '}
               {chosen.dimensions ? `${chosen.dimensions}-dimension vectors` : 'width unknown'}
               {chosen.verified_at ? ' (verified)' : ''}
               {chosen.max_tokens ? ` · reads up to ${chosen.max_tokens} tokens a chunk` : ''}
-              {chosen.languages ? ` · ${chosen.languages}` : ''}. Changing it means re-embedding the
-              corpus — the old index is kept, not lost.
+              {chosen.languages ? ` · ${chosen.languages}` : ''}
+              {config.fit.recommended.english && config.fit.recommended.english !== chosen.tag && (
+                <> · this machine's recommendation is{' '}
+                  {models.find((m) => m.tag === config.fit.recommended.english)?.label ?? config.fit.recommended.english}
+                </>
+              )}
+              . Changing it means re-embedding the corpus — the old index is kept, not lost.
             </p>
           ) : current ? (
             <p className="text-[11px] leading-relaxed status-warn">
@@ -239,6 +284,7 @@ export function EmbeddingModelsPane({
   const [progress, setProgress] = useState<string | null>(null)
   const [showCloud, setShowCloud] = useState(false)
   const [verifying, setVerifying] = useState<string | null>(null)
+  const [benchmarking, setBenchmarking] = useState<string | null>(null)
   const [filter, setFilter] = useState<LangFilter>('all')
   const [search, setSearch] = useState('')
   const [typedTag, setTypedTag] = useState('')
@@ -321,6 +367,15 @@ export function EmbeddingModelsPane({
       .finally(() => { setVerifying(null); load() })
   }
 
+  const bench = (tag: string) => {
+    setBenchmarking(tag)
+    setError(null)
+    benchmarkEmbeddingModel(tag)
+      .then(setConfig)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBenchmarking(null))
+  }
+
   if (!config) return <Skeleton className="h-64 w-full" />
 
   return (
@@ -332,6 +387,9 @@ export function EmbeddingModelsPane({
           <span className="theme-text">Settings → Vector RAG</span>. Every figure is read
           from the model file; once pulled, it is re-read from the copy on this disk.
         </p>
+      ) : null}
+      {mode === 'browse' ? (
+        <FitSummary config={config} />
       ) : mode === 'installed' ? (
       <PaneIntro action={onChoose && <BrowseLink onClick={onChoose}>Choose in Settings → Vector RAG</BrowseLink>}>
         The embedding models on this machine. Verify one to measure its real vector width.
@@ -461,6 +519,8 @@ export function EmbeddingModelsPane({
               onPull={() => pull(m.tag)}
               onVerify={() => verify(m.tag)}
               verifying={verifying === m.tag}
+              onBenchmark={() => bench(m.tag)}
+              benchmarking={benchmarking === m.tag}
             />
           ) : (
             <EmbeddingRow

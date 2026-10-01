@@ -140,7 +140,7 @@ class RerankerFitTest(unittest.TestCase):
 
     def test_recommends_the_strongest_safe_model_and_a_multilingual_one(self) -> None:
         roomy = {"available_bytes": 64_000_000_000, "total_bytes": 64_000_000_000, "cpu": "test"}
-        with mock.patch.object(reranker, "_machine", return_value=roomy), \
+        with mock.patch.object(reranker.fit_verdict, "machine", return_value=roomy), \
              mock.patch.object(reranker, "estimate_ms", return_value=100):
             rec = reranker.fit()["recommended"]
         self.assertEqual(rec["english"], "bge-reranker-v2-m3")  # everything fits; highest quality wins

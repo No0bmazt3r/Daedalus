@@ -83,6 +83,24 @@ def pull(tag: str = Body(..., embed=True)) -> StreamingResponse:
     )
 
 
+@router.post("/benchmark")
+def benchmark(tag: str = Body(..., embed=True)) -> dict[str, Any]:
+    """Time embedding one question with an installed model, and keep it.
+
+    A warm-up, then the median of five. Stored per machine, and from then on
+    the model's fit verdict quotes this instead of the estimate
+    (`docs/MODEL_FIT.md`).
+    """
+    try:
+        record = embedding_models.benchmark(tag)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (ollama_client.OllamaError, ollama_client.OllamaUnavailable) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    live_events.publish("embeddings")
+    return {"ok": True, "benchmark": record, **embedding_models.status()}
+
+
 @router.post("/verify")
 def verify(tag: str = Body(..., embed=True)) -> dict[str, Any]:
     """Embed a probe string and record the width the model actually returns.

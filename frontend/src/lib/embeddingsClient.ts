@@ -51,7 +51,14 @@ export interface EmbeddingModel {
    * as a different document than the citation points at.
    */
   max_tokens: number | null;
+  /** Computed per machine (`docs/MODEL_FIT.md`): true when this is a recommendation. */
   recommended: boolean;
+  /** 'english' and/or 'malay' — which recommendation this is. */
+  recommended_for: ('english' | 'malay')[];
+  /** Approximate retrieval rank within the catalogue; orders the recommendation, not a score. */
+  quality: number;
+  /** This machine's verdict: memory, time to embed one question, and the chunk window. */
+  fit: EmbeddingFit;
   note: string;
   /** Rough — what the model was trained to handle, not a measured claim. */
   languages: string | null;
@@ -60,6 +67,26 @@ export interface EmbeddingModel {
   /** That, times an illustrative corpus size. Labelled as illustrative in the UI. */
   index_bytes_estimate: number | null;
   illustrative_chunks?: number;
+}
+
+export interface EmbeddingFit {
+  verdict: 'safe' | 'marginal' | 'will_not_fit';
+  reasons: string[];
+  latency_ms: number;
+  /** `estimated` from the model's size until Benchmark has run on this machine. */
+  latency_source: 'estimated' | 'measured';
+  memory_bytes: number;
+  benchmark: { ms: number; runs_ms: number[]; at: string } | null;
+}
+
+export interface EmbeddingFitSummary {
+  machine: { available_bytes: number | null; total_bytes: number | null; cpu: string | null };
+  /** Embedding one question's share of the 3-second answer. */
+  budget_ms: number;
+  /** A chunk's size in tokens — the shortest window that does not truncate. */
+  chunk_tokens: number;
+  calibration: string;
+  recommended: { english: string | null; malay: string | null };
 }
 
 export interface CloudBaseline {
@@ -147,6 +174,8 @@ export interface EmbeddingConfig {
    */
   indexes: VectorIndex[];
   local_models: EmbeddingModel[];
+  /** What the models' fit verdicts were judged against. */
+  fit: EmbeddingFitSummary;
   cloud_baselines: CloudBaseline[];
   ollama_available: boolean;
 }
@@ -183,6 +212,13 @@ export const pullEmbeddingModel = (
  * The only call here that runs a model rather than reading metadata about one:
  * a brief load and one forward pass over a few words.
  */
+export const benchmarkEmbeddingModel = (tag: string) =>
+  request<EmbeddingConfig>('/api/embeddings/benchmark', {
+    method: 'POST',
+    body: JSON.stringify({ tag }),
+    timeoutMs: 120_000,
+  });
+
 export const verifyEmbeddingModel = (tag: string) =>
   request<EmbeddingConfig & { dimensions: number; elapsed_ms: number }>(
     '/api/embeddings/verify',

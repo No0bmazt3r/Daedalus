@@ -44,6 +44,9 @@ machine can afford.
 
 ## Fit — what this machine can afford
 
+The contract is `docs/MODEL_FIT.md`; the verdict and recommendation rules are
+`fit_verdict.py`, shared with the embedding models.
+
 The Forge does for chat models what `fit()` does here, on the two resources a
 re-ranker actually spends:
 
@@ -81,6 +84,7 @@ from pathlib import Path
 from typing import Any
 
 from ..db import paths
+from . import fit_verdict
 
 log = logging.getLogger("daedalus.reranker")
 
@@ -281,22 +285,6 @@ def _threads() -> int:
     return max(1, min(4, os.cpu_count() or 1))
 
 
-def _machine() -> dict[str, Any]:
-    """Available RAM and CPU, from the hardware profile. Never raises."""
-    try:
-        from . import hardware  # noqa: PLC0415 — heavy-ish, only when fit is asked for
-
-        profile = hardware.profile()
-        memory, cpu = profile.get("memory") or {}, profile.get("cpu") or {}
-        return {
-            "available_bytes": memory.get("available_bytes"),
-            "total_bytes": memory.get("total_bytes"),
-            "cpu": cpu.get("model"),
-        }
-    except Exception:  # noqa: BLE001
-        return {"available_bytes": None, "total_bytes": None, "cpu": None}
-
-
 def estimate_ms(model_id: str, threads: int | None = None) -> int:
     """Estimated milliseconds to score `BENCH_CANDIDATES` chunks on this machine.
 
@@ -314,22 +302,11 @@ def estimate_ms(model_id: str, threads: int | None = None) -> int:
 
 
 def _verdict(memory_bytes: int, available: int | None, latency_ms: int) -> tuple[str, list[str]]:
-    """`safe` | `marginal` | `will_not_fit`, the Forge's words, and why."""
-    reasons: list[str] = []
-    level = 0
-    if available:
-        if memory_bytes > available:
-            level, _ = 2, reasons.append("needs more memory than is free now")
-        elif memory_bytes > available * 0.5:
-            level = max(level, 1)
-            reasons.append("would take over half the free memory, beside the chat model")
-    if latency_ms > 3 * LATENCY_BUDGET_MS:
-        level = 2
-        reasons.append(f"~{latency_ms / 1000:.1f} s per question — the whole answer budget on its own")
-    elif latency_ms > LATENCY_BUDGET_MS:
-        level = max(level, 1)
-        reasons.append(f"~{latency_ms / 1000:.1f} s per question — over the {LATENCY_BUDGET_MS} ms re-ranking budget")
-    return ("safe", "marginal", "will_not_fit")[level], reasons
+    """This kind's call into the shared rule (`fit_verdict.verdict`)."""
+    return fit_verdict.verdict(
+        memory_bytes=memory_bytes, available_bytes=available,
+        latency_ms=latency_ms, budget_ms=LATENCY_BUDGET_MS,
+    )
 
 
 def fit() -> dict[str, Any]:
@@ -339,7 +316,7 @@ def fit() -> dict[str, Any]:
     recommendation is the highest-`quality` model judged `safe` — once over every
     model (English questions) and once over the multilingual ones (Malay).
     """
-    machine = _machine()
+    machine = fit_verdict.machine()
     threads = _threads()
     judged: dict[str, dict[str, Any]] = {}
     for model_id, entry in CATALOGUE.items():
@@ -358,14 +335,7 @@ def fit() -> dict[str, Any]:
         }
 
     def best(pool: list[str]) -> str | None:
-        # The strongest `safe` model; failing that, the fastest `marginal` one —
-        # on a slow machine "the least over budget" is still the useful answer,
-        # and its verdict says it is over.
-        safe = [m for m in pool if judged[m]["verdict"] == "safe"]
-        if safe:
-            return max(safe, key=lambda m: (CATALOGUE[m]["quality"], -judged[m]["latency_ms"]))
-        marginal = [m for m in pool if judged[m]["verdict"] == "marginal"]
-        return min(marginal, key=lambda m: judged[m]["latency_ms"], default=None)
+        return fit_verdict.recommend(pool, judged, lambda m: CATALOGUE[m]["quality"])
 
     return {
         "machine": {**machine, "threads": threads},

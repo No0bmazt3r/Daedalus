@@ -23,9 +23,23 @@
     "A model pulled from outside this list still appears — capability is read from",
     "Ollama, not matched against these tags.",
     "",
-    "Fields: tag (Ollama tag), label, dimensions, max_tokens, approx_bytes,",
-    "languages (starts with 'English' or 'Multilingual' — the Forge filters on",
-    "it), recommended (at most one; architecture/04's pick), note."
+    "Fields — every entry must have all of them; tests/test_embedding_fit.py fails",
+    "the build if one is missing, so a model added later cannot skip the fit check:",
+    "  tag (Ollama tag) · label · dimensions · max_tokens · approx_bytes (model layer,",
+    "  from the registry manifest) · params_m (total parameters, millions) ·",
+    "  compute_m (parameters a forward pass multiplies through — total minus the",
+    "  token-embedding table, which is a lookup; for a multilingual model the table",
+    "  is most of the file) · languages (starts with 'English' or 'Multilingual' —",
+    "  the Forge filters on it, and 'Multilingual' makes it a Malay candidate) ·",
+    "  quality (rank within this list, higher is better, from published MTEB",
+    "  retrieval results — it orders the recommendation and is not a score) · note.",
+    "",
+    "There is no `recommended` field. Which model is recommended is computed per",
+    "machine by services/embedding_models.fit(), under the rule in",
+    "docs/MODEL_FIT.md — the strongest model judged safe on memory, on the time to",
+    "embed one question, and on a window at least as long as a chunk. nomic-embed-text",
+    "was architecture/04's pick and its note still says so; it is no longer",
+    "recommended by fiat."
   ],
   "models": [
     {
@@ -34,8 +48,10 @@
       "dimensions": 768,
       "max_tokens": 2048,
       "approx_bytes": 274290656,
+      "params_m": 137,
+      "compute_m": 110,
       "languages": "English",
-      "recommended": true,
+      "quality": 5,
       "note": "architecture/04's recommendation. 2,048 tokens is four times M2's largest chunk, so no chunk truncates."
     },
     {
@@ -44,8 +60,10 @@
       "dimensions": 1024,
       "max_tokens": 512,
       "approx_bytes": 669603712,
+      "params_m": 335,
+      "compute_m": 300,
       "languages": "English",
-      "recommended": false,
+      "quality": 6,
       "note": "Wider vectors than nomic at a fraction of the context. Fine for 300-500 token chunks, tight above that."
     },
     {
@@ -54,8 +72,10 @@
       "dimensions": 1024,
       "max_tokens": 8192,
       "approx_bytes": 1157671200,
+      "params_m": 568,
+      "compute_m": 300,
       "languages": "Multilingual (100+)",
-      "recommended": false,
+      "quality": 7,
       "note": "Wide vectors and long context. Over 1GB — check it against the Forge's memory figures."
     },
     {
@@ -64,8 +84,10 @@
       "dimensions": 384,
       "max_tokens": 256,
       "approx_bytes": 45949216,
+      "params_m": 23,
+      "compute_m": 21,
       "languages": "English",
-      "recommended": false,
+      "quality": 1,
       "note": "architecture/04's 'if hardware is weak'. Tiny and fast; 256 tokens truncates a 500-token chunk."
     },
     {
@@ -74,8 +96,10 @@
       "dimensions": 1024,
       "max_tokens": 8192,
       "approx_bytes": 1160285024,
+      "params_m": 568,
+      "compute_m": 300,
       "languages": "Multilingual",
-      "recommended": false,
+      "quality": 7,
       "note": "Arctic Embed's multilingual second version. Long context with English retrieval kept strong."
     },
     {
@@ -84,8 +108,10 @@
       "dimensions": 1024,
       "max_tokens": 512,
       "approx_bytes": 669481504,
+      "params_m": 335,
+      "compute_m": 300,
       "languages": "English",
-      "recommended": false,
+      "quality": 6,
       "note": "The large English Arctic model. Same width and window as mxbai-embed-large."
     },
     {
@@ -94,8 +120,10 @@
       "dimensions": 768,
       "max_tokens": 2048,
       "approx_bytes": 274177792,
+      "params_m": 137,
+      "compute_m": 110,
       "languages": "English",
-      "recommended": false,
+      "quality": 5,
       "note": "Nomic-BERT base, like nomic-embed-text: the same width and window at the same size."
     },
     {
@@ -104,8 +132,10 @@
       "dimensions": 384,
       "max_tokens": 512,
       "approx_bytes": 67185920,
+      "params_m": 33,
+      "compute_m": 21,
       "languages": "English",
-      "recommended": false,
+      "quality": 3,
       "note": "Small and fast, with a full 512-token window — unlike all-minilm, a 500-token chunk fits."
     },
     {
@@ -114,8 +144,10 @@
       "dimensions": 384,
       "max_tokens": 512,
       "approx_bytes": 62523136,
+      "params_m": 30,
+      "compute_m": 21,
       "languages": "English",
-      "recommended": false,
+      "quality": 3,
       "note": "IBM's smallest. The lightest model here with a full 512-token window."
     },
     {
@@ -124,8 +156,10 @@
       "dimensions": 768,
       "max_tokens": 512,
       "approx_bytes": 562765632,
+      "params_m": 278,
+      "compute_m": 86,
       "languages": "Multilingual (12)",
-      "recommended": false,
+      "quality": 4,
       "note": "IBM's multilingual model: English, German, Spanish, French, Japanese, Portuguese, Arabic, Czech, Italian, Korean, Dutch, Chinese."
     },
     {
@@ -134,8 +168,10 @@
       "dimensions": 768,
       "max_tokens": 2048,
       "approx_bytes": 621867104,
+      "params_m": 308,
+      "compute_m": 140,
       "languages": "Multilingual (100+)",
-      "recommended": false,
+      "quality": 7,
       "note": "Google's on-device embedder. Needs a recent Ollama."
     },
     {
@@ -144,8 +180,10 @@
       "dimensions": 1024,
       "max_tokens": 32768,
       "approx_bytes": 639150592,
+      "params_m": 596,
+      "compute_m": 440,
       "languages": "Multilingual (100+)",
-      "recommended": false,
+      "quality": 8,
       "note": "Decoder-based embedder from the same family as the chat model. Very long window."
     },
     {
@@ -154,8 +192,10 @@
       "dimensions": 2560,
       "max_tokens": 40960,
       "approx_bytes": 2496703776,
+      "params_m": 4022,
+      "compute_m": 3600,
       "languages": "Multilingual (100+)",
-      "recommended": false,
+      "quality": 9,
       "note": "2.5GB and 2,560-wide vectors: over three times nomic's index size. Competes with the chat model for VRAM."
     },
     {
@@ -164,8 +204,10 @@
       "dimensions": 4096,
       "max_tokens": 40960,
       "approx_bytes": 4676804928,
+      "params_m": 7568,
+      "compute_m": 6950,
       "languages": "Multilingual (100+)",
-      "recommended": false,
+      "quality": 10,
       "note": "4.7GB — larger than most chat models here. Only worth it on a machine with VRAM to spare."
     },
     {
@@ -174,8 +216,10 @@
       "dimensions": 1024,
       "max_tokens": 512,
       "approx_bytes": 670530624,
+      "params_m": 335,
+      "compute_m": 300,
       "languages": "English",
-      "recommended": false,
+      "quality": 5,
       "note": "BAAI's English model; bge-m3 is its long-context multilingual successor."
     },
     {
@@ -184,8 +228,10 @@
       "dimensions": 768,
       "max_tokens": 512,
       "approx_bytes": 562766080,
+      "params_m": 278,
+      "compute_m": 86,
       "languages": "Multilingual (50+)",
-      "recommended": false,
+      "quality": 2,
       "note": "Sentence-similarity model. Tuned for short paraphrases rather than document retrieval."
     }
   ]

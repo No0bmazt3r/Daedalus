@@ -258,6 +258,14 @@ counts as this rig's unless somebody said so. It is read from the manifest at
 query time (`corpus_store.origins_for`), not copied onto vector metadata, so
 correcting a document applies from the next question with no re-ingest.
 
+**Every model is judged against this machine.** Chat models, embedders and
+re-rankers each get *safe / marginal / will not fit* with reasons, and a
+recommendation (one for English, one for Malay) computed per machine — never
+declared in a catalogue. Embedders are judged on memory, on the time to embed
+one question (300 ms budget), and on reading a whole chunk; benchmarking one
+replaces its estimate. The rule, the calibration and the checklists for adding a
+model are in [`MODEL_FIT.md`](MODEL_FIT.md).
+
 **Corpus categories** (`source_type`), what retrieval can filter on:
 
 | Value | Shown as | Holds |

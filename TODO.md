@@ -32,6 +32,17 @@ Unblocks every data-backed answer.
 
 Offline pipeline. Never runs during a live query.
 
+- [x] **Embedding models judged against this machine** — memory, time to embed
+      one question (300 ms), and a window that holds a whole chunk; English and
+      Malay recommendations computed per machine (the catalogue's fixed
+      `recommended` flag is gone); Benchmark under Installed. Shared rule with
+      the re-rankers in `fit_verdict.py`; contract in `docs/MODEL_FIT.md`,
+      enforced by `tests/test_embedding_fit.py` (10 tests). Calibrated on the dev
+      laptop: nomic-embed-text 35 ms, qwen3-embedding:0.6b 95 ms per question —
+      the latter is now the recommendation here, for English and Malay
+  - [ ] Qwen3 embedders want an instruction prefix on the *query*
+        (`Instruct: …\nQuery: …`); `embed_query` adds none yet
+  - [ ] Recalibrate both estimators on the lab machine (`MODEL_FIT.md` §4)
 - [ ] Collect the corpus into `data/documents/{manuals,sops,anomaly_records,uauc_records,other}/`
 - [x] **Document origin — this rig vs reference.** Every document is `rig` (this
       lab's own) or `reference` (another installation's; the default). Chosen at
