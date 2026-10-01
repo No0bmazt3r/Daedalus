@@ -249,6 +249,18 @@ export interface RagConfig {
   rerank: RerankSettings;
   rerankers: RerankerModel[];
   rerank_runtime: { available: boolean; detail: string };
+  /** Track 2's retrieval mode — frozen with the track. */
+  graph: GraphSettings;
+}
+
+export type GraphMode = 'agent' | 'walk';
+
+export interface GraphSettings {
+  /** `agent`: the local model chooses each hop. `walk`: the fixed path it is measured against. */
+  mode: GraphMode;
+  /** Wall-clock limit on the whole loop, model calls included. */
+  budget_s: number;
+  max_steps: number;
 }
 
 export interface RerankSettings {
@@ -280,6 +292,9 @@ export const fetchRagConfig = () => request<RagConfig>('/api/rag/config');
 
 export const setRerank = (rerank: Partial<RerankSettings>) =>
   request<RagConfig>('/api/rag/config', { method: 'PUT', body: JSON.stringify({ rerank }) });
+
+export const setGraphSettings = (graph: Partial<GraphSettings>) =>
+  request<RagConfig>('/api/rag/config', { method: 'PUT', body: JSON.stringify({ graph }) });
 
 export const downloadReranker = (id: string) =>
   request<{ ok: boolean; started: boolean }>(
@@ -326,7 +341,7 @@ export interface CorpusDocument {
   filename: string;
   media_type: string;
   size_bytes: number;
-  source_type: 'manual' | 'sop' | 'other';
+  source_type: 'manual' | 'sop' | 'anomaly_record' | 'uauc_record' | 'other';
   title: string | null;
   document_version: string | null;
   reactor_mode: string | null;

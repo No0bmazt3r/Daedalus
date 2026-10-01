@@ -30,14 +30,14 @@ from .registry import Effect, Integrity, Param, ToolError, register
 # evidence pack, and an SLM at num_ctx 4096 cannot afford twenty of them.
 _MAX_TOP_K = 10
 
-SOURCE_TYPES = ("manual", "sop", "any")
+SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "other", "any")
 
 
 @register(
     name="search_corpus",
     category="search",
     summary=(
-        "Search the ingested document corpus (manuals and SOPs) "
+        "Search the ingested document corpus (manuals, SOPs, troubleshooting and safety documents) "
         "for passages relevant to a question. Track 1: vector similarity."
     ),
     effects={Effect.READ_CORPUS},
@@ -213,8 +213,8 @@ _WALK_FROM = 4
     category="search",
     summary=(
         "Track 2's baseline retrieval: find the graph's entry points for a question, then "
-        "walk the schema's fixed path — anomaly type → resolving SOP → its steps, and "
-        "sensor → its thresholds. One call, one recorded traversal."
+        "walk the schema's fixed path — sensor → its thresholds → the anomaly types they "
+        "trigger → the resolving SOP → its steps. One call, one recorded traversal."
     ),
     effects={Effect.READ_GRAPH},
     integrity=Integrity.SYSTEM,
@@ -255,15 +255,19 @@ def graph_walk(query: str, limit: int) -> dict[str, Any]:
         pool = among if among is not None else sub.of_type(node_type)
         return [n["id"] for n in pool if n.get("type") == node_type][:_WALK_FROM]
 
-    anomaly_types = ids("AnomalyType")
-    if anomaly_types:
-        sub = graph_tools.graph_traverse(anomaly_types, "RESOLVED_BY", subgraph=sub, path=path)
-    sops = ids("SOPDocument")
-    if sops:
-        sub = graph_tools.graph_traverse(sops, "CONTAINS", subgraph=sub, path=path)
-    sensors = ids("Sensor", entries)
-    if sensors:
-        sub = graph_tools.graph_traverse(sensors, "HAS_THRESHOLD", subgraph=sub, path=path)
+    # The schema's one causal chain, in order. Each hop walks from every node of
+    # its start type gathered so far — entry points and what earlier hops
+    # reached — so a question that enters at a sensor still arrives at the
+    # procedure, and one that names the procedure skips straight to its steps.
+    for start_type, relationship in (
+        ("Sensor", "HAS_THRESHOLD"),
+        ("Threshold", "TRIGGERS"),
+        ("AnomalyType", "RESOLVED_BY"),
+        ("SOPDocument", "CONTAINS"),
+    ):
+        starts = ids(start_type)
+        if starts:
+            sub = graph_tools.graph_traverse(starts, relationship, subgraph=sub, path=path)
 
     walked = sub.as_dict()
     return {
@@ -282,3 +286,38 @@ def graph_walk(query: str, limit: int) -> dict[str, Any]:
             if entries else f"nothing matched ({strategy})"
         ),
     }
+
+
+@register(
+    name="graph_agent",
+    category="search",
+    summary=(
+        "Track 2's agentic retrieval: find the graph's entry points for a question, then let "
+        "the local model choose each hop and judge when it has enough. Bounded by a step "
+        "limit and a time budget. One call, one recorded traversal."
+    ),
+    effects={Effect.READ_GRAPH, Effect.INFERENCE},
+    integrity=Integrity.SYSTEM,
+    track="graph",
+    params=(
+        Param("query", str, "The question to find entry points for.", required=True,
+              max_length=500, example="pressure and temperature both spiked, what do I do"),
+        Param("limit", int, "How many entry points to start from.",
+              default=6, minimum=1, maximum=_MAX_TOP_K),
+    ),
+)
+def graph_agent(query: str, limit: int) -> dict[str, Any]:
+    """The agent loop (`graph_agent.run`), under the settings in `rag_config`.
+
+    Its own tool rather than a flag on `graph_walk`, so `tool_logs` names which
+    mode ran without opening the path, and Settings can describe each in its own
+    words. The budget and step limit are read here on every call rather than
+    taken as arguments: they are part of the frozen comparison, not something a
+    caller may vary per query.
+    """
+    from .. import graph_agent as agent, rag_config  # noqa: PLC0415 — avoids an import cycle at boot
+
+    if not knowledge_graph.schema()["total_nodes"]:
+        return {"data": {"nodes": [], "track": "graph"}, "detail": "the graph is empty"}
+    settings = rag_config.graph_settings()
+    return agent.run(query, limit=limit, budget_s=settings["budget_s"], max_steps=settings["max_steps"])

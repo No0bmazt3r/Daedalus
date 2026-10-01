@@ -14,7 +14,7 @@ Blocking or scope-shaping — these change what gets built.
 - [ ] **Is the PyQt5 tab still a deliverable?** Or does the web dashboard fully replace it? *(decides whether Zone 4 needs two clients)*
 - [ ] **Is the 6-candidate vector-DB bake-off still in scope**, on top of the dual-track RAG comparison? *(two benchmark studies may overrun the timeline)*
 - [ ] **Confirm the lab machine's RAM/GPU** *(gates the entire model-tier decision — M4 can't finish without it)*
-- [ ] **Get the real document corpus** — manuals and SOPs *(blocks M2 entirely)*
+- [ ] **Get the real document corpus** — manuals, SOPs, troubleshooting/incident literature, safety (UAUC) documents, background *(blocks M2 entirely)*
 
 ---
 
@@ -32,7 +32,7 @@ Unblocks every data-backed answer.
 
 Offline pipeline. Never runs during a live query.
 
-- [ ] Collect the corpus into `data/documents/{manuals,sops}/`
+- [ ] Collect the corpus into `data/documents/{manuals,sops,anomaly_records,uauc_records,other}/`
 - [x] **Settings → Search**, the setup surface for finding that corpus. Six
       providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper)
       with an ordered fallback chain, per-provider credentials, a Test probe and
@@ -522,10 +522,29 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [x] NetworkX store + persistence — the YAML file is the store, loaded into
       NetworkX, validated against the schema and cached on mtime
 - [x] `graph_lookup` · `graph_traverse` · `graph_query_natural` (`graph_tools.py`)
-- [ ] Agent loop with sufficiency assessment
+- [x] Agent loop with sufficiency assessment — `graph_agent` (`services/graph_agent.py`).
+      Same entry search as the walk; the committed **local** model then picks each
+      hop from a numbered list of schema-legal moves and judges after every hop
+      whether it has enough. Unusable replies are rejected and recorded, never
+      acted on; two in a row end the loop. One call, one `rag_logs` row, with
+      `mode`, `stop_reason`, `model_calls` and `rejected` in `traversal_path`.
+      Settings → Knowledge Base → *Agent loop* switches Track 2 between
+      `agent` (default) and `walk`, with budget and step limit; frozen with the
+      track. No local model → the walk runs, recorded as a fallback. 16 tests
+  - [ ] **qwen3:1.7b drives it poorly on the dev machine.** 1–7 s per step, and
+        it often walks `MONITORED_IN` (sensor → mode) for "what do I do?"
+        questions or judges a complete set insufficient. Expected for a 1.7B
+        model — revisit once the lab machine's model is chosen (M4), not by
+        tuning the prompt against a handful of questions
+- [x] Fixed walk follows the schema's whole causal chain — sensor →
+      `HAS_THRESHOLD` → `TRIGGERS` → `RESOLVED_BY` → `CONTAINS` — so the baseline
+      reaches the procedure for "pressure and temperature both spiked"; before,
+      it stopped at the thresholds and the comparison would have flattered the agent
 - [x] **Cap `max_hops`** — 4, by the tool's declaration, so a request for more
       is refused before the graph loads; `graph_walk` starts from at most 4 nodes
-- [ ] **Add a timeout guard** so a failing traversal can't blow the latency budget
+- [x] **Timeout guard** — the agent's budget is a hard wall-clock limit (default 6 s):
+      each model call runs on a worker thread and is abandoned at the deadline,
+      since an HTTP read timeout does not bound a cold model load
 - [x] Log the traversal path for the UI's reasoning view — `graph_walk` records
       the whole walk as one `rag_logs.traversal_path`, which Blueprints replays
       for real chat queries now, not only for seeded ones

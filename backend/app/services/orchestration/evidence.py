@@ -35,7 +35,7 @@ from typing import Any
 from .. import agent_tools
 from . import numbers, timeparse
 
-RETRIEVAL_TOOLS = ("search_corpus", "graph_walk", "search_graph")
+RETRIEVAL_TOOLS = ("search_corpus", "graph_walk", "graph_agent", "search_graph")
 
 NO_DOCUMENTS = (
     "NO DOCUMENTS FOUND. The knowledge base returned nothing for this question, so there is no "
@@ -237,6 +237,9 @@ class _Builder:
 
     def graph_walk(self, data: dict[str, Any]) -> list[str]:
         return [self._node(n, "graph_walk") for n in data.get("nodes") or []]
+
+    def graph_agent(self, data: dict[str, Any]) -> list[str]:
+        return [self._node(n, "graph_agent") for n in data.get("nodes") or []]
 
     def graph_traverse(self, data: dict[str, Any]) -> list[str]:
         seen = {i.citation.get("node_id") for i in self.pack.items if i.kind == "graph"}

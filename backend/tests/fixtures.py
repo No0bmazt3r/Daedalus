@@ -41,5 +41,9 @@ def build() -> None:
             )
 
 
-def set_track(track: str) -> None:
-    (paths.CONFIG_DIR / "rag_config.json").write_text(json.dumps({"track": track, "frozen": False}))
+def set_track(track: str, graph_mode: str = "walk") -> None:
+    """Select a track. Track 2 defaults to the fixed walk here, so no test reaches a
+    model by accident; the agent's own tests drive it with a scripted one."""
+    (paths.CONFIG_DIR / "rag_config.json").write_text(json.dumps(
+        {"track": track, "frozen": False, "graph": {"mode": graph_mode}}
+    ))

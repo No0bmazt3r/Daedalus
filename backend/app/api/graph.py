@@ -443,8 +443,9 @@ def rag_track() -> dict[str, Any]:
 def set_rag_track(
     track: str | None = Body(default=None, embed=True),
     rerank: dict[str, Any] | None = Body(default=None, embed=True),
+    graph: dict[str, Any] | None = Body(default=None, embed=True),
 ) -> dict[str, Any]:
-    """Select a retrieval track.
+    """Select a retrieval track, and tune each track's retrieval.
 
     Refuses while the comparison is frozen (`PROJECT.md` §5): after the two arms
     are built, the evaluation runs once without further tuning, and unfreezing
@@ -455,10 +456,10 @@ def set_rag_track(
     switch unusable in exactly the window it is most useful, while Track 1 waits
     on M2 and you want to demonstrate Track 2.
     """
-    if track is None and rerank is None:
-        raise HTTPException(status_code=400, detail="send 'track' and/or 'rerank'")
+    if track is None and rerank is None and graph is None:
+        raise HTTPException(status_code=400, detail="send 'track', 'rerank' and/or 'graph'")
     try:
-        rag_config.write(track, rerank=rerank)  # type: ignore[arg-type]
+        rag_config.write(track, rerank=rerank, graph=graph)  # type: ignore[arg-type]
         return rag_config.status()
     except rag_config.ConfigFrozen as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

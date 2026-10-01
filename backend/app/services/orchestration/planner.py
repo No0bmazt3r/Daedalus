@@ -61,17 +61,28 @@ _SENSOR_KEYS = {
 # simple view is drawn from this, so it cannot list a tool the planner never
 # calls or miss one it does.
 SENSOR_TOOLS = ("get_live_reading", "get_trend")
+# Track 2 has two retrieval modes (`rag_config` → graph.mode): the agent loop,
+# and the fixed walk it is measured against inside the track.
 RETRIEVAL_TOOLS = {"vector": "search_corpus", "graph": "graph_walk"}
+GRAPH_MODE_TOOLS = {"walk": "graph_walk", "agent": "graph_agent"}
+
+
+def retrieval_tool(track: str) -> str:
+    """The one retrieval tool the selected track plans with."""
+    if track == "graph":
+        return GRAPH_MODE_TOOLS[rag_config.graph_settings()["mode"]]
+    return RETRIEVAL_TOOLS[track]
 
 
 def answering_tools() -> dict[str, Any]:
     """What answers a chat question right now: the sensor tools, and the selected track's retrieval."""
     track = rag_config.resolve()
+    retrieval = retrieval_tool(track)
     return {
         "track": track,
         "sensor": list(SENSOR_TOOLS),
-        "retrieval": RETRIEVAL_TOOLS[track],
-        "tools": [*SENSOR_TOOLS, RETRIEVAL_TOOLS[track]],
+        "retrieval": retrieval,
+        "tools": [*SENSOR_TOOLS, retrieval],
     }
 
 
@@ -177,9 +188,12 @@ def plan(understood: Understanding, *, now: datetime | None = None) -> Plan:
         track = rag_config.resolve()
         p.track, p.retrieval_query = track, understood.standalone
         if track == "graph":
+            tool = retrieval_tool("graph")
             p.calls.append(PlannedCall(
-                RETRIEVAL_TOOLS["graph"], {"query": understood.standalone, "limit": GRAPH_LIMIT},
-                "Track 2 is selected: enter the graph from the question and walk to procedures",
+                tool, {"query": understood.standalone, "limit": GRAPH_LIMIT},
+                "Track 2 is selected: enter the graph from the question and "
+                + ("let the local model choose each hop" if tool == "graph_agent"
+                   else "walk the fixed path to procedures"),
             ))
         else:
             p.calls.append(PlannedCall(

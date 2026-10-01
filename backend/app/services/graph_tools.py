@@ -121,6 +121,16 @@ class TraversalPath:
     entry_nodes: list[str] = field(default_factory=list)
     hops: list[Hop] = field(default_factory=list)
     started_at: float = field(default_factory=time.perf_counter)
+    #: 'walk' (the fixed baseline) | 'agent' (model-chosen hops). Which of
+    #: Track 2's two retrieval modes produced this path — the within-track
+    #: comparison reads it from `rag_logs.traversal_path`.
+    mode: str = "walk"
+    #: Agent only: why the loop ended, the model that chose the hops, how many
+    #: times it was asked, and the replies it gave that could not be acted on.
+    stop_reason: str | None = None
+    model: str | None = None
+    model_calls: int = 0
+    rejected: list[dict[str, Any]] = field(default_factory=list)
 
     def record(
         self,
@@ -166,6 +176,11 @@ class TraversalPath:
             "hops": [h.as_dict() for h in self.hops],
             "hop_count": self.hop_count,
             "elapsed_ms": self.elapsed_ms,
+            "mode": self.mode,
+            "stop_reason": self.stop_reason,
+            "model": self.model,
+            "model_calls": self.model_calls,
+            "rejected": self.rejected,
         }
 
 

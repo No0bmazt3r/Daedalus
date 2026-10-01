@@ -43,7 +43,12 @@ router = APIRouter(prefix="/api/corpus", tags=["corpus"])
 # disk before the check runs.
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 
-SOURCE_TYPES = ("manual", "sop", "other")
+# What a document *is*, which is what retrieval filters on. `anomaly_record` is
+# troubleshooting and incident literature (foaming, degradation, corrosion —
+# what goes wrong, why, and the fix); `uauc_record` is Unsafe Act / Unsafe
+# Condition material — SDSs, hazard guidance, lab safety rules. Both are
+# documents to read, not live data: nothing here comes from a detection system.
+SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "other")
 
 
 @router.get("/status")

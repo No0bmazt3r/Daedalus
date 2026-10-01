@@ -39,6 +39,12 @@ const PLAIN: Record<string, { title: string; does: string; usedFor: string; labe
     usedFor: '“What should I do if the NDIR drifts?”',
     label: 'D',
   },
+  graph_agent: {
+    title: 'Knowledge graph agent',
+    does: 'Starts from what the question names, then the local model chooses each step through the graph and stops when it has enough.',
+    usedFor: '“Pressure and temperature both spiked — what do I do?”',
+    label: 'G',
+  },
   graph_walk: {
     title: 'Knowledge graph walk',
     does: 'Starts from the sensor or fault type the question names and follows the graph to the procedure and its steps.',

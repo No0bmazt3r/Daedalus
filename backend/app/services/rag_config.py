@@ -73,12 +73,38 @@ CONFIG_PATH = paths.CONFIG_DIR / "rag_config.json"
 DEFAULT_CANDIDATES = 20
 CANDIDATE_RANGE = (5, 50)
 
+# Track 2's two retrieval modes. `agent` lets the local model choose each hop
+# (`graph_agent`); `walk` is the fixed path it is measured against inside the
+# track (`graph_walk`). The budget bounds the whole loop, model calls included:
+# past it the agent answers from what it has gathered. Four steps is the most
+# the schema's longest chain (Sensor → Threshold → AnomalyType → SOP → steps)
+# needs, so a fifth could only revisit.
+GRAPH_MODES = ("agent", "walk")
+BUDGET_RANGE = (1.0, 30.0)
+STEPS_RANGE = (1, 4)
+
 DEFAULT: dict[str, Any] = {
     "track": "vector",
     "frozen": False,
     "note": "Track 1 (vector) is the baseline/control arm — see PROJECT.md §5.",
     "rerank": {"enabled": True, "model": "ms-marco-minilm-l6", "candidates": DEFAULT_CANDIDATES},
+    "graph": {"mode": "agent", "budget_s": 6.0, "max_steps": 4},
 }
+
+
+def _graph(raw: Any) -> dict[str, Any]:
+    out = dict(DEFAULT["graph"])
+    if not isinstance(raw, dict):
+        return out
+    if raw.get("mode") in GRAPH_MODES:
+        out["mode"] = raw["mode"]
+    b = raw.get("budget_s")
+    if isinstance(b, (int, float)) and not isinstance(b, bool) and BUDGET_RANGE[0] <= b <= BUDGET_RANGE[1]:
+        out["budget_s"] = float(b)
+    n = raw.get("max_steps")
+    if isinstance(n, int) and not isinstance(n, bool) and STEPS_RANGE[0] <= n <= STEPS_RANGE[1]:
+        out["max_steps"] = n
+    return out
 
 
 def _rerank(raw: Any) -> dict[str, Any]:
@@ -112,16 +138,22 @@ def read() -> dict[str, Any]:
     try:
         raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {**DEFAULT, "rerank": _rerank(None)}
+        return {**DEFAULT, "rerank": _rerank(None), "graph": _graph(None)}
 
     track = raw.get("track")
     if track not in TRACKS:
-        return {**DEFAULT, "rerank": _rerank(raw.get("rerank") if isinstance(raw, dict) else None)}
+        valid = isinstance(raw, dict)
+        return {
+            **DEFAULT,
+            "rerank": _rerank(raw.get("rerank") if valid else None),
+            "graph": _graph(raw.get("graph") if valid else None),
+        }
     return {
         "track": track,
         "frozen": bool(raw.get("frozen", False)),
         "note": raw.get("note", DEFAULT["note"]),
         "rerank": _rerank(raw.get("rerank")),
+        "graph": _graph(raw.get("graph")),
     }
 
 
@@ -130,12 +162,18 @@ def write(
     *,
     note: str | None = None,
     rerank: dict[str, Any] | None = None,
+    graph: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Commit a track choice and/or Track 1's re-ranking. Refuses while frozen."""
+    """Commit a track choice, Track 1's re-ranking and/or Track 2's retrieval mode.
+
+    Refuses while frozen.
+    """
     if track is not None and track not in TRACKS:
         raise ValueError(f"unknown track {track!r}; expected one of {TRACKS}")
     if rerank is not None:
         _validate_rerank(rerank)
+    if graph is not None:
+        _validate_graph(graph)
 
     with _lock:
         current = read()
@@ -149,6 +187,7 @@ def write(
             "frozen": False,
             "note": note or current.get("note") or DEFAULT["note"],
             "rerank": _rerank({**current["rerank"], **(rerank or {})}),
+            "graph": _graph({**current["graph"], **(graph or {})}),
         }
         # Written the same way `model_config` writes: temp file, fsync, atomic
         # rename. This is read on the chat path, and a half-written config read
@@ -183,6 +222,26 @@ def _validate_rerank(raw: dict[str, Any]) -> None:
         low, high = CANDIDATE_RANGE
         if not isinstance(n, int) or isinstance(n, bool) or not low <= n <= high:
             raise ValueError(f"rerank.candidates must be a whole number from {low} to {high}")
+
+
+def _validate_graph(raw: dict[str, Any]) -> None:
+    if "mode" in raw and raw["mode"] not in GRAPH_MODES:
+        raise ValueError(f"graph.mode must be one of {GRAPH_MODES}")
+    if "budget_s" in raw:
+        b = raw["budget_s"]
+        low, high = BUDGET_RANGE
+        if not isinstance(b, (int, float)) or isinstance(b, bool) or not low <= b <= high:
+            raise ValueError(f"graph.budget_s must be a number of seconds from {low:g} to {high:g}")
+    if "max_steps" in raw:
+        n = raw["max_steps"]
+        low, high = STEPS_RANGE
+        if not isinstance(n, int) or isinstance(n, bool) or not low <= n <= high:
+            raise ValueError(f"graph.max_steps must be a whole number from {low} to {high}")
+
+
+def graph_settings() -> dict[str, Any]:
+    """Track 2's retrieval mode, budget and step limit, read on every query."""
+    return read()["graph"]
 
 
 def rerank_settings() -> dict[str, Any]:

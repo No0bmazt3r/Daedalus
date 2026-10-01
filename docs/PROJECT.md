@@ -93,7 +93,7 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 8 | Same candidate models and quantization strategy (Q4_K_M-first) |
 | 9 | Same success targets: **<3s** end-to-end latency, **>80%** retrieval precision, **<10%** hallucination rate |
 | 10 | Setup/admin utilities are not runtime components and must not sit in the query path |
-| 11 | Corpus is manuals and SOPs; chunked 300–500 tokens with overlap; embedded locally |
+| 11 | Corpus is manuals, SOPs, troubleshooting/incident documents (`anomaly_record`), safety documents (`uauc_record`) and background references; chunked 300–500 tokens with overlap; embedded locally |
 
 ### 2.2 Where they conflict — and the resolution
 
@@ -406,7 +406,7 @@ the report.
 | **Sensor** | SQLite | `/data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
 | **Audit** | SQLite | `/logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
 | **Chat** | SQLite | `/data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
-| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded SOP/manual chunks, and the manifest of what was ingested |
+| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded manual/SOP/troubleshooting/safety chunks, and the manifest of what was ingested |
 | **Prefs** | SQLite | `/app/data/prefs.db` | read/write | UI state, kept out of the browser |
 
 **The Vector store has two halves and is still one store.** Chroma holds the
@@ -867,6 +867,7 @@ Kùzu graph backend · LAN/multi-lab deployment
 | **ABV** | Automated Ball Valve — write-only from SCADA, hence untrustworthy state |
 | **Daedalus** | This system's product name |
 | **CO2SorptionDT** | The pre-existing PyQt5 SCADA app this layer attaches to |
+| **UAUC** | Unsafe Act / Unsafe Condition — the safety category of the corpus (SDSs, hazard guidance, lab safety rules) |
 | **Evidence pack** | Structured tool output handed to the LLM — the *only* thing it may draw facts from |
 | **Grounded** | Every factual claim traces to retrieved evidence |
 | **Track 1 / Track 2** | Traditional vector RAG / Agentic GraphRAG |

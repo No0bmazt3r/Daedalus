@@ -135,7 +135,7 @@ def databases() -> dict[str, Any]:
                 # The only store that runs as a server, hence the one container.
                 "deployment": "service" if vector["mode"] == "server" else "embedded file",
                 "access": "read-write",
-                "purpose": "Embedded SOP and manual chunks for RAG retrieval.",
+                "purpose": "Embedded manual, SOP, troubleshooting and safety chunks for RAG retrieval.",
                 "path": vector["target"],
                 "size_bytes": None,
                 "available": vector["available"],

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, HelpCircle, ArrowUpRight,
-  Download, Trash2, Loader2, ListOrdered,
+  Download, Trash2, Loader2, ListOrdered, Route,
 } from 'lucide-react'
 import {
-  deleteReranker, downloadReranker, fetchRagConfig, setRagTrack, setRerank,
-  type RagConfig, type RagTrack, type RerankerModel, type RerankSettings, type TrackStatus,
+  deleteReranker, downloadReranker, fetchRagConfig, setGraphSettings, setRagTrack, setRerank,
+  type GraphSettings, type RagConfig, type RagTrack, type RerankerModel, type RerankSettings,
+  type TrackStatus,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
@@ -184,6 +185,10 @@ export function KnowledgeBasePanel() {
         <RerankSection config={config} onChange={setConfig} />
       </div>
 
+      <div className="border-t theme-border pt-4">
+        <GraphModeSection config={config} onChange={setConfig} />
+      </div>
+
       {/* The index, not the model. Choosing and pulling an embedding model is
           the Forge's job — it is a model, and the Forge is the model console.
           What belongs here is the corpus fact: whether the vectors currently
@@ -267,6 +272,107 @@ function IndexSummary() {
 }
 
 const CANDIDATE_OPTIONS = [10, 20, 30, 50].map((n) => ({ value: String(n), label: `${n} candidates` }))
+const BUDGET_OPTIONS = [3, 6, 10, 20].map((n) => ({ value: String(n), label: `${n} s budget` }))
+const STEP_OPTIONS = [1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} step${n === 1 ? '' : 's'}` }))
+
+/**
+ * Track 2's two retrieval modes — the within-track comparison.
+ *
+ * `agent` lets the committed local model choose each hop and judge when it has
+ * enough; `walk` follows the schema's fixed path. Entry points are found the
+ * same way in both, so the only difference is who decides where to walk. The
+ * budget is a hard wall-clock limit: a model call still running at the deadline
+ * is abandoned, and the answer is built from what was gathered.
+ *
+ * Frozen with the track, for the same reason re-ranking is.
+ */
+function GraphModeSection({
+  config,
+  onChange,
+}: {
+  config: RagConfig
+  onChange: (config: RagConfig) => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const graph = config.graph
+  const locked = config.frozen || busy
+  const agent = graph.mode === 'agent'
+
+  const save = async (patch: Partial<GraphSettings>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      onChange(await setGraphSettings(patch))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const withCurrent = (options: { value: string; label: string }[], value: number, label: string) =>
+    options.some((o) => o.value === String(value)) ? options : [...options, { value: String(value), label }]
+
+  return (
+    <div className="space-y-3">
+      <header className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="flex items-center gap-1.5 text-sm theme-text">
+            <Route size={14} className="theme-text-muted" /> Agent loop
+            <span className="rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">Track 2</span>
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed theme-text-muted">
+            On: the local model chooses each hop through the graph and decides when it has enough
+            (<code className="theme-text">graph_agent</code>). Off: the fixed path — sensor → threshold →
+            condition → procedure → steps (<code className="theme-text">graph_walk</code>). Compare the
+            two inside Track 2 by running the same questions in each mode.
+          </p>
+        </div>
+        <Switch
+          checked={agent}
+          onChange={(next) => void save({ mode: next ? 'agent' : 'walk' })}
+          disabled={locked}
+          label="Agent loop on or off"
+        />
+      </header>
+
+      <div className={`flex flex-wrap items-center gap-3 ${locked || !agent ? 'pointer-events-none opacity-50' : ''}`}>
+        <ThemeSelect
+          value={String(graph.budget_s)}
+          onChange={(v) => void save({ budget_s: Number(v) })}
+          options={withCurrent(BUDGET_OPTIONS, graph.budget_s, `${graph.budget_s} s budget`)}
+          ariaLabel="Time budget"
+          size="sm"
+          className="w-36"
+        />
+        <ThemeSelect
+          value={String(graph.max_steps)}
+          onChange={(v) => void save({ max_steps: Number(v) })}
+          options={withCurrent(STEP_OPTIONS, graph.max_steps, `${graph.max_steps} steps`)}
+          ariaLabel="Step limit"
+          size="sm"
+          className="w-32"
+        />
+      </div>
+      <p className="text-[11px] leading-relaxed theme-text-muted">
+        The budget is a hard limit on the whole loop, model calls included — past it the answer uses
+        what was gathered. With no local model installed the fixed walk runs instead, recorded as such.
+      </p>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5 text-[11px] theme-text">
+          <AlertCircle size={13} className="shrink-0 text-rose-400" /> {error}
+        </div>
+      )}
+
+      <p className="text-[11px] leading-relaxed theme-text-muted">
+        Each walk is recorded in <code className="theme-text">rag_logs.traversal_path</code> with its mode,
+        why it stopped, and the model's verdict after every hop — replay it in Labyrinth Blueprints.
+      </p>
+    </div>
+  )
+}
 
 function mb(bytes: number) {
   return `${Math.round(bytes / 1_000_000)} MB`

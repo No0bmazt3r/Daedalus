@@ -142,7 +142,7 @@ TREND_RE = re.compile(
 SOP_STRONG_RE = re.compile(
     r"\b(?:sops?|procedures?|manuals?|instructions?|guidelines?|protocols?|checklists?|step[- ]by[- ]step"
     r"|steps|troubleshoot\w*|calibrat\w*|recalibrat\w*|maintenance|maintain|servic(?:e|ing)|clean(?:ing)?"
-    r"|replac(?:e|ing)|install\w*|safety\s+(?:procedures?|precautions?|rules?|measures?)|ppe|lockout|tagout"
+    r"|replac(?:e|ing)|install\w*|safety\s+(?:procedures?|precautions?|rules?|measures?)|ppe|uauc|sds|lockout|tagout"
     r"|how\s+(?:do|should|can|would|could)\s+(?:i|we|you|one|an\s+operator)|how\s+to"
     r"|what\s+(?:should|do|must)\s+(?:i|we)\s+do|what\s+to\s+do|recommended|best\s+practice"
     r"|bagaimana|prosedur|langkah)\b"
