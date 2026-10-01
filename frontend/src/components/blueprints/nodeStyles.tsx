@@ -1,5 +1,5 @@
 import {
-  Gauge, SlidersHorizontal, Ruler, FileText, ListOrdered, History, TriangleAlert,
+  Gauge, SlidersHorizontal, Ruler, FileText, ListOrdered, TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
 import type { NodeType, GraphNode } from '../../lib/blueprintsClient'
@@ -13,7 +13,7 @@ import type { NodeType, GraphNode } from '../../lib/blueprintsClient'
  * whether they are the same thing.
  *
  * Colours are fixed hues rather than theme tokens on purpose. The theme engine
- * supplies one accent; these need seven that stay distinguishable from each
+ * supplies one accent; these need six that stay distinguishable from each
  * other under every theme, so they are chosen for mutual contrast and used only
  * as a small type marker — never as the only carrier of meaning, which is also
  * why every badge prints its type name next to the colour.
@@ -23,7 +23,6 @@ export const NODE_STYLE: Record<NodeType, { icon: LucideIcon; tint: string; ring
   OperatingMode: { icon: SlidersHorizontal, tint: 'text-violet-400',  ring: 'border-violet-400/40 bg-violet-400/10' },
   Threshold:     { icon: Ruler,             tint: 'text-amber-400',   ring: 'border-amber-400/40 bg-amber-400/10' },
   AnomalyType:   { icon: TriangleAlert,     tint: 'text-rose-400',    ring: 'border-rose-400/40 bg-rose-400/10' },
-  AnomalyRecord: { icon: History,           tint: 'text-orange-400',  ring: 'border-orange-400/40 bg-orange-400/10' },
   SOPDocument:   { icon: FileText,          tint: 'text-emerald-400', ring: 'border-emerald-400/40 bg-emerald-400/10' },
   SOPStep:       { icon: ListOrdered,       tint: 'text-teal-400',    ring: 'border-teal-400/40 bg-teal-400/10' },
 }
@@ -85,8 +84,8 @@ export function TypeBadge({ type }: { type: NodeType }) {
 
 /**
  * The relationship label. A trailing ↩ means the walk followed the edge
- * backwards — half this schema reads that way (an AnomalyType's history is the
- * AnomalyRecords pointing *in* via INSTANCE_OF), and hiding the direction would
+ * backwards — half this schema reads that way (an SOP's trigger is the
+ * AnomalyType pointing *in* via RESOLVED_BY), and hiding the direction would
  * make a replay look like it traversed an edge that does not exist.
  */
 export function EdgeLabel({ edge }: { edge: string }) {

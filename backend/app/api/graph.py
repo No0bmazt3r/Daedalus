@@ -119,9 +119,8 @@ def graph_nodes(
 def graph_node(node_id: str) -> dict[str, Any]:
     """One node with its neighbours, both directions.
 
-    `:path` because node ids contain a colon (`Sensor:co2_ppm`) and carry dates
-    (`AnomalyRecord:2026-08-14_co2`); the default converter stops at the slash
-    but the colon would otherwise need escaping at every call site.
+    `:path` because node ids contain a colon (`Sensor:co2_ppm`); the default
+    converter would otherwise need it escaped at every call site.
     """
     try:
         node = kg.node(node_id)

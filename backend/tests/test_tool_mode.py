@@ -9,7 +9,7 @@ from app.services import agent_tools
 
 from . import fixtures
 
-ANSWERING_VECTOR = {"get_live_reading", "get_trend", "get_anomaly_summary", "search_corpus"}
+ANSWERING_VECTOR = {"get_live_reading", "get_trend", "search_corpus"}
 
 
 class ToolModeTest(unittest.TestCase):
@@ -66,6 +66,24 @@ class ToolModeTest(unittest.TestCase):
         tool_policy_store.set_mode("simple")
         env = agent_tools.call("get_current_time", {}, surface=agent_tools.Surface.SETUP)
         self.assertTrue(env["ok"])
+
+    def test_fallback_sensor_set_matches_the_planner(self) -> None:
+        from app.services.agent_tools import registry
+        from app.services.orchestration import planner
+
+        self.assertEqual(registry._FALLBACK_SENSOR_TOOLS, frozenset(planner.SENSOR_TOOLS))
+
+    def test_unreadable_planner_keeps_only_the_named_sensor_tools(self) -> None:
+        from unittest import mock
+
+        from app.services.agent_tools import registry
+
+        tool_policy_store.set_mode("simple")
+        with mock.patch.object(registry, "_answering_names", return_value=None):
+            sensors = {t["name"] for t in agent_tools.catalogue()["tools"]
+                       if t["available"] and t["category"] == "sensor"}
+            self.assertEqual(sensors, set(registry._FALLBACK_SENSOR_TOOLS))
+            self.assertEqual(agent_tools.call("get_current_time", {})["status"], "refused")
 
     def test_bad_mode_is_rejected(self) -> None:
         with self.assertRaises(tool_policy_store.ToolPolicyError):

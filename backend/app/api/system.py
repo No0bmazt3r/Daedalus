@@ -95,7 +95,6 @@ def databases() -> dict[str, Any]:
                 "available": sensor["exists"],
                 "metrics": {
                     "rows": sensor["rows"],
-                    "anomalies": sensor["anomalies"],
                     "earliest": sensor["earliest"],
                     "latest": sensor["latest"],
                 },
@@ -136,7 +135,7 @@ def databases() -> dict[str, Any]:
                 # The only store that runs as a server, hence the one container.
                 "deployment": "service" if vector["mode"] == "server" else "embedded file",
                 "access": "read-write",
-                "purpose": "Embedded SOP, manual, anomaly and UAUC chunks for RAG retrieval.",
+                "purpose": "Embedded SOP and manual chunks for RAG retrieval.",
                 "path": vector["target"],
                 "size_bytes": None,
                 "available": vector["available"],

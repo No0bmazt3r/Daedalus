@@ -27,7 +27,6 @@ export type NodeType =
   | 'Threshold'
   | 'SOPDocument'
   | 'SOPStep'
-  | 'AnomalyRecord'
   | 'AnomalyType';
 
 /** The 7 edge types. A traversal's `edge` may carry a trailing ↩ for a reverse walk. */
@@ -36,9 +35,7 @@ export type EdgeType =
   | 'HAS_THRESHOLD'
   | 'TRIGGERS'
   | 'RESOLVED_BY'
-  | 'CONTAINS'
-  | 'INSTANCE_OF'
-  | 'INVOLVES';
+  | 'CONTAINS';
 
 export interface GraphNode {
   id: string;
@@ -59,10 +56,6 @@ export interface GraphNode {
   version?: string;
   /** SOPStep only. */
   step_number?: number;
-  /** AnomalyRecord only. */
-  occurred_at?: string;
-  severity?: string;
-  resolution?: string;
   /** Set when a recorded traversal crossed a node the graph no longer has. */
   missing?: boolean;
 }
@@ -171,7 +164,6 @@ export const NODE_TYPES: NodeType[] = [
   'Threshold',
   'SOPDocument',
   'SOPStep',
-  'AnomalyRecord',
   'AnomalyType',
 ];
 
@@ -334,7 +326,7 @@ export interface CorpusDocument {
   filename: string;
   media_type: string;
   size_bytes: number;
-  source_type: 'manual' | 'sop' | 'anomaly_record' | 'uauc_record' | 'other';
+  source_type: 'manual' | 'sop' | 'other';
   title: string | null;
   document_version: string | null;
   reactor_mode: string | null;

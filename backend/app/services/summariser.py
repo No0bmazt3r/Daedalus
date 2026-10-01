@@ -66,7 +66,7 @@ _SYSTEM = (
     "You keep a running summary of an operator's conversation with a read-only monitoring "
     "assistant for a CO2 sorption reactor. Merge the previous summary with the new turns into "
     f"at most {MAX_SENTENCES} short sentences saying what the operator asked about — which "
-    "sensors, time periods, anomalies, equipment or procedures — and what they were trying to "
+    "sensors, time periods, equipment or procedures — and what they were trying to "
     "find out. Do NOT include any measured value, reading or number: they go stale. Reply with "
     'JSON {"summary": "<text>"} and nothing else.'
 )

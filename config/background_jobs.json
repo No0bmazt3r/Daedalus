@@ -1,0 +1,10 @@
+{
+  "title": {
+    "mode": "model",
+    "model": "auto",
+    "refresh_every": 4
+  },
+  "summary": {
+    "model": "auto"
+  }
+}

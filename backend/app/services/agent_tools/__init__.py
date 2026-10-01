@@ -11,8 +11,8 @@ Six categories, and what each one is for:
 | `system` | "Is the machinery working?" | system — trusted |
 | `other` | The clock, and asking rather than guessing | system |
 
-`PROJECT.md` §7.2's sensor tools (`get_live_reading`, `get_trend`,
-`get_anomaly_summary`) live in `sensor.py`, in their own module because they
+`PROJECT.md` §7.2's sensor tools (`get_live_reading`, `get_trend`) live in
+`sensor.py`, in their own module because they
 read the telemetry of record and deserve their own review. They declare only
 `READ_SENSOR`, which the gate permits on the runtime surface.
 

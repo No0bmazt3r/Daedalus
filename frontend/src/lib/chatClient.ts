@@ -17,10 +17,10 @@ export interface ChatTimings {
   generation_ms: number | null;
 }
 
-/** One evidence label an answer may cite — `[S1]` a reading, `[A1]` an anomaly, `[D1]` a passage, `[G1]` a graph node. */
+/** One evidence label an answer may cite — `[S1]` a reading, `[D1]` a passage, `[G1]` a graph node. */
 export interface ChatCitation {
   label: string;
-  kind: 'sensor' | 'anomaly' | 'document' | 'graph';
+  kind: 'sensor' | 'document' | 'graph';
   tool: string;
   type: 'sqlite' | 'document' | 'graph';
   [detail: string]: unknown;

@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from 'react'
-import { AlertTriangle, BookOpen, ChevronDown, Database, Network, Siren } from 'lucide-react'
+import { AlertTriangle, BookOpen, ChevronDown, Database, Network } from 'lucide-react'
 import { Collapse } from './ui/collapse'
 import type { StoredEvidence } from '../lib/chatClient'
 
@@ -8,7 +8,7 @@ import type { StoredEvidence } from '../lib/chatClient'
  *
  * The orchestrator stores the evidence pack with the turn (`message.evidence`,
  * never replayed into a prompt). Each line carries the label the model was told
- * to cite — `[S1]` a sensor reading, `[A1]` an anomaly, `[D1]` a document
+ * to cite — `[S1]` a sensor reading, `[D1]` a document
  * passage, `[G1]` a graph node — so an answer's claims can be traced to what the
  * tools actually returned without opening the audit store.
  *
@@ -28,7 +28,6 @@ const SPLIT_RE = /\s*(?:[,;&/]|\band\b)\s*/i
 
 const KIND_ICON: Record<string, typeof Database> = {
   sensor: Database,
-  anomaly: Siren,
   document: BookOpen,
   graph: Network,
 }
@@ -40,7 +39,6 @@ const KIND_ICON: Record<string, typeof Database> = {
  */
 const KIND_NAME: Record<string, string> = {
   S: 'Sensor reading',
-  A: 'Anomaly record',
   D: 'Document passage',
   G: 'Knowledge-graph node',
 }
@@ -133,7 +131,7 @@ export function Sources({ text, evidence }: { text: string; evidence: StoredEvid
       </button>
       {open && (
         <p className="mt-1 pl-4 text-[10px] opacity-60">
-          S sensor reading · A anomaly record · D document passage · G knowledge-graph node
+          S sensor reading · D document passage · G knowledge-graph node
         </p>
       )}
       <Collapse open={open} className="mt-1.5 pl-4 space-y-2">

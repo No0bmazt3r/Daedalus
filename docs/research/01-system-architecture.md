@@ -17,10 +17,10 @@ Column                 (existing PyQt5)         ├── Local SLM via Ollama
                                                       (Graph DB + agent loop)
                                                           ↕
                                                   Local Vector/Graph DB
-                                                  (RAG: Manuals, SOPs, UAUC)
+                                                  (RAG: Manuals, SOPs)      
 ```
 
-**Zone 3 is the entirety of this project's contribution.** Zones 1, 2, and 4 already exist or are owned by teammates (Jason: IoT ingestion; Anson: anomaly detection).
+**Zone 3 is the entirety of this project's contribution.** Zones 1, 2, and 4 already exist and are outside this project's scope.
 
 ## 2. The safety boundary (non-negotiable)
 
@@ -30,7 +30,7 @@ Why this matters: the automated ball valves (ABVs) are a **write-only path** fro
 
 **Implementation-level enforcement (not just policy):**
 - The SQLite connection used by the FastAPI backend is opened in read-only mode (`sqlite3.connect(..., uri=True)` with `?mode=ro`, or equivalent).
-- No tool exposed to the LLM has a write signature. There is no `set_reading()`, no `write_valve()`, no `update_anomaly()` — these functions simply do not exist in the tool registry.
+- No tool exposed to the LLM has a write signature. There is no `set_reading()`, no `write_valve()`, no `delete_reading()` — these functions simply do not exist in the tool registry.
 - The agent's tool-calling loop is restricted to a fixed, enumerable list of read tools — the LLM cannot invent new tool calls that touch the database directly (no raw SQL execution tool is exposed).
 
 ## 3. Concurrency: reading a database that's being written to live
@@ -84,7 +84,7 @@ Both tracks share Zones 1/2/4 and the deterministic sensor-data tools. They dive
      1. Embed query                          1. Parse query into entities/intent
      2. Vector similarity search             2. Traverse knowledge graph
         against ChromaDB                        (entities: sensors, thresholds,
-     3. Top-k chunks returned                    modes, anomalies, SOP steps)
+     3. Top-k chunks returned                    modes, anomaly types, SOP steps)
      4. Chunks passed to SLM as               3. Agent may issue multiple graph
         context, single-shot                     queries / follow-up retrievals
                                               4. Agent may self-critique / re-query
@@ -105,8 +105,7 @@ A **routing flag** (config or CLI parameter) determines which track handles a gi
 | Component | Responsibility | Owned by |
 |---|---|---|
 | CO2SorptionDT PyQt5 app | Existing SCADA UI, sensor I/O, actuator control | Pre-existing (Ensonic) |
-| IoT ingestion subsystem | Sensor → SQLite writes | Jason (teammate) |
-| Anomaly detection subsystem | Anomaly labelling on ingested rows | Anson (teammate) |
+| IoT ingestion subsystem | Sensor → SQLite writes | Pre-existing (outside this project) |
 | FastAPI backend | Intent routing, tool orchestration, both RAG tracks | This project |
 | Traditional RAG engine | ChromaDB indexing + retrieval | This project |
 | Agentic GraphRAG engine | Graph construction + agent traversal loop | This project |

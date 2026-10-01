@@ -83,6 +83,5 @@ The stack itself, each under its own permissive licence:
 | [Monocraft](https://github.com/IdreesInc/Monocraft) | The Minecraft typeface — the UI's default face, bundled at `frontend/src/assets/fonts/` | SIL OFL 1.1 |
 | [Geist](https://vercel.com/font) · [OpenDyslexic](https://opendyslexic.org/) | Alternative faces in the Font selector | SIL OFL 1.1 |
 
-The CO₂ sorption reactor, its SCADA layer and the ingestion and anomaly
-subsystems are the work of the wider project team; Daedalus reads from them
-and never writes to them. See [`docs/PROJECT.md`](docs/PROJECT.md) §4.
+The CO₂ sorption reactor, its SCADA layer and its ingestion subsystem are
+pre-existing; Daedalus reads from them and never writes to them. See [`docs/PROJECT.md`](docs/PROJECT.md) §4.

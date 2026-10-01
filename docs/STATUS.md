@@ -45,7 +45,7 @@ Counted from `TODO.md` checkboxes (done / total tasks).
 
 | Milestone | Layer | Done | % | Honest read |
 |---|---|---|---|---|
-| M1 Sensor data layer | 3 | 4 / 7 | 57% | Works on demo data; not reconciled with Jason's real table |
+| M1 Sensor data layer | 3 | 4 / 5 | 80% | Works on demo data |
 | M2 Knowledge ingestion | 4 | 32 / 37 | 86%\* | Pipeline built; **0 documents ingested** |
 | M3 Deterministic tool layer | 8 | 23 / 32 | 72%\* | Registry built; **sensor tools not written** |
 | M4 Model provider | 6 | 4 / 7 | 57% | Ollama serving works; only 1–2 local models tested |
@@ -113,15 +113,14 @@ mid-answer, text still appearing. Shows streaming.
 ### 3.2 Read-only sensor data layer
 
 **What it is.** A SQLite database with the reactor's schema: `sensor_readings`
-(timestamp, mode, temperature, pressure, pH, level, CO₂, anomaly status) and
-`anomaly_records`. Daedalus opens it in read-only mode, and this is tested: INSERT,
+(timestamp, mode, temperature, pressure, pH, level, CO₂). Daedalus opens it in read-only mode, and this is tested: INSERT,
 UPDATE, DELETE and DROP are all rejected. A generator fills it with **4,320 demo
 rows** so development doesn't need the physical rig.
 
 **Why it matters.** This is Rule 2 enforced at the database driver, not by asking
 the model nicely. Even a fully compromised prompt cannot write to plant data.
 
-**Current limitation.** Demo data only. Not yet matched to Jason's real table.
+**Current limitation.** Demo data only.
 
 ![Databases panel](screenshots/03-databases.png)
 
@@ -297,10 +296,10 @@ registry checks:
 - **Citability** — old conversation text can't be cited as evidence.
 
 **Why it matters.** This is Rules 2 and 3 in code. It is also where the sensor
-tools (`get_live_reading`, `get_trend`, `get_anomaly_summary`) will plug in — a slot
+tools (`get_live_reading`, `get_trend`) will plug in — a slot
 for them already exists.
 
-**Current limitation.** The three sensor tools are not written yet.
+**Current limitation.** The two sensor tools are not written yet.
 
 ![Agent tools](screenshots/13-agent-tools.png)
 
@@ -425,8 +424,8 @@ Save all images to `docs/screenshots/`.
 
 | Area | What's missing | Milestone |
 |---|---|---|
-| Sensor tools | `get_live_reading`, `get_trend`, `get_anomaly_summary` — not written, not even stubs. Also sensor-name whitelist, query timeouts, result-size caps | M3 |
-| Orchestration | Query normaliser, 8-intent classifier, **safety guard** (refuse control requests before any tool/LLM call), tool planner, evidence-pack builder, prompt builder, **response validator** (reject numbers not in evidence), follow-up rewriting | M5 |
+| Sensor tools | `get_live_reading`, `get_trend` — not written, not even stubs. Also sensor-name whitelist, query timeouts, result-size caps | M3 |
+| Orchestration | Query normaliser, 7-intent classifier, **safety guard** (refuse control requests before any tool/LLM call), tool planner, evidence-pack builder, prompt builder, **response validator** (reject numbers not in evidence), follow-up rewriting | M5 |
 | Track 1 — vector RAG | Top-k retrieval, query expansion, hybrid dense + BM25, cross-encoder re-ranking, compression, multi-hop, `VectorStoreAdapter` | M6 |
 | Track 2 — GraphRAG | Final node/edge schema, the graph itself, `graph_lookup` / `graph_traverse`, agent loop with hop cap and timeout | M6 |
 | Routing | Flag to point the same UI at either track for a fair comparison | M6 |
@@ -482,13 +481,8 @@ What this shows so far:
 
 ### Blocked on other people
 
-- **Document corpus** — manuals, SOPs, anomaly records, UAUC records. Nothing can
-  be ingested without it, which blocks both retrieval tracks and evaluation.
-  (UAUC and anomaly records involve Anson.)
-- **Real sensor data sample** from Jason's ingestion — needed to finish M1 and write
-  real sensor tools.
-- **Anson's anomaly output format** — a column on each reading or a separate table?
-  Decides the primary path for `get_anomaly_summary`.
+- **Document corpus** — manuals and SOPs. Nothing can be ingested without it,
+  which blocks both retrieval tracks and evaluation.
 - **Lab machine RAM / GPU** — gates the final model choice (M4).
 
 ### Scope decisions still open

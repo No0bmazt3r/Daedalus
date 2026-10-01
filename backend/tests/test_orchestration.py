@@ -84,10 +84,9 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(self.tools("What is the CO2 level now?"), ["get_live_reading"])
         self.assertEqual(self.tools("What was the pressure at 10:30?"), ["get_live_reading"])
         self.assertEqual(self.tools("Average temperature over the last hour?"), ["get_trend"])
-        self.assertEqual(self.tools("Was there an anomaly this morning?"), ["get_anomaly_summary"])
         self.assertEqual(self.tools("What should I do if the NDIR drifts?"), ["search_corpus"])
         self.assertEqual(self.tools("Why did CO2 spike at 10:30?"),
-                         ["get_trend", "get_anomaly_summary", "search_corpus"])
+                         ["get_trend", "search_corpus"])
 
     def test_retrieval_follows_the_track(self) -> None:
         fixtures.set_track("graph")
@@ -132,7 +131,17 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         # Retrieval is left out: no Chroma here, and the sensor side is what
         # the number checks are about.
         plan.calls = [c for c in plan.calls if c.tool != "search_corpus"]
-        cls.pack = orchestration.evidence.build(orchestration.executor.execute(plan, None))
+        # In its place, one passage recording the excursion — the prose line the
+        # time and cause checks are exercised against.
+        record = {
+            "tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus", "citable": True,
+            "data": {"track": "vector", "chunks": [{
+                "chunk_id": "log1", "source_file": "Shift_Log.pdf",
+                "text": "High CO2 excursion on 12 September 2026 from 10:30 to 10:35: CO2 exceeded "
+                        "the absorption range. Resolution: NDIR recalibrated.",
+            }]},
+        }
+        cls.pack = orchestration.evidence.build([*orchestration.executor.execute(plan, None), record])
         cls.question = u.standalone
 
     def validate(self, answer: str, history=None):  # noqa: ANN001, ANN201
@@ -149,11 +158,11 @@ class EvidenceAndValidatorTest(unittest.TestCase):
 
     def test_pack_labels_and_numbers(self) -> None:
         self.assertIn("S1", self.pack.labels)
-        self.assertIn("A1", self.pack.labels)
+        self.assertIn("D1", self.pack.labels)
         self.assertIn(fixtures.co2(34), self.pack.numbers)
 
     def test_supported_answer_passes(self) -> None:
-        v = self.validate(f"CO2 peaked at {fixtures.co2(34)} ppm [S1] during a recorded High CO2 anomaly [A2].")
+        v = self.validate(f"CO2 peaked at {fixtures.co2(34)} ppm [S1] during a recorded High CO2 excursion [D1].")
         self.assertTrue(v.passed, v.reasons)
         self.assertTrue(validator.grounded(v, self.pack))
 
@@ -181,16 +190,16 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         self.assertIn("unknown_citation", self.validate("See [S9].").reasons)
 
     def test_grouped_citations_are_each_checked(self) -> None:
-        v = self.validate("See [S1, A1] and [A2; S9].")
-        self.assertEqual(v.cited, ["A1", "A2", "S1", "S9"])
+        v = self.validate("See [S1, D1] and [D1; S9].")
+        self.assertEqual(v.cited, ["D1", "S1", "S9"])
         self.assertEqual(v.unknown_citations, ["S9"])
 
     def test_loose_citation_shapes_are_normalised(self) -> None:
         cases = {
             "[EVIDENCE: S1] CO2 peaked.": "[S1] CO2 peaked.",
-            "See [Source S1, A1].": "See [S1, A1].",
-            "(S1) and (a2)": "[S1] and [A2]",
-            "[S1 and A1]": "[S1, A1]",
+            "See [Source S1, D1].": "See [S1, D1].",
+            "(S1) and (d2)": "[S1] and [D2]",
+            "[S1 and D1]": "[S1, D1]",
             "Valve [ABV-1] and footnote [1]": "Valve [ABV-1] and footnote [1]",
         }
         for raw, want in cases.items():
@@ -230,7 +239,7 @@ class EvidenceAndValidatorTest(unittest.TestCase):
                 self.assertIn("control_claim", self.validate(text).reasons)
 
     def test_describing_a_procedure_is_not_a_control_claim(self) -> None:
-        self.assertTrue(self.validate("The operator should close the isolation valve first [A2].").passed)
+        self.assertTrue(self.validate("The operator should close the isolation valve first [D1].").passed)
 
     def test_empty_answer_fails(self) -> None:
         self.assertEqual(self.validate("   ").reasons, ["empty"])
@@ -243,32 +252,32 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         self.assertTrue(self.validate(f"There were 7 steps; CO2 peaked at {fixtures.co2(34)} ppm [S1].").passed)
 
     def test_unit_is_read_after_and_ph_before(self) -> None:
-        units = {n.text: n.unit for n in numbers.extract("3 ppm, 4% and 5 °C; pH of 6; 2 anomalies")}
+        units = {n.text: n.unit for n in numbers.extract("3 ppm, 4% and 5 °C; pH of 6; 2 readings")}
         self.assertEqual(units, {"3": "ppm", "4": "%", "5": "°c", "6": "ph", "2": None})
 
     def test_time_in_the_evidence_passes_in_any_format(self) -> None:
         for when in ("10:30", "10:30:00", "10.30am", "10:30 UTC"):
             with self.subTest(when=when):
-                v = self.validate(f"The High CO2 anomaly began at {when} [A2].")
+                v = self.validate(f"The High CO2 excursion began at {when} [D1].")
                 self.assertTrue(v.passed, (v.reasons, v.unsupported_times))
 
     def test_misstated_time_is_caught(self) -> None:
-        v = self.validate("The High CO2 anomaly began at 10:47 [A2].")
+        v = self.validate("The High CO2 excursion began at 10:47 [D1].")
         self.assertIn("unsupported_time", v.reasons)
         self.assertEqual(v.unsupported_times, ["10:47"])
         self.assertTrue(v.hallucination)
 
     def test_dates_are_checked_as_days(self) -> None:
-        self.assertTrue(self.validate("The anomaly was on 12 September [A2].").passed)
-        self.assertIn("unsupported_time", self.validate("The anomaly was on 14 September [A2].").reasons)
+        self.assertTrue(self.validate("The excursion was on 12 September [D1].").passed)
+        self.assertIn("unsupported_time", self.validate("The excursion was on 14 September [D1].").reasons)
 
     def test_a_time_from_the_question_or_history_is_a_referent(self) -> None:
         history = [{"role": "user", "content": "what happened at 09:15?"}]
-        self.assertTrue(self.validate("Nothing is recorded for 09:15 in this evidence [A1].", history=history).passed)
+        self.assertTrue(self.validate("Nothing is recorded for 09:15 in this evidence [D1].", history=history).passed)
 
     def test_cause_from_lines_that_state_none_is_caught(self) -> None:
         # The live failure: a cause stitched from a spike and an unrelated resolution.
-        v = self.validate("The CO2 spike was caused by NDIR calibration [A2].")
+        v = self.validate("The CO2 spike was caused by NDIR calibration [D1].")
         self.assertIn("uncited_cause", v.reasons)
         self.assertTrue(v.hallucination)
 
@@ -277,7 +286,7 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         self.assertIn("uncited_cause", v.reasons)
 
     def test_saying_the_cause_is_unknown_is_not_a_claim(self) -> None:
-        self.assertTrue(self.validate("The evidence does not state what caused the spike [A2].").passed)
+        self.assertTrue(self.validate("The evidence does not state what caused the spike [D1].").passed)
 
     def test_cause_stated_by_a_document_passes(self) -> None:
         pack = orchestration.evidence.build([{

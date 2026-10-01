@@ -72,13 +72,13 @@ _QUESTION = (
 
 # Synthetic, and labelled as such everywhere it is used. Written to look like
 # what the real corpus contains — numbered SOP clauses, setpoints with units,
-# an anomaly note — because prefill cost depends on the token distribution, and
+# an incident note — because prefill cost depends on the token distribution, and
 # lorem ipsum tokenises differently from technical prose with figures in it.
 _FIXTURE_CHUNKS = [
     "SOP-412 §3.1 Coolant loop A shall be maintained between 288 °C and 295 °C at "
     "the core outlet. A sustained excursion above 297 °C for more than 120 seconds "
     "requires the operator to initiate a controlled power reduction to 80% and log "
-    "the event under UAUC-7.",
+    "the event under LOG-7.",
     "SOP-412 §3.4 Primary loop pressure is nominally 15.5 MPa. Deviations beyond "
     "±0.4 MPa are reportable. The pressuriser heater bank shall not be cycled more "
     "than four times per hour; excessive cycling indicates level instrumentation "
@@ -87,7 +87,7 @@ _FIXTURE_CHUNKS = [
     "A single detector reading more than 8% from the channel mean is treated as "
     "instrument fault, not a reactivity event, provided the remaining three agree "
     "within 2%.",
-    "ANOMALY-2024-118 At 03:14 the CO2 concentration in the containment sampling "
+    "MAINT-2024-118 At 03:14 the CO2 concentration in the containment sampling "
     "line rose from 412 ppm to 470.2 ppm over nine minutes. Loop A outlet "
     "temperature was 291.4 °C and stable. Root cause was traced to a calibration "
     "gas bottle left open in the instrument room; no reactor parameter was affected.",

@@ -74,8 +74,6 @@ const LEVEL_STYLE: Record<IngestEvent['level'], string> = {
 const SOURCE_TYPES = [
   { id: 'manual', label: 'Manual' },
   { id: 'sop', label: 'SOP' },
-  { id: 'anomaly_record', label: 'Anomaly record' },
-  { id: 'uauc_record', label: 'UAUC record' },
   { id: 'other', label: 'Other' },
 ]
 
@@ -153,7 +151,7 @@ function ImportStep({
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed theme-text-muted">
-        The documents Track 1 will retrieve from — manuals, SOPs, anomaly and UAUC records. Text is
+        The documents Track 1 will retrieve from — manuals and SOPs. Text is
         extracted on upload, so a file that cannot be read is refused now rather than at the run.
       </p>
 

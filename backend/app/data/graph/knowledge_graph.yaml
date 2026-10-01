@@ -313,27 +313,6 @@ nodes:
   label: Reduce gas feed rate
   step_number: 2
   description: Throttle the blower to lower the pressure rise rate.
-- id: AnomalyRecord:2026-08-14_co2
-  type: AnomalyRecord
-  label: CO₂ breakthrough, 14 Aug 2026
-  occurred_at: '2026-08-14T09:41:00Z'
-  severity: medium
-  resolution: NDIR analyser recalibrated; drift of 140 ppm found.
-  description: Outlet CO₂ reached 910 ppm during Absorption.
-- id: AnomalyRecord:2026-09-02_co2
-  type: AnomalyRecord
-  label: CO₂ breakthrough, 02 Sep 2026
-  occurred_at: '2026-09-02T14:05:00Z'
-  severity: medium
-  resolution: Solvent replaced; HSS measured at 18 %.
-  description: Gradual CO₂ rise over four hours with pH falling in parallel.
-- id: AnomalyRecord:2026-09-11_thermal
-  type: AnomalyRecord
-  label: Thermal excursion, 11 Sep 2026
-  occurred_at: '2026-09-11T03:20:00Z'
-  severity: high
-  resolution: Emergency cooldown executed; reboiler control valve found sticking.
-  description: Temperature reached 52 °C with pressure at 2.7 barg.
 edges:
 - from: Sensor:co2_ppm
   type: MONITORED_IN
@@ -455,27 +434,3 @@ edges:
 - from: SOPDocument:Pressure_Relief
   type: CONTAINS
   to: SOPStep:relief_2
-- from: AnomalyRecord:2026-08-14_co2
-  type: INSTANCE_OF
-  to: AnomalyType:co2_breakthrough
-- from: AnomalyRecord:2026-09-02_co2
-  type: INSTANCE_OF
-  to: AnomalyType:co2_breakthrough
-- from: AnomalyRecord:2026-09-11_thermal
-  type: INSTANCE_OF
-  to: AnomalyType:thermal_runaway_risk
-- from: AnomalyRecord:2026-08-14_co2
-  type: INVOLVES
-  to: Sensor:co2_ppm
-- from: AnomalyRecord:2026-09-02_co2
-  type: INVOLVES
-  to: Sensor:co2_ppm
-- from: AnomalyRecord:2026-09-02_co2
-  type: INVOLVES
-  to: Sensor:ph
-- from: AnomalyRecord:2026-09-11_thermal
-  type: INVOLVES
-  to: Sensor:temp_c
-- from: AnomalyRecord:2026-09-11_thermal
-  type: INVOLVES
-  to: Sensor:pressure_barg

@@ -1,7 +1,7 @@
 """Step 7 of PROJECT.md §7.1: the evidence pack.
 
-Tool envelopes become labelled, citable lines — `[S1]` a sensor reading, `[A1]`
-an anomaly, `[D1]` a document passage, `[G1]` a graph node — and the pack keeps
+Tool envelopes become labelled, citable lines — `[S1]` a sensor reading, `[D1]`
+a document passage, `[G1]` a graph node — and the pack keeps
 three things the later steps need:
 
 | kept | used by |
@@ -14,7 +14,7 @@ three things the later steps need:
 
 A raw envelope is a page of JSON per tool, and an SLM at a 4k context spends
 its budget on braces. Each line here carries only what an answer could state —
-value, unit, time, mode, flag, source — with the label it must be cited by.
+value, unit, time, mode, source — with the label it must be cited by.
 The fence and its integrity hint come from `agent_tools.render_for_prompt`
 unchanged, so a document passage is still quoted as data, never as instruction.
 
@@ -54,7 +54,7 @@ _SERIES_SHOWN = 12
 @dataclass
 class EvidenceItem:
     label: str
-    #: 'sensor' | 'anomaly' | 'document' | 'graph'
+    #: 'sensor' | 'document' | 'graph'
     kind: str
     tool: str
     line: str
@@ -161,7 +161,7 @@ class _Builder:
             asked = data.get("requested_timestamp")
             return [f"No {data.get('sensor')} reading" + (f" near {_when(asked)}" if asked else " exists") + "."]
         ts = data.get("timestamp")
-        head = f"Reading at {_when(ts)}, mode {data.get('mode')}, anomaly flag {data.get('anomaly_flag')}"
+        head = f"Reading at {_when(ts)}, mode {data.get('mode')}"
         if data.get("stale"):
             head += f". STALE: this is the newest reading and it is {_age(int(data.get('age_seconds') or 0))} old"
         if data.get("offset_seconds") is not None:
@@ -203,29 +203,6 @@ class _Builder:
             shown = series[::step][:_SERIES_SHOWN]
             points = ", ".join(f"{p['timestamp'][11:16]} {p['value']}" for p in shown)
             lines.append(f"  (series sample, UTC: {points})")
-        return lines
-
-    def get_anomaly_summary(self, data: dict[str, Any]) -> list[str]:
-        span = f"{_when(data.get('start_time'))} to {_when(data.get('end_time'))}"
-        flagged = data.get("flagged_readings") or 0
-        lines = [self.add("A", "anomaly", "get_anomaly_summary",
-                          f"From {span}: {data.get('anomaly_count') or 0} anomaly records; "
-                          f"{flagged} individual readings flagged"
-                          + (f", first at {_when(data.get('first_flagged_at'))}, last at {_when(data.get('last_flagged_at'))}"
-                             if flagged else "") + ".",
-                          {"type": "sqlite", "table": data.get("source"), "start_time": data.get("start_time"),
-                           "end_time": data.get("end_time"), "count": data.get("anomaly_count")})]
-        for a in data.get("anomalies") or []:
-            if "anomaly_type" in a:
-                line = (f"{a.get('anomaly_type')} ({a.get('severity')} severity) from {_when(a.get('start_time'))} "
-                        f"to {_when(a.get('end_time'))}: {a.get('description')} Resolution: {a.get('resolution') or 'none recorded'}.")
-                cite = {"type": "sqlite", "table": "anomaly_records", "start_time": a.get("start_time"),
-                        "anomaly_type": a.get("anomaly_type")}
-            else:
-                vals = "; ".join(f"{k} {_fmt(v['value'], v['unit'])}" for k, v in (a.get("readings") or {}).items())
-                line = f"Flagged reading at {_when(a.get('timestamp'))}, mode {a.get('mode')}: {vals}."
-                cite = {"type": "sqlite", "table": "sensor_readings", "timestamp": a.get("timestamp")}
-            lines.append(self.add("A", "anomaly", "get_anomaly_summary", line, cite))
         return lines
 
     def search_corpus(self, data: dict[str, Any]) -> list[str]:

@@ -23,7 +23,7 @@ same surface check, the same argument validation and the same logging it would
 have run had the model asked for that tool directly. A locked effect stays
 locked inside a pipeline, and every step gets its own `tool_logs` row.
 
-What it buys is fewer round trips. "Find the SOP for this anomaly" is three
+What it buys is fewer round trips. "Find the SOP for this fault" is three
 calls whose arguments do not depend on each other's *content*, and spending
 three inference turns to issue them is three chances to drift.
 """

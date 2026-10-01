@@ -139,17 +139,10 @@ TREND_RE = re.compile(
     r"|purata|tertinggi|terendah)\b"
 )
 
-ANOMALY_STRONG_RE = re.compile(
-    r"\b(?:anomal\w*|abnormal\w*|alarms?|alerts?|faults?|faulty|unusual|irregular\w*"
-    r"|out\s+of\s+(?:range|spec|bounds|limits?)|deviat\w*|flagged|flags?|incidents?|excursions?"
-    r"|exceed\w*|outliers?|spikes?|spiked|spiking|surge\w*|glitch\w*|malfunction\w*|luar\s+biasa)\b"
-)
-ANOMALY_WEAK_RE = re.compile(r"\b(?:problems?|issues?|errors?|wrong|weird|strange|odd)\b")
-
 SOP_STRONG_RE = re.compile(
     r"\b(?:sops?|procedures?|manuals?|instructions?|guidelines?|protocols?|checklists?|step[- ]by[- ]step"
     r"|steps|troubleshoot\w*|calibrat\w*|recalibrat\w*|maintenance|maintain|servic(?:e|ing)|clean(?:ing)?"
-    r"|replac(?:e|ing)|install\w*|safety\s+(?:procedures?|precautions?|rules?|measures?)|ppe|uauc|lockout|tagout"
+    r"|replac(?:e|ing)|install\w*|safety\s+(?:procedures?|precautions?|rules?|measures?)|ppe|lockout|tagout"
     r"|how\s+(?:do|should|can|would|could)\s+(?:i|we|you|one|an\s+operator)|how\s+to"
     r"|what\s+(?:should|do|must)\s+(?:i|we)\s+do|what\s+to\s+do|recommended|best\s+practice"
     r"|bagaimana|prosedur|langkah)\b"
@@ -167,7 +160,7 @@ CAUSAL_RE = re.compile(
 )
 
 # Anything that places a question inside this project's world. A question with
-# none of these, no sensor and no SOP/anomaly cue is `out_of_scope`.
+# none of these, no sensor and no SOP cue is `out_of_scope`.
 DOMAIN_RE = re.compile(
     r"\b(?:sorption|absorption|adsorption|desorption|sorbent|sorbents|reactor|reactors|rig|plant|lab|laboratory"
     r"|carbon\s+capture|scada|sensors?|ndir|valves?|abv[-\s]?\d*|pumps?|amine|amines|solvent|solvents|column"
@@ -241,7 +234,7 @@ PARAMETER_TARGET_RE = re.compile(
 )
 DATA_TARGET_RE = re.compile(
     r"\b(?:database|db|tables?|records?|readings?|data|logs?|entry|entries|values?|rows?|history"
-    r"|anomaly\s+(?:records?|flags?)|flags?|measurements?|telemetry|timestamps?)\b"
+    r"|flags?|measurements?|telemetry|timestamps?)\b"
 )
 # Verbs too general to trust with a distant object: "run a report on the sensor"
 # is analysis, "run the pump" is not. For these the target must follow closely.

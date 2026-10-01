@@ -4,7 +4,7 @@
       │  normalise            clean, reject empty / too long, flag language
       │  guard (raw)          refuse a command before any model runs
       │  condense             rewrite a follow-up into a standalone question
-      │  classify             one of the eight intents
+      │  classify             one of the seven intents
       │  guard (standalone)   refuse a command the rewrite revealed
       ▼
     Understanding — the standalone question, its intent, and either
@@ -53,16 +53,16 @@ REPLY_TOO_LONG = (
 )
 REPLY_OUT_OF_SCOPE = (
     "That is outside what I can help with. I answer questions about the CO2 sorption reactor: "
-    "current and past sensor readings, trends, anomalies, and the lab's procedures."
+    "current and past sensor readings, trends, and the lab's procedures."
 )
 REPLY_ABOUT = (
     "I'm Daedalus, a read-only assistant for the CO2 sorption reactor. Ask me about current or "
     'past readings ("What is the CO2 level now?"), trends ("Average temperature over the last '
-    'hour?"), anomalies ("Was there an anomaly this morning?"), or procedures ("What should I '
-    'do if the NDIR drifts?"). I cannot operate the reactor.'
+    'hour?"), or procedures ("What should I do if the NDIR drifts?"). I cannot operate the '
+    'reactor.'
 )
 REPLY_SMALLTALK = (
-    "Hello — I'm Daedalus. Ask me about the reactor's readings, trends, anomalies or "
+    "Hello — I'm Daedalus. Ask me about the reactor's readings, trends or "
     "procedures whenever you're ready."
 )
 

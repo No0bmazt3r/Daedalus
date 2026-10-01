@@ -453,12 +453,6 @@ _FIELDS: dict[str, list[dict[str, str]]] = {
         {"name": "step_number", "hint": "Order within the procedure"},
         {"name": "description", "hint": "What to do"},
     ],
-    "AnomalyRecord": [
-        {"name": "label", "hint": "Display name"},
-        {"name": "occurred_at", "hint": "ISO timestamp"},
-        {"name": "severity", "hint": "low · medium · high"},
-        {"name": "resolution", "hint": "What was done"},
-    ],
     "AnomalyType": [
         {"name": "label", "hint": "Display name"},
         {"name": "description", "hint": "What this class of anomaly is"},

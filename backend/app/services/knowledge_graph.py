@@ -50,7 +50,9 @@ from typing import Any
 # works for whoever built it and breaks for everybody else.
 #
 # The first edit copies the seed across. Until then the seed is served directly,
-# so a fresh checkout has the authored 37-node graph with nothing to set up.
+# so a fresh checkout has the authored 34-node graph with nothing to set up.
+# Its contents are placeholder engineering data, written to exercise the
+# schema — not the rig's real thresholds or procedures.
 from ..db import paths as _paths  # noqa: E402 — needed for the path below
 
 SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "graph" / "knowledge_graph.yaml"
@@ -68,7 +70,6 @@ NODE_TYPES = (
     "Threshold",
     "SOPDocument",
     "SOPStep",
-    "AnomalyRecord",
     "AnomalyType",
 )
 
@@ -78,8 +79,6 @@ EDGE_TYPES = (
     "TRIGGERS",
     "RESOLVED_BY",
     "CONTAINS",
-    "INSTANCE_OF",
-    "INVOLVES",
 )
 
 # Which node types an edge type is allowed to connect. Declared rather than
@@ -92,8 +91,6 @@ EDGE_DOMAINS: dict[str, tuple[str, str]] = {
     "TRIGGERS": ("Threshold", "AnomalyType"),
     "RESOLVED_BY": ("AnomalyType", "SOPDocument"),
     "CONTAINS": ("SOPDocument", "SOPStep"),
-    "INSTANCE_OF": ("AnomalyRecord", "AnomalyType"),
-    "INVOLVES": ("AnomalyRecord", "Sensor"),
 }
 
 
@@ -239,8 +236,8 @@ def neighbours(node_id: str) -> dict[str, list[dict[str, Any]]]:
     """A node's immediate connections, split by direction.
 
     Both directions, because half this graph reads backwards: an SOPDocument's
-    useful neighbour is the AnomalyType that RESOLVED_BY points at it, and an
-    AnomalyType's history is the AnomalyRecords pointing in via INSTANCE_OF.
+    useful neighbour is the AnomalyType that RESOLVED_BY points at it, and a
+    Threshold is reached from the Sensor that HAS_THRESHOLD points at it.
     """
     graph = load()
     if not graph.has_node(node_id):

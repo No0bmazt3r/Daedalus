@@ -13,7 +13,7 @@ LLM only summarizes evidence
 
 ---
 
-## Core Tools (keep these four for FYP)
+## Core Tools (keep these three for FYP)
 
 ### Tool 1: `get_live_reading(sensor, timestamp)`
 
@@ -22,7 +22,7 @@ LLM only summarizes evidence
 **Input:**
 ```json
 {
-  "sensor": "temperature | pressure | ph | co2_ppm | mode | anomaly_flag",
+  "sensor": "temperature | pressure | ph | co2_ppm | mode",
   "timestamp": "optional ISO timestamp"
 }
 ```
@@ -34,8 +34,7 @@ LLM only summarizes evidence
   "value": 470.2,
   "unit": "ppm",
   "timestamp": "2026-01-07T10:00:05",
-  "mode": "Absorption",
-  "anomaly_flag": "Normal"
+  "mode": "Absorption"
 }
 ```
 
@@ -97,58 +96,16 @@ Limit series length: `max_points = 100` to avoid huge prompts.
 
 ---
 
-### Tool 3: `get_anomaly_summary(start_time, end_time, limit)`
+### Tool 3: `rag_retrieve(query, top_k, source_types, reactor_mode)`
 
-**Purpose:** Retrieve anomaly occurrences in a time range.
-
-**Input:**
-```json
-{
-  "start_time": "ISO timestamp",
-  "end_time": "ISO timestamp",
-  "limit": 10
-}
-```
-
-**Output (from sensor_readings):**
-```json
-{
-  "anomaly_count": 1,
-  "anomalies": [{
-    "timestamp": "2026-01-07T09:42:10",
-    "anomaly_flag": "Anomaly",
-    "co2_ppm": 980.4,
-    "mode": "Absorption"
-  }]
-}
-```
-
-**Output (from anomaly_records table, if exists):**
-```json
-{
-  "anomaly_count": 1,
-  "anomalies": [{
-    "start_time": "2026-01-07T09:40:00",
-    "end_time": "2026-01-07T09:45:00",
-    "anomaly_type": "High CO₂",
-    "severity": "medium",
-    "description": "CO₂ exceeded expected absorption range."
-  }]
-}
-```
-
----
-
-### Tool 4: `rag_retrieve(query, top_k, source_types, reactor_mode)`
-
-**Purpose:** Retrieve relevant SOP/manual/anomaly knowledge chunks.
+**Purpose:** Retrieve relevant SOP/manual knowledge chunks.
 
 **Input:**
 ```json
 {
   "query": "string",
   "top_k": 5,
-  "source_types": ["sop", "manual", "anomaly", "uauc"],
+  "source_types": ["sop", "manual"],
   "reactor_mode": "optional"
 }
 ```
@@ -175,14 +132,13 @@ Limit series length: `max_points = 100` to avoid huge prompts.
 ```text
 get_mode_context()
 get_experiment_summary()
-get_recent_anomalies()
 ```
 
 ---
 
 ## Tool Security Rules
 
-1. **Whitelisted sensor names:** `temperature, pressure, ph, co2_ppm, mode, anomaly_flag`
+1. **Whitelisted sensor names:** `temperature, pressure, ph, co2_ppm, mode`
 2. **Whitelisted aggregation functions:** `average, min, max, count, latest, first`
 3. **Parameterized SQL only** — no raw SQL from LLM
 4. **No write queries**
@@ -194,11 +150,10 @@ get_recent_anomalies()
 
 ## Diagram Elements
 
-Four tool boxes:
+Three tool boxes:
 ```text
 get_live_reading()
 get_trend()
-get_anomaly_summary()
 rag_retrieve()
 ```
 
@@ -206,7 +161,6 @@ Arrows:
 ```text
 FastAPI → get_live_reading → SQLite
 FastAPI → get_trend → SQLite
-FastAPI → get_anomaly_summary → SQLite
 FastAPI → rag_retrieve → ChromaDB
 ```
 

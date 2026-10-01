@@ -34,9 +34,9 @@ temperature sensor measures ambient temperature, monitoring thermal
 dynamics."* — no number, a cited reading, and an explanation nobody retrieved.
 So every `S` citation is checked against its own line: the sentence it sits in
 (or the one before, for a label written after the full stop) must state one of
-that line's numbers, its mode *as a mode*, its anomaly flag, or its staleness.
-Naming the sensor is not enough, because that is exactly the failure. `A`, `D`
-and `G` lines are prose, where a fair check needs meaning rather than tokens,
+that line's numbers, its mode *as a mode*, or its staleness.
+Naming the sensor is not enough, because that is exactly the failure. `D` and
+`G` lines are prose, where a fair check needs meaning rather than tokens,
 so they are not checked this way.
 
 ## Times are moments, checked like numbers
@@ -54,10 +54,10 @@ restate a measurement. Formats are normalised (`10:30`, `10:30:00`, `10.30am`;
 
 Rule 8 of the prompt says: do not claim a cause the evidence does not state.
 Seen on qwen3:1.7b — the CO₂ spike "was caused by NDIR calibration", when the
-anomaly record only listed the spike and, separately, its resolution. A
+cited record only listed the spike and, separately, its resolution. A
 sentence making a causal claim ("because", "due to", "caused by", "led to",
 Malay "disebabkan"/"kerana"/"akibat") therefore has to cite at least one
-non-reading line (`A`, `D`, `G` — a sensor value cannot establish causation)
+non-reading line (`D`, `G` — a sensor value cannot establish causation)
 that itself uses causal language *and* shares a content word with the claim.
 Sentences saying a cause is unknown or not in the evidence are exempt.
 
@@ -70,8 +70,8 @@ state none — without pretending to read meaning.
 
 - **Numbers in the question.** "Is 900 ppm high?" — echoing 900 is not a claim.
 - **Small counts (0–10, no decimal point, no unit).** "Step 3", "1 record",
-  "2 anomalies". Rejecting these made nearly every procedural answer fail in
-  testing, and a count that matters (anomalies, readings) is in the evidence
+  "2 steps". Rejecting these made nearly every procedural answer fail in
+  testing, and a count that matters (readings) is in the evidence
   anyway. A small number *with a unit* is a measurement and is checked like
   any other — "pressure is 2 bar" must be in the evidence. So the remaining
   blind spot is a small bare count, not a small value.
@@ -319,7 +319,6 @@ def _labels_in(text: str) -> set[str]:
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 _MODES = ("manual", "absorption", "desorption")
-_FLAG_RE = re.compile(r"anomaly flag (\w+)", re.IGNORECASE)
 
 
 def _supports(sentence: str, line: str) -> bool:
@@ -332,9 +331,6 @@ def _supports(sentence: str, line: str) -> bool:
             return True
     # The mode, said as a mode — "critical for desorption processes" is not.
     if "mode" in said and any(m in said and m in shown for m in _MODES):
-        return True
-    flag = _FLAG_RE.search(line)
-    if flag and flag.group(1).lower() in said and ("flag" in said or "normal" in said or "anomal" in said):
         return True
     if "stale" in shown and ("stale" in said or " old" in said or "days ago" in said):
         return True

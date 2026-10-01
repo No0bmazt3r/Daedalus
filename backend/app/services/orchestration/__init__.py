@@ -3,7 +3,7 @@
     Understanding (query_pipeline, steps 1–4)
       │  planner     intent + signals → tool calls, time resolved by rules     step 5
       │  executor    agent_tools.call per call, runtime surface, query_id      step 6
-      │  evidence    envelopes → labelled lines [S1] [A1] [D1] [G1]           step 7
+      │  evidence    envelopes → labelled lines [S1] [D1] [G1]                 step 7
       │  prompt      rules + history + evidence + standalone question         step 8
       ▼
     inference.answer_stream — the model call                                  step 9

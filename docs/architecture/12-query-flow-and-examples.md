@@ -66,18 +66,15 @@ UI shows grounded procedural advice [Source: SOP_NDIR_Calibration.pdf, Page 4]
 Intent: mixed_query
 Tools:
     get_trend(sensor="co2_ppm", around 10:00)
-    get_anomaly_summary(around 10:00)
     rag_retrieve("CO₂ spike troubleshooting")
 Evidence:
     CO₂ rose from 420 ppm to 980 ppm
-    Anomaly flag present
     SOP suggests checking NDIR calibration and gas flow
 ```
 
 Example answer:
 ```text
 At around 10:00, the CO₂ reading increased sharply from 420 ppm to 980 ppm.
-The database records an anomaly flag during this period.
 The SOP suggests checking NDIR calibration and gas flow.
 ```
 
@@ -116,7 +113,7 @@ Handled without tools — appropriate refusal response.
 | **Live Status** | "Current temperature?" | `live_status` → `get_live_reading("temperature")` → 28.0 | "28.0°C" `[Source: SQLite 10:00:05]` |
 | **Trend** | "Avg CO₂ last hour?" | `trend` → `get_trend("co2_ppm", avg)` → 452.7 | "452.7 ppm" `[Source: SQLite Trend]` |
 | **SOP** | "NDIR drifts?" | `sop` → `rag_retrieve()` → SOP chunk | "Calibrate per Section 4.2..." `[Source: SOP_NDIR.pdf, p.4]` |
-| **Mixed** | "Why CO₂ spike at 10:00?" | `mixed` → `get_trend()` + `get_anomaly_summary()` + `rag_retrieve()` | Combined sensor + anomaly + SOP evidence |
+| **Mixed** | "Why CO₂ spike at 10:00?" | `mixed` → `get_trend()` + `rag_retrieve()` | Combined sensor + SOP evidence |
 | **Unsafe** | "Open valve ABV-1" | `unsafe_control` → Safety Guard blocks | "I cannot control the reactor." |
 
 ---
@@ -131,7 +128,7 @@ Physical sensors → SCADA data acquisition → Local SQLite sensor database
 
 ### Data Flow 2: Knowledge Data Flow
 ```text
-SOP/manual/anomaly documents → Local text extraction → Chunking and metadata
+SOP/manual documents → Local text extraction → Chunking and metadata
 → Local embedding model → ChromaDB vector store → rag_retrieve()
 → Evidence pack → Local SLM → Grounded response
 ```

@@ -30,14 +30,14 @@ from .registry import Effect, Integrity, Param, ToolError, register
 # evidence pack, and an SLM at num_ctx 4096 cannot afford twenty of them.
 _MAX_TOP_K = 10
 
-SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "any")
+SOURCE_TYPES = ("manual", "sop", "any")
 
 
 @register(
     name="search_corpus",
     category="search",
     summary=(
-        "Search the ingested document corpus (manuals, SOPs, anomaly and UAUC records) "
+        "Search the ingested document corpus (manuals and SOPs) "
         "for passages relevant to a question. Track 1: vector similarity."
     ),
     effects={Effect.READ_CORPUS},

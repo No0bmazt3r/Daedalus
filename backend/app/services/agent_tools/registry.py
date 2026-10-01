@@ -210,6 +210,11 @@ def _tool_mode() -> str:
         return "simple"
 
 
+# `planner.SENSOR_TOOLS`, restated so Simple mode still has it when the planner
+# cannot be read. `test_tool_mode` holds the two equal.
+_FALLBACK_SENSOR_TOOLS: Final = frozenset({"get_live_reading", "get_trend"})
+
+
 def _answering_names() -> frozenset[str] | None:
     """The tools Simple mode keeps — the planner's set. None if it cannot be read."""
     try:
@@ -516,9 +521,11 @@ def _simple_refusal(tool: Tool, surface: Surface) -> str | None:
     """
     names = _answering_names()
     if names is None:
-        # Planner unreadable: keep the sensor tools and the selected track's
-        # retrieval by declaration rather than refusing everything.
-        if tool.category == "sensor":
+        # Planner unreadable: keep the planner's sensor tools, by name, and the
+        # selected track's retrieval by declaration rather than refusing
+        # everything. By name, not by category — a sensor tool added later is
+        # not an answering tool until the planner says so.
+        if tool.name in _FALLBACK_SENSOR_TOOLS:
             return None
         if tool.category == "search" and tool.track is not None:
             return _track_refusal(tool, surface)

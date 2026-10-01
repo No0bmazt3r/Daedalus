@@ -41,7 +41,7 @@ lab-scale CO₂ sorption reactor, logging temperature, pressure, pH, level and
 NDIR CO₂ concentration to a local SQLite database every 5 seconds. To
 understand reactor state today, a person must read raw sensor graphs, know
 SCADA/mode jargon (Manual/Absorption/Desorption), and manually cross-reference
-separate SOP documents and anomaly logs. That is slow, error-prone, and shuts
+separate SOP documents and logs. That is slow, error-prone, and shuts
 out non-specialists.
 
 ### The solution
@@ -53,7 +53,6 @@ letting anyone ask plain-language questions:
 - "Why did the CO₂ reading spike at 10:00?"
 - "What's the average temperature over the past hour?"
 - "What do I do if the NDIR reading drifts?"
-- "Was there an anomaly this morning?"
 
 …and get a grounded, cited, natural-language answer — **without the model ever
 inventing a sensor value**, because it never generates numbers. It only narrates
@@ -90,11 +89,11 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 4 | SOP/troubleshooting answers must be retrieval-grounded, and must refuse when nothing relevant is retrieved |
 | 5 | FastAPI is the orchestration backend; Ollama is the local model runtime |
 | 6 | SQLite holds sensor data (WAL mode, opened read-only by the AI); AI logs live in a **separate** database |
-| 7 | The same four core tools: `get_live_reading`, `get_trend`, `get_anomaly_summary`, `rag_retrieve` |
+| 7 | The same three core tools: `get_live_reading`, `get_trend`, `rag_retrieve` |
 | 8 | Same candidate models and quantization strategy (Q4_K_M-first) |
 | 9 | Same success targets: **<3s** end-to-end latency, **>80%** retrieval precision, **<10%** hallucination rate |
 | 10 | Setup/admin utilities are not runtime components and must not sit in the query path |
-| 11 | Corpus is manuals, SOPs, anomaly records and UAUC records; chunked 300–500 tokens with overlap; embedded locally |
+| 11 | Corpus is manuals and SOPs; chunked 300–500 tokens with overlap; embedded locally |
 
 ### 2.2 Where they conflict — and the resolution
 
@@ -108,11 +107,10 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 6 | **Model-fit tooling** | `05-model-hardware-fit-tool.md` — llmfit-inspired CLI | `11-admin-utility-layer.md` — Model Selector Console (Streamlit) | **Same deliverable, two names.** Merge into one "Hardware & Model Console": CLI-first (the safe MVP), optional web UI later |
 | 7 | **Evaluation method** | Local manual labelling | Hybrid: local Streamlit + n8n/Google Sheets + LLM-as-a-judge | **Adopt the hybrid**, with the cloud half explicitly fenced as an *offline, post-hoc* workflow over exported logs. It never touches the live runtime |
 | 8 | **Sensor table PK** | `timestamp DATETIME PRIMARY KEY` | `id INTEGER PRIMARY KEY AUTOINCREMENT` + `timestamp TEXT` | **ISO-8601 `timestamp TEXT` as PK.** `architecture/03` itself recommends collapsing to a single ISO timestamp. Simpler joins, natural ordering |
-| 9 | **Column naming** | `temp_c`, `pressure_barg`, `ph`, `co2_ppm`, `anomaly_status` | `temperature`, `pressure`, `ph`, `co2_ppm`, `mode`, `anomaly_flag` | **Unit-suffixed physical columns** (`temp_c`, `pressure_barg`) — self-documenting. The tool layer exposes *friendly* names (`temperature`) and maps them to columns via a whitelist |
-| 10 | **Anomaly storage** | `anomaly_status` column on the readings row | Either the column *or* a separate `anomaly_records` table | **Support both.** `get_anomaly_summary` reads the richer table when present and falls back to the column |
-| 11 | **Graph store** | NetworkX primary, Kùzu as a stretch comparison | "KuzuDB or NetworkX" | **NetworkX first** (zero setup, fast iteration); Kùzu only if time allows |
-| 12 | **Model list drift** | Qwen3, Phi-3, Gemma 3, Llama 3.1, Mistral | `architecture-overview` says Qwen2.5/Llama 3.2; `06` says Qwen3/Phi-3/Gemma 3 | **Use the `06`/`docs` list** (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B for SLM tier). The overview's list is stale |
-| 13 | **Naming** | "CO2SorptionDT Conversational Agentic AI" | "Project Daedalus" | **Daedalus** is the system/product name; the FYP title stays the formal academic one |
+| 9 | **Column naming** | `temp_c`, `pressure_barg`, `ph`, `co2_ppm` | `temperature`, `pressure`, `ph`, `co2_ppm`, `mode` | **Unit-suffixed physical columns** (`temp_c`, `pressure_barg`) — self-documenting. The tool layer exposes *friendly* names (`temperature`) and maps them to columns via a whitelist |
+| 10 | **Graph store** | NetworkX primary, Kùzu as a stretch comparison | "KuzuDB or NetworkX" | **NetworkX first** (zero setup, fast iteration); Kùzu only if time allows |
+| 11 | **Model list drift** | Qwen3, Phi-3, Gemma 3, Llama 3.1, Mistral | `architecture-overview` says Qwen2.5/Llama 3.2; `06` says Qwen3/Phi-3/Gemma 3 | **Use the `06`/`docs` list** (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B for SLM tier). The overview's list is stale |
+| 12 | **Naming** | "CO2SorptionDT Conversational Agentic AI" | "Project Daedalus" | **Daedalus** is the system/product name; the FYP title stays the formal academic one |
 
 ### 2.3 Open questions still needing your decision
 
@@ -120,7 +118,6 @@ These are genuinely undecided — flagged rather than silently resolved:
 
 - [ ] **Is the PyQt5 tab still a deliverable at all**, or fully replaced by the web dashboard? Affects whether Zone 4 needs two clients.
 - [ ] **Is the vector-DB bake-off (6 candidates) still in scope for FYP2**, on top of the dual-track RAG comparison? Two benchmark studies may be more than the timeline allows.
-- [ ] **Does Anson's anomaly subsystem write a column or a table?** Determines which `get_anomaly_summary` path is primary.
 - [ ] **Confirm the lab machine's actual specs** (RAM/GPU) — this gates the entire model-tier decision.
 
 ---
@@ -167,7 +164,7 @@ claim than an unenforced absolute. See [`BENCHMARK.md`](BENCHMARK.md) §8.
 
 ### Rule 2 — The AI layer is read-only toward the plant
 It may read the sensor SQLite DB and its own knowledge stores. It may **never**
-write to SCADA, actuators, ABVs, sensor hardware, or a teammate's subsystem.
+write to SCADA, actuators, ABVs, sensor hardware, or the SCADA ingestion subsystem.
 
 *It may and must write to its own audit/evaluation logs* — those belong to the
 AI layer, not the control layer, and do not breach the boundary.
@@ -181,7 +178,7 @@ guardrails.
 **Enforcement:**
 - SQLite opened `file:...?mode=ro` via URI — the driver refuses writes.
 - No tool in the registry has a write signature. `set_reading()`,
-  `write_valve()`, `update_anomaly()` **do not exist**.
+  `write_valve()`, `delete_reading()` **do not exist**.
 - No raw-SQL tool is exposed, so the model cannot compose its own statement.
 - A safety guard blocks control-intent queries before any tool runs.
 
@@ -209,7 +206,7 @@ evaluation harness are administrative. They never sit in the live query path.
 └────────────────────────────┬────────────────────────────────────────┘
                              │ sensor readings
 ┌─ Zone 2 ─ SCADA / Data Acquisition ────────────────── pre-existing ─┐
-│  CO2SorptionDT · polling · ingestion (Jason) · anomaly flags (Anson)│
+│  CO2SorptionDT · polling · ingestion                                │
 │  → writes a row every 5s                                            │
 └────────────────────────────┬────────────────────────────────────────┘
                              │ read-only SQL  ◄── THE SAFETY BOUNDARY
@@ -228,7 +225,7 @@ evaluation harness are administrative. They never sit in the live query path.
 | # | Layer | Zone | Status |
 |---|---|---|---|
 | 1 | Physical reactor & sensors | 1 | Pre-existing, untouched |
-| 2 | SCADA acquisition | 2 | Pre-existing (teammates) |
+| 2 | SCADA acquisition | 2 | Pre-existing |
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
 | 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); waiting on the real corpus |
 | 5 | Retrieval — vector + graph | 3 | **Wired into chat** — Track 1 top-k over the current index, Track 2 a fixed logged walk (`graph_walk`), gated by the selected track. Advanced Track 1 techniques and Track 2's agent loop not built |
@@ -267,16 +264,15 @@ A hand-authored knowledge graph plus a ReAct-style agent loop that traverses it
 over multiple hops, self-assessing sufficiency between steps.
 
 **Nodes:** `Sensor`, `OperatingMode`, `Threshold`, `SOPDocument`, `SOPStep`,
-`AnomalyRecord`, `AnomalyType`
+`AnomalyType`
 **Edges:** `MONITORED_IN`, `HAS_THRESHOLD`, `TRIGGERS`, `RESOLVED_BY`,
-`CONTAINS`, `INSTANCE_OF`, `INVOLVES`
+`CONTAINS`
 
 **Why it should win on multi-hop.** For *"pressure and temperature both spiked —
-what do I do, and has this happened before?"*, flat retrieval embeds the whole
-sentence and hopes one chunk covers it. The graph instead walks:
-both `Sensor` nodes → their `Threshold`s → the `AnomalyType` triggered by both →
-the `SOPDocument` that `RESOLVED_BY` it → and separately every `AnomalyRecord`
-that is an `INSTANCE_OF` that type, answering the historical half structurally.
+what do I do?"*, flat retrieval embeds the whole sentence and hopes one chunk
+covers it. The graph instead walks: both `Sensor` nodes → their `Threshold`s →
+the `AnomalyType` triggered by both → the `SOPDocument` that `RESOLVED_BY` it →
+its `SOPStep`s, answering each half structurally.
 
 **Honest risks to report:** higher latency (works against the <3s target), silent
 failure when a relationship was never authored, and meta-reasoning steps
@@ -377,25 +373,9 @@ CREATE TABLE sensor_readings (
     pressure_barg  REAL,   -- P-101
     ph             REAL,   -- pH-101
     level_pct      REAL,   -- LV-101/102
-    co2_ppm        REAL,   -- NDIR
-    anomaly_status TEXT CHECK(anomaly_status IN ('Normal','Anomaly'))
+    co2_ppm        REAL    -- NDIR
 );
 CREATE INDEX idx_readings_timestamp ON sensor_readings(timestamp);
-CREATE INDEX idx_readings_anomaly   ON sensor_readings(anomaly_status);
-```
-
-Optional richer table, if Anson's subsystem provides it:
-
-```sql
-CREATE TABLE anomaly_records (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    start_time   TEXT,
-    end_time     TEXT,
-    anomaly_type TEXT,
-    severity     TEXT,
-    description  TEXT,
-    resolution   TEXT
-);
 ```
 
 **Volume:** ~17,000 rows/day at 5s sampling — comfortably within SQLite's range
@@ -426,7 +406,7 @@ the report.
 | **Sensor** | SQLite | `/data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
 | **Audit** | SQLite | `/logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
 | **Chat** | SQLite | `/data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
-| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded SOP/manual/anomaly/UAUC chunks, and the manifest of what was ingested |
+| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded SOP/manual chunks, and the manifest of what was ingested |
 | **Prefs** | SQLite | `/app/data/prefs.db` | read/write | UI state, kept out of the browser |
 
 **The Vector store has two halves and is still one store.** Chroma holds the
@@ -465,9 +445,8 @@ database we do not own would breach Rule 2 as surely as an INSERT would.
 ### 6.4 Store separation (state this explicitly in the report)
 
 ```
-Jason's subsystem  → writes sensor_readings
-Anson's subsystem  → writes anomaly flags/records
-Daedalus           → READS both; writes ONLY to its own separate stores:
+SCADA ingestion    → writes sensor_readings
+Daedalus           → READS it; writes ONLY to its own separate stores:
                      ChromaDB dir, corpus.db, graph file, ai_logs.db,
                      chat.db, prefs.db
 ```
@@ -484,7 +463,7 @@ record, because they are different files.
 1. Receive query
 2. Normalise (trim, length-check, detect control keywords)
 3. **Classify intent** — `live_status` · `historical_query` · `trend_query` ·
-   `anomaly_query` · `sop_query` · `mixed_query` · `unsafe_control` · `out_of_scope`
+   `sop_query` · `mixed_query` · `unsafe_control` · `out_of_scope`
 4. **Safety guard** — control intent returns
    *"I cannot control the reactor. I only provide read-only monitoring information."*
    with **no tool execution and no LLM call**
@@ -500,9 +479,8 @@ record, because they are different files.
 
 | Tool | Input | Returns |
 |---|---|---|
-| `get_live_reading` | `sensor`, optional `timestamp` | value, unit, timestamp, mode, anomaly flag |
+| `get_live_reading` | `sensor`, optional `timestamp` | value, unit, timestamp, mode |
 | `get_trend` | `sensor`, `start_time`, `end_time`, `aggregation`, optional `mode_filter` | aggregated value, unit, sample count, optional series (≤100 points) |
-| `get_anomaly_summary` | `start_time`, `end_time`, `limit` | anomaly count + records |
 | `rag_retrieve` | `query`, `top_k`, `source_types`, optional `reactor_mode` | chunks with text, score, source file, section, page |
 
 Track 2 adds `graph_lookup`, `graph_traverse`, `graph_query_natural`.
@@ -534,7 +512,7 @@ instrumentation methods as much as two retrieval strategies. A call with no
 for one would land in the evaluation set as though it were.
 
 **Security rules:** whitelisted sensor names (`temperature`, `pressure`, `ph`,
-`co2_ppm`, `mode`, `anomaly_flag`) and aggregations (`average`, `min`, `max`,
+`co2_ppm`, `mode`) and aggregations (`average`, `min`, `max`,
 `count`, `latest`, `first`); parameterized SQL only; no write queries; query
 timeout and result-size caps; errors that never leak internals.
 
@@ -544,12 +522,11 @@ timeout and result-size caps; errors that never leak internals.
 
 ```
 intent: mixed_query
-tools:  get_trend(co2_ppm, ~10:00) + get_anomaly_summary(~10:00) + rag_retrieve("CO₂ spike troubleshooting")
-evidence: CO₂ rose 420 → 980 ppm · anomaly flag present · SOP says check NDIR calibration and gas flow
+tools:  get_trend(co2_ppm, ~10:00) + rag_retrieve("CO₂ spike troubleshooting")
+evidence: CO₂ rose 420 → 980 ppm · SOP says check NDIR calibration and gas flow
 answer: "At around 10:00 the CO₂ reading increased sharply from 420 ppm to 980 ppm.
-         The database records an anomaly flag during this period. The SOP suggests
-         checking NDIR calibration and gas flow."
-         [SQLite trend] [SQLite anomaly] [SOP_NDIR_Calibration.pdf p.4]
+         The SOP suggests checking NDIR calibration and gas flow."
+         [SQLite trend] [SOP_NDIR_Calibration.pdf p.4]
 ```
 
 It must **not** say "the valve failed" — that causal claim has no supporting
@@ -712,8 +689,8 @@ Trust comes from visible reasoning, not a black box:
 
 - **Streaming chat** — token-by-token via SSE
 - **Tool-call trace** — collapsible Thought → Action → Observation steps
-- **Graph visualiser** — mini node-graph showing how GraphRAG connected an
-  anomaly to an SOP
+- **Graph visualiser** — mini node-graph showing how GraphRAG connected a
+  sensor to an SOP
 - **Source badges** — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]`
 - **Hardware/model console** — CPU/RAM/VRAM stats, swap active SLM
 
@@ -870,7 +847,7 @@ Kùzu graph backend · LAN/multi-lab deployment
 > The proposed system is a fully local, read-only conversational agentic AI layer
 > for an existing CO₂ sorption reactor monitoring stack. Sensor telemetry is
 > acquired by the existing SCADA layer into a local SQLite database. Domain
-> knowledge from manuals, SOPs, anomaly records and UAUC logs is chunked,
+> knowledge from manuals and SOPs is chunked,
 > embedded locally, and stored in local vector and graph knowledge bases. When a
 > user asks a question, the FastAPI orchestration backend classifies intent,
 > applies safety guards, and calls deterministic tools to retrieve evidence. That
@@ -890,7 +867,6 @@ Kùzu graph backend · LAN/multi-lab deployment
 | **ABV** | Automated Ball Valve — write-only from SCADA, hence untrustworthy state |
 | **Daedalus** | This system's product name |
 | **CO2SorptionDT** | The pre-existing PyQt5 SCADA app this layer attaches to |
-| **UAUC** | User Anomaly and Usage Context records |
 | **Evidence pack** | Structured tool output handed to the LLM — the *only* thing it may draw facts from |
 | **Grounded** | Every factual claim traces to retrieved evidence |
 | **Track 1 / Track 2** | Traditional vector RAG / Agentic GraphRAG |

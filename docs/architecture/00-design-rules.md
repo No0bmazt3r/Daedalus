@@ -23,7 +23,7 @@ No cloud APIs are allowed in the runtime system.
 
 ### Rule 2: AI layer must be strictly read-only
 The AI layer can read from the local SQLite sensor database and the local vector knowledge base.
-* **Forbidden Writes:** SCADA control systems, reactor actuators, automated ball valves (ABVs), sensor hardware, teammate's anomaly detection subsystem, external dashboards.
+* **Forbidden Writes:** SCADA control systems, reactor actuators, automated ball valves (ABVs), sensor hardware, the SCADA ingestion subsystem, external dashboards.
 * **Allowed Writes:** The AI layer *can and should* write to its own local audit/evaluation logs (chat logs, tool logs, retrieval logs, model inference logs, error logs, user feedback logs). These belong to the AI layer, not the reactor control layer, and do not violate the read-only safety boundary.
 * **Safety Argument:** This is the primary safety boundary preventing the AI from altering physical lab states.
 

@@ -15,7 +15,7 @@ _UNSAFE_EFFECTS = {
     agent_tools.Effect.WRITE, agent_tools.Effect.ADMIN,
     agent_tools.Effect.EXECUTE_CODE, agent_tools.Effect.NETWORK_EGRESS,
 }
-SENSOR_TOOLS = ("get_live_reading", "get_trend", "get_anomaly_summary")
+SENSOR_TOOLS = ("get_live_reading", "get_trend")
 
 
 class SensorToolTest(unittest.TestCase):
@@ -110,20 +110,6 @@ class SensorToolTest(unittest.TestCase):
         env = self.call("get_trend", sensor="ph", start_time="2026-09-12T11:00:00Z",
                         end_time="2026-09-12T10:00:00Z")
         self.assertFalse(env["ok"])
-
-    def test_anomaly_summary(self) -> None:
-        env = self.call("get_anomaly_summary", start_time="2026-09-12T10:00:00Z",
-                        end_time="2026-09-12T12:00:00Z")
-        data = env["data"]
-        self.assertEqual(data["source"], "anomaly_records")
-        self.assertEqual(data["anomaly_count"], 1)
-        self.assertEqual(data["flagged_readings"], len(fixtures.SPIKE))
-
-    def test_anomaly_limit_is_capped(self) -> None:
-        tool = agent_tools.get("get_anomaly_summary")
-        cleaned = registry.validate(tool, {"start_time": "a", "end_time": "b", "limit": 10_000})
-        self.assertEqual(cleaned["limit"], 50)
-
 
 if __name__ == "__main__":
     unittest.main()

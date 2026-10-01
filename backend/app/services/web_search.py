@@ -8,7 +8,7 @@ in `chat_service`, `inference` or the retrieval tracks imports this module, and
 `search_config.purpose` carries a CHECK admitting only `'setup'`.
 
 What it is for is the work *around* the corpus. M2 has to find, check and
-version the manuals, SOPs and anomaly records it ingests, and the Forge's model
+version the manuals, SOPs and records it ingests, and the Forge's model
 sizing regularly needs a model card. §8.2 already draws this line for model
 weights — *"model downloading is a one-time setup activity performed when
 internet is available; the production runtime remains fully offline"* — and this

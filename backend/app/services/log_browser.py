@@ -39,7 +39,7 @@ from ..db.sensor_store import SENSOR_DB
 BROWSABLE: Final[dict[str, tuple[Path, tuple[str, ...]]]] = {
     "chat": (CHAT_DB, ("chat_sessions", "chat_messages")),
     "audit": (AUDIT_DB, LOG_TABLES),
-    "sensor": (SENSOR_DB, ("sensor_readings", "anomaly_records")),
+    "sensor": (SENSOR_DB, ("sensor_readings",)),
     # The Vector store's relational half. Listed because the whole point of
     # keeping the manifest in SQLite rather than inside Chroma is that it can be
     # read — an ingest that produced nothing, a chunk that never got a vector

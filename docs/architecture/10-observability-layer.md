@@ -206,7 +206,6 @@ Minimum 20, good 50, strong 80+ queries.
 |---|---|
 | SOP/procedure queries | 10–15 |
 | Manual queries | 8–12 |
-| Anomaly queries | 5–10 |
 | Troubleshooting | 5–10 |
 | Ambiguous | 3–5 |
 
@@ -217,7 +216,7 @@ Minimum 20, good 50, strong 80+ queries.
 | Q01 | What should I do if the NDIR reading drifts? | SOP_NDIR_Calibration chunk |
 | Q02 | What is absorption mode? | Manual operating modes chunk |
 | Q03 | What is the procedure for high pressure? | SOP pressure response chunk |
-| Q04 | What happened during the last CO₂ anomaly? | Anomaly record chunk |
+| Q04 | What are the startup steps for absorption mode? | SOP startup chunk |
 | Q05 | How do I interpret pH fluctuations? | Manual pH sensor chunk |
 
 ### Retrieval Metrics
@@ -247,7 +246,7 @@ Latency breakdown to measure: tool latency, retrieval latency, embedding latency
 3. Are SOP steps supported by retrieved chunks?
 4. Are causal claims supported?
 5. Did the model invent sensor names?
-6. Did the model invent anomaly causes?
+6. Did the model invent fault causes?
 
 ### Hybrid Evaluation Strategy (Local + Cloud)
 

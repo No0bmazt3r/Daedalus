@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/corpus", tags=["corpus"])
 # disk before the check runs.
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 
-SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "other")
+SOURCE_TYPES = ("manual", "sop", "other")
 
 
 @router.get("/status")

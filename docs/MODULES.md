@@ -13,7 +13,7 @@ under **"the glass box experience"**, given a home and a name:
 |---|---|---|
 | **Ariadne's Thread** | Tool-call trace — collapsible Thought → Action → Observation | 10 — Observability |
 | **The Forge** | Hardware/model console — CPU/RAM/VRAM stats, swap active SLM | 11 — Admin utilities |
-| **Labyrinth Blueprints** | Graph visualiser — how GraphRAG connected an anomaly to an SOP | 4 + 5 — Ingestion & retrieval |
+| **Labyrinth Blueprints** | Graph visualiser — how GraphRAG connected a sensor to an SOP | 4 + 5 — Ingestion & retrieval |
 
 The mythology is not decoration. Daedalus built the Labyrinth and kept its
 plans; Ariadne's thread is what let Theseus retrace his path out of it; the
@@ -140,10 +140,9 @@ traces properly:
 │ q_20260914_0042       │  ▸ QUERY      "Why did CO₂ spike at 10:00?" │
 │   ✓ grounded  1.8s    │  ▸ INTENT     mixed_query        (2ms)      │
 │ q_20260914_0041       │  ▸ TOOL       get_trend          (34ms) ✓   │
-│   ⚠ ungrounded 2.4s   │  ▸ TOOL       get_anomaly_summary(12ms) ✓   │
-│ q_20260914_0040       │  ▸ RETRIEVAL  rag_retrieve k=5   (180ms)    │
-│   ✓ grounded  0.9s    │  ▸ MODEL      qwen3:1.7b  412 tok (1.4s)    │
-│ …                     │  ▸ ANSWER     + groundedness check          │
+│   ⚠ ungrounded 2.4s   │  ▸ RETRIEVAL  rag_retrieve k=5   (180ms)    │
+│ q_20260914_0040       │  ▸ MODEL      qwen3:1.7b  412 tok (1.4s)    │
+│   ✓ grounded  0.9s    │  ▸ ANSWER     + groundedness check          │
 └───────────────────────┴─────────────────────────────────────────────┘
 ```
 
@@ -168,8 +167,7 @@ the answer with each number marked:
 ```
 "At around 10:00 the CO₂ reading increased sharply from 420 ppm to 980 ppm.
                                                        ^^^green      ^^^green
- The database records an anomaly flag during this period. The SOP suggests
- checking NDIR calibration and gas flow."
+ The SOP suggests checking NDIR calibration and gas flow."
                                                     [SOP_NDIR_Calibration.pdf p.4]
 ```
 

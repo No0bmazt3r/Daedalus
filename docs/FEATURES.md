@@ -32,7 +32,7 @@ Everything below was read off the source, not from memory.
 | Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
 | Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, answers carry citation chips and a *Sources* list from the stored evidence pack, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
-| Agent tools | Built — 33 tools in six categories, including the three sensor tools and Track 2's `graph_walk`. **Simple** (the default) is a runtime mode, not just a view: only the tools that answer questions can run, everything else is refused at dispatch. **Advanced** restores the full list under the per-tool switches and locks. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
+| Agent tools | Built — 33 tools in six categories, including the two sensor tools and Track 2's `graph_walk`. **Simple** (the default) is a runtime mode, not just a view: only the tools that answer questions can run, everything else is refused at dispatch. **Advanced** restores the full list under the per-tool switches and locks. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
 | Retrieval (M6) | Both tracks are wired into the chat path through the planner. Track 1 needs a current vector index to return anything; Track 2 runs a fixed, logged walk. The advanced Track 1 techniques and Track 2's agent loop are not built |
@@ -375,7 +375,7 @@ latency budget the <3s target is measured against.
 Backs the sidebar's **Data stores** section: what is actually in the stores
 right now. `trace(query_id)` proves one response was grounded; this shows
 everything that has been recorded. It spans `chat`, `audit`, `sensor`
-(telemetry & anomalies) and `vector` (knowledge base embeddings).
+(telemetry) and `vector` (knowledge base embeddings).
 
 **It used to be a draggable popup behind Settings → Databases → Browse rows.**
 It is now a route, `/stores/$store/$table`, reached in one click from the
@@ -681,8 +681,8 @@ Layer 8. Six categories (`sensor` · `search` · `knowledge` · `session` ·
 `system` · `other`), thirty-three tools, and a dispatcher that checks three
 declarations before the function is entered.
 
-**The sensor tools** (`sensor.py`) are §7.2's `get_live_reading`, `get_trend`
-and `get_anomaly_summary`, and the only source of a number in an answer. They
+**The sensor tools** (`sensor.py`) are §7.2's `get_live_reading` and `get_trend`,
+and the only source of a number in an answer. They
 declare `read_sensor` and nothing else, read through the `mode=ro` connection,
 put only enum-checked column names into SQL, abort any statement past 2 s, and
 cap a series at 100 points by bucketing — keeping each bucket's most extreme
@@ -864,7 +864,7 @@ overrides). When the feed has stopped, relative times count back from its last
 reading and the evidence says so. A phrase it cannot place ("during the last
 run") ends the turn with a clarifying question.
 
-**Evidence is labelled lines, not JSON.** `[S1]` a reading, `[A1]` an anomaly,
+**Evidence is labelled lines, not JSON.** `[S1]` a reading,
 `[D1]` a document passage, `[G1]` a graph node — each tool's block still fenced
 by `render_for_prompt()`. The model must cite labels; the validator checks every
 cited label exists.
@@ -891,7 +891,7 @@ replayed into every later prompt and is not evidence. Without a local model it
 stores the operator's earlier questions instead. Each run is a `memory_logs` row
 with `kind='summary'`.
 
-**Settings → Agent Tools → Simple** shows only `catalogue.answering` — the three
+**Settings → Agent Tools → Simple** shows only `catalogue.answering` — the two
 sensor tools and the selected track's retrieval — read-only and in plain words.
 The backend takes that list from the planner (`planner.answering_tools()`), so
 the view cannot list a tool the chat path never calls. **It is also enforced**:
@@ -1763,7 +1763,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **75 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time) and the simple view's tool list. Everything else is still verified by direct API calls |
+| Backend | **116 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time) and the simple view's tool list. Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

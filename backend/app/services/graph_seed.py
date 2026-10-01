@@ -44,12 +44,11 @@ SEED_MARKER = "seed"
 _SCENARIOS: list[dict[str, Any]] = [
     {
         "id": "multi-hop causal",
-        "query": "pressure and temperature both spiked — what do I do, and has this happened before?",
+        "query": "pressure and temperature both spiked — what do I do?",
         "walk": [
             ("HAS_THRESHOLD", False, (False, "thresholds found, no procedure yet")),
-            ("TRIGGERS", False, (False, "anomaly type identified, need the procedure and the history")),
-            ("RESOLVED_BY", False, (False, "procedure found, history still missing")),
-            ("INSTANCE_OF", True, (True, "procedure and history both present")),
+            ("TRIGGERS", False, (False, "anomaly type identified, need the procedure")),
+            ("RESOLVED_BY", False, (True, "resolving procedure found")),
         ],
     },
     {
@@ -93,15 +92,7 @@ def _write(conn: Any, *, query_id: str, ts: str, scenario: dict[str, Any]) -> No
     for relationship, reverse, (sufficient, reason) in scenario["walk"]:
         if not frontier:
             break
-        # The history hop reads from every AnomalyType gathered so far, not from
-        # the SOP documents the previous hop reached — a frontier is not always
-        # the right starting set, and hard-coding it here keeps the tools honest.
-        start = (
-            [n["id"] for n in sub.of_type("AnomalyType")]
-            if relationship == "INSTANCE_OF"
-            else frontier
-        )
-        sub = gt.graph_traverse(start, relationship, subgraph=sub, path=path, reverse=reverse)
+        sub = gt.graph_traverse(frontier, relationship, subgraph=sub, path=path, reverse=reverse)
         path.mark(sufficient, reason)
         frontier = sub.frontier
 

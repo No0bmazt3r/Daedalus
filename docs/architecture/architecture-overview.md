@@ -17,7 +17,7 @@ This document defines the finalized, production-ready architecture for Project D
 
 ### Zone 3: Read-Only AI Layer (Core Contribution)
 • Layer 3: Multi-Device SQLite Data Layer — Stores time-series data. Crucially, it uses a `device_profiles` schema to support ANY IoT device, not just the CO2 reactor.
-• Layer 4: Knowledge Ingestion Layer — Offline pipeline extracting entities and relationships from manuals, SOPs, and anomaly logs to build the Knowledge Graph.
+• Layer 4: Knowledge Ingestion Layer — Offline pipeline extracting entities and relationships from manuals and SOPs to build the Knowledge Graph.
 • Layer 5: Local Graph RAG Layer — Uses an embedded Graph DB (KuzuDB or NetworkX) instead of Vector DBs. Maps physical topology for multi-hop reasoning (e.g., tracing a sensor fault to a downstream valve).
 • Layer 6: Local Model Provider Layer — Ollama serving quantized SLMs (Qwen2.5, Llama 3.2). Includes a Hardware Profiler to recommend/swap models based on host VRAM/RAM.
 • Layer 7: FastAPI Orchestration Layer — The Brain. Uses **PydanticAI** to enforce strict, typed tool-calling. Processes queries in an 11-step flow, blocking unsafe actuator commands.
@@ -32,7 +32,7 @@ This document defines the finalized, production-ready architecture for Project D
 ## Key UI/UX Features (The "Glass-Box" Experience)
 • Streaming Chat: Token-by-token streaming via FastAPI SSE.
 • Tool Calling Logs: A collapsible shadcn/ui Accordion showing the agent's exact "Thought -> Action -> Observation" steps, building operator trust.
-• Graph Visualizer: Mini node-graphs showing how the Graph RAG connected a sensor anomaly to a specific SOP.
+• Graph Visualizer: Mini node-graphs showing how the Graph RAG connected a sensor reading to a specific SOP.
 • Hardware/Model Console: A dedicated settings tab showing CPU/RAM/VRAM stats and allowing the user to switch between a 7B LLM (high accuracy) and a 3B SLM (low latency).
 
 ## Multi-Device Modularity (The "Device-Agnostic" Core)

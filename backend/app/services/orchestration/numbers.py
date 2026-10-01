@@ -19,7 +19,7 @@ supported number look unsupported or the reverse.
 ## Units
 
 A number carries the unit written straight after it (`5 ppm`, `3%`, `2 bar`),
-or `ph` for `pH 7`. The validator uses it to tell a count ("3 anomalies"),
+or `ph` for `pH 7`. The validator uses it to tell a count ("3 readings"),
 which it tolerates when small, from a measurement ("3 ppm"), which it never
 does — a small value is still a value.
 """

@@ -31,9 +31,8 @@ import { GraphCanvas } from './GraphCanvas'
  * ## Neighbours are shown in both directions
  *
  * Half this schema reads backwards. An SOPDocument's useful neighbour is the
- * AnomalyType that points *at* it via RESOLVED_BY, and an AnomalyType's history
- * is the AnomalyRecords pointing in via INSTANCE_OF. Showing only outgoing
- * edges would make those nodes look like leaves.
+ * AnomalyType that points *at* it via RESOLVED_BY. Showing only outgoing edges
+ * would make it look like a leaf.
  */
 
 /** Attributes worth printing in the detail pane, in the order they read. */
@@ -46,9 +45,6 @@ const DETAIL_FIELDS: { key: keyof GraphNode; label: string }[] = [
   { key: 'filename', label: 'source file' },
   { key: 'version', label: 'version' },
   { key: 'step_number', label: 'step' },
-  { key: 'occurred_at', label: 'occurred' },
-  { key: 'severity', label: 'severity' },
-  { key: 'resolution', label: 'resolution' },
 ]
 
 function Legend({ schema }: { schema: GraphSchema }) {

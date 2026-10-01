@@ -317,8 +317,7 @@ def graph_traverse(
     """Walk outward along one relationship type, recording every hop.
 
     `reverse=True` walks the edge backwards, which half this schema needs: an
-    AnomalyType's history is the AnomalyRecords pointing *in* via INSTANCE_OF,
-    and an SOP's trigger is the AnomalyType pointing *in* via RESOLVED_BY.
+    SOP's trigger is the AnomalyType pointing *in* via RESOLVED_BY.
 
     A hop that reaches nothing is still recorded, with an empty `to`. That is not
     noise — `MODULES.md` §3.3 is about omission being invisible, and a recorded

@@ -6,7 +6,7 @@ import type { AgentTool, ToolCatalogue } from '../../lib/toolsClient'
 /**
  * Settings → Agent Tools → Simple.
  *
- * Only the tools that answer a chat question — the three sensor reads and the
+ * Only the tools that answer a chat question — the two sensor reads and the
  * selected track's retrieval — in plain words, read-only. No switches, no trial
  * runs, no capability chips: those are Advanced, where changing them is the
  * point. Here the question is only "what can the assistant do when I ask it
@@ -33,12 +33,6 @@ const PLAIN: Record<string, { title: string; does: string; usedFor: string; labe
     usedFor: '“Average temperature over the last hour?”',
     label: 'S',
   },
-  get_anomaly_summary: {
-    title: 'Anomalies',
-    does: 'Recorded anomalies — type, severity, resolution — and how many readings were flagged.',
-    usedFor: '“Was there an anomaly this morning?”',
-    label: 'A',
-  },
   search_corpus: {
     title: 'Document search',
     does: 'The manual and SOP passages closest in meaning to the question.',
@@ -47,7 +41,7 @@ const PLAIN: Record<string, { title: string; does: string; usedFor: string; labe
   },
   graph_walk: {
     title: 'Knowledge graph walk',
-    does: 'Starts from the anomaly or sensor the question names and follows the graph to the procedure and its steps.',
+    does: 'Starts from the sensor or fault type the question names and follows the graph to the procedure and its steps.',
     usedFor: '“What should I do about high CO2?”',
     label: 'G',
   },

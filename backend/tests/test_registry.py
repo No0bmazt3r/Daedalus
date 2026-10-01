@@ -48,7 +48,7 @@ class RegistryTest(unittest.TestCase):
             answering = agent_tools.catalogue()["answering"]
             self.assertEqual(answering["track"], track)
             self.assertEqual(answering["tools"],
-                             ["get_live_reading", "get_trend", "get_anomaly_summary", retrieval])
+                             ["get_live_reading", "get_trend", retrieval])
         fixtures.set_track("vector")
 
     def test_sensor_category_is_listed(self) -> None:

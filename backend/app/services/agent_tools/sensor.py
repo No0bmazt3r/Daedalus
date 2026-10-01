@@ -1,7 +1,7 @@
 """Sensor tools — the telemetry of record, and the only source of a number.
 
-Rule 3 says numbers come from tools, never from the model. These three are the
-tools it means: `PROJECT.md` §7.2 / `architecture/08` §Tools 1–3. Everything
+Rule 3 says numbers come from tools, never from the model. These two are the
+tools it means: `PROJECT.md` §7.2 / `architecture/08` §Tools 1–2. Everything
 else in the registry finds *text*; this category finds *values*, and a value in
 an answer that did not come from here (or from a cited document) is what the
 response validator exists to catch.
@@ -21,7 +21,7 @@ response validator exists to catch.
 §7.2's "query timeout and result-size caps": each query runs under a progress
 handler that aborts it past `_QUERY_TIMEOUT_S`; a series is downsampled to at
 most `_MAX_SERIES` points by time bucket, not truncated (a truncated series of a
-spike can end before the spike); an anomaly list is capped by `limit`. Errors
+spike can end before the spike). Errors
 name what was wrong with the request, never a path or a statement.
 
 ## Timestamps
@@ -52,7 +52,7 @@ from .registry import Effect, Param, ToolError, register
 # Numeric sensors — the ones a statistic means anything for.
 NUMERIC_SENSORS = ("temperature", "pressure", "ph", "level", "co2_ppm")
 # State sensors — readable, not aggregable (an "average mode" is not a thing).
-STATE_SENSORS = ("mode", "anomaly_flag")
+STATE_SENSORS = ("mode",)
 READABLE_SENSORS = NUMERIC_SENSORS + STATE_SENSORS + ("all",)
 
 AGGREGATIONS = ("average", "min", "max", "count", "latest", "first")
@@ -60,7 +60,6 @@ MODES = ("Manual", "Absorption", "Desorption")
 
 _QUERY_TIMEOUT_S = 2.0
 _MAX_SERIES = 100
-_MAX_ANOMALIES = 50
 _NEAREST_TOLERANCE = timedelta(minutes=5)
 # How old the newest row may be before a "live" reading is reported as stale.
 STALE_AFTER = timedelta(minutes=2)
@@ -117,7 +116,6 @@ def _reading(row: sqlite3.Row, sensor: str) -> dict[str, Any]:
     base = {
         "timestamp": row["timestamp"],
         "mode": row["mode"],
-        "anomaly_flag": row["anomaly_status"],
     }
     names = NUMERIC_SENSORS if sensor == "all" else (sensor,)
     values: dict[str, Any] = {}
@@ -145,8 +143,8 @@ def _reading(row: sqlite3.Row, sensor: str) -> dict[str, Any]:
     category="sensor",
     summary=(
         "The latest reading of a reactor sensor, or the reading nearest a given time. "
-        "Use 'all' for every sensor at once. Returns the value, unit, timestamp, "
-        "operating mode and anomaly flag."
+        "Use 'all' for every sensor at once. Returns the value, unit, timestamp "
+        "and operating mode."
     ),
     effects={Effect.READ_SENSOR},
     params=(
@@ -300,75 +298,3 @@ def get_trend(
         "detail": f"{aggregation} {sensor} over {len(values)} readings",
     }
 
-
-@register(
-    name="get_anomaly_summary",
-    category="sensor",
-    summary=(
-        "Anomalies recorded in a time window: the anomaly records (type, severity, "
-        "description, resolution) and how many individual readings were flagged."
-    ),
-    effects={Effect.READ_SENSOR},
-    params=(
-        Param("start_time", str, "Window start, ISO-8601.", required=True, max_length=40,
-              example="2026-09-12T11:00:00+00:00"),
-        Param("end_time", str, "Window end, ISO-8601.", required=True, max_length=40,
-              example="2026-09-12T18:00:00+00:00"),
-        Param("limit", int, "Most records to return.", default=10, minimum=1, maximum=_MAX_ANOMALIES),
-    ),
-)
-def get_anomaly_summary(start_time: str, end_time: str, limit: int) -> dict[str, Any]:
-    start, end = parse_ts(start_time, "start_time"), parse_ts(end_time, "end_time")
-    if end <= start:
-        raise ToolError("end_time must be after start_time")
-    lo, hi = fmt_ts(start), fmt_ts(end)
-
-    flagged = _run(
-        "SELECT COUNT(*) AS n, MIN(timestamp) AS first_at, MAX(timestamp) AS last_at "
-        "FROM sensor_readings WHERE anomaly_status = 'Anomaly' AND timestamp BETWEEN ? AND ?",
-        (lo, hi),
-    )[0]
-
-    # `anomaly_records` is the curated account; the per-row flag is the raw one.
-    # §7.2: use the table when present, the column otherwise. Both are returned
-    # when both exist, because they can disagree and that is worth seeing.
-    records: list[dict[str, Any]] = []
-    source = "sensor_readings"
-    try:
-        found = _run(
-            "SELECT start_time, end_time, anomaly_type, severity, description, resolution "
-            "FROM anomaly_records WHERE start_time <= ? AND (end_time >= ? OR end_time IS NULL) "
-            "ORDER BY start_time LIMIT ?",
-            (hi, lo, limit),
-        )
-        records = [dict(r) for r in found]
-        source = "anomaly_records"
-    except ToolError:
-        pass  # no table on this installation — the column is the fallback
-
-    samples: list[dict[str, Any]] = []
-    if not records and flagged["n"]:
-        rows = _run(
-            "SELECT * FROM sensor_readings WHERE anomaly_status = 'Anomaly' AND timestamp BETWEEN ? AND ? "
-            "ORDER BY timestamp LIMIT ?",
-            (lo, hi, limit),
-        )
-        samples = [_reading(r, "all") for r in rows]
-
-    data = {
-        "start_time": lo,
-        "end_time": hi,
-        "anomaly_count": len(records) if records else flagged["n"],
-        "flagged_readings": flagged["n"],
-        "first_flagged_at": flagged["first_at"],
-        "last_flagged_at": flagged["last_at"],
-        "source": source,
-        "anomalies": records or samples,
-    }
-    return {
-        "data": data,
-        "detail": (
-            f"{len(records)} anomaly records, {flagged['n']} flagged readings"
-            if records or flagged["n"] else "no anomalies in that window"
-        ),
-    }

@@ -1,6 +1,6 @@
 # Track 2: Agentic GraphRAG Pipeline
 
-This is the comparison arm. Instead of flat vector similarity search over document chunks, this track builds a **knowledge graph** of the domain and uses an **agentic loop** (multi-step, tool-calling, self-directed retrieval) to answer queries — particularly ones requiring multi-hop reasoning across sensors, thresholds, operating modes, SOPs, and anomaly history.
+This is the comparison arm. Instead of flat vector similarity search over document chunks, this track builds a **knowledge graph** of the domain and uses an **agentic loop** (multi-step, tool-calling, self-directed retrieval) to answer queries — particularly ones requiring multi-hop reasoning across sensors, thresholds, operating modes, anomaly types and SOPs.
 
 ## 1. Purpose
 
@@ -30,7 +30,6 @@ This is the "ReAct-style" pattern referenced in your own literature review (Rayf
 | `Threshold` | "CO2 > 500ppm = warning" | `sensor_id`, `condition`, `severity` |
 | `SOPDocument` | SOP-04: Desorption startup | `id`, `title`, `full_text_ref` |
 | `SOPStep` | Step 3 of SOP-04 | `sop_id`, `step_number`, `text` |
-| `AnomalyRecord` | Anomaly #17, 2025-07-01 | `id`, `timestamp`, `sensor_id`, `description`, `resolution` |
 | `AnomalyType` | "Temperature drift", "NDIR fault" | `id`, `description` |
 
 ### Edge types (relationships)
@@ -42,17 +41,15 @@ This is the "ReAct-style" pattern referenced in your own literature review (Rayf
 | `Threshold -[TRIGGERS]-> AnomalyType` | Crossing this threshold indicates this anomaly type |
 | `AnomalyType -[RESOLVED_BY]-> SOPDocument` | This SOP addresses this anomaly type |
 | `SOPDocument -[CONTAINS]-> SOPStep` | Structural containment |
-| `AnomalyRecord -[INSTANCE_OF]-> AnomalyType` | Historical occurrence links to its category |
-| `AnomalyRecord -[INVOLVES]-> Sensor` | Which sensor was implicated |
 
-This schema is intentionally small and hand-designed for a bounded domain — it does not need to be learned/extracted at large scale, since the corpus (a handful of manuals, SOPs, and anomaly logs for one lab rig) is small enough for semi-manual or LLM-assisted graph construction (see Section 5).
+This schema is intentionally small and hand-designed for a bounded domain — it does not need to be learned/extracted at large scale, since the corpus (a handful of manuals and SOPs for one lab rig) is small enough for semi-manual or LLM-assisted graph construction (see Section 5).
 
 ## 4. Example: why this helps on multi-hop queries
 
-**Query:** "The reactor showed high pressure and high temperature at the same time this morning — what should I do, and has this happened before?"
+**Query:** "The reactor showed high pressure and high temperature at the same time this morning — what should I do?"
 
-- **Traditional RAG** would embed this whole sentence and search for chunks similar to it — likely retrieving the single SOP section that best matches the wording, but possibly missing either the pressure-specific or temperature-specific guidance if they live in different documents, and it has no structured way to check "has this co-occurrence happened before" beyond hoping an anomaly log chunk happens to mention both.
-- **GraphRAG** can instead: (1) find both `Sensor` nodes (Pressure, Temperature) → (2) traverse to their `Threshold` nodes → (3) traverse to `AnomalyType` nodes triggered by *both* → (4) find `SOPDocument` nodes linked to that anomaly type → (5) separately query `AnomalyRecord` nodes that are `INSTANCE_OF` that anomaly type to answer the "has this happened before" part. This is a deliberate multi-step traversal that flat vector search doesn't naturally express.
+- **Traditional RAG** would embed this whole sentence and search for chunks similar to it — likely retrieving the single SOP section that best matches the wording, but possibly missing either the pressure-specific or temperature-specific guidance if they live in different documents, and it has no structured way to tie the two readings to one shared procedure.
+- **GraphRAG** can instead: (1) find both `Sensor` nodes (Pressure, Temperature) → (2) traverse to their `Threshold` nodes → (3) traverse to `AnomalyType` nodes triggered by *both* → (4) find `SOPDocument` nodes linked to that anomaly type → (5) walk `CONTAINS` to that SOP's steps. This is a deliberate multi-step traversal that flat vector search doesn't naturally express.
 
 This is exactly the kind of query your evaluation query set should include a few of, specifically to give GraphRAG a fair chance to show its advantage (see `04-rag-comparison-framework.md`).
 
@@ -60,7 +57,7 @@ This is exactly the kind of query your evaluation query set should include a few
 
 Two options, and you can reasonably do a hybrid:
 
-1. **Manual/semi-manual construction** — given the corpus is small (a handful of SOPs, manuals, anomaly logs), hand-authoring the node/edge schema instances is feasible within FYP scope and guarantees correctness (no extraction errors). Recommended primary approach given your timeline.
+1. **Manual/semi-manual construction** — given the corpus is small (a handful of SOPs and manuals), hand-authoring the node/edge schema instances is feasible within FYP scope and guarantees correctness (no extraction errors). Recommended primary approach given your timeline.
 2. **LLM-assisted extraction** — use the local SLM/LLM to read each document and propose node/edge triples, which are then reviewed/corrected. This is more "impressive" for a report but adds an extra failure mode (extraction hallucination) that would need its own precision check — treat as a stretch goal, not a dependency.
 
 ## 6. Storage engine options

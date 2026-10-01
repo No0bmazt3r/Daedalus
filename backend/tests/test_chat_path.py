@@ -140,7 +140,7 @@ class ChatPathTest(unittest.TestCase):
         window = chat_service.build_context(self.session_id)
         replayed = "\n".join(m["content"] for m in window.as_prompt_messages())
         # Words that only occur in an evidence line, never in the answer.
-        self.assertNotIn("anomaly flag", replayed)
+        self.assertNotIn("Reading at", replayed)
         self.assertNotIn("get_live_reading", replayed)
 
     def test_prompt_size_and_context_are_logged_on_the_query(self) -> None:

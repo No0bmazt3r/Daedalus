@@ -13,10 +13,8 @@ Blocking or scope-shaping — these change what gets built.
 
 - [ ] **Is the PyQt5 tab still a deliverable?** Or does the web dashboard fully replace it? *(decides whether Zone 4 needs two clients)*
 - [ ] **Is the 6-candidate vector-DB bake-off still in scope**, on top of the dual-track RAG comparison? *(two benchmark studies may overrun the timeline)*
-- [ ] **Does Anson's anomaly subsystem write a column or a table?** *(decides the primary `get_anomaly_summary` path)*
 - [ ] **Confirm the lab machine's RAM/GPU** *(gates the entire model-tier decision — M4 can't finish without it)*
-- [ ] **Get the real document corpus** — manuals, SOPs, anomaly records, UAUC *(blocks M2 entirely)*
-- [ ] **Get a real sensor DB sample** from Jason's ingestion *(blocks M1)*
+- [ ] **Get the real document corpus** — manuals and SOPs *(blocks M2 entirely)*
 
 ---
 
@@ -24,19 +22,17 @@ Blocking or scope-shaping — these change what gets built.
 
 Unblocks every data-backed answer.
 
-- [x] `sensor_readings` + `anomaly_records` schema (`docs/PROJECT.md` §6.1)
+- [x] `sensor_readings` schema (`docs/PROJECT.md` §6.1)
 - [x] Read-only connection helper — `file:...?mode=ro` + WAL, verified to *reject* INSERT/UPDATE/DELETE/DROP
 - [x] Seed/fixture generator so development doesn't need the live rig (idempotent)
-- [x] Indexes on `timestamp`, `anomaly_status` and `mode`
-- [ ] Reconcile the schema against Jason's **real** ingested table
-- [ ] Handle missing values, duplicate timestamps, invalid modes, timezone normalisation
+- [x] Indexes on `timestamp` and `mode`
 - [ ] Tests: concurrent read during an active write · query latency at ~17k rows/day
 
 ## M2 — Knowledge ingestion  ▸ Layer 4
 
 Offline pipeline. Never runs during a live query.
 
-- [ ] Collect the corpus into `data/documents/{manuals,sops,anomaly_records,uauc_records}/`
+- [ ] Collect the corpus into `data/documents/{manuals,sops}/`
 - [x] **Settings → Search**, the setup surface for finding that corpus. Six
       providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper)
       with an ordered fallback chain, per-provider credentials, a Test probe and
@@ -210,9 +206,10 @@ the Forge while M5 was in flight.
       hardcoded `daedalus_knowledge` and never read the `collection` the config
       set, so a configured cloud embedder would have written its vectors into
       the local production index
-- [ ] Ingestion must call `record_index()` when it finishes, or nothing can
-      attribute the index: `index_state` stays `stale` and the query path
-      refuses to retrieve from it
+- [x] Ingestion calls `record_index()` when it finishes, so the index is
+      attributed: a run that wrote vectors stamps the collection with its model
+      and records it (`ingestion.py`), and a failed stamp is logged rather than
+      left silently `stale`
 - [ ] Warn when a chunk exceeds the selected model's context window. The UI
       flags a narrow window against M2's 300-500 token chunks, but only
       ingestion can know whether a chunk actually overran
@@ -340,9 +337,6 @@ The anti-hallucination mechanism. **Highest-value milestone.**
       aggregations plus the window's full summary and where the min/max fell.
       The series is capped at 100 points by **bucketing, keeping each bucket's
       most extreme value** rather than truncating, so a spike survives it
-- [x] `get_anomaly_summary(start, end, limit)` — `anomaly_records` when present,
-      the per-row flag as the fallback, and the flagged-reading count either way
-      (the two can disagree, and that is worth seeing)
 - [x] `rag_retrieve` — deliberately **two** tools, `search_corpus` (Track 1) and
       `graph_walk` (Track 2), gated by the selected track. The orchestrator asks
       for "retrieval" and gets whichever the gate allows
@@ -390,8 +384,9 @@ The anti-hallucination mechanism. **Highest-value milestone.**
       not a bare question — `services/benchmark.py`, ~2k tokens, from `rag_logs`
       when a real retrieval exists and a labelled fixture otherwise
 - [ ] Pull and smoke-test the SLM tier: Qwen3 1.7B · Phi-3 Mini 3.8B · Gemma 3 1B (Q4_K_M)
-- [ ] Streaming responses on the chat path — currently synchronous, which is
-      tolerable at 300–400ms TTFT and will not be on a larger model
+- [x] Streaming responses on the chat path — `POST /api/chat` streams
+      server-sent events from `inference.answer_stream`; tokens are provisional
+      until the validator passes the whole answer
 - [ ] Verify inference works with networking fully disabled
 
 ## M5 — Orchestration  ▸ Layer 7
@@ -424,7 +419,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       surface with the turn's `query_id`, so the registry's gates and logging
       apply unchanged
 - [x] Evidence pack builder — envelopes become labelled lines (`[S1]` reading,
-      `[A1]` anomaly, `[D1]` passage, `[G1]` graph node), each tool's block
+      `[D1]` passage, `[G1]` graph node), each tool's block
       fenced by its integrity. The set of numbers the validator accepts is built
       from **exactly the rendered text**, so "supported" means "shown to the model"
 - [x] Prompt builder — numbered rules (evidence only, numbers only from
@@ -472,7 +467,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       gathered but not cited, any tool that failed, and how the window was chosen.
       Read from the stored pack, so a reopened chat shows them too
 - [x] Settings → Agent Tools has **Simple** (default) and **Advanced** views.
-      Simple lists only what answers a question — the three sensor reads and the
+      Simple lists only what answers a question — the two sensor reads and the
       selected track's retrieval (Vector RAG or Graph RAG) — in plain words,
       read-only. The list is `catalogue.answering`, read from the planner, so it
       cannot drift from what actually runs. Advanced is the full panel as before
@@ -484,6 +479,11 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
             and locks again — a mode change never rewrites them. Fails closed
             to Simple if the mode cannot be read. Trial runs in Settings (setup
             surface) are unaffected. 8 tests
+      - [x] **The fallback is a named set.** If the planner cannot be read,
+            Simple keeps exactly `get_live_reading` and `get_trend` by name
+            (`registry._FALLBACK_SENSOR_TOOLS`, held equal to
+            `planner.SENSOR_TOOLS` by a test), not every tool in the `sensor`
+            category. 2 tests
 - [x] **"No model installed" prompt.** With zero local models the app opens a
       themed dialog on load — *add a model first, before starting any task* —
       with a button straight into The Forge. Dismissable, but sending a message
@@ -499,22 +499,33 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 > cannot answer — so counting it as ready would put an arm into §5's comparison
 > that cannot run.
 
-- [ ] ChromaDB store + `VectorStoreAdapter` interface
-- [ ] Top-k cosine retrieval with metadata filtering
+- [x] ChromaDB store — `search_corpus` queries the stamped collection and
+      refuses one built by a different embedding model
+- [ ] `VectorStoreAdapter` interface (needed only for the DB bake-off)
+- [x] Top-k cosine retrieval with metadata filtering — `top_k` capped at 10,
+      filtered by `source_type`
 - [ ] Query expansion (LLM rewrites with lab synonyms)
 - [ ] Hybrid dense + BM25 search
-- [ ] Cross-encoder re-ranking
+- [x] Cross-encoder re-ranking — `reranker.py`, wired into `search_corpus`:
+      a wider candidate pool is retrieved and reranked down to `top_k`, and an
+      answer built on un-reranked chunks says so. Toggled in `rag_config`
 - [ ] Contextual compression
 - [ ] Multi-hop re-retrieval loop
 - [ ] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
 
 ### Track 2 — Agentic GraphRAG
 - [ ] Finalise the node/edge schema against the **real** corpus (§5)
-- [ ] Build the graph — manual authoring first; LLM-assisted extraction is a stretch goal with its own precision check
-- [ ] NetworkX store + persistence
-- [ ] `graph_lookup` · `graph_traverse` · `graph_query_natural`
+- [x] Build the graph — manual authoring first: a 34-node hand-authored seed
+      (placeholder data until the real corpus lands), editable in Blueprints and
+      saved to `config/knowledge_graph.yaml`. LLM-assisted extraction exists as
+      a reviewed proposal queue (see M10), still without its precision check
+- [x] NetworkX store + persistence — the YAML file is the store, loaded into
+      NetworkX, validated against the schema and cached on mtime
+- [x] `graph_lookup` · `graph_traverse` · `graph_query_natural` (`graph_tools.py`)
 - [ ] Agent loop with sufficiency assessment
-- [ ] **Cap `max_hops` and add a timeout guard** so a failing traversal can't blow the latency budget
+- [x] **Cap `max_hops`** — 4, by the tool's declaration, so a request for more
+      is refused before the graph loads; `graph_walk` starts from at most 4 nodes
+- [ ] **Add a timeout guard** so a failing traversal can't blow the latency budget
 - [x] Log the traversal path for the UI's reasoning view — `graph_walk` records
       the whole walk as one `rag_logs.traversal_path`, which Blueprints replays
       for real chat queries now, not only for seeded ones
@@ -1313,7 +1324,7 @@ Layer 9 below for the per-step detail.
 - [x] `reset.sh` — snapshot, wipe and rebuild the databases; sensor excluded by default and double-confirmed; refuses while the stack holds the files open
 - [x] `scripts/common.sh` — one copy of the output helpers, `.env` backfill, compose shim and path handling for all three scripts
 - [x] Raw store browser — `GET /api/logs/...` + Settings → Databases → **Browse rows**; allowlisted, read-only, secrets unreachable
-- [x] Expanded raw store browser — added `sensor` telemetry (`sensor_readings`, `anomaly_records`) and `vector` store chunks (`daedalus_knowledge`). Upgraded `RawLogModal` to be draggable with the exact same 'Peek' (transparency) UI as the Settings and Theme windows.
+- [x] Expanded raw store browser — added `sensor` telemetry (`sensor_readings`) and `vector` store chunks (`daedalus_knowledge`). Upgraded `RawLogModal` to be draggable with the exact same 'Peek' (transparency) UI as the Settings and Theme windows.
 - [x] Cloud model endpoints — Settings → **Add Models**: provider catalogue, base URL + key, connection test, masked key hints. Rule 1 enforced by a `CHECK (purpose = 'benchmark')` constraint
 - [x] Settings shell responds to its **container** width — below 620px the rail goes horizontal and resize/collapse withdraw (Odysseus' `isDesktopSidebarMode`)
 - [x] `docs/SCRIPTS.md` — every script, subcommand, flag and exit code, and the reasoning behind each safeguard
@@ -1349,19 +1360,19 @@ Layer 9 below for the per-step detail.
 
 ## Known issues
 
-- [ ] Chat responses are synchronous — `POST /api/chat` answers in one shot with
-      no streaming. Fine at 300–400ms to first token on a 3B model, and not fine
-      on anything larger
-- [ ] The chat path has no retrieval or tool-calling yet: it replays conversation
-      history and answers. `evidence` is threaded through `inference.answer()`
-      unused, so the prompt is already in its final shape for M5/M6
+- [x] ~~Chat responses are synchronous~~ — resolved: the chat path streams SSE
+- [x] ~~The chat path has no retrieval or tool-calling yet~~ — resolved: M5's
+      orchestrator plans tools, builds the evidence pack and validates the answer
 - [ ] 24 oxlint warnings across `src/`, zero errors: 16 `set-state-in-effect`
       (the legitimate kind — an effect synchronising with the backend on mount)
       and 8 `react(refs)`, nine of the latter in `GraphCanvas`, which drives a
       D3 simulation and holds refs on purpose. Counted over the whole tree
       rather than the handful of files a previous entry had checked
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
-- [ ] No automated tests on either side. The chat store, migration runner and session API were verified by direct calls, but nothing is in CI — the migration runner especially wants a test suite, since it is the piece that can quietly break every other store
+- [ ] Tests are backend-only and not in CI. The backend has 116 `unittest` cases
+      (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,
+      background jobs); the frontend has none, and the **migration runner** still
+      has no test — it is the piece that can quietly break every other store
 - [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container
 - [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**
       SearXNG volume gets. An instance that has already booted keeps its own
@@ -1552,10 +1563,8 @@ Layer 9 below for the per-step detail.
 - [ ] Unlocking any extended effect invalidates a groundedness measurement taken
       while it was open. There is no automatic guard for this — the panel warns,
       and `tool_policy.unlocked_at` is what lets a reviewer check afterwards
-- [ ] `render_for_prompt()` has no consumer yet — M5's prompt builder is what
-      will call it. Until then the integrity fence is tested but not in the
-      path, which is the right order (the marking has to exist before anything
-      can honour it) but is worth not forgetting
+- [x] ~~`render_for_prompt()` has no consumer yet~~ — resolved: the evidence
+      pack fences every tool's block through it (`orchestration/evidence.py`)
 - [ ] Two Font selector options are not actually bundled — `mono` names Fira Code
       and `opendyslexic` names OpenDyslexic, but only Monocraft and Geist ship
       with the app, so both silently fall back (to the system monospace and to

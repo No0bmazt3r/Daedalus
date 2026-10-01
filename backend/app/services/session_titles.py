@@ -63,7 +63,7 @@ TIMEOUT_S = 45.0
 _SYSTEM = (
     "You name conversations between an operator and a read-only monitoring assistant for a CO2 "
     "sorption reactor. Write a title of 3 to 7 words saying what the conversation is about — the "
-    "sensors, equipment, anomalies, procedures or time periods it covers. If it moved on from where "
+    "sensors, equipment, procedures or time periods it covers. If it moved on from where "
     "it started, name where it is now. No measured values or numbers other than clock times, no "
     "quotes, no trailing full stop. Use the language the operator writes in. Reply with JSON "
     '{"title": "<title>"} and nothing else.'

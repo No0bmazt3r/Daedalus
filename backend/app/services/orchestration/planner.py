@@ -3,7 +3,7 @@
 Deterministic, from the intent and the signals `query_pipeline` already read.
 The model is not asked which tools to call. That is a deliberate choice for this
 milestone, not a missing feature: a plan made by rules is replayable from the
-log and explainable in one line per call (`PlannedCall.why`), and the eight
+log and explainable in one line per call (`PlannedCall.why`), and the seven
 intents were defined so that each one maps to a fixed tool set
 (`architecture/07` §Step 5). Letting a model plan is what Track 2's agent loop
 (M6) is for, and that is measured against this baseline rather than replacing
@@ -14,9 +14,8 @@ it.
 | `live_status` | `get_live_reading` per named sensor, or `all` |
 | `historical_query` | `get_live_reading(timestamp)` per sensor |
 | `trend_query` | `get_trend` per sensor, over the window |
-| `anomaly_query` | `get_anomaly_summary` (+ `get_trend` for a named sensor) |
 | `sop_query` | retrieval on the selected track |
-| `mixed_query` | `get_trend` + `get_anomaly_summary` + retrieval |
+| `mixed_query` | `get_trend` + retrieval |
 
 ## Retrieval follows the track, and only the track
 
@@ -61,7 +60,7 @@ _SENSOR_KEYS = {
 # The tools the chat path can plan, and nothing else. Settings → Agent Tools'
 # simple view is drawn from this, so it cannot list a tool the planner never
 # calls or miss one it does.
-SENSOR_TOOLS = ("get_live_reading", "get_trend", "get_anomaly_summary")
+SENSOR_TOOLS = ("get_live_reading", "get_trend")
 RETRIEVAL_TOOLS = {"vector": "search_corpus", "graph": "graph_walk"}
 
 
@@ -82,7 +81,6 @@ RETRIEVAL_TOP_K = 5
 GRAPH_LIMIT = 6
 
 DEFAULT_TREND_WINDOW = timedelta(hours=1)
-DEFAULT_ANOMALY_WINDOW = timedelta(hours=24)
 # A point in time asked "why" about is read as the minutes around it.
 POINT_CONTEXT = timedelta(minutes=15)
 
@@ -189,7 +187,7 @@ def plan(understood: Understanding, *, now: datetime | None = None) -> Plan:
                 "Track 1 is selected: find the corpus passages nearest the question",
             ))
 
-    if not scope.understood and intent in ("historical_query", "trend_query", "anomaly_query", "mixed_query"):
+    if not scope.understood and intent in ("historical_query", "trend_query", "mixed_query"):
         p.clarify = CLARIFY_TIME.format(phrase=scope.phrase or "that")
         return p
 
@@ -228,20 +226,6 @@ def plan(understood: Understanding, *, now: datetime | None = None) -> Plan:
                 f"{aggregation} of {s} over {start} – {end}",
             ))
 
-    elif intent == "anomaly_query":
-        start, end = window(DEFAULT_ANOMALY_WINDOW)
-        p.calls.append(PlannedCall(
-            "get_anomaly_summary", {"start_time": start, "end_time": end, "limit": 10},
-            f"anomalies between {start} and {end}",
-        ))
-        for s in numeric:
-            p.calls.append(PlannedCall(
-                "get_trend",
-                {"sensor": s, "start_time": start, "end_time": end, "aggregation": "max",
-                 "include_series": len(numeric) == 1},
-                f"what {s} did over the same window",
-            ))
-
     elif intent == "sop_query":
         retrieval()
 
@@ -260,10 +244,6 @@ def plan(understood: Understanding, *, now: datetime | None = None) -> Plan:
                 "get_live_reading", {"sensor": "all"},
                 "no sensor was named; the reactor's current state for context",
             ))
-        p.calls.append(PlannedCall(
-            "get_anomaly_summary", {"start_time": start, "end_time": end, "limit": 10},
-            "whether an anomaly was recorded then",
-        ))
         retrieval()
 
     return p

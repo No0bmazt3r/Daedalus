@@ -17,14 +17,13 @@ CO2SorptionDT is an existing PyQt5 SCADA application monitoring a lab-scale CO�
 sorption reactor, logging temperature, pressure, pH, level and NDIR CO₂
 concentration to SQLite every 5 seconds. Understanding what the reactor is doing
 today means reading raw graphs, knowing SCADA jargon, and manually
-cross-referencing SOP documents and anomaly logs.
+cross-referencing SOP documents and logs.
 
 Daedalus sits **on top of** that stack — never replacing it — so anyone can ask:
 
 > *"Is the reactor running fine right now?"*
 > *"Why did the CO₂ reading spike at 10:00?"*
 > *"What do I do if the NDIR reading drifts?"*
-> *"Was there an anomaly this morning?"*
 
 …and get an answer traceable to the exact database row or SOP page it came from.
 
@@ -178,7 +177,7 @@ sensor data of record. **Settings → Databases** shows all five live, and
 | **Sensor** | SQLite | **read-only** | IoT telemetry written by the SCADA subsystem |
 | **Audit** | SQLite | read/write | chat · tool-call · retrieval · model · error · feedback · memory logs |
 | **Chat** | SQLite | read/write | conversation sessions and messages — the assistant's memory |
-| **Vector** | ChromaDB | read/write | embedded SOP/manual/anomaly chunks for RAG |
+| **Vector** | ChromaDB | read/write | embedded SOP/manual chunks for RAG |
 | **Prefs** | SQLite | read/write | UI state, kept out of the browser |
 
 The read-only boundary is the SQLite driver's, not a convention:
@@ -332,7 +331,7 @@ User question
      ↓
 FastAPI  ── normalise → classify intent → SAFETY GUARD
      ↓
-     ├─ live/trend/anomaly  → deterministic SQL tools ─→ SQLite (read-only)
+     ├─ live/trend          → deterministic SQL tools ─→ SQLite (read-only)
      └─ SOP/troubleshooting → Track 1 vector RAG  ─→ ChromaDB
                              Track 2 agentic GraphRAG ─→ knowledge graph
      ↓
