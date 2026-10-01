@@ -1,6 +1,6 @@
 # Daedalus — Roadmap
 
-Spec: [`docs/PROJECT.md`](docs/PROJECT.md) · Built: [`docs/FEATURES.md`](docs/FEATURES.md) · Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
+Spec: [`docs/PROJECT.md`](docs/PROJECT.md) · Built: [`docs/FEATURES.md`](docs/FEATURES.md) · Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` cut from FYP2 scope
 
 > **Critical path:** M1 → M2 → M3 → M4 → M6. M5 and M7 can run alongside.
 > Nothing downstream of M3 works until the tool layer is real.
@@ -11,10 +11,32 @@ Spec: [`docs/PROJECT.md`](docs/PROJECT.md) · Built: [`docs/FEATURES.md`](docs/F
 
 Blocking or scope-shaping — these change what gets built.
 
-- [ ] **Is the PyQt5 tab still a deliverable?** Or does the web dashboard fully replace it? *(decides whether Zone 4 needs two clients)*
-- [ ] **Is the 6-candidate vector-DB bake-off still in scope**, on top of the dual-track RAG comparison? *(two benchmark studies may overrun the timeline)*
+- [x] **Is the PyQt5 tab still a deliverable?** No: the web dashboard replaces it for FYP2, and the tab is in Deferred — Phase 2
+- [x] **Is the 6-candidate vector-DB bake-off still in scope?** No: the dual-track comparison is the one benchmark study, and the bake-off is in Deferred — Phase 2
 - [ ] **Confirm the lab machine's RAM/GPU** *(gates the entire model-tier decision — M4 can't finish without it)*
 - [ ] **Get the real document corpus** — manuals, SOPs, troubleshooting/incident literature, safety (UAUC) documents, background *(blocks M2 entirely)*
+
+### Path to completion
+
+Everything left that the result depends on, in order. Everything else open below
+is nice-to-have; the `[-]` items are cut.
+
+1. **Get the corpus and confirm the lab machine** (above). Nearly everything
+   below waits on one of these two.
+2. **Ingest and author:** ingest the corpus (≥80 chunks), finalise the graph
+   schema against it, author the graph, reconcile the placeholder SOP filenames,
+   and build the ingestion graph-gap check (M10, Labyrinth Blueprints), which
+   keeps the comparison fair to Track 2.
+3. **On the lab machine:** smoke-test the SLM tier and choose the chat model
+   (M4), recalibrate the embedding and re-ranker estimators, re-check
+   re-ranker fit (M2/M6), and verify inference with networking disabled.
+4. **Evaluate (M8):** write and label 30–50 questions → practice runs (and
+   measure the embedding prefixes) → freeze → one official run → failure
+   analysis → human panel and Method B.
+5. **Before the report:** close or state the validator gaps (M5, and rule 9 in
+   M2), verify the MMLU figures (M10, the Forge), clear the bogus
+   `embedding_config.json` record (Known issues), and do the privacy items (M7
+   secrets, M10 ephemeral logs, gating `seed-demo`).
 
 ---
 
@@ -114,7 +136,7 @@ Offline pipeline. Never runs during a live query.
         it still boots and refuses a PDF with a message naming the package.
         Deliberately no OCR: a scanned PDF has no text layer and is refused with
         that reason rather than stored as a document whose chunks are blank
-  - [ ] DOCX. Not wired — `python-docx` would be a second optional import, and
+  - [-] DOCX *(cut from FYP2, 2026-10-01)*. Not wired — `python-docx` would be a second optional import, and
         no document in the intended corpus is a .docx yet
   - [x] Clean: line endings, PDF ligatures, non-breaking spaces, runs of blank
         lines. Done in the extractor rather than the chunker because it changes
@@ -534,11 +556,11 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 
 - [x] ChromaDB store — `search_corpus` queries the stamped collection and
       refuses one built by a different embedding model
-- [ ] `VectorStoreAdapter` interface (needed only for the DB bake-off)
+- [-] `VectorStoreAdapter` interface (needed only for the DB bake-off) *(cut from FYP2, 2026-10-01)*
 - [x] Top-k cosine retrieval with metadata filtering — `top_k` capped at 10,
       filtered by `source_type`
-- [ ] Query expansion (LLM rewrites with lab synonyms)
-- [ ] Hybrid dense + BM25 search
+- [-] Query expansion (LLM rewrites with lab synonyms) *(cut from FYP2, 2026-10-01)*
+- [-] Hybrid dense + BM25 search *(cut from FYP2, 2026-10-01)*
 - [x] Cross-encoder re-ranking — `reranker.py`, wired into `search_corpus`:
       a wider candidate pool is retrieved and reranked down to `top_k`, and an
       answer built on un-reranked chunks says so. Toggled in `rag_config`.
@@ -554,8 +576,11 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
         6–16 s, i.e. offline-evaluation only on this machine
   - [ ] Only MiniLM-L6 fits the 1 s budget on the dev laptop; every Malay-capable
         model is `marginal`. Re-check on the lab machine before freezing
-- [ ] Contextual compression
-- [ ] Multi-hop re-retrieval loop
+- [-] Contextual compression *(cut from FYP2, 2026-10-01)*
+- [-] Multi-hop re-retrieval loop *(cut from FYP2, 2026-10-01)*
+  - Track 1 is deliberately a **plain baseline with cross-encoder re-ranking**.
+    The report must say so, so that the four cut techniques read as a scoping
+    decision rather than as a handicap that tilts the comparison towards Track 2
 - [ ] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
 
 ### Track 2 — Agentic GraphRAG
@@ -604,7 +629,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       `get_collection()` guard that refuses vectors it cannot attribute — so a
       local index and a cloud baseline over the same corpus coexist and stay
       comparable instead of overwriting each other
-- [ ] `VectorStoreAdapter` interface over it (needed for the DB bake-off)
+- [-] `VectorStoreAdapter` interface over it (needed for the DB bake-off) *(cut from FYP2, 2026-10-01)*
 
 ## M7 — Observability  ▸ Layer 10
 
@@ -616,16 +641,16 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       `conversation_logs` (intent, rewrite, guard reason, selected tools,
       `grounded_flag`, `hallucination_flag`, `validation_json`), `tool_logs` per
       call, `rag_logs` per retrieval and `model_logs` per model call
-- [ ] Async logging via `BackgroundTasks` — must never block a response
+- [-] Async logging via `BackgroundTasks` — must never block a response *(cut from FYP2, 2026-10-01)*
 - [ ] Never log secrets or personal identifiers
-- [ ] Streamlit log viewer: history, filters, per-query trace, error dashboard, evaluation view
-- [ ] Metrics + container logs on their own port — Prometheus scraping the app,
+- [-] Streamlit log viewer: history, filters, per-query trace, error dashboard, evaluation view *(cut from FYP2, 2026-10-01)*
+- [-] Metrics + container logs on their own port — Prometheus scraping the app,
       Grafana over it, and the compose logs for each service in one place. The
       dashboard says *whether* a store is healthy; this is where you go to find
-      out *why* it isn't, without dropping to `docker compose logs`
-- [ ] Wire it to the Databases panel — the standing link described in M10, plus
+      out *why* it isn't, without dropping to `docker compose logs` *(cut from FYP2, 2026-10-01)*
+- [-] Wire it to the Databases panel — the standing link described in M10, plus
       per-store deep links so an unhealthy row lands on *that* service's logs
-      rather than on the Grafana home page
+      rather than on the Grafana home page *(cut from FYP2, 2026-10-01)*
 
 ## M8 — Evaluation
 
@@ -724,12 +749,13 @@ Layer 9 below for the per-step detail.
 - [x] **Embedding catalogue moved to `backend/app/data/embedding_catalogue.json`**,
       beside `model_catalogue.json` and loaded the same way — read fresh per call,
       a malformed file degrades to no suggestions rather than an error
-- [ ] Average the benchmark over several runs — currently one run per click.
+- [-] Average the benchmark over several runs — currently one run per click.
       `GET /api/forge/usage` already aggregates every logged run into
       mean/p50/p95, so this is about the *per-click* figure, not the report's.
       **The measured spread makes this matter**: live TTFT for the same model and
       prompt ranged 3,399 ms to 13,432 ms (4×), driven by cold loads. No figure
-      in the report may be a single run — see `BENCHMARK.md` §9.1
+      in the report may be a single run — see `BENCHMARK.md` §9.1 *(cut from FYP2, 2026-10-01)*
+      — the report's figures come from the aggregated `/api/forge/usage`, never from one click
 - [x] Record *which* host served a run — `model_logs.host` (migration `004`),
       `ollama.com` for a cloud row and NULL for local. Host only, never a full URL:
       a base URL can carry a key and these rows are exported. It groups runs; it
@@ -738,7 +764,7 @@ Layer 9 below for the per-step detail.
 - [ ] Cross-check estimates against LLM Checker for the methodology chapter.
       Worth doing now that there is something to check: on the development
       machine the estimator predicted 28.9 tok/s against 27.9 measured
-- [ ] *Optional:* Streamlit UI — unlikely; the web console covers it
+- [-] *Optional:* Streamlit UI — unlikely; the web console covers it *(cut from FYP2, 2026-10-01)*
 
 ## M10 — Dashboard completion  ▸ Layer 9B
 
@@ -764,18 +790,19 @@ Layer 9 below for the per-step detail.
 - [x] Wire the chat UI to `POST /api/chat` — no longer mocked
 - [x] SSE streaming rendering — tokens append as they arrive; `lib/http.ts`
       `streamEvents()` owns the framing for both streaming endpoints
-- [ ] Source badges — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]`
-- [ ] Collapsible tool-call trace (Thought → Action → Observation) — the inline
-      half of Ariadne's Thread, below
-- [ ] Graph visualiser for GraphRAG traversal paths — traversal replay, the
-      centrepiece of Labyrinth Blueprints, below
-- [ ] The three sidebar modules — **designed, none built.** Full spec in
+- [-] Source badges — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]` *(cut from FYP2, 2026-10-01)*
+- [-] Collapsible tool-call trace (Thought → Action → Observation) — the inline
+      half of Ariadne's Thread, below *(cut from FYP2, 2026-10-01)*
+- [-] Graph visualiser for GraphRAG traversal paths — traversal replay, the
+      centrepiece of Labyrinth Blueprints, below *(cut from FYP2, 2026-10-01)*
+- [~] The three sidebar modules — **the Forge and Labyrinth Blueprints are built;
+      Ariadne's Thread is designed only and cut from FYP2.** Full spec in
       [`docs/MODULES.md`](docs/MODULES.md); each is a `PROJECT.md` §10.2
       "glass box" promise given a home:
-  - [ ] **Ariadne's Thread** — provenance. Joins the seven audit tables on
+  - [-] **Ariadne's Thread** — provenance. Joins the seven audit tables on
         `query_id` into one causal trace, with a number-by-number
-        groundedness verdict over the answer. Build first: the schema
-        already exists, so the viewer can go in now against a trace seeder
+        groundedness verdict over the answer *(cut from FYP2, 2026-10-01)*.
+        For FYP2, Replay and the raw store browser cover provenance
   - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
         steps built,** as three tabs: Hardware · Models · Added Models.
         `HardwareView` is still shared with Settings → Hardware. The two model
@@ -1206,8 +1233,8 @@ Layer 9 below for the per-step detail.
         three edges correctly refused — including
         `SOPDocument --RESOLVED_BY--> AnomalyType`, which is plausible English
         and backwards in this schema. Accept applied it and logged it; rolled back
-  - [ ] Still to do: a per-document scope control, and re-validating the queue's
-        `valid` flags after an accept so the snapshot refreshes without a re-run
+  - [-] Still to do: a per-document scope control, and re-validating the queue's
+        `valid` flags after an accept so the snapshot refreshes without a re-run *(cut from FYP2, 2026-10-01)*
 - [x] **No default embedding model.** The config shipped naming
       `nomic-embed-text`, so every fresh install looked like a choice had been
       made — a claim about a model that may not even be pulled, and a claim about
@@ -1278,7 +1305,7 @@ Layer 9 below for the per-step detail.
       the Forge's `source='benchmark'` rows. The chat picker is filtered to
       local installed models and defaults to the committed choice, so Rule 1
       cannot be broken from the composer. Retrieval and tool-calling still to come
-- [ ] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet
+- [-] Wire the benchmark endpoints into the evaluation harness (M8) — they are configurable but nothing reads them yet *(cut from FYP2, 2026-10-01)*
 - [x] "Added Models" panel — list local Ollama models alongside the cloud baselines
 - [x] **Split the Databases feature in two, by how often you reach for each half.**
       Settings is the refined, occasional surface; the sidebar is the one-click,
@@ -1299,7 +1326,7 @@ Layer 9 below for the per-step detail.
         and shrank the chat list under the cursor. `max-h-[45%]` →
         `basis-[45%] grow-0`: the cut is where it always is, and an expanded
         store scrolls inside it
-- [ ] Let the raw browser filter by `session_id` / `query_id`, so one conversation's rows can be isolated
+- [-] Let the raw browser filter by `session_id` / `query_id`, so one conversation's rows can be isolated *(cut from FYP2, 2026-10-01)*
 - [x] Sidebar driven by `GET /api/sessions` — select, inline rename, delete, filter
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
 - [x] User messages persisted through `POST /api/sessions/{id}/messages`
@@ -1318,7 +1345,7 @@ Layer 9 below for the per-step detail.
       browse tabs: Chat models (Local · Cloud baselines), Embedding models,
       Re-rankers (downloaded only — benchmark, delete); the Re-rankers browse
       tab shows a downloaded model as *Downloaded · Manage*
-- [ ] Archive from the sidebar *(the API supports it; no UI affordance yet)*
+- [-] Archive from the sidebar *(the API supports it; no UI affordance yet)* *(cut from FYP2, 2026-10-01)*
 - [ ] Error and loading states for a backend that's down or slow
 
 ---
@@ -1468,9 +1495,9 @@ Layer 9 below for the per-step detail.
       Fixing `TypewriterText` also fixed a leak — its interval was never
       cleared on unmount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
-- [ ] Tests are backend-only and not in CI. The backend has 116 `unittest` cases
+- [ ] Tests are backend-only and not in CI. The backend has 191 `unittest` cases
       (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,
-      background jobs); the frontend has none, and the **migration runner** still
+      background jobs, model fit, embedding prefixes, evaluation harness); the frontend has none, and the **migration runner** still
       has no test — it is the piece that can quietly break every other store
 - [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container
 - [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**
@@ -1580,8 +1607,8 @@ Layer 9 below for the per-step detail.
       `window.confirm` — which ignores the theme, cannot describe what is about
       to happen, and cannot ask for anything to be typed. The audit log and
       *everything* require typing `DELETE`: two clicks can be muscle memory
-      - [ ] The Forge's two `window.confirm` calls (delete a pulled model) could
-            adopt the same dialog. Left alone for now — they were not in scope
+      - [-] The Forge's two `window.confirm` calls (delete a pulled model) could
+            adopt the same dialog. Left alone for now — they were not in scope *(cut from FYP2, 2026-10-01)*
 - [x] **SearXNG can be started and stopped from Settings → Search**, when a
       Docker socket is mounted into the backend. **Off by default**, and that is
       a position: a process that can reach the socket can do anything Docker can
@@ -1652,9 +1679,9 @@ Layer 9 below for the per-step detail.
       A switched-off tool leaves `/api/tools/schemas` and is refused at dispatch.
       Every parameter now declares a working `example`, filled in on expand for
       read-only tools and behind a button for the ones that write or execute
-- [ ] MCP `resources` and `prompts` are not implemented — only `tools`. Nothing
+- [-] MCP `resources` and `prompts` are not implemented — only `tools`. Nothing
       in Daedalus has anywhere to put them yet, and a half-wired capability is
-      worse than an absent one
+      worse than an absent one *(cut from FYP2, 2026-10-01)*
 - [ ] `bash` and `python` are contained, not sandboxed. On a machine that
       matters, unlock `execute_code` only with Daedalus running in its container,
       where the process is confined by a kernel rather than by a regular
@@ -1668,7 +1695,8 @@ Layer 9 below for the per-step detail.
       and `opendyslexic` names OpenDyslexic, but only Monocraft and Geist ship
       with the app, so both silently fall back (to the system monospace and to
       Comic Sans respectively). Pre-existing; the OpenDyslexic one matters most,
-      since it is offered as an accessibility affordance and currently isn't one
+      since it is offered as an accessibility affordance and currently isn't one.
+      Quick fix: remove the two options rather than ship a broken accessibility setting
 - [ ] Hugging Face gated repositories cannot be pulled. Public GGUF publishers
       (bartowski, unsloth, mradermacher, lmstudio-community) need no token, but
       `meta-llama` and friends do, and Ollama's `hf.co/` pull does not reliably
