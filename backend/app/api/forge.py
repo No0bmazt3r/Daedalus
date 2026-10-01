@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from ..services import benchmark as benchmark_service
 from ..services import forge as forge_service
-from ..services import hardware, live_events, model_usage, ollama_client
+from ..services import embedding_models, hardware, live_events, model_usage, ollama_client
 
 router = APIRouter(prefix="/api/forge", tags=["forge"])
 
@@ -190,7 +190,11 @@ def delete_model(tag: str) -> dict[str, Any]:
     except ollama_client.OllamaUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     forge_service.invalidate_cache()
+    # An embedder's benchmark described the copy that was just removed; a later
+    # pull of the same tag may be a different build, so it is measured afresh.
+    embedding_models.forget_benchmark(tag)
     live_events.publish("models", source="delete", tag=tag)
+    live_events.publish("embeddings")
     return {"deleted": True, "tag": tag}
 
 

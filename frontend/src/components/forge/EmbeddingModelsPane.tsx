@@ -11,6 +11,7 @@ import {
 } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
 import { ThemeSelect } from '../ui/theme-select'
+import { deleteModel } from '../../lib/forgeClient'
 import { EmbeddingRow } from './EmbeddingRow'
 import { PaneIntro, BrowseLink, SectionLabel, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
@@ -285,6 +286,7 @@ export function EmbeddingModelsPane({
   const [showCloud, setShowCloud] = useState(false)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [benchmarking, setBenchmarking] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [filter, setFilter] = useState<LangFilter>('all')
   const [search, setSearch] = useState('')
   const [typedTag, setTypedTag] = useState('')
@@ -365,6 +367,23 @@ export function EmbeddingModelsPane({
     verifyEmbeddingModel(tag)
       .catch((e: Error) => setError(e.message))
       .finally(() => { setVerifying(null); load() })
+  }
+
+  const remove = (m: EmbeddingConfig['local_models'][number]) => {
+    // Deleting the model that builds the index leaves Track 1 unable to embed a
+    // question — its index stays on disk, but nothing can query it until the
+    // model is back or another is chosen. Said before, not discovered after.
+    const builds = config?.provider === 'local' && normaliseTag(config.model) === m.tag
+    const message = builds
+      ? `${m.label} builds Track 1's index. Delete it and Track 1 cannot answer until you pull it again or choose another model in Settings → Vector RAG (the index itself is kept). Delete anyway?`
+      : `Delete ${m.label} from this machine?`
+    if (!window.confirm(message)) return
+    setDeleting(m.tag)
+    setError(null)
+    deleteModel(m.installed_tag ?? m.tag)
+      .then(() => load())
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setDeleting(null))
   }
 
   const bench = (tag: string) => {
@@ -521,6 +540,8 @@ export function EmbeddingModelsPane({
               verifying={verifying === m.tag}
               onBenchmark={() => bench(m.tag)}
               benchmarking={benchmarking === m.tag}
+              onDelete={() => remove(m)}
+              deleting={deleting === m.tag}
             />
           ) : (
             <EmbeddingRow

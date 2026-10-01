@@ -650,6 +650,19 @@ def local_models_without_fit() -> list[dict[str, Any]]:
     ]
 
 
+def forget_benchmark(tag: str) -> None:
+    """Drop a model's benchmark — called when it is deleted. Never raises."""
+    tag = normalise_tag(tag)
+    with _lock:
+        benches = _benchmarks()
+        if benches.pop(tag, None) is None:
+            return
+        try:
+            _BENCH_PATH.write_text(json.dumps(benches, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+
 def benchmark(tag: str, *, runs: int = 5) -> dict[str, Any]:
     """Time embedding one question with an installed model; keep the result.
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, RefreshCw, Check, ChevronDown, ScanLine, ArrowRight, CircleCheck, CircleAlert, CircleSlash, Gauge } from 'lucide-react'
+import { Download, RefreshCw, Check, ChevronDown, ScanLine, ArrowRight, CircleCheck, CircleAlert, CircleSlash, Gauge, Trash2 } from 'lucide-react'
 import type { EmbeddingModel, FigureSource } from '../../lib/embeddingsClient'
 import { Collapse } from '../ui/collapse'
 
@@ -92,13 +92,14 @@ const VERDICT = {
 
 /**
  * The same card in both places, with different actions. Installed passes
- * `onSelect` and `onVerify` — managing what you have. Browsing passes
+ * `onVerify`, `onBenchmark` and `onDelete` — managing what you have; Settings →
+ * Vector RAG chooses with its own picker, not this card. Browsing passes
  * `onManage` instead, so an installed model points to where it is managed
  * rather than repeating those controls.
  */
 export function EmbeddingRow({
   model, selected, pulling, progress, onPull, onVerify, verifying = false, onSelect, onManage,
-  onBenchmark, benchmarking = false,
+  onBenchmark, benchmarking = false, onDelete, deleting = false,
 }: {
   model: EmbeddingModel
   selected: boolean
@@ -112,6 +113,9 @@ export function EmbeddingRow({
   /** Installed: time embedding one question on this machine. */
   onBenchmark?: () => void
   benchmarking?: boolean
+  /** Installed: remove it from Ollama. */
+  onDelete?: () => void
+  deleting?: boolean
 }) {
   const [open, setOpen] = useState(false)
   // A window shorter than a chunk truncates without error, and a truncated
@@ -242,6 +246,17 @@ export function EmbeddingRow({
               {verifying
                 ? <><RefreshCw size={11} className="animate-spin" />verifying…</>
                 : <><ScanLine size={11} />{model.dimensions_source === 'verified' ? 'Re-verify' : 'Verify'}</>}
+            </button>
+          )}
+          {model.installed && onDelete && (
+            <button
+              onClick={onDelete}
+              disabled={deleting}
+              title="Delete this model from Ollama"
+              aria-label={`Delete ${model.label}`}
+              className="rounded-lg border theme-border p-1.5 theme-text-muted transition-colors hover:text-rose-400 disabled:opacity-40"
+            >
+              {deleting ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
             </button>
           )}
           {!model.installed && (
