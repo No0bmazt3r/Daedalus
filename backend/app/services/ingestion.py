@@ -237,11 +237,17 @@ def embed_query(text: str) -> list[float]:
     does not return nothing, and ranks by noise.
     """
     model, _ = _embedding_target()
-    return ollama_client.embed(model, text)
+    return ollama_client.embed(model, embedding_models.prefixes(model)[0] + text)
 
 
 def _embed_batch(model: str, texts: list[str]) -> list[list[float]]:
-    return [ollama_client.embed(model, text) for text in texts]
+    """Chunk vectors, each with the model's document prefix.
+
+    The prefix goes into the vector, not into the stored text: Chroma and the
+    manifest keep the chunk as written, so a citation quotes the document.
+    """
+    prefix = embedding_models.prefixes(model)[1]
+    return [ollama_client.embed(model, prefix + text) for text in texts]
 
 
 # ── the run ──────────────────────────────────────────────────────────────────
@@ -404,6 +410,7 @@ def _run(
             vector_store.stamp_index(
                 collection_name, model=model,
                 dimensions=embedding_models.effective_dimensions(model), at=_now(),
+                document_prefix=embedding_models.prefixes(model)[1],
             )
             embedding_models.record_index(model=model, collection=collection_name)
             corpus_store.log(run_id, "stamp", f"{collection_name} stamped as {model}")
@@ -570,6 +577,7 @@ def resume(document_id: str | None = None) -> dict[str, Any]:
                 vector_store.stamp_index(
                     collection_name, model=model,
                     dimensions=embedding_models.effective_dimensions(model), at=_now(),
+                    document_prefix=embedding_models.prefixes(model)[1],
                 )
                 embedding_models.record_index(model=model, collection=collection_name)
                 corpus_store.log(run_id, "stamp", f"{collection_name} stamped as {model}")

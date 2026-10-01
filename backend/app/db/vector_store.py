@@ -57,6 +57,10 @@ COLLECTION = "daedalus_knowledge"
 STAMP_MODEL = "embedding_model"
 STAMP_DIMENSIONS = "embedding_dimensions"
 STAMP_AT = "indexed_at"
+# The text every chunk was prefixed with before embedding (`embedding_models`
+# `document_prefix`). Part of what produced the vectors, so part of the stamp:
+# the same model with a different prefix writes different vectors.
+STAMP_DOC_PREFIX = "document_prefix"
 
 _client: Any = None
 _last_error: str | None = None
@@ -208,7 +212,9 @@ def get_collection(
     return collection
 
 
-def stamp_index(name: str, *, model: str, dimensions: int | None, at: str) -> None:
+def stamp_index(
+    name: str, *, model: str, dimensions: int | None, at: str, document_prefix: str = "",
+) -> None:
     """Record on the collection which model produced its vectors.
 
     Called by ingestion, and allowed to fail loudly: an index nobody can
@@ -218,7 +224,10 @@ def stamp_index(name: str, *, model: str, dimensions: int | None, at: str) -> No
     collection = _open(name, create=True)
     if collection is None:
         raise RuntimeError(f"cannot stamp {name}: {_last_error or 'chroma unavailable'}")
-    metadata = {**(collection.metadata or {}), STAMP_MODEL: model, STAMP_AT: at}
+    metadata = {
+        **(collection.metadata or {}), STAMP_MODEL: model, STAMP_AT: at,
+        STAMP_DOC_PREFIX: document_prefix,
+    }
     if dimensions:
         metadata[STAMP_DIMENSIONS] = int(dimensions)
     collection.modify(metadata=metadata)
@@ -270,6 +279,8 @@ def describe(name: str | None = None) -> dict[str, Any]:
             "embedding_model": metadata.get(STAMP_MODEL),
             "dimensions": metadata.get(STAMP_DIMENSIONS),
             "indexed_at": metadata.get(STAMP_AT),
+            # None when the index predates prefix stamping — read as no prefix.
+            "document_prefix": metadata.get(STAMP_DOC_PREFIX),
             "error": None,
         }
     except Exception as exc:  # noqa: BLE001

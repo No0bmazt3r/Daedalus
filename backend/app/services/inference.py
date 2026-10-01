@@ -52,6 +52,7 @@ model by whatever else the machine was doing.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import queue
 import re
@@ -140,6 +141,21 @@ def choose_model(requested: str | None = None) -> dict[str, Any]:
     local, remote = _known_tags()
 
     if requested and requested != resolved.get("tag"):
+        # A model that cannot complete a prompt — an embedding model — never
+        # answers, whoever asked for it. A stale composer selection or a scripted
+        # call gets the configured model and the reason, not a failed generation.
+        if requested in local and ollama_client.can_answer(requested) is False:
+            return {
+                "tag": resolved.get("tag"),
+                "source": "config",
+                "remote": False,
+                "reason": (
+                    f"requested {requested}, which is an embedding model and cannot answer a "
+                    f"question; using the configured model instead"
+                ),
+                "config_tag": resolved.get("tag"),
+                "rejected": requested,
+            }
         if requested in local:
             return {
                 "tag": requested,
@@ -322,8 +338,15 @@ def answer_stream(
     question: str,
     *,
     model: str | None = None,
+    evaluation: bool = False,
 ) -> Iterator[dict[str, Any]]:
     """Answer one message, yielding progress events as the model produces them.
+
+    `evaluation=True` is the evaluation harness (`services/evaluation`): the
+    turn runs the identical pipeline, but its `model_logs` row says
+    `source='eval'` — so every operator statistic that filters `'chat'` stays
+    clean — and the background title and summary jobs are skipped, because a
+    model call they start would compete with the next timed question.
 
     Yields the phase events listed in the module docstring, then exactly one
     terminal event — `{"phase": "done", "result": {...}}` or
@@ -530,7 +553,7 @@ def answer_stream(
                 # What separates these rows from the Forge's `bench_` ones in the
                 # same table. §2.3 wants both here; this is how the analysis tells
                 # them apart.
-                source="chat_cloud" if choice.get("remote") else "chat",
+                source="eval" if evaluation else ("chat_cloud" if choice.get("remote") else "chat"),
                 host=ollama_client.serving_host(tag),
                 status="error" if error else "ok",
                 error_message=error,
@@ -593,10 +616,11 @@ def answer_stream(
             stored = chat_service.add_assistant_message(
                 session_id, delivered, query_id=query_id, evidence=pack.as_json(), model_tag=tag
             )
-            summary_scheduled = _maybe_summarise(session_id)
+            summary_scheduled = False if evaluation else _maybe_summarise(session_id)
             # After the answer is stored, on its own thread — like the summary,
             # the operator never waits for a title.
-            session_titles.schedule(session_id)
+            if not evaluation:
+                session_titles.schedule(session_id)
 
             events.put({
                 "phase": "done",
@@ -650,7 +674,11 @@ def answer_stream(
             # Always last, and always exactly once: this is what ends the stream.
             events.put(None)
 
-    threading.Thread(target=_worker, name=f"chat-{query_id}", daemon=True).start()
+    # The worker runs in a copy of this context, so a run-scoped setting — an
+    # evaluation arm (`rag_config.arm`) — reaches the pipeline it starts.
+    threading.Thread(
+        target=contextvars.copy_context().run, args=(_worker,), name=f"chat-{query_id}", daemon=True,
+    ).start()
 
     while True:
         event = events.get()

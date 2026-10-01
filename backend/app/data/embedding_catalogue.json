@@ -32,7 +32,20 @@
     "  is most of the file) · languages (starts with 'English' or 'Multilingual' —",
     "  the Forge filters on it, and 'Multilingual' makes it a Malay candidate) ·",
     "  quality (rank within this list, higher is better, from published MTEB",
-    "  retrieval results — it orders the recommendation and is not a score) · note.",
+    "  retrieval results — it orders the recommendation and is not a score) ·",
+    "  query_prefix / document_prefix (leading text the model was trained to expect",
+    "  on a question / on a passage — \"\" when it expects none) · note.",
+    "",
+    "Prefixes are from each model's own card, and they matter: an asymmetric",
+    "retrieval embedder given an unprefixed question retrieves below its published",
+    "quality. nomic: `search_query: ` / `search_document: `. mxbai-embed-large,",
+    "bge-large-en-v1.5 and snowflake-arctic-embed v1: the BGE query instruction.",
+    "snowflake-arctic-embed2: `query: `. embeddinggemma: `task: search result |",
+    "query: ` / `title: none | text: `. Qwen3-Embedding: `Instruct: {task}\\nQuery:`",
+    "with a task written for this corpus (its card: an instruction tailored to the",
+    "task is worth 1-5%). bge-m3, granite, all-minilm and paraphrase-multilingual",
+    "expect none. The document prefix is stamped on the index, so changing it marks",
+    "the index stale rather than mixing two kinds of vector.",
     "",
     "There is no `recommended` field. Which model is recommended is computed per",
     "machine by services/embedding_models.fit(), under the rule in",
@@ -52,6 +65,8 @@
       "compute_m": 110,
       "languages": "English",
       "quality": 5,
+      "query_prefix": "search_query: ",
+      "document_prefix": "search_document: ",
       "note": "architecture/04's recommendation. 2,048 tokens is four times M2's largest chunk, so no chunk truncates."
     },
     {
@@ -64,6 +79,8 @@
       "compute_m": 300,
       "languages": "English",
       "quality": 6,
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "document_prefix": "",
       "note": "Wider vectors than nomic at a fraction of the context. Fine for 300-500 token chunks, tight above that."
     },
     {
@@ -76,6 +93,8 @@
       "compute_m": 300,
       "languages": "Multilingual (100+)",
       "quality": 7,
+      "query_prefix": "",
+      "document_prefix": "",
       "note": "Wide vectors and long context. Over 1GB — check it against the Forge's memory figures."
     },
     {
@@ -88,6 +107,8 @@
       "compute_m": 21,
       "languages": "English",
       "quality": 1,
+      "query_prefix": "",
+      "document_prefix": "",
       "note": "architecture/04's 'if hardware is weak'. Tiny and fast; 256 tokens truncates a 500-token chunk."
     },
     {
@@ -100,6 +121,8 @@
       "compute_m": 300,
       "languages": "Multilingual",
       "quality": 7,
+      "query_prefix": "query: ",
+      "document_prefix": "",
       "note": "Arctic Embed's multilingual second version. Long context with English retrieval kept strong."
     },
     {
@@ -112,6 +135,8 @@
       "compute_m": 300,
       "languages": "English",
       "quality": 6,
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "document_prefix": "",
       "note": "The large English Arctic model. Same width and window as mxbai-embed-large."
     },
     {
@@ -124,6 +149,8 @@
       "compute_m": 110,
       "languages": "English",
       "quality": 5,
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "document_prefix": "",
       "note": "Nomic-BERT base, like nomic-embed-text: the same width and window at the same size."
     },
     {
@@ -136,6 +163,8 @@
       "compute_m": 21,
       "languages": "English",
       "quality": 3,
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "document_prefix": "",
       "note": "Small and fast, with a full 512-token window — unlike all-minilm, a 500-token chunk fits."
     },
     {
@@ -148,6 +177,8 @@
       "compute_m": 21,
       "languages": "English",
       "quality": 3,
+      "query_prefix": "",
+      "document_prefix": "",
       "note": "IBM's smallest. The lightest model here with a full 512-token window."
     },
     {
@@ -160,6 +191,8 @@
       "compute_m": 86,
       "languages": "Multilingual (12)",
       "quality": 4,
+      "query_prefix": "",
+      "document_prefix": "",
       "note": "IBM's multilingual model: English, German, Spanish, French, Japanese, Portuguese, Arabic, Czech, Italian, Korean, Dutch, Chinese."
     },
     {
@@ -172,6 +205,8 @@
       "compute_m": 140,
       "languages": "Multilingual (100+)",
       "quality": 7,
+      "query_prefix": "task: search result | query: ",
+      "document_prefix": "title: none | text: ",
       "note": "Google's on-device embedder. Needs a recent Ollama."
     },
     {
@@ -184,6 +219,8 @@
       "compute_m": 440,
       "languages": "Multilingual (100+)",
       "quality": 8,
+      "query_prefix": "Instruct: Given a question about a lab-scale CO2 sorption reactor, retrieve passages from its manuals, procedures and safety documents that answer the question\nQuery:",
+      "document_prefix": "",
       "note": "Decoder-based embedder from the same family as the chat model. Very long window."
     },
     {
@@ -196,6 +233,8 @@
       "compute_m": 3600,
       "languages": "Multilingual (100+)",
       "quality": 9,
+      "query_prefix": "Instruct: Given a question about a lab-scale CO2 sorption reactor, retrieve passages from its manuals, procedures and safety documents that answer the question\nQuery:",
+      "document_prefix": "",
       "note": "2.5GB and 2,560-wide vectors: over three times nomic's index size. Competes with the chat model for VRAM."
     },
     {
@@ -208,6 +247,8 @@
       "compute_m": 6950,
       "languages": "Multilingual (100+)",
       "quality": 10,
+      "query_prefix": "Instruct: Given a question about a lab-scale CO2 sorption reactor, retrieve passages from its manuals, procedures and safety documents that answer the question\nQuery:",
+      "document_prefix": "",
       "note": "4.7GB — larger than most chat models here. Only worth it on a machine with VRAM to spare."
     },
     {
@@ -220,6 +261,8 @@
       "compute_m": 300,
       "languages": "English",
       "quality": 5,
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "document_prefix": "",
       "note": "BAAI's English model; bge-m3 is its long-context multilingual successor."
     },
     {
@@ -232,6 +275,8 @@
       "compute_m": 86,
       "languages": "Multilingual (50+)",
       "quality": 2,
+      "query_prefix": "",
+      "document_prefix": "",
       "note": "Sentence-similarity model. Tuned for short paraphrases rather than document retrieval."
     }
   ]

@@ -46,10 +46,13 @@ hand edit of a committed file rather than a click nobody remembers making.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import tempfile
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Literal
 
 from ..db import paths
@@ -239,9 +242,44 @@ def _validate_graph(raw: dict[str, Any]) -> None:
             raise ValueError(f"graph.max_steps must be a whole number from {low} to {high}")
 
 
+# ── evaluation arms ──────────────────────────────────────────────────────────
+#
+# PROJECT.md §5: freeze both tracks, then run the query set once per arm. The
+# freeze refuses writes, so an arm cannot be selected by writing the config —
+# and should not be: a config rewritten mid-evaluation is exactly the drift the
+# freeze exists to stop. Instead the evaluation harness (`services/evaluation`)
+# runs each arm inside `arm(...)`, which overrides what `resolve()` and
+# `graph_settings()` answer for that context only. Everything else — budget,
+# step limit, re-ranker, embedding model — is read from the frozen config as
+# usual, so the arms differ in exactly the one thing being compared.
+#
+# A ContextVar, so the override follows the evaluation's own thread (and the
+# chat worker it starts, which copies the context) and nothing else: a person
+# using the app during a run still gets the configured track.
+_ARM: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar("rag_arm", default=None)
+
+
+@contextmanager
+def arm(track: Track, graph_mode: str | None = None) -> Iterator[None]:
+    """Answer as `track` (and, for graph, `graph_mode`) inside this block only."""
+    if track not in TRACKS:
+        raise ValueError(f"unknown track {track!r}")
+    if graph_mode is not None and graph_mode not in GRAPH_MODES:
+        raise ValueError(f"unknown graph mode {graph_mode!r}")
+    token = _ARM.set({"track": track, "graph_mode": graph_mode or ""})
+    try:
+        yield
+    finally:
+        _ARM.reset(token)
+
+
 def graph_settings() -> dict[str, Any]:
     """Track 2's retrieval mode, budget and step limit, read on every query."""
-    return read()["graph"]
+    settings = read()["graph"]
+    override = _ARM.get()
+    if override and override["graph_mode"]:
+        settings = {**settings, "mode": override["graph_mode"]}
+    return settings
 
 
 def rerank_settings() -> dict[str, Any]:
@@ -251,6 +289,9 @@ def rerank_settings() -> dict[str, Any]:
 
 def resolve() -> Track:
     """The track a Path B query should use. The one call the chat path needs."""
+    override = _ARM.get()
+    if override:
+        return override["track"]  # type: ignore[return-value]
     return read()["track"]  # type: ignore[return-value]
 
 

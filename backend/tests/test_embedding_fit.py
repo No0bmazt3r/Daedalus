@@ -36,7 +36,7 @@ class CatalogueContractTest(unittest.TestCase):
                 for key, kind in (("tag", str), ("label", str), ("dimensions", int), ("max_tokens", int),
                                   ("approx_bytes", int), ("params_m", (int, float)),
                                   ("compute_m", (int, float)), ("quality", int), ("languages", str),
-                                  ("note", str)):
+                                  ("query_prefix", str), ("document_prefix", str), ("note", str)):
                     self.assertIsInstance(entry.get(key), kind, f"{key} missing or wrong type")
                 self.assertTrue(entry["languages"].startswith(("English", "Multilingual")))
                 self.assertLessEqual(entry["compute_m"], entry["params_m"])

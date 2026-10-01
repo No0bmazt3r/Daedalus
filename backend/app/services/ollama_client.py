@@ -350,6 +350,34 @@ def _extract_arch(model_info: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
+# Ollama's capability for "can complete a prompt". An embedding model reports
+# `embedding` instead, and asking it for an answer fails.
+COMPLETION_CAPABILITY = "completion"
+
+
+def answers_questions(capabilities: list[str] | None) -> bool:
+    """Whether a model with these capabilities can write an answer.
+
+    The one rule for "is this a chat model", used by the composer's list,
+    `inference.choose_model` and `model_config`, so the three cannot disagree.
+    On the *presence* of `completion`, not the absence of `embedding`: a model
+    reporting neither is not assumed usable.
+    """
+    return COMPLETION_CAPABILITY in (capabilities or [])
+
+
+def can_answer(name: str) -> bool | None:
+    """`answers_questions` for an installed tag — None if Ollama cannot be asked.
+
+    None is not False: an unreachable Ollama says nothing about the model, and
+    callers that only guard against a known embedder treat it as "not refused".
+    """
+    try:
+        return answers_questions(show(name).get("capabilities"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def show(name: str) -> dict[str, Any]:
     """A pulled model's real architecture and parameters.
 

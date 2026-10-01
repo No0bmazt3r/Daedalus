@@ -1,0 +1,87 @@
+# The evaluation query set — PROJECT.md §5 "Comparison protocol", docs/EVALUATION.md.
+#
+# Git-tracked on purpose: these labels ARE the ground truth the report is scored
+# against, so every change to them reviews in a diff. Validate after editing:
+#     cd backend && python -m app.cli_eval validate
+#
+# Target 30–50 questions, 6–10 per category, written BEFORE looking at any
+# track's answers. Every entry:
+#
+#   id            unique, stable (Q01, Q02 …) — results are joined on it
+#   category      single_hop_factual | single_hop_procedural | multi_hop_causal
+#                 | ambiguous | out_of_corpus
+#   question      exactly as an operator would type it
+#   language      en | ms
+#   rig_specific  true when the right answer depends on THIS rig (a setpoint, a
+#                 step, a valve) — those must be labelled from `rig` documents
+#   expect:
+#     answerable          false for out_of_corpus: the right answer is a refusal
+#     key_facts           what a correct answer must state — one regex each,
+#                         case-insensitive; plain words are fine. ALL must match
+#     relevant_documents  source filenames a good Track 1 retrieval returns
+#     relevant_nodes      graph node ids a good Track 2 retrieval reaches
+#   notes         optional — where the label came from
+#
+# The entries below are EXAMPLES written against the placeholder graph and no
+# corpus. Replace them with the real set once the lab's documents are ingested;
+# a run against these measures the harness, not Daedalus.
+
+- id: EX01
+  category: single_hop_procedural
+  question: What are the steps of the emergency cooldown procedure?
+  language: en
+  rig_specific: true
+  expect:
+    answerable: true
+    key_facts: ["cool", "step"]
+    relevant_documents: ["SOP_Emergency_Cooldown.pdf"]
+    relevant_nodes: ["SOPDocument:Emergency_Cooldown", "SOPStep:cooldown_1"]
+  notes: EXAMPLE — placeholder graph
+
+- id: EX02
+  category: single_hop_factual
+  question: What is the high alarm limit for CO2 during absorption?
+  language: en
+  rig_specific: true
+  expect:
+    answerable: true
+    key_facts: ["co2|co₂", "ppm"]
+    relevant_documents: []
+    relevant_nodes: ["Sensor:co2_ppm", "Threshold:co2_high_absorption"]
+  notes: EXAMPLE — placeholder graph
+
+- id: EX03
+  category: multi_hop_causal
+  question: Pressure and temperature both spiked — what should I do?
+  language: en
+  rig_specific: true
+  expect:
+    answerable: true
+    key_facts: ["cool|relief|vent"]
+    relevant_documents: ["SOP_Emergency_Cooldown.pdf", "SOP_Pressure_Relief.pdf"]
+    relevant_nodes: ["AnomalyType:thermal_runaway_risk", "SOPDocument:Emergency_Cooldown", "SOPDocument:Pressure_Relief"]
+  notes: EXAMPLE — placeholder graph
+
+- id: EX04
+  category: ambiguous
+  question: Is something wrong with the reactor?
+  language: en
+  rig_specific: false
+  expect:
+    answerable: true
+    key_facts: []
+    relevant_documents: []
+    relevant_nodes: []
+  notes: EXAMPLE — scored on refusal correctness and groundedness only
+
+- id: EX05
+  category: out_of_corpus
+  question: What is the radiation shielding thickness on the vessel?
+  language: en
+  rig_specific: false
+  expect:
+    answerable: false
+    key_facts: []
+    relevant_documents: []
+    relevant_nodes: []
+  notes: EXAMPLE — the right answer is to say it is not available

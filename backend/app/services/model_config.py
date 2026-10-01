@@ -131,6 +131,13 @@ def write(
         raise ValueError(f"mode must be 'auto' or 'pinned', not {mode!r}")
     if mode == "pinned" and not tag:
         raise ValueError("pinned mode needs a tag")
+    if mode == "pinned" and tag:
+        from . import ollama_client  # noqa: PLC0415
+
+        # Refused only when Ollama says so: pinning a model before it is pulled
+        # stays allowed (`resolve` reports it as not installed).
+        if ollama_client.can_answer(tag) is False:
+            raise ValueError(f"{tag} is an embedding model — it cannot answer a question, so it cannot be the chat model")
 
     config = {
         "schema_version": SCHEMA_VERSION,
@@ -165,6 +172,13 @@ def write(
     return config
 
 
+def ollama_client_answers(row: dict[str, Any]) -> bool:
+    """`ollama_client.answers_questions` for an installed-models row."""
+    from . import ollama_client  # noqa: PLC0415
+
+    return ollama_client.answers_questions(row.get("capabilities"))
+
+
 def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
     """What to actually run right now, and why.
 
@@ -197,6 +211,18 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         pinned = config.get("pinned") or {}
         tag = pinned.get("tag")
         match = next((row for row in installed if row["tag"] == tag), None)
+        # A pin written by hand can name an embedding model. Reported, like a
+        # missing one, rather than handed to the chat path to fail on.
+        if match and "capabilities" in match and not ollama_client_answers(match):
+            return {
+                "mode": "pinned",
+                "tag": None,
+                "resolved": False,
+                "reason": f"pinned to {tag}, which is an embedding model and cannot answer — pin a chat model, or switch to auto.",
+                "row": match,
+                "candidates_considered": len(installed),
+                "config": config,
+            }
         return {
             "mode": "pinned",
             "tag": tag,
@@ -231,7 +257,7 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         for row in installed
         if row["verdict"]["fit"] in {"safe", "marginal"}
         and not row.get("remote")
-        and "completion" in (row.get("capabilities") or [])
+        and ollama_client_answers(row)
     ]
     if not runnable:
         # Three different problems, and saying "nothing fits" for all of them

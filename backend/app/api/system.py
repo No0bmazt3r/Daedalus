@@ -212,7 +212,10 @@ def clear_graph_traces() -> dict[str, Any]:
 
 @router.get("/models")
 def list_models() -> dict[str, Any]:
-    """Every model the console can name, and whether it may answer a query.
+    """Every model that can answer a chat question, and whether it may.
+
+    Embedding models are left out — they are chosen in Settings → Vector RAG,
+    never in the composer (`ollama_client.answers_questions`).
 
     Two kinds, and the difference is Rule 1:
 
@@ -250,6 +253,13 @@ def list_models() -> dict[str, Any]:
                 capabilities = ollama_client.show(m["name"]).get("capabilities") or []
             except Exception:
                 capabilities = []
+            # Only models that can write an answer. An embedding model is on this
+            # machine to embed the corpus and the question — it cannot answer
+            # one, and offering it in the composer invited a chat turn that fails.
+            # Unknown capabilities (a failed `/api/show`) keep the model listed:
+            # that says nothing about what it is.
+            if capabilities and not ollama_client.answers_questions(capabilities):
+                continue
             models.append({
                 "id": f"ollama:{m['name']}",
                 "name": m["name"],

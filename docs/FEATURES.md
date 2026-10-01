@@ -36,6 +36,7 @@ Everything below was read off the source, not from memory.
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
 | Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything and re-ranks with a cross-encoder. Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's hybrid search, query expansion and multi-hop re-retrieval are not built |
+| Evaluation harness | Built, run from a terminal (`python -m app.cli_eval`). It asks every question in `config/eval/queries.yaml` once per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores each answer against hand-written labels, and writes a report, a CSV and an LLM-judge input file. It refuses an official run unless the comparison is frozen. The query set holds 5 examples until the real corpus is ingested. See [`EVALUATION.md`](EVALUATION.md) |
 
 ---
 
@@ -265,6 +266,13 @@ declared in a catalogue. Embedders are judged on memory, on the time to embed
 one question (300 ms budget), and on reading a whole chunk; benchmarking one
 replaces its estimate. The rule, the calibration and the checklists for adding a
 model are in [`MODEL_FIT.md`](MODEL_FIT.md).
+
+**Embedders get the prefixes they were trained with.** A question is embedded
+with the model's `query_prefix` and a chunk with its `document_prefix`
+(`search_query: ` / `search_document: ` for nomic, a corpus-specific instruction
+for Qwen3), from each model's card. The stored chunk text stays as written; the
+prefix only goes into the vector. The document prefix is stamped on the index,
+so an index built with a different one reads `stale`.
 
 **Corpus categories** (`source_type`), what retrieval can filter on:
 
@@ -1046,6 +1054,22 @@ it), `manage_settings` / `manage_endpoints` (Rule 5), and `bash` / `python` /
 telemetry of record and deserve their own module and review; the registry
 already carries a `READ_SENSOR` effect so adding them is a registration rather
 than a redesign.
+
+### Evaluation harness — `services/evaluation.py` · `cli_eval.py`
+
+The guide is [`EVALUATION.md`](EVALUATION.md). Each question runs through
+`inference.answer_stream` with `evaluation=True` (this logs
+`model_logs.source='eval'` and starts no background title or summary job),
+inside `rag_config.arm(track, mode)`. That override is held in a `ContextVar`
+and reaches the chat worker because the worker runs in a copy of the caller's
+context. Because it is not a config write, the frozen config is never touched
+and a person using the app during a run still gets the configured track.
+
+A run is written to `data/eval/<run_id>/` as `run.json`, `report.md`,
+`results.csv` and `judge.jsonl`. `run.json` is rewritten atomically after every
+answer. A crash, Ctrl-C or a turn still running after its timeout plus a drain
+period stops the run as `aborted`, keeping every answer scored so far, and the
+report then says it is not citable.
 
 ### System maintenance — `services/app_logs.py` · `services/maintenance.py`
 
@@ -1861,7 +1885,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **143 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins). Everything else is still verified by direct API calls |
+| Backend | **191 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), and the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers). Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

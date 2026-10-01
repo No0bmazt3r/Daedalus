@@ -19,6 +19,15 @@ build when it does not.
 | **Embedding** | Embeds the question for Track 1 | `backend/app/data/embedding_catalogue.json` | `services/embedding_models.fit()` | **300 ms** per question | Window ≥ one chunk (~375 tokens) |
 | **Re-ranker** | Re-scores Track 1's 20 candidates | `CATALOGUE` in `services/reranker.py` | `services/reranker.fit()` | **1 s** per question | — |
 
+**A model's kind comes from Ollama, not its name.** A chat model is one whose
+`/api/show` capabilities include `completion`; an embedding model reports
+`embedding` instead. `ollama_client.answers_questions()` is the single rule, and
+every layer uses it: the composer's model list (`GET /api/system/models`)
+leaves embedders out, `inference.choose_model` refuses an override to one and
+answers with the configured model, and `model_config` refuses to pin one. An
+embedder is chosen only in Settings → Vector RAG. Guarded by
+`tests/test_chat_models_only.py`.
+
 Chat models have a richer scorer because they are the expensive part: weights
 × quantization × context against two memory pools (VRAM and RAM), with fit,
 speed, quality and context weighted for this project's workload. Embedders and
@@ -120,7 +129,10 @@ does.
 1. **Embedding** — add an entry to `embedding_catalogue.json` with every field
    listed in its `_about` block: `tag`, `label`, `dimensions`, `max_tokens`,
    `approx_bytes`, `params_m`, `compute_m`, `languages` (`English…` or
-   `Multilingual…`), `quality`, `note`. Read `dimensions`, `max_tokens` and
+   `Multilingual…`), `quality`, `query_prefix`, `document_prefix`, `note`. Take
+   the prefixes from the model's own card (`""` when it expects none) — an
+   asymmetric embedder given an unprefixed question retrieves below its
+   published quality. Read `dimensions`, `max_tokens` and
    `approx_bytes` from the tag's manifest on `registry.ollama.ai`, not a model
    card.
 2. **Re-ranker** — add an entry to `reranker.CATALOGUE` with `repo`, a **pinned
@@ -170,7 +182,9 @@ does.
   case, not wrong.
 - **Free RAM is read now**, so a verdict reflects whether the chat model is
   loaded at that moment. Judge with the chat model you will use loaded.
-- **Embedding instructions:** Qwen3 embedders retrieve best with a short
-  instruction prefix on the *query*; ingestion and `embed_query` do not add one
-  yet (TODO M2), so their real quality here is a little below their published
-  rank.
+- **Prefixes are applied, not yet measured here.** Each embedder gets the query
+  and document prefix its card specifies (`embedding_models.prefixes`), and the
+  document prefix is stamped on the index so a change marks it stale. A
+  three-passage spot check with qwen3-embedding:0.6b showed the prefix pushing
+  an off-topic passage further away but no gain on a same-topic distractor —
+  too small to conclude anything. Measure it on the evaluation set.

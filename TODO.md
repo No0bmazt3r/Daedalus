@@ -40,8 +40,18 @@ Offline pipeline. Never runs during a live query.
       enforced by `tests/test_embedding_fit.py` (10 tests). Calibrated on the dev
       laptop: nomic-embed-text 35 ms, qwen3-embedding:0.6b 95 ms per question —
       the latter is now the recommendation here, for English and Malay
-  - [ ] Qwen3 embedders want an instruction prefix on the *query*
-        (`Instruct: …\nQuery: …`); `embed_query` adds none yet
+  - [x] An embedding model is never offered or used as the chat model: one rule
+        (`ollama_client.answers_questions` — `completion` capability) applied
+        to the composer's list, `choose_model` overrides and pinning. 5 tests
+  - [x] Query and document prefixes per embedder, from each model's card
+        (`query_prefix` / `document_prefix` in the catalogue — nomic's
+        `search_query:`/`search_document:`, Qwen3's corpus-specific instruction,
+        the BGE instruction, embeddinggemma's task text). The document prefix is
+        stamped on the index (`vector_store.STAMP_DOC_PREFIX`); a mismatch reads
+        `stale`. Benchmarks embed the prefixed question. 4 tests
+  - [ ] Measure the prefixes' effect on the evaluation set — a 3-passage spot
+        check with qwen3-embedding:0.6b was inconclusive (off-topic passage
+        pushed from 0.576 to 0.442; same-topic margin 0.168 → 0.166)
   - [ ] Recalibrate both estimators on the lab machine (`MODEL_FIT.md` §4)
 - [ ] Collect the corpus into `data/documents/{manuals,sops,anomaly_records,uauc_records,other}/`
 - [x] **Document origin — this rig vs reference.** Every document is `rig` (this
@@ -619,14 +629,33 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 
 ## M8 — Evaluation
 
-- [ ] Golden query set — 30–50 queries, stratified across the 5 categories in §5
+- [x] **The harness** — `services/evaluation.py`, `python -m app.cli_eval`, guide
+      in `docs/EVALUATION.md`. Every question in `config/eval/queries.yaml` is
+      asked once per arm (`vector` · `graph-walk` · `graph-agent`) through the
+      real chat path, inside `rag_config.arm(...)`. That override is
+      context-scoped, so the frozen config is never written. Turns log as
+      `source='eval'`. 21 tests in `tests/test_evaluation.py`
+  - [x] Refuses an official run unless frozen; a repeat over the same
+        fingerprint and query set needs a written reason. `--practice` and
+        `--ids` runs are marked not citable
+  - [x] A silent model still hits the deadline, because the stream is read on
+        its own thread. A timed-out turn is waited for (the drain) before the
+        next question is timed, and the run stops if it never ends
+  - [x] `run.json` is checkpointed atomically after every answer. A crash or
+        Ctrl-C saves the run as `aborted` with its reason and every answer so far
+- [ ] Golden query set — 30–50 queries, stratified across the 5 categories in §5.
+      The 5 `EX…` entries are placeholders against the placeholder graph
 - [ ] Hand-label ground-truth answers and relevant-evidence sets
-- [ ] Groundedness / hallucination scoring
-- [ ] Retrieval precision@3 and @5, recall, MRR
-- [ ] Latency harness — mean, p50, p95, broken down by stage
+- [x] Groundedness / hallucination scoring — the validator's flags, per arm
+- [x] Retrieval precision@3 and @5, recall, MRR (Track 1); node precision and
+      recall, hops and stop reasons (Track 2)
+- [~] Latency harness — mean, p50 and p95 for the whole turn, first token and
+      retrieval. Not yet broken down further by stage (planning, validation)
 - [ ] **Freeze both tracks, then run once.** Tuning after seeing results invalidates the comparison
-- [ ] Produce the head-to-head comparison table
-- [ ] Qualitative failure analysis — *when* and *why* each track fails
+- [x] Produce the head-to-head comparison table — `report.md` per run
+- [ ] Qualitative failure analysis — *when* and *why* each track fails. The
+      report lists every wrong answer with what was missing; the analysis
+      itself waits on a real run
 - [ ] Method B: n8n → Google Sheets → LLM-as-a-judge over **exported** logs only
 - [ ] Human evaluation panel (chem-eng students + faculty)
 

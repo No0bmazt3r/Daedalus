@@ -125,6 +125,20 @@ def catalogue() -> list[dict[str, Any]]:
 def _by_tag() -> dict[str, dict[str, Any]]:
     return {entry["tag"]: entry for entry in catalogue()}
 
+
+def prefixes(tag: str) -> tuple[str, str]:
+    """(query prefix, document prefix) the model was trained to expect.
+
+    Many retrieval embedders are asymmetric: a question and a passage are
+    embedded with different leading text — `search_query: ` / `search_document: `
+    for nomic, an instruction for Qwen3 — and without it they retrieve below
+    their published quality. From the catalogue; a model outside it gets none.
+    The document prefix is stamped on the index (`vector_store.STAMP_DOC_PREFIX`),
+    because changing it changes every vector.
+    """
+    entry = _by_tag().get(normalise_tag(tag), {})
+    return entry.get("query_prefix", ""), entry.get("document_prefix", "")
+
 # Chroma stores float32, so a vector costs 4 bytes per dimension. Spelled out
 # rather than folded into a total, because the point of showing it is that a
 # reader can check it: 768 dims x 4 = 3.0KB a chunk, and a 200-chunk corpus is
@@ -675,11 +689,14 @@ def benchmark(tag: str, *, runs: int = 5) -> dict[str, Any]:
     if row is None:
         raise ValueError(f"{tag} is not installed — pull it before benchmarking")
     name = row["installed_tag"] or tag
-    ollama_client.embed(name, _BENCH_QUERY)
+    # Prefixed as a real question is — an instruction prefix is tokens the
+    # model has to read, and a timing without it would flatter it.
+    query = prefixes(tag)[0] + _BENCH_QUERY
+    ollama_client.embed(name, query)
     timings = []
     for _ in range(max(1, runs)):
         started = time.perf_counter()
-        ollama_client.embed(name, _BENCH_QUERY)
+        ollama_client.embed(name, query)
         timings.append((time.perf_counter() - started) * 1000)
     timings.sort()
     result = {
@@ -806,6 +823,22 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "index_detail": (
                 f"{name} holds {documents} chunks with no record of which model embedded them, "
                 "so they cannot be trusted as comparable — re-ingest"
+            ),
+            "index_source": "collection",
+            "index_documents": documents,
+            "collection": name,
+        }
+
+    # Same model, different document prefix: different vectors. An index built
+    # before prefixes were stamped reads as no prefix, which is what it had.
+    built_with = info.get("document_prefix") or ""
+    expected = prefixes(chosen_tag)[1]
+    if built_with != expected:
+        return {
+            "index_state": "stale",
+            "index_detail": (
+                f"{name} was embedded with document prefix {built_with!r}, but {config['model']} "
+                f"now uses {expected!r} — the vectors differ, so re-ingest before querying"
             ),
             "index_source": "collection",
             "index_documents": documents,
