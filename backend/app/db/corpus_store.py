@@ -69,6 +69,7 @@ def add_document(
     title: str | None = None,
     document_version: str | None = None,
     reactor_mode: str | None = None,
+    origin: str = "reference",
 ) -> dict[str, Any]:
     now = _now()
     with _connect() as conn:
@@ -76,12 +77,12 @@ def add_document(
             """
             INSERT INTO documents (
                 document_id, filename, stored_name, content_hash, media_type, size_bytes,
-                source_type, title, document_version, reactor_mode, uploaded_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                source_type, title, document_version, reactor_mode, origin, uploaded_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 document_id, filename, stored_name, content_hash, media_type, size_bytes,
-                source_type, title, document_version, reactor_mode, now, now,
+                source_type, title, document_version, reactor_mode, origin, now, now,
             ),
         )
     return get_document(document_id) or {}
@@ -161,7 +162,7 @@ def update_document(document_id: str, **fields: Any) -> dict[str, Any] | None:
     silently ignored key — the same argument `registry.validate` makes about
     unknown tool arguments.
     """
-    allowed = {"source_type", "title", "document_version", "reactor_mode"}
+    allowed = {"source_type", "title", "document_version", "reactor_mode", "origin"}
     unknown = set(fields) - allowed
     if unknown:
         raise ValueError(f"cannot update {', '.join(sorted(unknown))}; allowed: {', '.join(sorted(allowed))}")
@@ -285,7 +286,7 @@ def list_chunks(
         total = conn.execute(f"SELECT COUNT(*) AS n FROM chunks {where}", args).fetchone()["n"]
         rows = conn.execute(
             f"""
-            SELECT c.*, d.filename, d.source_type
+            SELECT c.*, d.filename, d.source_type, d.origin
               FROM chunks c JOIN documents d ON d.document_id = c.document_id
               {where.replace('document_id', 'c.document_id')}
              ORDER BY c.document_id, c.ordinal
@@ -310,13 +311,36 @@ def chunks_by_id(chunk_ids: list[str]) -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
             f"""
-            SELECT c.*, d.filename, d.source_type
+            SELECT c.*, d.filename, d.source_type, d.origin
               FROM chunks c JOIN documents d ON d.document_id = c.document_id
              WHERE c.chunk_id IN ({marks})
             """,
             chunk_ids,
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def origins_for(chunk_ids: list[str]) -> dict[str, str]:
+    """Each chunk's document origin — 'rig' or 'reference' — read at query time.
+
+    From the manifest rather than the vector's metadata, so a document whose
+    origin was corrected answers with the new value on the next question. A
+    chunk the manifest no longer knows is left out; the caller treats a missing
+    origin as `reference`, the same default the column has.
+    """
+    if not chunk_ids:
+        return {}
+    marks = ",".join("?" * len(chunk_ids))
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT c.chunk_id, d.origin
+              FROM chunks c JOIN documents d ON d.document_id = c.document_id
+             WHERE c.chunk_id IN ({marks})
+            """,
+            chunk_ids,
+        ).fetchall()
+    return {r["chunk_id"]: r["origin"] for r in rows}
 
 
 def all_chunk_ids() -> list[str]:

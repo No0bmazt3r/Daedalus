@@ -49,6 +49,10 @@ MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 # Condition material — SDSs, hazard guidance, lab safety rules. Both are
 # documents to read, not live data: nothing here comes from a detection system.
 SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "other")
+# Whose document it is. `rig` is this lab's own; `reference` is another
+# installation's, valid for concepts but not for this rig's specifics. The
+# default is `reference`: nothing counts as this rig's unless somebody said so.
+ORIGINS = ("rig", "reference")
 
 
 @router.get("/status")
@@ -85,6 +89,7 @@ async def upload_document(
     title: str | None = Query(None),
     document_version: str | None = Query(None),
     reactor_mode: str | None = Query(None),
+    origin: str = Query("reference", description="'rig' for this lab's own document, 'reference' otherwise."),
 ) -> dict[str, Any]:
     """Store one document and extract its text. The body is the raw file.
 
@@ -95,6 +100,8 @@ async def upload_document(
     """
     if source_type not in SOURCE_TYPES:
         raise HTTPException(400, f"source_type must be one of {', '.join(SOURCE_TYPES)}")
+    if origin not in ORIGINS:
+        raise HTTPException(400, f"origin must be one of {', '.join(ORIGINS)}")
 
     raw = await request.body()
     if not raw:
@@ -107,7 +114,7 @@ async def upload_document(
     try:
         document = ingestion.store_upload(
             raw, filename, source_type=source_type, title=title,
-            document_version=document_version, reactor_mode=reactor_mode,
+            document_version=document_version, reactor_mode=reactor_mode, origin=origin,
         )
     except ingestion.IngestionError as exc:
         # 409 rather than 400: a duplicate is not a malformed request, and the
@@ -128,22 +135,29 @@ def get_document(document_id: str) -> dict[str, Any]:
 def update_document(document_id: str, fields: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Edit the metadata retrieval filters on.
 
-    Does not re-index. The values are copied onto each vector's metadata at
-    embed time, so changing `source_type` here and expecting `search_corpus` to
-    filter by the new value needs a re-ingest — which the response says rather
-    than leaving it to be discovered.
+    Does not re-index. `source_type` and the rest are copied onto each vector's
+    metadata at embed time, so changing them here and expecting `search_corpus`
+    to filter by the new value needs a re-ingest — which the response says
+    rather than leaving it to be discovered. `origin` is the exception: it is
+    read from the manifest at query time, so it applies from the next question.
     """
     if not corpus_store.get_document(document_id):
         raise HTTPException(404, f"no document {document_id!r}")
     if fields.get("source_type") and fields["source_type"] not in SOURCE_TYPES:
         raise HTTPException(400, f"source_type must be one of {', '.join(SOURCE_TYPES)}")
+    if "origin" in fields and fields["origin"] not in ORIGINS:
+        raise HTTPException(400, f"origin must be one of {', '.join(ORIGINS)}")
     try:
         document = corpus_store.update_document(document_id, **fields)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    reindex = set(fields) - {"origin", "title"}
     return {
         "document": document,
-        "note": "Vector metadata carries the old values until this document is re-ingested.",
+        "note": (
+            "Vector metadata carries the old values until this document is re-ingested."
+            if reindex else "Applies from the next question; no re-ingest needed."
+        ),
     }
 
 

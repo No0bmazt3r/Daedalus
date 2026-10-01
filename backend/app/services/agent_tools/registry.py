@@ -747,6 +747,8 @@ def _log_retrieval(
             source_files=json.dumps(
                 sorted({c.get("source_file") for c in chunks if c.get("source_file")})
             ),
+            # Migration 009, aligned with `retrieved_chunk_ids`.
+            retrieved_origins=json.dumps([c.get("origin") or "reference" for c in chunks]),
         )
         rerank = data.get("rerank") or {}
         if rerank:
@@ -760,8 +762,11 @@ def _log_retrieval(
                 rerank_latency_ms=rerank.get("latency_ms"),
             )
     else:
+        from .. import knowledge_graph as kg  # noqa: PLC0415 — only needed on the logging path
+
         path = data.get("path") or {}
         nodes = data.get("nodes") or data.get("entries") or []
+        ordered = sorted((n for n in nodes if n.get("id")), key=lambda n: n["id"])
         row.update(
             hop_count=path.get("hop_count") or 0,
             traversal_path=json.dumps(path, default=str) if path else None,
@@ -769,7 +774,8 @@ def _log_retrieval(
             # The graph's equivalents of chunk ids and source files: which nodes
             # the answer could draw on, and which SOP documents among them —
             # the same two columns the seeder fills, so both read alike.
-            retrieved_chunk_ids=json.dumps(sorted(n["id"] for n in nodes if n.get("id"))) if nodes else None,
+            retrieved_chunk_ids=json.dumps([n["id"] for n in ordered]) if nodes else None,
+            retrieved_origins=json.dumps([kg.origin_of(n) for n in ordered]) if nodes else None,
             source_files=json.dumps(sorted({
                 n["filename"] for n in nodes if n.get("type") == "SOPDocument" and n.get("filename")
             })) if nodes else None,

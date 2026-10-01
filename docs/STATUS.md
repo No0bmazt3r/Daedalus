@@ -1,6 +1,6 @@
 # Daedalus — FYP Status & Feature Overview
 
-*As of 2026-09-25. Figures come from the checkboxes in `TODO.md` and from reading
+*As of 2026-10-01. Figures come from the checkboxes in `TODO.md` and from reading
 the local databases directly. Nothing here is a plan dressed up as progress: where
 something is only designed, it says so.*
 
@@ -8,20 +8,27 @@ something is only designed, it says so.*
 
 ## 1. Summary
 
-The platform around Daedalus is largely built. The core research pipeline is only
-about **10–15% done**:
+The pipeline is **built end to end** and answers questions from demo telemetry
+and a placeholder knowledge graph. What it cannot do yet is answer from the
+lab's real knowledge, and nothing has been evaluated:
 
-- no real documents have been ingested,
-- the sensor database holds only demo data,
-- neither retrieval track can answer a question yet,
+- **no real documents have been ingested** — the corpus is empty,
+- the knowledge graph is placeholder data, and the sensor database holds demo data,
+- both retrieval tracks run, but there is nothing real for them to retrieve,
 - evaluation has not started.
 
-**What Daedalus is.** A fully local, read-only chat assistant for the CO2SorptionDT
-lab-scale CO₂ sorption reactor. It sits on top of the existing PyQt5 SCADA app
-(which logs temperature, pressure, pH, level and NDIR CO₂ to SQLite every 5 s) and
-never replaces it. An operator asks things like *"Is the reactor running fine right
-now?"* or *"What do I do if the NDIR reading drifts?"* and gets an answer traceable
-to a database row or SOP page.
+**What Daedalus is.** A fully local, read-only **standalone chat application**
+for the CO2SorptionDT lab-scale CO₂ sorption reactor. It is not part of the
+reactor or of the existing PyQt5 SCADA app: it reads the sensor data that app
+logs (temperature, pressure, pH, level and NDIR CO₂, every 5 s) and the lab's
+documents, and never writes to either. An operator asks things like *"Is the
+reactor running fine right now?"* or *"What do I do if the NDIR reading
+drifts?"* and gets an answer traceable to a database row, a document page or a
+graph node.
+
+**Scope.** Daedalus is the chatbot only. Sensor ingestion and anomaly detection
+are outside this project; the assistant reads telemetry, it does not detect
+anything.
 
 **Three rules shape the design:**
 
@@ -46,25 +53,25 @@ Counted from `TODO.md` checkboxes (done / total tasks).
 | Milestone | Layer | Done | % | Honest read |
 |---|---|---|---|---|
 | M1 Sensor data layer | 3 | 4 / 5 | 80% | Works on demo data |
-| M2 Knowledge ingestion | 4 | 32 / 37 | 86%\* | Pipeline built; **0 documents ingested** |
-| M3 Deterministic tool layer | 8 | 23 / 32 | 72%\* | Registry built; **sensor tools not written** |
-| M4 Model provider | 6 | 4 / 7 | 57% | Ollama serving works; only 1–2 local models tested |
-| M5 Orchestration | 7 | 2 / 17 | **12%** | Only chat memory and streaming exist |
-| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 3 / 20 | **15%** | Store plumbing only; no retrieval |
-| M7 Observability | 10 | 4 / 10 | 40% | Log DB exists; not wired into a full query flow |
-| M8 Evaluation | — | 0 / 10 | **0%** | Not started |
-| M9 Hardware & model console | 11 | 10 / 13 | 77% | Working ("The Forge") |
-| M10 Dashboard | 9B | 97 / 111 | 87%\* | Working; provenance/source badges not built |
+| M2 Knowledge ingestion | 4 | 34 / 39 | 87%\* | Pipeline built, with categories and rig/reference origin; **0 documents ingested** |
+| M3 Deterministic tool layer | 8 | 31 / 31 | 100% | Sensor tools, both tracks' retrieval, effect/track/argument gates |
+| M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested and the lab machine unconfirmed |
+| M5 Orchestration | 7 | 21 / 23 | 91% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers |
+| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 14 / 24 | 58% | Both tracks answer; Track 2's agent loop built; Track 1's hybrid search, expansion and multi-hop not built |
+| M7 Observability | 10 | 5 / 10 | 50% | Every turn fully logged on one `query_id`; no log viewer yet |
+| M8 Evaluation | — | 0 / 10 | **0%** | Not started — waits on the real corpus |
+| M9 Hardware & model console | 11 | 15 / 18 | 83% | Working ("The Forge") |
+| M10 Dashboard | 9B | 99 / 113 | 88%\* | Working; Ariadne's Thread not built |
 
-\* **Inflated.** Many ticked boxes in M2, M3 and M10 are small setup or UI
-sub-tasks, while the big items in those milestones are still open.
+\* **Inflated.** Many ticked boxes in M2 and M10 are small setup or UI
+sub-tasks.
 
-**Do not quote a single overall percentage.** Supporting infrastructure (M9, M10,
-most of M2's pipeline) is mostly done; the research core (M5 + M6 + M8), which the
-project is assessed on, is roughly 10%.
+**Do not quote a single overall percentage.** The machinery the research needs
+is largely built; the research *result* — the evaluation over real knowledge —
+has not started, and it is what the project is assessed on.
 
-Critical path per `TODO.md`: **M1 → M2 → M3 → M4 → M6**, then M8. M5 and M7 can run
-alongside.
+Critical path now: **real corpus → ingest and rebuild the graph from it → choose
+the model the lab machine allows → freeze both tracks → evaluate once.**
 
 ---
 
@@ -94,8 +101,18 @@ Because it talks to the backend only over HTTP, it proves the AI layer is
 decoupled from the SCADA app — it could be attached to CO2SorptionDT later
 without changing the backend.
 
-**Current limitation.** Answers come from the model alone. Retrieval and sensor
-tools are not yet wired in, so it cannot yet answer from documents or live data.
+**How an answer is made.** The question is normalised, a follow-up is rewritten
+to stand alone, its intent is classified (7 intents), and a control request is
+refused before any tool or model runs. The planner then picks tools by rule —
+sensor reads for data questions, the selected track's retrieval for knowledge
+questions — and their results become a labelled evidence pack (`[S1]` a reading,
+`[D1]` a passage, `[G1]` a graph node). The model writes the answer from that
+pack only, and a validator replaces it with a fallback if it states a number, a
+time or a cause the evidence does not. Citation chips show the evidence behind
+each claim.
+
+**Current limitation.** It answers from demo telemetry and a placeholder graph,
+and the corpus is empty, so knowledge answers are not yet meaningful.
 
 ![Chat interface](screenshots/01-chat.png)
 
@@ -250,18 +267,27 @@ The same chunks feed both retrieval tracks, so the comparison is fair.
 **Why it matters.** Every cited answer depends on this. Tagging each chunk with its
 source is what makes "cited to the exact SOP page" possible.
 
+**Categories and origin.** Each document is uploaded as a manual, SOP,
+troubleshooting/incident record, safety (UAUC — Unsafe Act / Unsafe Condition)
+document, or background reference — and as **this rig's** own or a
+**reference** from another installation (the default). Answers mark every
+passage accordingly, and a rig-specific fact backed only by references must be
+called general guidance from another installation. The origin can be corrected
+at any time without re-ingesting.
+
 **Current limitation.** Built but **empty** — 0 documents ingested, because the
-real corpus hasn't been received.
+corpus hasn't been collected yet.
 
 ![Ingest view](screenshots/10-ingest.png)
 
 **[SCREENSHOT: `10-ingest.png`]** — Blueprints → **Ingest**, showing the pipeline
-screen (empty state is fine — it shows it's ready and waiting for documents).
+screen with the *Import as* and *Whose* (This rig / Reference) choices, and ideally
+one uploaded document with its badge.
 
 ![Knowledge base settings](screenshots/11-knowledge-base.png)
 
 **[SCREENSHOT: `11-knowledge-base.png`]** — Settings → **Knowledge Base**, showing
-chunking settings and the selected embedding model.
+the track switch, Track 1's re-ranking and Track 2's *Agent loop* section.
 
 ---
 
@@ -285,21 +311,26 @@ and one test search result.
 
 ### 3.9 Safe tool registry
 
-**What it is.** The layer the model uses to fetch facts. It has **13 tools** in
-five groups (search, knowledge, session, system, other). Before any tool runs, the
-registry checks:
+**What it is.** The layer every fact is fetched through. It has **33 tools** in
+six groups (sensor, search, knowledge, session, system, other). Before any tool
+runs, the registry checks:
 
 - **Effects** — any tool that writes, uses the network or needs admin rights is
   refused on the chat path, however the prompt is worded.
+- **Track** — only the selected retrieval track's tools can run; the other
+  track's are refused, so each answer comes from one track only.
 - **Arguments** — type, allowed values and ranges are checked; an unknown
   argument is an error, not silently ignored.
 - **Citability** — old conversation text can't be cited as evidence.
 
-**Why it matters.** This is Rules 2 and 3 in code. It is also where the sensor
-tools (`get_live_reading`, `get_trend`) will plug in — a slot
-for them already exists.
+**Simple** mode (the default) lets only the tools that answer questions run —
+the two sensor tools and the selected track's retrieval. **Advanced** opens the
+rest under per-tool switches and capability locks.
 
-**Current limitation.** The two sensor tools are not written yet.
+**Why it matters.** This is Rules 2 and 3 in code: the sensor tools
+(`get_live_reading`, `get_trend`) read through a read-only connection with
+enum-checked columns and a query timeout, and they are the only source of a
+number in an answer.
 
 ![Agent tools](screenshots/13-agent-tools.png)
 
@@ -308,17 +339,30 @@ tool list with their categories and effect labels.
 
 ---
 
-### 3.10 Knowledge graph authoring (Track 2 groundwork)
+### 3.10 Knowledge graph and Track 2's agent loop
 
-**What it is.** Tools for building the knowledge graph used by GraphRAG (Track 2):
-a graph viewer, manual authoring, and an LLM-assisted **proposal queue** where
-suggested nodes and edges are reviewed by a person before they enter the graph.
-Track 2 does not use embeddings, by design.
+**What it is.** The knowledge graph used by GraphRAG (Track 2): sensors, their
+alarm limits, the abnormal conditions those limits signal, the procedures that
+resolve them, and their steps. It is built in Blueprints — a graph viewer,
+manual authoring, and an LLM-assisted **proposal queue** where suggested nodes
+and edges are reviewed by a person before they enter the graph. Track 2 uses
+no embeddings, by design.
 
-**Why it matters.** GraphRAG is half of the headline comparison. Human review of
-proposals keeps the graph accurate.
+Track 2 retrieves in one of two modes, switched in Settings → Knowledge Base:
 
-**Current limitation.** The graph is empty until the corpus arrives.
+- **Agent loop** (default) — the local model picks each hop through the graph
+  and decides when it has enough, under a hard time budget (6 s by default).
+- **Fixed walk** — the schema's fixed chain, sensor → limit → condition →
+  procedure → steps. The baseline the agent is measured against.
+
+**Why it matters.** GraphRAG is half of the headline comparison, and the two
+modes isolate whether the *agent's choices* help, separately from whether a
+graph helps at all.
+
+**Current limitation.** The graph is 34 nodes of placeholder data until the real
+corpus arrives. On the development machine qwen3:1.7b takes 1–7 s per hop and
+often walks to the wrong part of the graph — a finding about the model, to
+revisit once the lab machine's model is chosen.
 
 ![Graph view](screenshots/14-graph.png)
 
@@ -341,8 +385,9 @@ set of views (inventory, trace, authoring), so they are inspected the same way.
 **Why it matters.** Answers must be traceable to their source. This is where an
 examiner can see *why* an answer said what it said.
 
-**Current limitation.** Nothing to show until retrieval is built and the corpus
-is loaded.
+**Current limitation.** Track 2 walks can be replayed now, with the agent's
+verdict after each hop and why it stopped. Track 1 has nothing to replay until
+the corpus is loaded.
 
 ![Retrieval view](screenshots/16-retrieval.png)
 
@@ -356,7 +401,9 @@ acceptable.
 **What it is.** A separate log database (`ai_logs.db`) with seven tables:
 conversation, tool, RAG, model, error, feedback and memory. Every question gets a
 `query_id`, so one question can be traced across all seven tables. Logging can
-never crash a chat response.
+never crash a chat response. Retrieval rows record which track and mode
+answered, the whole graph walk, and whether each retrieved item was this rig's
+document or a reference.
 
 **Why it matters.** Evaluation (latency, groundedness, precision) is computed from
 these logs. It also gives an audit trail of every tool call and model call.
@@ -424,15 +471,13 @@ Save all images to `docs/screenshots/`.
 
 | Area | What's missing | Milestone |
 |---|---|---|
-| Sensor tools | `get_live_reading`, `get_trend` — not written, not even stubs. Also sensor-name whitelist, query timeouts, result-size caps | M3 |
-| Orchestration | Query normaliser, 7-intent classifier, **safety guard** (refuse control requests before any tool/LLM call), tool planner, evidence-pack builder, prompt builder, **response validator** (reject numbers not in evidence), follow-up rewriting | M5 |
-| Track 1 — vector RAG | Top-k retrieval, query expansion, hybrid dense + BM25, cross-encoder re-ranking, compression, multi-hop, `VectorStoreAdapter` | M6 |
-| Track 2 — GraphRAG | Final node/edge schema, the graph itself, `graph_lookup` / `graph_traverse`, agent loop with hop cap and timeout | M6 |
-| Routing | Flag to point the same UI at either track for a fair comparison | M6 |
-| Evaluation | 30–50 query golden set, hand labels, groundedness / hallucination scoring, precision@3/@5, recall, MRR, latency p50/p95, head-to-head table, human panel | M8 |
-| Models | Pull and test Phi-3 Mini 3.8B and Gemma 3 1B; verify inference with networking disabled | M4 |
-| Provenance UI | Source badges (`[Live DB]` `[SOP]` `[Graph]`…), tool-call trace, GraphRAG path visualiser | M10 |
-| PyQt5 tab | Not started — now optional / Phase 2 | — |
+| Knowledge | The real corpus (manuals, SOPs, troubleshooting, safety, background — tagged this rig / reference); the graph rebuilt from it | M2 · M6 |
+| Track 1 — vector RAG | Query expansion, hybrid dense + BM25, contextual compression, multi-hop re-retrieval, `VectorStoreAdapter` | M6 |
+| Evaluation | 30–50 query golden set, hand labels, groundedness / hallucination scoring, precision@3/@5, recall, MRR, latency p50/p95, three comparison runs (Track 1 · Track 2 walk · Track 2 agent), human panel | M8 |
+| Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); verify inference with networking disabled | M4 |
+| Provenance UI | Ariadne's Thread — the per-query trace viewer; source badges | M10 |
+| Validator | A check for prompt rule 9 (rig-specific facts backed only by references) | M5 |
+| PyQt5 tab | Not started — optional / Phase 2 | — |
 
 ---
 
@@ -473,17 +518,24 @@ What this shows so far:
 | Observability | Not covered | Seven log tables with per-query tracing | Research docs had a gap |
 | Evaluation | Local manual labelling | Hybrid: local labels + offline LLM-as-judge over **exported** logs only | Judge never touches the live runtime |
 | Track 2 (GraphRAG) | — | Embedding-free | Keeps the two tracks clearly different for the comparison |
-| Retrieval | Dual-track comparison | **Kept** — still the headline contribution | — |
+| Retrieval | Dual-track comparison | **Kept** — still the headline contribution, now three runs: Track 1, Track 2 fixed walk, Track 2 agent | Separates "a graph helps" from "the agent's choices help" |
+| Scope | Chatbot alongside separate ingestion and anomaly-detection subsystems | **Chatbot only** — reads telemetry, detects nothing | Sensor ingestion and anomaly detection are outside this project |
+| Corpus | Manuals and SOPs | Five categories, each document tagged **this rig** or **reference** | Public literature is useful for concepts but wrong for this rig's specifics, and answers must say which they rest on |
+| Frontend | — | Daedalus is a **standalone chat app**, not a component of the reactor or its SCADA app | It reads the reactor's data over a read-only boundary |
 
 ---
 
 ## 7. Blockers, risks and decisions needed
 
-### Blocked on other people
+### Blocked
 
-- **Document corpus** — manuals and SOPs. Nothing can be ingested without it,
-  which blocks both retrieval tracks and evaluation.
-- **Lab machine RAM / GPU** — gates the final model choice (M4).
+- **Document corpus** — the lab's own manuals and SOPs, plus reference
+  literature. Nothing meaningful can be retrieved without it, which blocks both
+  tracks' real answers and the whole evaluation. Public documents are being
+  collected; the lab's own documents are still needed for rig-specific answers
+  and for ground truth.
+- **Lab machine RAM / GPU** — gates the final model choice (M4), which also
+  decides how well Track 2's agent can drive.
 
 ### Scope decisions still open
 
@@ -493,10 +545,11 @@ What this shows so far:
 
 ### Schedule risk
 
-The remaining work is the research core: sensor tools (M3), orchestration (M5), both
-retrieval tracks (M6) and evaluation (M8). All of it depends on the corpus and real
-sensor data arriving. The evaluation must be run once, after both tracks are frozen,
-so it cannot start early.
+The remaining work is mostly knowledge and measurement, not code: collect and
+ingest the corpus, rebuild the graph from it, choose the model, then freeze both
+tracks and run the evaluation **once**. Tuning after seeing results invalidates
+the comparison, so the evaluation cannot start until everything before it is
+done.
 
 ---
 
@@ -504,7 +557,7 @@ so it cannot start early.
 
 - **Current week and sprint:** _week ___, Sprint ___ — on schedule / behind by ___
 - **Goal of the meeting:** sign-off to proceed / help with a blocker / checkpoint
-- **Main ask (suggested):** help getting the document corpus and a real sensor data
-  sample, since those unblock most of the remaining work.
+- **Main ask (suggested):** the lab's own manuals and SOPs for the rig, and the
+  lab machine's specs — those unblock the evaluation.
 - **Decisions to get from the advisor:** PyQt5 tab in or out; vector-DB bake-off in
   or out.

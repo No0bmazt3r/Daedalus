@@ -13,7 +13,8 @@ over anything else here.
 | Understand the whole project | [`PROJECT.md`](PROJECT.md) |
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
-| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — design only, none built |
+| Report progress (advisor, examiner) | [`STATUS.md`](STATUS.md) — plain-language status with screenshot placeholders |
+| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — The Forge and Labyrinth Blueprints built; Ariadne's Thread designed only |
 | Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
 | Run it | [`../README.md`](../README.md) |
 | Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |

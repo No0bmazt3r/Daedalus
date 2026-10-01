@@ -33,6 +33,18 @@ Unblocks every data-backed answer.
 Offline pipeline. Never runs during a live query.
 
 - [ ] Collect the corpus into `data/documents/{manuals,sops,anomaly_records,uauc_records,other}/`
+- [x] **Document origin — this rig vs reference.** Every document is `rig` (this
+      lab's own) or `reference` (another installation's; the default). Chosen at
+      upload in Blueprints → Corpus, flippable from the badge, read from the
+      manifest at query time so a correction needs no re-ingest (corpus
+      migration 004). Graph nodes carry the same `origin` (Sensor/OperatingMode
+      are `rig` by definition; others `reference` unless marked). Evidence lines
+      say `[THIS RIG]` / `[REFERENCE: another installation]`; prompt rule 9 makes
+      a rig-specific fact backed only by references say so. Logged per retrieval
+      in `rag_logs.retrieved_origins` (audit migration 009). 11 tests
+  - [ ] No validator check for rule 9 yet — it is a prompt rule only. A lexical
+        check (rig-specific sentence citing only REFERENCE labels, with no
+        "general guidance" wording) would make it enforceable
 - [x] **Settings → Search**, the setup surface for finding that corpus. Six
       providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper)
       with an ordered fallback chain, per-provider credentials, a Test probe and
@@ -401,7 +413,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       stream is `understood` → `evidence` → tokens → `validated` → `done`
 - [x] Query normaliser — NFKC-folded match form, invisible characters stripped,
       empty/too-long rejected, language flagged (en/ms/mixed)
-- [x] Intent classifier — 8 intents, rules first with `signals` and a one-line
+- [x] Intent classifier — 7 intents (`anomaly_query` removed with the anomaly scope), rules first with `signals` and a one-line
       reason per decision; the local model only breaks a low-confidence tie and
       can never move a question into or out of `unsafe_control`
 - [x] **Safety guard** — control, data-write and instruction-override requests

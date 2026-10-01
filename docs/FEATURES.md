@@ -32,10 +32,10 @@ Everything below was read off the source, not from memory.
 | Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
 | Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, answers carry citation chips and a *Sources* list from the stored evidence pack, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
-| Agent tools | Built — 33 tools in six categories, including the two sensor tools and Track 2's `graph_walk`. **Simple** (the default) is a runtime mode, not just a view: only the tools that answer questions can run, everything else is refused at dispatch. **Advanced** restores the full list under the per-tool switches and locks. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
+| Agent tools | Built — 33 tools in six categories, including the two sensor tools and Track 2's two retrieval modes, `graph_walk` and `graph_agent`. **Simple** (the default) is a runtime mode, not just a view: only the tools that answer questions can run, everything else is refused at dispatch. **Advanced** restores the full list under the per-tool switches and locks. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
-| Retrieval (M6) | Both tracks are wired into the chat path through the planner. Track 1 needs a current vector index to return anything; Track 2 runs a fixed, logged walk. The advanced Track 1 techniques and Track 2's agent loop are not built |
+| Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything and re-ranks with a cross-encoder. Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's hybrid search, query expansion and multi-hop re-retrieval are not built |
 
 ---
 
@@ -87,10 +87,10 @@ to it.
 | `GET` | `/api/graph/coverage` | Orphans and authoring gaps — every row is a question the graph cannot answer |
 | `GET` | `/api/graph/traversals` | Recent graph-track retrievals, newest first — the replay picker |
 | `GET` | `/api/graph/traversal/{query_id}` | The recorded walk for one query, hop by hop |
-| `GET` | `/api/corpus/documents` | Ingested documents. **Blocked on M2** — answers with `available: false` and the milestone |
-| `GET` | `/api/corpus/documents/{id}/chunks` | Chunks with metadata. Same honest empty state |
+| `GET` | `/api/corpus/documents/{id}/chunks` | Chunks with metadata, including each document's `origin` |
 | `GET` | `/api/corpus/status` | Corpus totals, chunk settings, extraction and embedding readiness — the pipeline panel's one call |
-| `GET`/`POST` | `/api/corpus/documents` | List, or upload. **The POST body is the raw file**, not multipart — one file per request, metadata in the query string, and `python-multipart` stays out of the image |
+| `PATCH` | `/api/corpus/documents/{id}` | Edit `source_type`, `title`, `document_version`, `reactor_mode`, `origin`. Only `origin` and `title` apply without a re-ingest — the response's `note` says which |
+| `GET`/`POST` | `/api/corpus/documents` | List, or upload. Query-string metadata: `source_type` (`manual` · `sop` · `anomaly_record` · `uauc_record` · `other`) and `origin` (`rig` · `reference`, default `reference`). **The POST body is the raw file**, not multipart — one file per request, metadata in the query string, and `python-multipart` stays out of the image |
 | `DELETE` | `/api/corpus/documents/{id}` | Removes the document, its chunks and its vectors. Chroma does not cascade, so the chunk ids come back from the row delete to drive the vector delete |
 | `POST` | `/api/corpus/preview` | Chunk a document at candidate settings and **write nothing** — what `services/chunking` having no I/O buys |
 | `GET`/`PUT` | `/api/corpus/config` | Chunk strategy, size and overlap, committed to `config/corpus_config.json`. Not retroactive: existing chunks keep their boundaries |
@@ -109,7 +109,7 @@ to it.
 | `POST` | `/api/graph/proposals/generate` | Reads the ingested corpus under the graph's fixed schema and queues candidates. Writes nothing to the graph |
 | `POST` | `/api/graph/proposals/{id}/accept` | The only write in the assisted path, and it goes through `graph_authoring` — so an accepted proposal is validated and logged to `graph_edits` exactly like a hand edit |
 | `POST` | `/api/graph/proposals/{id}/reject` | Declines one. Kept, not deleted: what the extractor got wrong is the evidence for how well it works |
-| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can. `PUT` is refused with 409 while the comparison is frozen |
+| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
 | `POST` | `/api/embeddings/verify` | Embed a probe string and record the width the model actually returns. The only call here that runs a model |
@@ -238,6 +238,33 @@ way Chroma keeps its own catalogue. §6.4's safety argument is untouched.
 It is deliberately not in `audit`: deleting a document should take its ingestion
 history with it, and that DELETE must never reach the store whose value is that
 nothing deletes from it.
+
+**Corpus & Authoring vs the Knowledge Vector Store.** The raw browser lists
+`corpus.db` as *Corpus & Authoring* and Chroma as *Knowledge Vector Store*. They
+are the two halves above: `corpus.db` is the **record** — what was uploaded, its
+category and origin, the extracted chunk text, every run, and the graph's edit
+history — and Chroma is the **search index** built from that record. Chroma can
+be rebuilt from `corpus.db` by re-embedding without reading a PDF again; the
+reverse is not true. The knowledge graph itself is in neither — it is
+`config/knowledge_graph.yaml`.
+
+**Every document is this rig's or a reference.** `documents.origin` (corpus
+migration 004) is `rig` for the lab's own manuals and SOPs, `reference` for
+another installation's — other analysers' manuals, other universities' SOPs,
+other pilot plants' incident reports — and defaults to `reference`, so nothing
+counts as this rig's unless somebody said so. It is read from the manifest at
+query time (`corpus_store.origins_for`), not copied onto vector metadata, so
+correcting a document applies from the next question with no re-ingest.
+
+**Corpus categories** (`source_type`), what retrieval can filter on:
+
+| Value | Shown as | Holds |
+|---|---|---|
+| `manual` | Manual | Instrument and equipment manuals — principles, calibration, maintenance, troubleshooting tables |
+| `sop` | SOP | Step-by-step procedures — start-up, shutdown, sampling, calibration, cylinder handling |
+| `anomaly_record` | Troubleshooting / incident | What goes wrong, why, and the fix — foaming, degradation, heat-stable salts, corrosion, case studies |
+| `uauc_record` | Safety (UAUC) | Unsafe Act / Unsafe Condition material — SDSs, hazard guidance, PPE, lab safety rules |
+| `other` | Other / background | Handbooks, review papers, measurement theory, typical operating ranges |
 
 Paths resolve centrally in `db/paths.py`, overridable by environment:
 `DAEDALUS_DATA_DIR`, `DAEDALUS_LOG_DIR`, `DAEDALUS_PREFS_DB`,
@@ -690,11 +717,33 @@ value, so a spike survives. A historical reading is the nearest row within ±5
 minutes, returned with its offset; the latest reading is marked `stale` with its
 age once the feed has stopped.
 
-**`graph_walk`** is Track 2's baseline retrieval: entry search, then the
-schema's fixed path (anomaly type → resolving SOP → its steps; sensor → its
-thresholds) as **one** call, so the walk is one `rag_logs` row with the whole
-`traversal_path` — the shape Blueprints replays. M6's agent loop will be
-measured against it.
+**Track 2 has two retrieval modes**, chosen in Settings → Knowledge Base →
+*Agent loop* (`rag_config.graph.mode`) and frozen with the track. Both find
+entry points the same way — authored aliases, no embeddings — so the only
+difference is who decides where to walk, which is the within-track comparison.
+
+- **`graph_walk`** — the baseline. The schema's whole causal chain in a fixed
+  order: sensor → `HAS_THRESHOLD` → `TRIGGERS` → `RESOLVED_BY` → `CONTAINS`, each
+  hop walking from every node of its start type gathered so far (at most 4). It
+  is deliberately not clever.
+- **`graph_agent`** — the agent loop (`services/graph_agent.py`), the default.
+  The committed **local** model is shown the question, what has been gathered,
+  and a numbered list of the moves the schema allows from it, and replies with
+  a move number (0 to stop) plus a verdict: does what it has already answer the
+  question? The verdict is attached to the hop it judged, and "sufficient" ends
+  the loop. Replies are checked before anything is acted on — an unknown move is
+  rejected and recorded, and two in a row end the loop. Bounded by a step limit
+  (≤ 4) and a **hard wall-clock budget** (default 6 s): each model call runs on
+  a worker thread and is abandoned at the deadline, because an HTTP read timeout
+  does not bound a cold model load. With no local model installed the fixed walk
+  runs instead, recorded as `stop_reason: "no_local_model"`.
+
+Either way the retrieval is **one** call, so it is one `rag_logs` row with the
+whole `traversal_path` — the shape Blueprints replays — carrying `mode`,
+`stop_reason`, `model`, `model_calls` and any `rejected` replies. On the
+development machine qwen3:1.7b takes 1–7 s a step and often walks to operating
+modes for "what do I do?" questions; that is recorded in TODO M6 as a model
+finding, not tuned away.
 
 **Effects, and the surface gate.** Every tool declares what it touches
 (`read_corpus`, `read_graph`, `read_transcript`, `read_system`, `clock`,
@@ -868,6 +917,16 @@ run") ends the turn with a clarifying question.
 `[D1]` a document passage, `[G1]` a graph node — each tool's block still fenced
 by `render_for_prompt()`. The model must cite labels; the validator checks every
 cited label exists.
+
+**Each passage and node says whose it is.** Document lines carry `[THIS RIG]` or
+`[REFERENCE: another installation]`; graph nodes carry the same, except sensors
+and operating modes, which are the rig's by definition. Prompt rule 9: reference
+evidence may explain concepts and causes freely, but a rig-specific fact — a
+setpoint, limit, step, valve or sequence — supported only by references must be
+called general guidance from another installation, to be confirmed against the
+lab's own procedure. That rule is prompt-only; the validator does not check it
+yet. Each retrieval logs a per-item origin in `rag_logs.retrieved_origins`
+(audit migration 009), aligned with `retrieved_chunk_ids`.
 
 **The validator checks numbers against what the model was shown this turn.**
 Every quantity in the answer must match a number in the rendered evidence at
@@ -1763,7 +1822,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **116 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time) and the simple view's tool list. Everything else is still verified by direct API calls |
+| Backend | **143 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins). Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

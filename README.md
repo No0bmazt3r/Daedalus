@@ -177,7 +177,7 @@ sensor data of record. **Settings → Databases** shows all five live, and
 | **Sensor** | SQLite | **read-only** | IoT telemetry written by the SCADA subsystem |
 | **Audit** | SQLite | read/write | chat · tool-call · retrieval · model · error · feedback · memory logs |
 | **Chat** | SQLite | read/write | conversation sessions and messages — the assistant's memory |
-| **Vector** | ChromaDB | read/write | embedded SOP/manual chunks for RAG |
+| **Vector** | ChromaDB + SQLite | read/write | embedded manual, SOP, troubleshooting and safety chunks (Chroma), and the record of what was ingested — each document's category and **this rig / reference** origin (`corpus.db`) |
 | **Prefs** | SQLite | read/write | UI state, kept out of the browser |
 
 The read-only boundary is the SQLite driver's, not a convention:
@@ -273,7 +273,7 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | Area | What works |
 |---|---|
 | **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat interface** | Message list, composer, model selector, incognito — wired end to end. Replies stream token by token from a real local model and survive a reload mid-answer. *No retrieval or tool-calling yet, so it answers from the conversation alone* |
+| **Chat interface** | Message list, composer, model selector, incognito — wired end to end. Replies stream token by token from a real local model, survive a reload mid-answer, and carry citation chips and a *Sources* list showing exactly which reading, passage or graph node backs each claim |
 | **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen |
 | **Dynamic Models**| Unified `/api/system/models` querying Ollama + cloud baselines, with per-model capability badges (reasoning · tools · vision). Cloud models are selectable but marked, and their turns are logged apart |
 | **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
@@ -289,13 +289,13 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` |
 | **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
 | **Model manager** | What is installed, badged SLM or LLM, with per-model usage: runs split by chat and benchmark, token totals, and latency as mean / p50 / p95 |
-| **Chat** | `POST /api/chat` resolves the committed model, replays conversation history, streams the answer from Ollama and logs the call. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged `chat_cloud` and kept out of every production figure |
+| **Chat** | `POST /api/chat` runs the whole pipeline: understand the question, refuse control requests, plan tools by rule, read sensors and the selected track's knowledge, build a labelled evidence pack, stream the answer, and replace it with a fallback if it states a number, time or cause the evidence does not. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged apart |
 | **Accessible theming** | Every colour derives from the selected theme and is floored to WCAG AA: body, muted, accent-as-text, on-accent labels and the three status colours. All 16 shipped themes pass on every role, and custom themes run through the same derivation |
 | **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Every panel is built — Databases reports health only |
 | **Keyboard shortcuts** | 11 rebindable actions across navigation, conversations and windows. Click a chord, press keys, Enter saves and Escape abandons — nothing commits on the first keypress. Duplicates are shown with the rule that resolves them, unbinding is Backspace, and AltGr is not mistaken for Ctrl+Alt |
 | **Appearance** | Nine switches over the app's own furniture — sidebar brand, New, core modules, chat list, data stores, bottom bar; welcome message, incognito button, full-width transcript. Chrome only: nothing switchable can hide an answer, a citation or a refusal |
 | **Web search** | Six providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper) with an ordered fallback chain, per-provider credentials and a live probe. A **setup** surface for sourcing corpus documents — SearXNG ships as an optional Docker container tuned for technical literature |
-| **Agent tools** | 29 tools in five categories behind a dispatcher that checks declared effects, validates arguments and stamps result integrity before the function is entered. Every call writes a `tool_logs` row. Untrusted output is fenced with a per-call nonce before it reaches a prompt |
+| **Agent tools** | 33 tools in six categories behind a dispatcher that checks declared effects, the selected retrieval track and the arguments before the function is entered. Every call writes a `tool_logs` row. **Simple** mode (default) lets only the answering tools run; **Advanced** opens the rest under per-tool switches and capability locks |
 | **Tool policy** | Two axes, deliberately separate: four capability locks (`network_egress` · `write` · `admin` · `execute_code`) that say what the machine may do while a result is recorded, and a per-tool switch that says which tools the model is offered. A switched-off tool leaves the schema list and is refused if asked for by name. Every parameter carries a working example, so a trial run is one click |
 | **System maintenance** | Settings → System: a filterable viewer over the backend's own rotating log, a credential-free backup/restore, and a per-category Danger Zone with typed confirmation. The sensor database is absent from all three by rule |
 | **Container control** | Settings → Search can start and stop the SearXNG container, when `DOCKER_SOCKET` is set. Off by default — the socket is a host-level privilege, and the agent's `bash` tool runs as the same user |
@@ -306,25 +306,25 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Migrations** | Numbered SQL files, applied in a transaction at startup, with drift and gap detection |
 | **Deployment** | Single-image build + ChromaDB, one-command startup, and a dev overlay that runs the same image with hot reload |
 
+### Retrieval
+
+| | Status |
+|---|---|
+| **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma, as one recorded run. Each document has a category (manual · SOP · troubleshooting/incident · safety (UAUC) · background) and an origin — **this rig** or **reference** (another installation), defaulting to reference |
+| **Track 1 — vector RAG** | Top-k with category filtering and cross-encoder re-ranking |
+| **Track 2 — graph RAG** | Embedding-free: entry by authored aliases, then either the **agent loop** (the local model picks each hop and decides when it has enough, under a hard time budget) or the **fixed walk** it is measured against |
+| **Provenance** | Every passage and node is marked this rig or reference; an answer that rests only on a reference for a rig-specific fact must say so |
+
 ### Not built yet
 
-Knowledge ingestion, both retrieval tracks, the orchestration flow that would
-call the tool layer, and the evaluation harness.
-
-The tool layer itself **is** built — 29 tools behind a gate that checks declared
-effects, validates arguments and logs every call — but nothing calls it during
-an answer yet. It is exercised from Settings → Agent Tools and by `/api/tools`,
-not by the chat path.
-
-Chat answers now: the serving path is wired, so a message goes to a real local
-model, streams token by token, and the transcript persists. A generation
-outlives the request that started it, so reloading mid-answer picks it back up.
-What it does *not* do yet is retrieve — there is no evidence pack and no
-tool-calling, so it answers from the conversation alone.
+- **The real knowledge.** No documents are ingested and the graph is placeholder data.
+- **Evaluation** — the query set, ground truth, scoring, and the three comparison runs (Track 1 · Track 2 walk · Track 2 agent).
+- Track 1's hybrid search, query expansion, compression and multi-hop re-retrieval.
+- Ariadne's Thread, the provenance viewer.
 
 ---
 
-## How it will work
+## How it works
 
 ```
 User question
@@ -352,12 +352,14 @@ query set with an identical model, so the *architecture* is the only variable:
 |---|---|---|
 | **Retrieval** | Vector similarity over chunks | Multi-hop traversal of a knowledge graph |
 | **Store** | ChromaDB | NetworkX (Kùzu as a stretch) |
-| **Shape** | One retrieval → one generation | Agent loop: retrieve → assess → re-retrieve |
+| **Shape** | One retrieval → one generation | Agent loop: the model picks each hop and judges when it has enough — or a fixed walk, as the within-track baseline |
 | **Strength** | Fast, simple, strong single-hop | Explicit relationships, genuine multi-hop |
 | **Cost** | Weak on multi-hop | Higher latency, silent gaps when a relation was never authored |
 
 Measured on groundedness, retrieval precision/recall, latency (mean + p95),
-multi-hop success and refusal correctness.
+multi-hop success and refusal correctness — over three runs of the same
+questions: Track 1, Track 2's fixed walk, and Track 2's agent loop. Only the
+selected track answers any question; the comparison is between runs.
 
 > Traditional RAG matching GraphRAG at a fraction of the latency would be a
 > perfectly valid — arguably more interesting — result. The experiment is

@@ -228,10 +228,10 @@ evaluation harness are administrative. They never sit in the live query path.
 | 2 | SCADA acquisition | 2 | Pre-existing |
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
 | 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); waiting on the real corpus |
-| 5 | Retrieval — vector + graph | 3 | **Wired into chat** — Track 1 top-k over the current index, Track 2 a fixed logged walk (`graph_walk`), gated by the selected track. Advanced Track 1 techniques and Track 2's agent loop not built |
+| 5 | Retrieval — vector + graph | 3 | **Wired into chat**, one track at a time — Track 1 top-k over the current index with metadata filtering and cross-encoder re-ranking; Track 2 the agent loop (`graph_agent`) or the fixed walk it is measured against (`graph_walk`). Every result marked this rig or reference. Track 1's hybrid search, query expansion, compression and multi-hop not built |
 | 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
 | 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback, background summariser; citations shown in the chat |
-| 8 | Deterministic tool layer | 3 | **Built** — the three sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
+| 8 | Deterministic tool layer | 3 | **Built** — the two sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
 | 9A | PyQt5 chat tab | 4 | Deferred / optional |
 | 9B | React web dashboard | 4 | **Partially built** — see §11 |
 | 10 | Observability & evaluation | Support | **Logging wired** — every chat turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags; evaluation harness not built |
@@ -249,14 +249,14 @@ Both tracks share Zones 1/2/4 and all deterministic sensor tools. They diverge
 ChromaDB, local embeddings, top-k cosine retrieval. Advanced techniques layered
 on top (all from `architecture/05`):
 
-| Technique | Purpose |
-|---|---|
-| Metadata-filtered retrieval | Narrow by `source_type`, `reactor_mode`, `document_version` |
-| Query expansion | LLM rewrites the query with lab synonyms before searching |
-| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology |
-| Cross-encoder re-ranking | Re-score top-N locally before synthesis |
-| Contextual compression | Strip irrelevant sentences to save context window |
-| Multi-hop | Loop back and re-retrieve if evidence is insufficient |
+| Technique | Purpose | Status |
+|---|---|---|
+| Metadata-filtered retrieval | Narrow by `source_type`, `reactor_mode`, `document_version` | **Built** (`source_type`) |
+| Query expansion | LLM rewrites the query with lab synonyms before searching | Not built |
+| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | Not built |
+| Cross-encoder re-ranking | Re-score top-N locally before synthesis | **Built** — on by default, frozen with the track |
+| Contextual compression | Strip irrelevant sentences to save context window | Not built |
+| Multi-hop | Loop back and re-retrieve if evidence is insufficient | Not built |
 
 ### Track 2 — Agentic GraphRAG (comparison arm)
 
@@ -277,7 +277,37 @@ its `SOPStep`s, answering each half structurally.
 **Honest risks to report:** higher latency (works against the <3s target), silent
 failure when a relationship was never authored, and meta-reasoning steps
 ("is this enough?") that sub-2B SLMs may simply be too small to do well. That
-last one is itself a legitimate finding.
+last one is itself a legitimate finding — and an observed one: on the
+development machine qwen3:1.7b takes 1–7 s per step and often walks to
+operating modes when the question needs a procedure.
+
+**Track 2 is embedding-free.** Entry points come from aliases authored on each
+node, with a fuzzy fallback — never from vector similarity. If both tracks used
+embeddings, the result could not separate "the graph helped" from "the
+embeddings helped". Track 1 is pinned to an embedding model; Track 2 to none.
+
+### Track 2's two modes — the within-track comparison
+
+Track 2 retrieves in one of two modes (`rag_config.graph.mode`, Settings →
+Knowledge Base → *Agent loop*), frozen with the track:
+
+| Mode | Tool | Who decides the walk |
+|---|---|---|
+| `agent` (default) | `graph_agent` | The committed **local** model, one hop at a time: shown the question, what it has gathered, and a numbered list of schema-legal moves, it picks a move or stops, and judges after every hop whether it has enough |
+| `walk` | `graph_walk` | Nobody — the schema's fixed causal chain: sensor → threshold → anomaly type → SOP → steps |
+
+Both enter the graph the same way, so the only difference is who decides where
+to walk. That isolates the *agentic* claim: running the query set once in each
+mode says whether the model's choices beat a fixed path, separately from
+whether a graph beats vectors at all.
+
+The agent is bounded by a step limit (≤ 4, the schema's longest chain) and a
+**hard wall-clock budget** (default 6 s, 1–30 s): each model call runs on a
+worker thread and is abandoned at the deadline, so a cold model load cannot hold
+the turn. Replies are validated before they are acted on; unusable ones are
+rejected and recorded. With no local model the fixed walk runs, recorded as a
+fallback. Each walk logs `mode`, `stop_reason`, `model_calls`, `rejected` and a
+per-hop sufficiency verdict in `rag_logs.traversal_path`.
 
 ### How each arm gets its knowledge
 
@@ -290,6 +320,43 @@ surfaces** under Rule 5 — they write, so neither is ever exposed to the model.
 | Surface | Blueprints → Corpus → **Build** | Blueprints → **Build** |
 | Source of truth | ChromaDB + `corpus.db` manifest | `config/knowledge_graph.yaml` |
 | Log | `ingest_events`, per stage | `graph_edits`, including refusals |
+
+### Knowledge provenance — this rig vs reference
+
+The corpus mixes the lab's own documents with public literature: other
+analysers' manuals, other universities' SOPs, other pilot plants' incident
+reports. Their **concepts** transfer — foaming, heat-stable salts and NDIR drift
+are the same chemistry and physics on any amine rig. Their **specifics** do not —
+another plant's setpoints, valve tags and step order can be wrong here.
+
+So every document is `rig` (this lab's own) or `reference` (another
+installation's), chosen at upload and defaulting to `reference`: nothing counts
+as this rig's unless somebody said so. Graph nodes carry the same `origin`;
+`Sensor` and `OperatingMode` are the rig's by definition, every other node is a
+reference unless marked. Evidence lines say `[THIS RIG]` or `[REFERENCE: another
+installation]`, and prompt rule 9 requires a rig-specific fact supported only by
+references to be called general guidance, to be confirmed against the lab's own
+procedure. `rag_logs.retrieved_origins` records the split per retrieval, so the
+evaluation can report how often answers rested on this rig's documents.
+
+**Evaluation implication:** ground-truth answers for rig-specific questions must
+come from `rig` documents. A reference document answering a setpoint question
+"correctly" for another plant is not a correct answer here.
+
+### Corpus categories
+
+| `source_type` | Holds |
+|---|---|
+| `manual` | Instrument and equipment manuals — principles, calibration, maintenance, troubleshooting tables |
+| `sop` | Step-by-step procedures — start-up, shutdown, sampling, calibration, cylinder handling |
+| `anomaly_record` | Troubleshooting and incident literature — what goes wrong (foaming, degradation, heat-stable salts, corrosion), why, and the fix |
+| `uauc_record` | Unsafe Act / Unsafe Condition — SDSs, hazard guidance, PPE, lab safety rules |
+| `other` | Background — handbooks, review papers, measurement theory, typical operating ranges |
+
+Category and origin are independent: an SDS can be the lab's own copy (`rig`)
+or a supplier's generic one (`reference`).
+
+### Assisted authoring
 
 Track 2's authoring has an **assisted** first step, and its shape matters for the
 comparison's validity. A local model reads the *ingested corpus* and proposes
@@ -337,6 +404,12 @@ set; same machine, run sequentially; same hand-labelled ground truth. **Also
 held constant by construction:** each arm sees only its own retrieval tools
 (§7.2), and both are recorded by one writer at the dispatch boundary.
 
+**Three runs of the same query set:** Track 1; Track 2 in `walk` mode; Track 2 in
+`agent` mode. Track 1 vs Track 2 asks whether graph structure beats vector
+similarity; `walk` vs `agent` asks whether the model's hop choices beat a fixed
+path. Only the selected track's tools run in any answer — the comparison is made
+between runs, never inside one.
+
 Stratify the query set (~30–50 queries, 6–10 per category):
 
 | Category | Hypothesis |
@@ -348,7 +421,9 @@ Stratify the query set (~30–50 queries, 6–10 per category):
 | Out-of-corpus (must refuse) | Tests groundedness discipline |
 
 Metrics: groundedness/hallucination rate, retrieval precision & recall, mean and
-p95 latency, multi-hop success rate, refusal correctness, hop count.
+p95 latency, multi-hop success rate, refusal correctness, hop count — and, for
+the agent, its stop reasons and rejected replies, plus for every run the share
+of retrieved items that were this rig's documents.
 
 **Sequencing discipline:** build Track 1 → build Track 2 → **freeze both** → run
 the evaluation once without further tuning. Tweaking a track after seeing its
@@ -426,6 +501,12 @@ history (`graph_edits`) and its proposal queue, for the same reason — both are
 operational records *about* the knowledge layer rather than the knowledge
 itself, which stays in Chroma and in the authored YAML.
 
+In the raw store browser the two halves appear as **Corpus & Authoring**
+(`corpus.db` — the record: documents with their category and origin, chunk
+text, runs, graph edit history) and **Knowledge Vector Store** (Chroma — the
+search index built from that record). Chroma can be rebuilt from `corpus.db` by
+re-embedding; the reverse is not true.
+
 Verified: the read-only connection rejects INSERT, UPDATE, DELETE and DROP at
 the driver, while reads continue to work.
 
@@ -481,9 +562,13 @@ record, because they are different files.
 |---|---|---|
 | `get_live_reading` | `sensor`, optional `timestamp` | value, unit, timestamp, mode |
 | `get_trend` | `sensor`, `start_time`, `end_time`, `aggregation`, optional `mode_filter` | aggregated value, unit, sample count, optional series (≤100 points) |
-| `rag_retrieve` | `query`, `top_k`, `source_types`, optional `reactor_mode` | chunks with text, score, source file, section, page |
+| `search_corpus` (Track 1's `rag_retrieve`) | `query`, `top_k`, `source_type` (`manual` · `sop` · `anomaly_record` · `uauc_record` · `other` · `any`) | chunks with text, distance, re-rank score, source file, section, page, **origin** |
+| `graph_agent` (Track 2, `agent` mode) | `query`, `limit` | gathered nodes and edges, entry points, and the whole recorded walk — budget and step limit come from `rag_config`, not the caller |
+| `graph_walk` (Track 2, `walk` mode) | `query`, `limit` | the same shape, from the fixed path |
 
-Track 2 adds `graph_lookup`, `graph_traverse`, `graph_query_natural`.
+Underneath, Track 2 is built from `graph_lookup`, `graph_traverse` and
+`graph_query_natural`; the planner calls exactly one retrieval tool per
+question — whichever the selected track and mode name.
 
 **The two arms' retrieval tools are mutually exclusive at runtime.** §5 is a
 controlled comparison, and an arm that can reach the other arm's retrieval is
@@ -698,47 +783,41 @@ Trust comes from visible reasoning, not a black box:
 
 ## 11. Current implementation status
 
+*As of 2026-10-01. `TODO.md` is the item-level record; this is the summary.*
+
 ### Built and working
 
 | Area | Detail |
 |---|---|
-| **React frontend shell** | Vite 8 · React 19 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat UI** | Message list, auto-growing composer, model selector, incognito mode, typewriter greeting — wired to `POST /api/chat`, streaming token by token, with both turns persisted. It answers from conversation history alone: retrieval and tool-calling are the part that is missing, not the transport |
-| **Theme system** | 16 themes; live customisation of 7 base + 14 per-zone colours; derived syntax ramps; complementary-harmony generator; font/density/text-scale; frosted glass; import/export; up to 8 saved custom themes |
-| **Typography** | Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted so the UI never reaches a font CDN; every font path in the app resolves through one CSS variable |
-| **Background effects** | 13 options (11 canvas-animated) with colour/intensity/size. Pointer reactivity was built and then removed — a background that answers the cursor competes with whatever the cursor is doing (`FEATURES.md` §5) |
-| **Settings modal** | Sectioned nav, incognito toggle, model defaults |
-| **Settings** | Registry-driven nav, keyword search with keyboard navigation, drag-resizable + collapsible rail with full ARIA, layout persisted server-side. Every declared panel is implemented |
-| **Shortcuts** | 11 rebindable actions; the chord is previewed before it commits, duplicates are shown with the rule that resolves them, and AltGr is not mistaken for Ctrl+Alt. Stored server-side like every other preference |
-| **Appearance** | 9 switches over the app's own chrome, grouped by region with a per-section reset. Chrome only — nothing switchable can hide an answer, a citation, a warning or a refusal |
-| **FastAPI backend** | App skeleton, health endpoint, preference store, CORS, `theme.css` endpoint for flash-free first paint, `GET /api/system/databases`, chat session API |
-| **Data stores** | All five wired: read-only sensor accessor + dev seeder, 7-table audit log store with `query_id` tracing, chat transcript store, Chroma client (server + embedded), prefs |
-| **Conversation memory** | Sessions and transcripts with `seq`-ordered messages, auto-titling, archive, incognito; token-budgeted context assembly with a rolling summary (§7.4) |
-| **Schema migrations** | Numbered SQL files per store, applied once in a transaction at startup; checksum-drift, gap-numbering, missing-file and bad-SQL rollback all refuse or roll back |
-| **Persistence** | All UI preferences live server-side in SQLite — deliberately **nothing in browser storage** |
+| **Chat** | `POST /api/chat` runs the whole §7.1 flow and streams tokens over SSE; both turns persist, and the answer carries citation chips and a *Sources* list from the stored evidence pack |
+| **Orchestration** | All 11 steps: normalise, rewrite follow-ups, classify (7 intents), safety guard, deterministic planning, tool execution, labelled evidence pack, prompt, stream, validate (numbers, times, causes, control claims → fallback), log |
+| **Sensor data** | Read-only store (`mode=ro`) with a demo seeder; `get_live_reading` and `get_trend` with enum-checked columns, timeouts and downsampling |
+| **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); per-document category and rig/reference origin. **No real documents ingested yet** |
+| **Track 1** | Chroma top-k with `source_type` filtering and cross-encoder re-ranking; refuses an index built by a different embedding model |
+| **Track 2** | Hand-authored 34-node graph (placeholder data until the real corpus), editable in Blueprints with an assisted proposal queue; the agent loop and the fixed walk, switchable; replay of every walk |
+| **Tool layer** | 33 tools in six categories behind effect, track and argument gates; Simple/Advanced mode enforced at dispatch |
+| **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins |
+| **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit |
+| **Frontend** | React dashboard: theming, settings, store browser, Blueprints (corpus, graph, coverage, authoring, replay) |
+| **Tests** | 143 backend `unittest` cases; the frontend has none |
 
-### Not started
+### Not built
 
-Knowledge ingestion, both retrieval tracks, the orchestration flow, and the
-evaluation harness.
+- **Real knowledge.** The corpus is empty and the graph is placeholder data —
+  this blocks meaningful answers from either track and the whole evaluation.
+- **Track 1 extras:** hybrid BM25 search, query expansion, contextual
+  compression, multi-hop re-retrieval.
+- **Evaluation (§9):** golden query set, ground truth, scoring and latency
+  harness, the three comparison runs.
+- **Model choice (§8):** the SLM tier is not smoke-tested and the lab machine's
+  specs are unconfirmed; qwen3:1.7b drives Track 2's agent poorly.
+- **Ariadne's Thread** — the provenance viewer (`MODULES.md`).
+- A validator check for prompt rule 9 (reference-only rig specifics).
 
-The deterministic tool layer is **built** — 29 tools in five categories behind a
-gate that checks declared effects, validates arguments, stamps result integrity
-and writes a `tool_logs` row per call. What is missing is a caller: nothing
-reaches it during an answer, so it is exercised from Settings → Agent Tools and
-over `/api/tools`, not from the chat path.
-
-Chat answers now. The serving path resolves the committed model, replays
-conversation history and returns a real local completion, logging what the call
-cost. What is missing is everything that makes the answer *grounded*: there is
-no evidence pack, no tool-calling, and therefore nothing yet to be grounded
-against. The §9.2 targets that depend on retrieval — precision@5, hallucination
-rate — have nothing to measure.
-
-> **Honest framing:** what exists today is a polished Zone 4 client, a Zone 3
-> shell that can now hold a conversation with a local model, and the admin
-> console that chose it. The retrieval layer — the actual FYP contribution — is
-> still ahead.
+> **Honest framing:** the pipeline is built end to end and runs on demo
+> telemetry and a placeholder graph. What is missing is the lab's real
+> documents, the evaluation that measures the two tracks, and the model choice
+> the lab machine allows.
 
 ---
 

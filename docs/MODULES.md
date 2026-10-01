@@ -464,23 +464,29 @@ a document to see its chunks with their metadata (`source_type`,
 `reactor_mode`, `document_version`) and the text as the retriever sees it.
 
 **B. The graph (Layer 5, Track 2).** The hand-authored knowledge graph from
-§5 — 7 node types and 7 edge types:
+§5 — 6 node types and 5 edge types:
 
 | Nodes | Edges |
 |---|---|
-| `Sensor` · `OperatingMode` · `Threshold` · `SOPDocument` · `SOPStep` · `AnomalyRecord` · `AnomalyType` | `MONITORED_IN` · `HAS_THRESHOLD` · `TRIGGERS` · `RESOLVED_BY` · `CONTAINS` · `INSTANCE_OF` · `INVOLVES` |
+| `Sensor` · `OperatingMode` · `Threshold` · `SOPDocument` · `SOPStep` · `AnomalyType` | `MONITORED_IN` · `HAS_THRESHOLD` · `TRIGGERS` · `RESOLVED_BY` · `CONTAINS` |
 
-Browse it as a list, search it, and see any node with its neighbours.
+Browse it as a list, search it, and see any node with its neighbours. Each
+node shows whether it is **this rig's** knowledge or a **reference** from
+another installation (`origin`; sensors and operating modes are the rig's by
+definition), and each corpus document carries the same badge, set at upload and
+flippable without a re-ingest.
 
 ### 3.2 The feature that earns the module: traversal replay
 
 A static graph browser is mildly useful. **Replaying a traversal is the
 deliverable.**
 
-Take any `query_id` whose `rag_logs.track = 'graph'`. That row already records
-`retrieved_chunk_ids` and `hop_count`. Replay the walk the agent actually took —
-highlighting each node and edge in sequence, hop by hop, with the agent's
-sufficiency check between steps:
+Take any `query_id` whose `rag_logs.track = 'graph'`. That row records
+`retrieved_chunk_ids`, `hop_count` and the whole `traversal_path` — including
+which mode walked it (`agent` or the fixed `walk`), why it stopped, and any
+replies the agent gave that could not be acted on. Replay the walk actually
+taken — highlighting each node and edge in sequence, hop by hop, with the
+agent's sufficiency check between steps:
 
 ```
 hop 1   Sensor(pressure) ──HAS_THRESHOLD──▶ Threshold(P > 2.5 barg)
@@ -488,10 +494,12 @@ hop 1   Sensor(pressure) ──HAS_THRESHOLD──▶ Threshold(P > 2.5 barg)
         ▸ sufficient? no — no procedure found yet
 
 hop 2   both Thresholds ──TRIGGERS──▶ AnomalyType(thermal_runaway_risk)
-        ▸ sufficient? no — need the procedure and the history
+        ▸ sufficient? no — need the procedure
 
 hop 3   AnomalyType ──RESOLVED_BY──▶ SOPDocument(Emergency_Cooldown.pdf)
-        AnomalyType ◀──INSTANCE_OF── AnomalyRecord ×3  (Aug 14, Sep 02, Sep 11)
+        ▸ sufficient? no — need its steps
+
+hop 4   SOPDocument ──CONTAINS──▶ SOPStep ×4
         ▸ sufficient? yes
 ```
 

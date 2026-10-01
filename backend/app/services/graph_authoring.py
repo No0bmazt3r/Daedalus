@@ -442,20 +442,24 @@ _FIELDS: dict[str, list[dict[str, str]]] = {
         {"name": "operator", "hint": "> < >= <= =="},
         {"name": "value", "hint": "The number it compares against"},
         {"name": "applies_mode", "hint": "OperatingMode id, or blank for all modes"},
+        {"name": "origin", "hint": "rig if this lab's own; blank = reference (another installation)"},
     ],
     "SOPDocument": [
         {"name": "label", "hint": "Display name"},
         {"name": "filename", "hint": "Joins to chunk metadata's source_file — must match a real document"},
         {"name": "version", "hint": "Document version"},
+        {"name": "origin", "hint": "rig if this lab's own; blank = reference (another installation)"},
     ],
     "SOPStep": [
         {"name": "label", "hint": "Display name"},
         {"name": "step_number", "hint": "Order within the procedure"},
         {"name": "description", "hint": "What to do"},
+        {"name": "origin", "hint": "rig if this lab's own; blank = reference (another installation)"},
     ],
     "AnomalyType": [
         {"name": "label", "hint": "Display name"},
         {"name": "description", "hint": "What this class of anomaly is"},
+        {"name": "origin", "hint": "rig if this lab's own; blank = reference (another installation)"},
     ],
 }
 

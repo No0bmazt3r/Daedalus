@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .. import agent_tools
+from .. import knowledge_graph as kg
 from . import numbers, timeparse
 
 RETRIEVAL_TOOLS = ("search_corpus", "graph_walk", "graph_agent", "search_graph")
@@ -47,6 +48,11 @@ NO_DOCUMENTS = (
 
 # A passage long enough to carry a procedure, short enough that five fit.
 _PASSAGE_CHARS = 700
+# How a passage or node says whose it is. Words the model can repeat, in
+# capitals so a small model does not read past them; rule 9 of the prompt says
+# what to do with REFERENCE.
+_ORIGIN_MARK = {"rig": "[THIS RIG]", "reference": "[REFERENCE: another installation]"}
+
 # Points of a series shown to the model. The tool keeps up to 100.
 _SERIES_SHOWN = 12
 
@@ -214,23 +220,30 @@ class _Builder:
             if c.get("section_title"):
                 where += f" §{c['section_title']}"
             text = " ".join(str(c.get("text") or "").split())[:_PASSAGE_CHARS]
-            lines.append(self.add("D", "document", "search_corpus", f"{where}: {text}", {
+            origin = c.get("origin") or "reference"
+            lines.append(self.add("D", "document", "search_corpus", f"{where} {_ORIGIN_MARK[origin]}: {text}", {
                 "type": "document", "chunk_id": c.get("chunk_id"), "source_file": c.get("source_file"),
                 "page_number": c.get("page_number"), "section_title": c.get("section_title"),
-                "distance": c.get("distance"), "rerank_score": c.get("rerank_score"),
+                "distance": c.get("distance"), "rerank_score": c.get("rerank_score"), "origin": origin,
             }))
         return lines
 
     def _node(self, node: dict[str, Any], tool: str) -> str:
-        skip = {"id", "type", "label", "aliases", "column", "description"}
+        skip = {"id", "type", "label", "aliases", "column", "description", "origin"}
         attrs = "; ".join(f"{k}: {v}" for k, v in node.items() if k not in skip and not isinstance(v, (list, dict)))
+        origin = kg.origin_of(node)
         text = f"{node.get('type')} \"{node.get('label')}\""
+        # Sensors and modes are the rig's by definition; marking every one would
+        # spend tokens saying what the type already says.
+        if node.get("type") not in kg.RIG_BY_DEFINITION:
+            text += f" {_ORIGIN_MARK[origin]}"
         if node.get("description"):
             text += f": {' '.join(str(node['description']).split())}"
         if attrs:
             text += f" ({attrs})"
         return self.add("G", "graph", tool, text, {"type": "graph", "node_id": node.get("id"),
-                                                   "node_type": node.get("type"), "label": node.get("label")})
+                                                   "node_type": node.get("type"), "label": node.get("label"),
+                                                   "origin": origin})
 
     def search_graph(self, data: dict[str, Any]) -> list[str]:
         return [self._node(n, "search_graph") for n in data.get("entries") or []]

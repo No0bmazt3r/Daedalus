@@ -145,6 +145,18 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         if not settings["enabled"]:
             rerank["reason"] = "re-ranking is off"
 
+    # Whose document each passage came from — this rig's, or another
+    # installation's. From the manifest, not the vector metadata, so a corrected
+    # origin applies now; a chunk the manifest has lost counts as a reference.
+    try:
+        from ...db import corpus_store  # noqa: PLC0415
+
+        origins = corpus_store.origins_for([c["chunk_id"] for c in chunks if c.get("chunk_id")])
+    except Exception:  # noqa: BLE001 — an unreadable manifest must not hide the passages
+        origins = {}
+    for c in chunks:
+        c["origin"] = origins.get(c.get("chunk_id"), "reference")
+
     if not chunks:
         detail = "no passage matched"
     elif rerank["model"]:

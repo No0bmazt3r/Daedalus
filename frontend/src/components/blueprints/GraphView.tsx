@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, ArrowRight, ArrowLeft, AlertCircle, Network, Table2, X } from 'lucide-react'
 import {
-  fetchGraphSchema, fetchNodes, fetchNode, NODE_TYPES,
+  fetchGraphSchema, fetchNodes, fetchNode, NODE_TYPES, nodeOrigin,
   type GraphSchema, type GraphNode, type GraphEdge, type NodeDetail, type NodeType,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
@@ -76,7 +76,23 @@ function Detail({ detail, onNavigate }: { detail: NodeDetail; onNavigate: (id: s
   return (
     <div className="space-y-4">
       <header className="space-y-1.5">
-        <TypeBadge type={node.type} />
+        <div className="flex items-center gap-1.5">
+          <TypeBadge type={node.type} />
+          <span
+            title={
+              nodeOrigin(node) === 'rig'
+                ? "This rig's own knowledge"
+                : "From another installation's documents — set origin: rig in Authoring if it is this lab's"
+            }
+            className={`rounded border px-1.5 py-px text-[10px] ${
+              nodeOrigin(node) === 'rig'
+                ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400'
+                : 'theme-border theme-text-muted'
+            }`}
+          >
+            {nodeOrigin(node) === 'rig' ? 'This rig' : 'Reference'}
+          </span>
+        </div>
         <h3 className="text-sm theme-text">{node.label}</h3>
         <code className="block text-[10px] theme-text-muted">{node.id}</code>
         {node.description && (

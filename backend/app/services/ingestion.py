@@ -88,6 +88,7 @@ def store_upload(
     title: str | None = None,
     document_version: str | None = None,
     reactor_mode: str | None = None,
+    origin: str = "reference",
 ) -> dict[str, Any]:
     """Keep the bytes, record the document, and extract its text immediately.
 
@@ -128,6 +129,7 @@ def store_upload(
         title=title or filename,
         document_version=document_version,
         reactor_mode=reactor_mode,
+        origin=origin,
     )
 
     try:

@@ -94,6 +94,23 @@ EDGE_DOMAINS: dict[str, tuple[str, str]] = {
 }
 
 
+# Whose knowledge a node records. `rig`: this lab's own — its sensors, its
+# limits, its procedures. `reference`: taken from another installation's
+# documents, valid for the concept but not for this rig's specifics. Sensors and
+# operating modes are this rig's by definition (they mirror its database); every
+# other node is a reference unless it is marked `origin: rig`, so nothing is
+# presented as this rig's fact without somebody having said so.
+ORIGINS = ("rig", "reference")
+RIG_BY_DEFINITION = frozenset({"Sensor", "OperatingMode"})
+
+
+def origin_of(node: dict[str, Any]) -> str:
+    """'rig' or 'reference' for one node, applying the defaults above."""
+    if node.get("type") in RIG_BY_DEFINITION:
+        return "rig"
+    return "rig" if node.get("origin") == "rig" else "reference"
+
+
 class GraphValidationError(Exception):
     """The authored graph does not satisfy the schema. Refuse to serve it."""
 
@@ -159,6 +176,9 @@ def _build(raw: dict[str, Any]) -> Any:
             continue
         if graph.has_node(node_id):
             errors.append(f"{node_id}: duplicate node id")
+            continue
+        if "origin" in node and node["origin"] not in ORIGINS:
+            errors.append(f"{node_id}: origin must be one of {ORIGINS}, got {node['origin']!r}")
             continue
         attrs = {k: v for k, v in node.items() if k != "id"}
         attrs.setdefault("aliases", [])

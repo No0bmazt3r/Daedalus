@@ -4,10 +4,10 @@ import {
   Loader2, Eraser, ChevronRight, Scissors, Cpu, Hammer, ArrowUpRight,
 } from 'lucide-react'
 import {
-  fetchCorpusStatus, fetchCorpusDocuments, uploadDocument, deleteDocument,
+  fetchCorpusStatus, fetchCorpusDocuments, uploadDocument, updateDocument, deleteDocument,
   fetchCorpusConfig, saveCorpusConfig, previewChunks, startIngest, resumeIngest,
   clearVectors, fetchRun, fetchRunEvents,
-  type CorpusStatus, type CorpusDocument, type CorpusConfig, type ChunkPreview,
+  type CorpusStatus, type CorpusDocument, type CorpusConfig, type ChunkPreview, type DocumentOrigin,
   type IngestRun, type IngestEvent,
 } from '../../lib/blueprintsClient'
 import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
@@ -79,6 +79,24 @@ const SOURCE_TYPES = [
   { id: 'other', label: 'Other / background' },
 ]
 
+const SOURCE_LABEL: Record<string, string> = Object.fromEntries(SOURCE_TYPES.map((t) => [t.id, t.label]))
+
+/**
+ * Whose document it is. Asked at upload because it is cheapest to answer then,
+ * and defaulted to Reference so nothing counts as this rig's unless somebody
+ * said so. An answer resting only on a Reference for a rig-specific fact —
+ * a setpoint, a step — has to say it is another installation's guidance.
+ */
+const ORIGINS: { id: DocumentOrigin; label: string; hint: string }[] = [
+  { id: 'rig', label: 'This rig', hint: "This lab's own document — its manuals, its SOPs" },
+  { id: 'reference', label: 'Reference', hint: "Another installation's document — fine for concepts, not for this rig's specifics" },
+]
+
+const ORIGIN_BADGE: Record<DocumentOrigin, string> = {
+  rig: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400',
+  reference: 'theme-border theme-text-muted',
+}
+
 const STEPS: readonly Step[] = [
   { id: 1, label: 'Import', icon: Upload, hint: 'Add the documents to index' },
   { id: 2, label: 'Chunk', icon: Scissors, hint: 'Decide where they get split' },
@@ -127,6 +145,7 @@ function ImportStep({
 }) {
   const input = useRef<HTMLInputElement>(null)
   const [sourceType, setSourceType] = useState('manual')
+  const [origin, setOrigin] = useState<DocumentOrigin>('reference')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -138,7 +157,7 @@ function ImportStep({
       const problems: string[] = []
       for (const file of Array.from(files)) {
         try {
-          await uploadDocument(file, { source_type: sourceType })
+          await uploadDocument(file, { source_type: sourceType, origin })
         } catch (e) {
           problems.push(`${file.name}: ${(e as Error).message}`)
         }
@@ -147,8 +166,18 @@ function ImportStep({
       setError(problems.length ? problems.join(' · ') : null)
       onChange()
     },
-    [onChange, sourceType],
+    [onChange, sourceType, origin],
   )
+
+  const flip = async (d: CorpusDocument) => {
+    setError(null)
+    try {
+      await updateDocument(d.document_id, { origin: d.origin === 'rig' ? 'reference' : 'rig' })
+      onChange()
+    } catch (e) {
+      setError(`${d.filename}: ${(e as Error).message}`)
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -172,6 +201,27 @@ function ImportStep({
             {t.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider theme-text-muted">Whose</span>
+        {ORIGINS.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => setOrigin(o.id)}
+            title={o.hint}
+            className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${
+              origin === o.id
+                ? 'theme-accent-border theme-surface-strong theme-text'
+                : 'theme-border theme-text-muted hover:theme-text'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+        <span className="text-[10px] theme-text-muted">
+          {ORIGINS.find((o) => o.id === origin)?.hint}
+        </span>
       </div>
 
       <div
@@ -238,9 +288,18 @@ function ImportStep({
                 className={`mt-0.5 shrink-0 ${d.extract_status === 'failed' ? 'text-rose-400' : 'theme-accent'}`}
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs theme-text">{d.filename}</p>
+                <p className="flex items-center gap-1.5 text-xs theme-text">
+                  <span className="truncate">{d.filename}</span>
+                  <button
+                    onClick={() => void flip(d)}
+                    title={`${d.origin === 'rig' ? "This lab's own" : "Another installation's"} — click to change. Applies from the next question; no re-ingest.`}
+                    className={`shrink-0 rounded border px-1.5 py-px text-[10px] ${ORIGIN_BADGE[d.origin ?? 'reference']}`}
+                  >
+                    {d.origin === 'rig' ? 'This rig' : 'Reference'}
+                  </button>
+                </p>
                 <p className="mt-0.5 text-[10px] theme-text-muted">
-                  {d.source_type} · {bytes(d.size_bytes)}
+                  {SOURCE_LABEL[d.source_type] ?? d.source_type} · {bytes(d.size_bytes)}
                   {d.page_count ? ` · ${d.page_count}p` : ''}
                   {d.char_count ? ` · ${d.char_count.toLocaleString()} chars` : ''}
                   {d.chunk_count > 0 && ` · ${d.chunk_count} chunks, ${d.embedded_count} embedded`}

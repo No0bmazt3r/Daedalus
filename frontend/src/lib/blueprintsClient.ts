@@ -56,9 +56,18 @@ export interface GraphNode {
   version?: string;
   /** SOPStep only. */
   step_number?: number;
+  /**
+   * Whose knowledge this records. Absent means `reference`, except on Sensor and
+   * OperatingMode, which are this rig's by definition — see `nodeOrigin`.
+   */
+  origin?: DocumentOrigin;
   /** Set when a recorded traversal crossed a node the graph no longer has. */
   missing?: boolean;
 }
+
+/** Mirrors `knowledge_graph.origin_of` on the backend. */
+export const nodeOrigin = (node: Pick<GraphNode, 'type' | 'origin'>): DocumentOrigin =>
+  node.type === 'Sensor' || node.type === 'OperatingMode' || node.origin === 'rig' ? 'rig' : 'reference';
 
 export interface GraphSchema {
   available: true;
@@ -336,12 +345,20 @@ export const setRagTrack = async (track: RagTrack) => {
 // M2, built. These replace the `available: false, blocked_by: 'M2'` shapes the
 // corpus half used to answer with — see `api/corpus.py`.
 
+export type DocumentOrigin = 'rig' | 'reference';
+
 export interface CorpusDocument {
   document_id: string;
   filename: string;
   media_type: string;
   size_bytes: number;
   source_type: 'manual' | 'sop' | 'anomaly_record' | 'uauc_record' | 'other';
+  /**
+   * Whose document this is. `rig`: this lab's own. `reference`: another
+   * installation's — valid for concepts, not for this rig's specifics. Read at
+   * query time, so changing it needs no re-ingest.
+   */
+  origin: DocumentOrigin;
   title: string | null;
   document_version: string | null;
   reactor_mode: string | null;
@@ -478,8 +495,13 @@ export const fetchCorpusDocuments = () =>
  * multipart, which keeps `python-multipart` out of the backend image — see the
  * module note there. Metadata rides in the query string.
  */
-export const uploadDocument = (file: File, meta: { source_type: string; title?: string }) => {
-  const params = new URLSearchParams({ filename: file.name, source_type: meta.source_type });
+export const uploadDocument = (
+  file: File,
+  meta: { source_type: string; origin: DocumentOrigin; title?: string },
+) => {
+  const params = new URLSearchParams({
+    filename: file.name, source_type: meta.source_type, origin: meta.origin,
+  });
   if (meta.title) params.set('title', meta.title);
   return request<{ document: CorpusDocument }>(`/api/corpus/documents?${params}`, {
     method: 'POST',
@@ -492,6 +514,12 @@ export const uploadDocument = (file: File, meta: { source_type: string; title?: 
     headers: { 'Content-Type': file.type || 'application/octet-stream' },
   });
 };
+
+export const updateDocument = (id: string, fields: Partial<Pick<CorpusDocument, 'origin' | 'title'>>) =>
+  request<{ document: CorpusDocument; note: string }>(
+    `/api/corpus/documents/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: JSON.stringify(fields) },
+  );
 
 export const deleteDocument = (id: string) =>
   request<{ deleted: string; chunks_removed: number; warning: string | null }>(
