@@ -136,7 +136,7 @@ export function AgentToolsSimple({ catalogue, card }: { catalogue: ToolCatalogue
           </span>
         </div>
         <p className="text-[11px] theme-text-muted mb-2">
-          Procedures and explanations. Only the selected track is used — change it in Settings → Knowledge Base.
+          Procedures and explanations. Only the selected track is used — change it in Settings → Retrieval Track.
         </p>
         <div className="rounded-xl border theme-border px-3">
           {retrieval ? <Row tool={retrieval} /> : (

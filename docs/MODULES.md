@@ -449,7 +449,7 @@ resolved to.
 > edges, validated before the file is written, with refused edits kept). §3.9 has
 > both. The window
 > shows **one** retrieval track — the one answering queries, read from Settings →
-> Knowledge Base — and only that track's tabs: Track 1 · Vector holds Corpus,
+> Retrieval Track — and only that track's tabs: Track 1 · Vector holds Corpus,
 > Track 2 · Graph holds Graph, Coverage and Replay. The other track is a
 > fallback, not a peer. §3.8 has the reasoning and the failure cases.
 
@@ -838,7 +838,7 @@ only:
 **Why one.** The first build put both tracks at the top as peer buttons, which
 asked the reader a question they had no way to answer: two systems on screen,
 equally prominent, only one of them responsible for any answer they had seen. A
-picker is the wrong shape for a setting that lives in Settings → Knowledge Base
+picker is the wrong shape for a setting that lives in Settings → Retrieval Track
 — it reads as *"pick one"* when the choice was already made, and made somewhere
 that records it (`config/rag_config.json`, §5's freeze) rather than here. So the
 window follows the setting. There is no badge naming the track either: with one
@@ -859,7 +859,7 @@ does.
 **The cost, stated.** You author the graph *before* switching to it, so with
 Track 1 live there is no way to reach Build or Coverage. That is deliberate, and
 the resolution is one setting rather than a second door: switch the track in
-Settings → Knowledge Base and Track 2's tabs are what this window is. The switch
+Settings → Retrieval Track and Track 2's tabs are what this window is. The switch
 is written to a committed file and recorded per query, so "I was working on the
 graph" stays a recoverable fact about the run rather than something the window
 let you do invisibly.

@@ -684,7 +684,7 @@ def resolve_for_runtime() -> dict[str, Any]:
         raise NotProductionSafe(
             "the selected embedding model is a cloud baseline and cannot serve the local "
             "system. Rule 1 permits cloud models as offline evaluation baselines only — "
-            "select a local model in Settings → Knowledge Base."
+            "select a local model in The Forge → Installed → Embedding models."
         )
     dimensions, dimensions_source = effective_dimensions(config)
     # The collection comes back with the model, because the two are one decision:

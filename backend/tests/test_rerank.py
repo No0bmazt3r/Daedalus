@@ -108,3 +108,56 @@ class RerankTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RerankerFitTest(unittest.TestCase):
+    """What this machine can afford — judged without downloading anything."""
+
+    def test_every_entry_is_complete_and_pinned(self) -> None:
+        for model_id, entry in reranker.CATALOGUE.items():
+            with self.subTest(model=model_id):
+                self.assertEqual(entry["id"], model_id)
+                self.assertRegex(entry["revision"], r"^[0-9a-f]{40}$")
+                self.assertTrue(entry["onnx"].endswith(".onnx"))
+                for key in ("multilingual", "size_bytes", "compute_m", "quantized", "quality", "licence"):
+                    self.assertIn(key, entry)
+
+    def test_bigger_models_are_estimated_slower(self) -> None:
+        tiny, l6 = reranker.estimate_ms("ms-marco-tinybert-l2"), reranker.estimate_ms("ms-marco-minilm-l6")
+        self.assertLess(tiny, l6)
+        self.assertLess(l6, reranker.estimate_ms("bge-reranker-v2-m3"))
+        self.assertGreater(reranker.estimate_ms("ms-marco-minilm-l6", threads=1),
+                           reranker.estimate_ms("ms-marco-minilm-l6", threads=4))
+
+    def test_verdicts(self) -> None:
+        gb = 1_000_000_000
+        self.assertEqual(reranker._verdict(gb // 10, 4 * gb, 500)[0], "safe")  # noqa: SLF001
+        self.assertEqual(reranker._verdict(3 * gb, 4 * gb, 500)[0], "marginal")  # noqa: SLF001
+        self.assertEqual(reranker._verdict(5 * gb, 4 * gb, 500)[0], "will_not_fit")  # noqa: SLF001
+        self.assertEqual(reranker._verdict(gb // 10, 4 * gb, 1500)[0], "marginal")  # noqa: SLF001
+        self.assertEqual(reranker._verdict(gb // 10, 4 * gb, 5000)[0], "will_not_fit")  # noqa: SLF001
+        self.assertEqual(reranker._verdict(gb // 10, None, 500)[0], "safe")  # unknown RAM is not a failure  # noqa: SLF001
+
+    def test_recommends_the_strongest_safe_model_and_a_multilingual_one(self) -> None:
+        roomy = {"available_bytes": 64_000_000_000, "total_bytes": 64_000_000_000, "cpu": "test"}
+        with mock.patch.object(reranker, "_machine", return_value=roomy), \
+             mock.patch.object(reranker, "estimate_ms", return_value=100):
+            rec = reranker.fit()["recommended"]
+        self.assertEqual(rec["english"], "bge-reranker-v2-m3")  # everything fits; highest quality wins
+        self.assertTrue(reranker.CATALOGUE[rec["malay"]]["multilingual"])
+
+    def test_falls_back_to_the_least_over_budget(self) -> None:
+        def slow(model_id: str, threads: int | None = None) -> int:
+            return 1500 if model_id == "mmarco-mminilm-l12" else 9000
+        with mock.patch.object(reranker, "estimate_ms", side_effect=slow):
+            rec = reranker.fit()["recommended"]
+        self.assertEqual(rec["malay"], "mmarco-mminilm-l12")
+        self.assertEqual(rec["english"], "mmarco-mminilm-l12")  # nothing safe: least over budget
+
+    def test_models_carry_fit_and_recommendation(self) -> None:
+        rows = reranker.models()
+        self.assertEqual({r["id"] for r in rows}, set(reranker.CATALOGUE))
+        for r in rows:
+            self.assertIn(r["fit"]["verdict"], ("safe", "marginal", "will_not_fit"))
+            self.assertIn(r["fit"]["latency_source"], ("estimated", "measured"))
+        self.assertTrue(any(r["recommended_for"] for r in rows))

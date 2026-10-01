@@ -7,7 +7,7 @@ import { useSessions } from '../contexts/SessionsContext'
 import { useSettings } from '../contexts/SettingsContext'
 import { sessionLabel } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
-import { SETTINGS_PANELS, getGroupLabel } from '../lib/settingsRegistry'
+import { SETTINGS_PANELS, getGroupLabel, trackVisible } from '../lib/settingsRegistry'
 import { fetchRagConfig, type RagTrack } from '../lib/blueprintsClient'
 import { BLUEPRINT_TABS, type BlueprintsTab } from './blueprints/tabs'
 
@@ -258,7 +258,8 @@ export function CommandPalette({
       keywords: 'preferences configuration window',
       run: () => actions.openSettings(),
     })
-    for (const panel of SETTINGS_PANELS) {
+    // Only the selected track's settings panel, as in the Settings nav.
+    for (const panel of SETTINGS_PANELS.filter((p) => trackVisible(p, track))) {
       push({
         id: `go:settings:${panel.id}`, group: 'Go to', icon: panel.icon,
         crumb: 'Settings', label: panel.label,

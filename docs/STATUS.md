@@ -286,8 +286,9 @@ one uploaded document with its badge.
 
 ![Knowledge base settings](screenshots/11-knowledge-base.png)
 
-**[SCREENSHOT: `11-knowledge-base.png`]** — Settings → **Knowledge Base**, showing
-the track switch, Track 1's re-ranking and Track 2's *Agent loop* section.
+**[SCREENSHOT: `11-knowledge-base.png`]** — Settings → **Retrieval Track** showing the
+track switch, with **Vector RAG** (re-ranking) and **Graph RAG** (agent loop) visible in the
+settings nav.
 
 ---
 
@@ -348,7 +349,7 @@ manual authoring, and an LLM-assisted **proposal queue** where suggested nodes
 and edges are reviewed by a person before they enter the graph. Track 2 uses
 no embeddings, by design.
 
-Track 2 retrieves in one of two modes, switched in Settings → Knowledge Base:
+Track 2 retrieves in one of two modes, switched in Settings → Graph RAG:
 
 - **Agent loop** (default) — the local model picks each hop through the graph
   and decides when it has enough, under a hard time budget (6 s by default).
@@ -455,7 +456,7 @@ Save all images to `docs/screenshots/`.
 - [ ] `08-forge-models.png` — The Forge → Chat models, Shortlist, fit labels visible
 - [ ] `09-benchmark.png` — finished benchmark run
 - [ ] `10-ingest.png` — Blueprints → Ingest
-- [ ] `11-knowledge-base.png` — Settings → Knowledge Base
+- [ ] `11-knowledge-base.png` — Settings → Retrieval Track
 - [ ] `12-search.png` — Settings → Search with a test result
 - [ ] `13-agent-tools.png` — Settings → Agent Tools
 - [ ] `14-graph.png` — Blueprints → Graph

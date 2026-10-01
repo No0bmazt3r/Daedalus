@@ -24,7 +24,7 @@ import { Unavailable } from './Unavailable'
  * > *"What does this system actually know, and how is it connected?"*
  *
  * Daedalus's plans for the maze, showing **one retrieval track: the one that is
- * answering queries**, chosen in Settings → Knowledge Base.
+ * answering queries**, chosen in Settings → Retrieval Track.
  *
  * ```
  * Track 1 — vector  →  Corpus
@@ -62,7 +62,7 @@ import { Unavailable } from './Unavailable'
  * **The cost, stated.** You author the graph *before* switching to it, so with
  * Track 1 live there is no way to reach Build or Coverage. That is deliberate,
  * and the resolution is one setting rather than a second door: switch the track
- * in Settings → Knowledge Base and Track 2's tabs are what this window is. The
+ * in Settings → Retrieval Track and Track 2's tabs are what this window is. The
  * switch is recorded in a committed file, so "I was working on the graph" is a
  * fact about the run rather than something the window let you do invisibly.
  *
@@ -222,7 +222,7 @@ function NotReady({ live }: { live: TrackStatus }) {
         <br />
         <span className="theme-text-muted">
           The other track's views are not reachable from here while this one is selected — change
-          the track in Settings → Knowledge Base.
+          the track in Settings → Retrieval Track.
         </span>
       </p>
     </div>

@@ -484,6 +484,22 @@ def download_reranker(model_id: str) -> dict[str, Any]:
     return {"ok": True, "started": started}
 
 
+@router.post("/rag/rerankers/{model_id}/benchmark")
+def benchmark_reranker(model_id: str) -> dict[str, Any]:
+    """Time re-scoring the default candidate pool on this machine, and keep it.
+
+    Synchronous: a few seconds for the small models, longer for the large ones,
+    and the caller is waiting for the number. The result replaces the estimate
+    in the model's fit verdict from then on.
+    """
+    if model_id not in reranker.CATALOGUE:
+        raise HTTPException(status_code=404, detail=f"unknown re-ranker {model_id!r}")
+    try:
+        return {"ok": True, "benchmark": reranker.benchmark(model_id)}
+    except reranker.RerankUnavailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.delete("/rag/rerankers/{model_id}")
 def delete_reranker(model_id: str) -> dict[str, Any]:
     try:

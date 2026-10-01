@@ -36,7 +36,7 @@ import { useLiveRefresh } from '../../hooks/useLiveRefresh'
  * window answers "what is on this machine".
  *
  * So the Forge owns the whole lifecycle — discover, pull, select, delete — and
- * Settings → Knowledge Base keeps only what is genuinely a corpus fact: whether
+ * Settings → Vector RAG keeps only what is genuinely a corpus fact: whether
  * the index matches the selected model.
  *
  * ## Browse is for finding, Installed is for managing

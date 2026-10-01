@@ -122,7 +122,7 @@ _FORBIDDEN_AT_RUNTIME: Final = frozenset({
 # experimental validity, so it follows the setting rather than a policy row:
 # there is no unlock, because "let this arm use the other arm's retrieval" is
 # not a permission anybody can grant — it just makes the measurement mean
-# something else. Change the track in Settings → Knowledge Base and the other
+# something else. Change the track in Settings → Retrieval Track and the other
 # set becomes available, which is the whole mechanism.
 #
 # Tools with `track=None` — the default — belong to neither and are always
@@ -557,7 +557,7 @@ def _track_refusal(tool: Tool, surface: Surface) -> str | None:
         f"({tool.track}) retrieval, and Track {'1' if active == 'vector' else '2'} "
         f"({active}) is the selected track. PROJECT.md §5 compares the two arms, "
         f"so an arm may not retrieve through the other one. Change the track in "
-        f"Settings → Knowledge Base."
+        f"Settings → Retrieval Track."
     )
 
 

@@ -12,13 +12,15 @@ import {
   DEFAULT_SETTINGS_PANEL_ID,
   getSettingsPanel,
   panelsForGroup,
+  trackVisible,
   visibleGroups,
   type SettingsPanel,
 } from '../lib/settingsRegistry'
+import { fetchRagConfig, RAG_TRACK_CHANGED_EVENT, type RagTrack } from '../lib/blueprintsClient'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { HardwarePanel } from './settings/HardwarePanel'
-import { KnowledgeBasePanel } from './settings/KnowledgeBasePanel'
+import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/KnowledgeBasePanel'
 import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
 import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
@@ -34,6 +36,8 @@ interface SettingsModalProps {
   onClose: () => void
   /** Appearance hands colours and fonts to the Theme window rather than copying them. */
   onOpenTheme?: () => void
+  /** Opens The Forge — where Vector RAG sends you to download a re-ranker. */
+  onOpenForge?: () => void
   /**
    * A panel to jump to, from the command palette. Not the *current* panel —
    * the window owns that, and lifting it would mean every click on the rail
@@ -42,8 +46,31 @@ interface SettingsModalProps {
   panel?: string | null
 }
 
-export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel = null }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
+
+  // The selected retrieval track decides which track's settings panel is
+  // listed. Re-read whenever the track changes, from here or from anywhere
+  // else (`setRagTrack` broadcasts it).
+  const [track, setTrack] = useState<RagTrack | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetchRagConfig().then((c) => { if (!cancelled) setTrack(c.track) }).catch(() => undefined)
+    const onChanged = (e: Event) => {
+      const next = (e as CustomEvent<{ track?: RagTrack }>).detail?.track
+      if (next) setTrack(next)
+    }
+    window.addEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+    return () => {
+      cancelled = true
+      window.removeEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+    }
+  }, [])
+
+  // Sitting on the other track's panel when the track changes (or asking for
+  // it from the palette) lands on the track switch instead of a hidden page.
+  const shown = getSettingsPanel(activeTab)
+  const effectiveTab = shown && track && !trackVisible(shown, track) ? 'knowledge' : activeTab
 
   // Asking for the panel already open is a no-op, which is what makes it safe
   // for the caller to leave the request set rather than having to clear it.
@@ -81,8 +108,8 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
 
   if (!open) return null
 
-  const groups = visibleGroups(isAdmin)
-  const activePanel = getSettingsPanel(activeTab)
+  const groups = visibleGroups(isAdmin, track)
+  const activePanel = getSettingsPanel(effectiveTab)
   return (
     <FloatingWindow
       id="settings"
@@ -129,6 +156,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
 
             {!isCompact && (
               <SettingsSearch
+                track={track}
                 isAdmin={isAdmin}
                 onOpenPanel={openPanel}
                 collapsed={sidebar.collapsed}
@@ -153,11 +181,11 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
                   {/* Groups keep their identity in the strip as a divider —
                       a flat run of 15 buttons is unreadable. */}
                   {isCompact && <div className="h-5 w-px shrink-0 theme-border border-l mx-1 first:hidden" />}
-                  {panelsForGroup(group.id, isAdmin).map((panel) => (
+                  {panelsForGroup(group.id, isAdmin, track).map((panel) => (
                     <NavButton
                       key={panel.id}
                       panel={panel}
-                      active={activeTab === panel.id}
+                      active={effectiveTab === panel.id}
                       collapsed={sidebar.collapsed && !isCompact}
                       horizontal={isCompact}
                       onSelect={() => setActiveTab(panel.id)}
@@ -191,7 +219,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
           {/* Panel area. Keyed on the active panel so switching replays the
               entry animation rather than swapping contents in place. */}
           <div
-            key={activeTab}
+            key={effectiveTab}
             className={`@container flex-1 overflow-y-auto no-scrollbar bg-transparent min-w-0 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out ${isCompact ? 'p-5' : 'p-8'}`}
           >
             {/* One measure for every panel. It grows with the window up to a
@@ -204,30 +232,32 @@ export function SettingsModal({ open, onClose, onOpenTheme, panel = null }: Sett
                 the pane it is centred in. */}
             <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl @7xl:max-w-[min(100%,1400px)]">
 
-            {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
+            {effectiveTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
 
             {/* The Forge's own Installed view, not a second implementation of
                 it. Same reasoning as ModelEndpointsPanel appearing in both
                 places: one component, two entry points, so the console and the
                 Forge can never describe the deployment differently. */}
-            {activeTab === 'added-models' && <InstalledModelsView isPeek={isPeek} />}
+            {effectiveTab === 'added-models' && <InstalledModelsView isPeek={isPeek} />}
 
-            {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
+            {effectiveTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
 
-            {activeTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
+            {effectiveTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
 
-            {activeTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
-            {activeTab === 'knowledge' && <KnowledgeBasePanel />}
-            {activeTab === 'search' && <SearchPanel isPeek={isPeek} />}
-            {activeTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
-            {activeTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
-            {activeTab === 'system' && <SystemPanel isPeek={isPeek} />}
+            {effectiveTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
+            {effectiveTab === 'knowledge' && <KnowledgeBasePanel />}
+            {effectiveTab === 'vector-rag' && <VectorRagPanel onOpenForge={onOpenForge} />}
+            {effectiveTab === 'graph-rag' && <GraphRagPanel />}
+            {effectiveTab === 'search' && <SearchPanel isPeek={isPeek} />}
+            {effectiveTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
+            {effectiveTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
+            {effectiveTab === 'system' && <SystemPanel isPeek={isPeek} />}
 
-            {activeTab === 'appearance' && (
+            {effectiveTab === 'appearance' && (
               <AppearancePanel isPeek={isPeek} onOpenTheme={onOpenTheme} />
             )}
 
-            {activeTab === 'shortcuts' && <ShortcutsPanel isPeek={isPeek} />}
+            {effectiveTab === 'shortcuts' && <ShortcutsPanel isPeek={isPeek} />}
 
             {activePanel && !activePanel.implemented && (
               <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-in fade-in duration-200">

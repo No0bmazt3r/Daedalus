@@ -163,7 +163,7 @@ the Forge while M5 was in flight.
       window able to answer "what is on this machine". The Forge now owns the
       lifecycle — Models → Embeddings discovers and pulls, Added Models →
       Embedding models is the inventory and the selection
-- [x] Settings → Knowledge Base keeps only the corpus fact: whether the stored
+- [x] Settings → Vector RAG keeps only the corpus fact: whether the stored
       vectors were produced by the selected model. Read-only, because a stale
       index is fixed by re-ingesting rather than by changing a setting
 - [x] **Embedding figures are measured, not declared, once pulled.** The
@@ -520,7 +520,19 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [ ] Hybrid dense + BM25 search
 - [x] Cross-encoder re-ranking — `reranker.py`, wired into `search_corpus`:
       a wider candidate pool is retrieved and reranked down to `top_k`, and an
-      answer built on un-reranked chunks says so. Toggled in `rag_config`
+      answer built on un-reranked chunks says so. Toggled in `rag_config`.
+      Weights are downloaded and deleted in The Forge → Re-rankers
+      (its own tab), from a pinned catalogue of seven with a per-machine fit
+      verdict, a benchmark, and a recommendation for English and for Malay; Settings → Vector RAG only chooses which one runs, whether,
+      and how many candidates — the parts frozen with the comparison
+  - [x] Measured on the dev laptop (i5-11400H, 4 threads, 20 × ~250-token
+        chunks, median of 3): TinyBERT-L2 37 ms · MiniLM-L6 805 ms ·
+        MiniLM-L12 (8-bit) 1127 ms · mMiniLMv2-L12 (8-bit) 1150 ms ·
+        mxbai-xsmall (8-bit) 1238 ms. All five ranked a relevant passage ~1 and
+        irrelevant ones ~0. bge-reranker-base / v2-m3 not run here — estimated
+        6–16 s, i.e. offline-evaluation only on this machine
+  - [ ] Only MiniLM-L6 fits the 1 s budget on the dev laptop; every Malay-capable
+        model is `marginal`. Re-check on the lab machine before freezing
 - [ ] Contextual compression
 - [ ] Multi-hop re-retrieval loop
 - [ ] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
@@ -540,7 +552,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       whether it has enough. Unusable replies are rejected and recorded, never
       acted on; two in a row end the loop. One call, one `rag_logs` row, with
       `mode`, `stop_reason`, `model_calls` and `rejected` in `traversal_path`.
-      Settings → Knowledge Base → *Agent loop* switches Track 2 between
+      Settings → Graph RAG → *Agent loop* switches Track 2 between
       `agent` (default) and `walk`, with budget and step limit; frozen with the
       track. No local model → the walk runs, recorded as a fallback. 16 tests
   - [ ] **qwen3:1.7b drives it poorly on the dev machine.** 1–7 s per step, and
@@ -973,7 +985,7 @@ Layer 9 below for the per-step detail.
     - [x] **No inference, no suggestion, no model in the authoring path.** A
           node exists because a person wrote it, which is the provenance claim
           that makes `search_graph` SYSTEM integrity rather than CORPUS
-    - [x] Retrieval track switch — Settings → Knowledge Base, committed to
+    - [x] Retrieval track switch — Settings → Retrieval Track, committed to
           `config/rag_config.json`, read on the chat path, recorded per query in
           `rag_logs.track`. Honours §5's freeze: `frozen: true` makes the API
           refuse writes so unfreezing is a visible commit
@@ -1040,7 +1052,7 @@ Layer 9 below for the per-step detail.
         experimental validity and has **no unlock**, because "let this arm use
         the other arm's retrieval" is not a permission anybody can grant — it
         just makes the measurement mean something else. Change the track in
-        Settings → Knowledge Base and the other set becomes available
+        Settings → Retrieval Track and the other set becomes available
   - [x] `knowledge_status` deliberately carries no track. It reports on both arms
         without retrieving through either, and it is the check that makes "I
         don't have that" a statement rather than a guess — which matters most,
@@ -1423,7 +1435,7 @@ Layer 9 below for the per-step detail.
       `indexed_at` set while `indexed_with` is null. Nomic is 768, no embedding
       model is installed, and `record_index()` cannot produce that pair — it
       looks seeded. Since a verified width outranks a declared one it now shows
-      as "512d (verified)" in Settings → Knowledge Base. Clear the block, or
+      as "512d (verified)" in Settings → Vector RAG. Clear the block, or
       re-verify once an embedder is pulled
 - [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
 - [ ] Search results are read by a person, not ingested. There is no "save this

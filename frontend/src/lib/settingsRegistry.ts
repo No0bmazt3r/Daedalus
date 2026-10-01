@@ -6,6 +6,7 @@
 // between the nav list and the search index.
 
 import {
+  Boxes,
   Cpu,
   Clock,
   Database,
@@ -13,6 +14,7 @@ import {
   Keyboard,
   Link as LinkIcon,
   List,
+  Network,
   Palette,
   Plus,
   Search,
@@ -37,6 +39,12 @@ export interface SettingsPanel {
   adminOnly: boolean;
   /** False while a panel is still a placeholder, so search can say so. */
   implemented: boolean;
+  /**
+   * A retrieval track's own settings: shown only while that track is selected.
+   * Each answer comes from one track, so the other track's knobs are noise
+   * until somebody switches — and switching is one click in Retrieval Track.
+   */
+  track?: 'vector' | 'graph';
 }
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
@@ -46,8 +54,8 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
   { id: 'administration', label: 'Administration', adminOnly: true },
 ]);
 
-function panel(p: Omit<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords'> &
-  Partial<Pick<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords'>>): SettingsPanel {
+function panel(p: Omit<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' | 'track'> &
+  Partial<Pick<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' | 'track'>>): SettingsPanel {
   return Object.freeze({
     adminOnly: false,
     implemented: false,
@@ -86,11 +94,29 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     id: 'databases', label: 'Databases', group: 'data', icon: Database, implemented: true,
     keywords: ['database', 'db', 'sqlite', 'chroma', 'vector', 'sensor', 'audit', 'logs', 'storage', 'health', 'rows', 'raw', 'browse', 'table', 'inspect'],
   }),
+  // The knowledge layer: which track answers, then that track's own settings —
+  // only the selected track's panel is listed (`track`, `trackVisible`). The id
+  // 'knowledge' is kept for the switch so a saved "last open panel" still
+  // lands somewhere sensible.
   panel({
-    id: 'knowledge', label: 'Knowledge Base', group: 'data', icon: Search, implemented: true,
+    id: 'knowledge', label: 'Retrieval Track', group: 'data', icon: Search, implemented: true,
     keywords: [
-      'rag', 'documents', 'sop', 'manual', 'ingestion', 'chunks', 'embedding',
-      'track', 'graphrag', 'graph', 'vector', 'retrieval', 'switch', 'compare',
+      'knowledge base', 'rag', 'track', 'switch', 'compare', 'comparison', 'freeze', 'frozen',
+      'graphrag', 'graph', 'vector', 'retrieval',
+    ],
+  }),
+  panel({
+    id: 'vector-rag', label: 'Vector RAG', group: 'data', icon: Boxes, implemented: true, track: 'vector',
+    keywords: [
+      'track 1', 'vector', 'rag', 'rerank', 're-ranking', 'cross-encoder', 'minilm', 'candidates',
+      'chroma', 'index', 'embedding', 'chunks', 'documents',
+    ],
+  }),
+  panel({
+    id: 'graph-rag', label: 'Graph RAG', group: 'data', icon: Network, implemented: true, track: 'graph',
+    keywords: [
+      'track 2', 'graph', 'graphrag', 'agent', 'agent loop', 'walk', 'hops', 'budget', 'steps',
+      'traversal', 'sufficiency',
     ],
   }),
 
@@ -155,16 +181,24 @@ export function getGroupLabel(groupId: string): string {
   return SETTINGS_GROUPS.find((g) => g.id === groupId)?.label ?? '';
 }
 
-/** Panels in a group, honouring admin visibility. */
-export function panelsForGroup(groupId: string, isAdmin: boolean): SettingsPanel[] {
+/**
+ * Whether a panel belongs to the selected retrieval track. `null` — the track
+ * not known yet — hides both track panels rather than flashing the wrong one.
+ */
+export function trackVisible(p: SettingsPanel, track: string | null): boolean {
+  return !p.track || p.track === track;
+}
+
+/** Panels in a group, honouring admin visibility and the selected track. */
+export function panelsForGroup(groupId: string, isAdmin: boolean, track: string | null = null): SettingsPanel[] {
   return SETTINGS_PANELS.filter(
-    (p) => p.group === groupId && (!p.adminOnly || isAdmin)
+    (p) => p.group === groupId && (!p.adminOnly || isAdmin) && trackVisible(p, track)
   );
 }
 
-export function visibleGroups(isAdmin: boolean): SettingsGroup[] {
+export function visibleGroups(isAdmin: boolean, track: string | null = null): SettingsGroup[] {
   return SETTINGS_GROUPS.filter((g) => !g.adminOnly || isAdmin).filter(
-    (g) => panelsForGroup(g.id, isAdmin).length > 0
+    (g) => panelsForGroup(g.id, isAdmin, track).length > 0
   );
 }
 
@@ -180,13 +214,16 @@ function normalize(value: string): string {
  * Every term must match somewhere in the panel's label, group or keywords —
  * so "model default" finds AI Defaults while "model email" finds nothing.
  */
-export function searchSettingsPanels(query: string, isAdmin: boolean): SettingsPanel[] {
+export function searchSettingsPanels(
+  query: string, isAdmin: boolean, track: string | null = null,
+): SettingsPanel[] {
   const normalized = normalize(query);
   if (!normalized) return [];
   const terms = normalized.split(' ');
 
   return SETTINGS_PANELS.filter((p) => {
     if (p.adminOnly && !isAdmin) return false;
+    if (!trackVisible(p, track)) return false;
     const text = haystack(p);
     return terms.every((t) => text.includes(t));
   }).sort((a, b) => {

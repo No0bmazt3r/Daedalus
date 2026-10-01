@@ -289,7 +289,7 @@ embeddings helped". Track 1 is pinned to an embedding model; Track 2 to none.
 ### Track 2's two modes — the within-track comparison
 
 Track 2 retrieves in one of two modes (`rag_config.graph.mode`, Settings →
-Knowledge Base → *Agent loop*), frozen with the track:
+Graph RAG → *Agent loop*), frozen with the track:
 
 | Mode | Tool | Who decides the walk |
 |---|---|---|

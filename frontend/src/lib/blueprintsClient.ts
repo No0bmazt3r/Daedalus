@@ -258,6 +258,8 @@ export interface RagConfig {
   rerank: RerankSettings;
   rerankers: RerankerModel[];
   rerank_runtime: { available: boolean; detail: string };
+  /** The machine and budget the re-rankers' fit verdicts were made against. */
+  rerank_fit: RerankFitSummary;
   /** Track 2's retrieval mode — frozen with the track. */
   graph: GraphSettings;
 }
@@ -279,14 +281,50 @@ export interface RerankSettings {
   candidates: number;
 }
 
+export type RerankVerdict = 'safe' | 'marginal' | 'will_not_fit';
+
+export interface RerankFitSummary {
+  machine: { available_bytes: number | null; total_bytes: number | null; cpu: string | null; threads: number };
+  /** Re-ranking's slice of the 3-second answer. */
+  budget_ms: number;
+  /** How many chunks a question re-scores — what the latency is for. */
+  candidates: number;
+  recommended: { english: string | null; malay: string | null };
+}
+
+export interface RerankerBenchmark {
+  ms: number;
+  runs_ms: number[];
+  candidates: number;
+  threads: number;
+  at: string;
+}
+
 export interface RerankerModel {
   id: string;
   label: string;
   repo: string;
   revision: string;
   languages: string;
+  multilingual: boolean;
   size_bytes: number;
+  /** Rank within the catalogue, higher is better — orders the recommendation. */
+  quality: number;
+  quantized: boolean;
+  licence: string;
   note: string;
+  /** This machine's verdict: memory against free RAM, time against the budget. */
+  fit: {
+    verdict: RerankVerdict;
+    reasons: string[];
+    latency_ms: number;
+    /** `estimated` from the model's size until a benchmark has run here. */
+    latency_source: 'estimated' | 'measured';
+    memory_bytes: number;
+    benchmark: RerankerBenchmark | null;
+  };
+  /** 'english' and/or 'malay' when this is the recommendation for that language. */
+  recommended_for: ('english' | 'malay')[];
   installed: boolean;
   downloaded_at: string | null;
   download: {
@@ -309,6 +347,12 @@ export const downloadReranker = (id: string) =>
   request<{ ok: boolean; started: boolean }>(
     `/api/rag/rerankers/${encodeURIComponent(id)}/download`, { method: 'POST' });
 
+export const benchmarkReranker = (id: string) =>
+  request<{ ok: boolean; benchmark: RerankerBenchmark }>(
+    `/api/rag/rerankers/${encodeURIComponent(id)}/benchmark`,
+    // The large models take tens of seconds on a CPU.
+    { method: 'POST', timeoutMs: 180_000 });
+
 export const deleteReranker = (id: string) =>
   request<{ ok: boolean; deleted: boolean }>(
     `/api/rag/rerankers/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -316,7 +360,7 @@ export const deleteReranker = (id: string) =>
 /**
  * Fired after the track actually changes, so anything showing it can re-read.
  *
- * The track is chosen in Settings → Knowledge Base and displayed in a different
+ * The track is chosen in Settings → Retrieval Track and displayed in a different
  * window, and windows here are *hidden, not unmounted* when minimized — so
  * Blueprints could sit minimized across a track change, keep its stale config,
  * and come back showing the wrong arm until it was closed and reopened.

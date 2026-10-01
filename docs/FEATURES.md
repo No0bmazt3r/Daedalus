@@ -24,7 +24,7 @@ Everything below was read off the source, not from memory.
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
 | Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge. Container-aware, with GPU passthrough layered on where the host has one |
-| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Four tabs: Hardware, Installed (manage: local, embedding, cloud), Chat models and Embedding models (browse) |
+| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs: Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed (manage: local, embedding, cloud). Which re-ranker runs is chosen in Settings → Vector RAG, whose *Open The Forge* button lands on the Re-rankers tab |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
@@ -109,6 +109,8 @@ to it.
 | `POST` | `/api/graph/proposals/generate` | Reads the ingested corpus under the graph's fixed schema and queues candidates. Writes nothing to the graph |
 | `POST` | `/api/graph/proposals/{id}/accept` | The only write in the assisted path, and it goes through `graph_authoring` — so an accepted proposal is validated and logged to `graph_edits` exactly like a hand edit |
 | `POST` | `/api/graph/proposals/{id}/reject` | Declines one. Kept, not deleted: what the extractor got wrong is the evidence for how well it works |
+| `POST` | `/api/rag/rerankers/{id}/benchmark` | Time re-scoring 20 chunk-sized passages on this machine (median of three, after a warm-up); stored with the weights, it replaces the estimate in the model's verdict |
+| `POST`/`DELETE` | `/api/rag/rerankers/{id}` (`/download` for POST) | Download a re-ranker's pinned weights on a worker thread, or delete them. Called from The Forge → Re-rankers; progress is read back from `/api/rag/config`'s `rerankers` |
 | `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
@@ -717,7 +719,7 @@ value, so a spike survives. A historical reading is the nearest row within ±5
 minutes, returned with its offset; the latest reading is marked `stale` with its
 age once the feed has stopped.
 
-**Track 2 has two retrieval modes**, chosen in Settings → Knowledge Base →
+**Track 2 has two retrieval modes**, chosen in Settings → Graph RAG →
 *Agent loop* (`rag_config.graph.mode`) and frozen with the track. Both find
 entry points the same way — authored aliases, no embeddings — so the only
 difference is who decides where to walk, which is the within-track comparison.
@@ -1392,6 +1394,13 @@ flag once. Nav, groups and search all read from it, so they cannot drift apart.
 - **Persisted** to `settings-ui` server-side, not `localStorage`.
 - Unbuilt panels carry a dot, and search says "not built yet" rather than
   opening a dead page silently.
+- **Track panels follow the selected track.** *Data & Knowledge* holds
+  **Retrieval Track** (which track answers), then the selected track's own
+  panel — **Vector RAG** (re-ranking, index status) when Track 1 is selected,
+  **Graph RAG** (agent loop) when Track 2 is. A panel declares `track`, and the
+  nav, search and command palette all hide the other track's. The selection is
+  re-read when the track changes anywhere (`RAG_TRACK_CHANGED_EVENT`); sitting
+  on a panel that just became hidden lands on Retrieval Track.
 
 **Every panel is built.** Account and Users were the last two placeholders and
 were removed rather than filled: there is one operator, they are the admin, and

@@ -344,6 +344,7 @@ def status() -> dict[str, Any]:
     return {
         **read(),
         "rerankers": reranker.models(),
+        "rerank_fit": reranker.fit_summary(),
         "rerank_runtime": {"available": runtime_ok, "detail": runtime_detail},
         "tracks": [
             {

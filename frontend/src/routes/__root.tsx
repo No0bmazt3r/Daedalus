@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button'
 import { restoreWindow } from '../components/ui/floating-window'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import type { BlueprintsTab } from '../components/blueprints/tabs'
+import type { ForgeTab } from '../components/forge/ForgeWindow'
 import type { PaletteActions } from '../components/CommandPalette'
 import {
   ThemeModal, SettingsModal, ForgeWindow, BlueprintsWindow, StoreWindow, CommandPalette,
@@ -74,6 +75,9 @@ function AppShell() {
   // no-op, so neither needs clearing afterwards.
   const [settingsPanel, setSettingsPanel] = useState<string | null>(null)
   const [blueprintsTab, setBlueprintsTab] = useState<BlueprintsTab | null>(null)
+  // Unlike Blueprints' tab this is cleared on a plain open: a link that asked
+  // for Re-rankers should not pin every later open of the Forge to it.
+  const [forgeTab, setForgeTab] = useState<ForgeTab | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Every floating window is owned here rather than by the Sidebar. Rendered
   // inside it they would sit under `.attention-zone`, and inherit the sidebar's
@@ -120,6 +124,14 @@ function AppShell() {
    * whatever tab you had last jumped to from the palette, which is the opposite
    * of what clicking the module's own name should do.
    */
+  /** Open the Forge, on a named tab or wherever it was — see `forgeTab`. */
+  const openForge = useCallback((tab: ForgeTab | null = null) => {
+    openWindow('forge', () => {
+      setForgeTab(tab)
+      setForgeOpen(true)
+    })
+  }, [])
+
   const openBlueprints = useCallback((tab: BlueprintsTab | null = null) => {
     openWindow('blueprints', () => {
       setBlueprintsTab(tab)
@@ -145,13 +157,13 @@ function AppShell() {
           setSettingsModalOpen(true)
         }),
       openTheme: () => openWindow('theme', () => setThemeModalOpen(true)),
-      openForge: () => openWindow('forge', () => setForgeOpen(true)),
+      openForge: () => openForge(),
       openBlueprints: (tab) => openBlueprints(tab ?? null),
       newChat,
       toggleIncognito: () => setIsIncognito(!isIncognito),
       toggleSidebar: () => setSidebarOpen((v) => !v),
     }),
-    [isIncognito, newChat, openBlueprints, selectSession, setIsIncognito],
+    [isIncognito, newChat, openBlueprints, openForge, selectSession, setIsIncognito],
   )
 
   useGlobalShortcuts(keybinds, {
@@ -173,7 +185,7 @@ function AppShell() {
     },
     toggle_incognito: () => setIsIncognito(!isIncognito),
     open_theme: () => openWindow('theme', () => setThemeModalOpen(true)),
-    open_forge: () => openWindow('forge', () => setForgeOpen(true)),
+    open_forge: () => openForge(),
     open_blueprints: () => openBlueprints(),
     close_window: closeTopWindow,
   })
@@ -193,7 +205,7 @@ function AppShell() {
                 onClose={() => setSidebarOpen(false)} 
                 onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
                 onOpenSettings={() => openWindow('settings', () => setSettingsModalOpen(true))}
-                onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
+                onOpenForge={() => openForge()}
                 onOpenBlueprints={() => openBlueprints()}
                 onOpenStore={(store, table) =>
                   openWindow('stores', () => setStoreTarget({ store, table }))
@@ -231,18 +243,19 @@ function AppShell() {
               open={settingsModalOpen}
               onClose={() => setSettingsModalOpen(false)}
               onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
+              onOpenForge={() => openForge('rerankers')}
               panel={settingsPanel}
             />
           </MountOnce>
           <MountOnce when={forgeOpen}>
-            <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} />
+            <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} requestedTab={forgeTab} />
           </MountOnce>
           <MountOnce when={blueprintsOpen}>
             <BlueprintsWindow
               open={blueprintsOpen}
               onClose={() => setBlueprintsOpen(false)}
               requestedTab={blueprintsTab}
-              onOpenForge={() => openWindow('forge', () => setForgeOpen(true))}
+              onOpenForge={() => openForge()}
             />
           </MountOnce>
           <MountOnce when={storeTarget !== null}>
@@ -301,7 +314,7 @@ function AppShell() {
           danger
           onConfirm={() => {
             dismissNoModelPrompt()
-            openWindow('forge', () => setForgeOpen(true))
+            openForge()
           }}
           onCancel={dismissNoModelPrompt}
         />

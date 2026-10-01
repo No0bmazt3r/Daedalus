@@ -1045,3 +1045,39 @@ input[type='color']::-webkit-color-swatch {
     animation: collapse-flow-out 0.01s linear forwards;
   }
 }
+
+/* One-line text that scrolls when it does not fit — `components/ui/marquee-text.tsx`.
+   The box clips; when the component measures an overflow it adds
+   `.marquee-moving`, which runs two copies right-to-left by exactly one copy
+   plus the gap, so the loop has no seam. The faded edges let the text slide in
+   from and out into the background instead of being cut at a hard line. */
+.marquee {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.marquee-track {
+  display: inline-flex;
+  gap: var(--marquee-gap, 24px);
+}
+.marquee-copy { flex-shrink: 0; }
+.marquee-moving {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+}
+.marquee-moving .marquee-track {
+  animation: marquee-scroll var(--marquee-duration, 8s) linear infinite;
+}
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-1 * var(--marquee-shift, 0px))); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No motion: clip with an ellipsis, and the full label is in the title. */
+  .marquee-moving { -webkit-mask-image: none; mask-image: none; }
+  .marquee-moving .marquee-track { animation: none; }
+  .marquee-moving .marquee-copy + .marquee-copy { display: none; }
+  .marquee-moving .marquee-track,
+  .marquee-moving .marquee-copy { display: block; overflow: hidden; text-overflow: ellipsis; }
+}

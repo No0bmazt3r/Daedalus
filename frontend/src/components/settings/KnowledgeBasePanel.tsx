@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, HelpCircle, ArrowUpRight,
-  Download, Trash2, Loader2, ListOrdered, Route,
+  ListOrdered, Route,
 } from 'lucide-react'
 import {
-  deleteReranker, downloadReranker, fetchRagConfig, setGraphSettings, setRagTrack, setRerank,
+  fetchRagConfig, setGraphSettings, setRagTrack, setRerank,
   type GraphSettings, type RagConfig, type RagTrack, type RerankerModel, type RerankSettings,
   type TrackStatus,
 } from '../../lib/blueprintsClient'
@@ -14,7 +14,8 @@ import { ThemeSelect } from '../ui/theme-select'
 import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
 
 /**
- * Settings → Knowledge Base — which retrieval track answers a knowledge query.
+ * Settings → Retrieval Track · Vector RAG · Graph RAG — which retrieval track answers a
+ * knowledge query, and each track's own settings.
  *
  * `PROJECT.md` §5's dual-track comparison is the project's headline research
  * contribution, and a comparison needs a switch you can actually throw. This is
@@ -104,14 +105,98 @@ function TrackCard({
   )
 }
 
-export function KnowledgeBasePanel() {
+/**
+ * The rag config, read once per panel. Three panels share it — the track
+ * switch, Track 1's settings and Track 2's — and each reads its own copy rather
+ * than sharing state, because Settings shows one panel at a time and the
+ * server is the single source of truth either way.
+ */
+function useRagConfig() {
   const [config, setConfig] = useState<RagConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
   useEffect(() => {
     fetchRagConfig().then(setConfig).catch((e: Error) => setError(e.message))
   }, [])
+  return { config, setConfig, error, setError }
+}
+
+function LoadState({ error }: { error: string | null }) {
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">
+        <AlertCircle size={14} className="shrink-0 text-rose-400" /> {error}
+      </div>
+    )
+  }
+  return <Skeleton className="h-52 w-full" />
+}
+
+function FrozenNotice() {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
+      <Lock size={13} className="mt-0.5 shrink-0 text-amber-400" />
+      <p className="text-[11px] leading-relaxed theme-text">
+        The comparison is frozen. Changing a track after seeing its results invalidates the
+        evaluation, so this is read-only — edit <code>config/rag_config.json</code> by hand to
+        change it.
+      </p>
+    </div>
+  )
+}
+
+/** Settings → Vector RAG: Track 1's re-ranking, and whether its index can answer. */
+export function VectorRagPanel({ onOpenForge }: { onOpenForge?: () => void }) {
+  const { config, setConfig, error } = useRagConfig()
+  if (!config) return <LoadState error={error} />
+  return (
+    <div className="space-y-4">
+      <header>
+        <h3 className="flex items-center gap-1.5 text-sm theme-text">
+          <Boxes size={14} className="theme-text-muted" /> Vector RAG
+          <span className="rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">Track 1</span>
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed theme-text-muted">{BLURB.vector}</p>
+      </header>
+      {config.frozen && <FrozenNotice />}
+      <div className="border-t theme-border pt-4">
+        <RerankSection config={config} onChange={setConfig} onOpenForge={onOpenForge} />
+      </div>
+      {/* The index, not the model. Choosing and pulling an embedding model is
+          the Forge's job — it is a model, and the Forge is the model console.
+          What belongs here is the corpus fact: whether the vectors currently
+          stored were produced by the model that is currently selected. */}
+      <div className="border-t theme-border pt-4">
+        <IndexSummary />
+      </div>
+    </div>
+  )
+}
+
+/** Settings → Graph RAG: Track 2's retrieval mode — the agent loop or the fixed walk. */
+export function GraphRagPanel() {
+  const { config, setConfig, error } = useRagConfig()
+  if (!config) return <LoadState error={error} />
+  return (
+    <div className="space-y-4">
+      <header>
+        <h3 className="flex items-center gap-1.5 text-sm theme-text">
+          <Network size={14} className="theme-text-muted" /> Graph RAG
+          <span className="rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">Track 2</span>
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed theme-text-muted">{BLURB.graph}</p>
+      </header>
+      {config.frozen && <FrozenNotice />}
+      <div className="border-t theme-border pt-4">
+        <GraphModeSection config={config} onChange={setConfig} />
+      </div>
+    </div>
+  )
+}
+
+/** Settings → Retrieval Track: which track answers. Each track's own settings have their own panel. */
+export function KnowledgeBasePanel() {
+  const { config, setConfig, error, setError } = useRagConfig()
+  const [saving, setSaving] = useState(false)
 
   const choose = async (track: RagTrack) => {
     if (!config || config.track === track || config.frozen) return
@@ -126,14 +211,7 @@ export function KnowledgeBasePanel() {
     }
   }
 
-  if (error && !config) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">
-        <AlertCircle size={14} className="shrink-0 text-rose-400" /> {error}
-      </div>
-    )
-  }
-  if (!config) return <Skeleton className="h-52 w-full" />
+  if (!config) return <LoadState error={error} />
 
   return (
     <div className="space-y-4">
@@ -145,16 +223,7 @@ export function KnowledgeBasePanel() {
         </p>
       </header>
 
-      {config.frozen && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
-          <Lock size={13} className="mt-0.5 shrink-0 text-amber-400" />
-          <p className="text-[11px] leading-relaxed theme-text">
-            The comparison is frozen. Changing a track after seeing its results invalidates the
-            evaluation, so this is read-only — edit <code>config/rag_config.json</code> by hand to
-            change it.
-          </p>
-        </div>
-      )}
+      {config.frozen && <FrozenNotice />}
 
       <div className="space-y-2">
         {config.tracks.map((t) => (
@@ -178,24 +247,9 @@ export function KnowledgeBasePanel() {
         Committed to <code className="theme-text">config/rag_config.json</code>, read on every
         knowledge query and recorded per query in <code className="theme-text">rag_logs.track</code>,
         so a result can always be traced to the track that produced it. Each query's walk is visible
-        in Labyrinth Blueprints → Replay.
+        in Labyrinth Blueprints → Replay. The selected track's own settings — re-ranking for Vector
+        RAG, the agent loop for Graph RAG — appear as a panel below this one in the settings list.
       </p>
-
-      <div className="border-t theme-border pt-4">
-        <RerankSection config={config} onChange={setConfig} />
-      </div>
-
-      <div className="border-t theme-border pt-4">
-        <GraphModeSection config={config} onChange={setConfig} />
-      </div>
-
-      {/* The index, not the model. Choosing and pulling an embedding model is
-          the Forge's job — it is a model, and the Forge is the model console.
-          What belongs here is the corpus fact: whether the vectors currently
-          stored were produced by the model that is currently selected. */}
-      <div className="border-t theme-border pt-4">
-        <IndexSummary />
-      </div>
     </div>
   )
 }
@@ -392,30 +446,17 @@ function mb(bytes: number) {
 function RerankSection({
   config,
   onChange,
+  onOpenForge,
 }: {
   config: RagConfig
   onChange: (config: RagConfig) => void
+  onOpenForge?: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const rerank = config.rerank
   const selected = config.rerankers.find((m) => m.id === rerank.model)
-  const downloading = config.rerankers.some((m) => m.download?.status === 'downloading')
   const locked = config.frozen || busy
-
-  // While a download runs, re-read until it lands. The backend does the work
-  // on its own thread; this only watches.
-  const onChangeRef = useRef(onChange)
-  useEffect(() => {
-    onChangeRef.current = onChange
-  })
-  useEffect(() => {
-    if (!downloading) return
-    const timer = window.setInterval(() => {
-      fetchRagConfig().then((c) => onChangeRef.current(c)).catch(() => undefined)
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [downloading])
 
   const save = async (patch: Partial<RerankSettings>) => {
     setBusy(true)
@@ -426,16 +467,6 @@ function RerankSection({
       setError((e as Error).message)
     } finally {
       setBusy(false)
-    }
-  }
-
-  const act = async (fn: () => Promise<unknown>) => {
-    setError(null)
-    try {
-      await fn()
-      onChange(await fetchRagConfig())
-    } catch (e) {
-      setError((e as Error).message)
     }
   }
 
@@ -471,23 +502,31 @@ function RerankSection({
       {rerank.enabled && selected && !selected.installed && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
           <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
-          <p className="text-[11px] leading-relaxed theme-text">
-            {selected.label} is selected but not downloaded, so Track 1 is answering in plain vector
-            order. Download it below.
-          </p>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-[11px] leading-relaxed theme-text">
+              {selected.label} is selected but not downloaded, so Track 1 is answering in plain vector
+              order. Download it in The Forge → Re-rankers.
+            </p>
+            {onOpenForge && (
+              <button
+                onClick={onOpenForge}
+                className="flex items-center gap-1 rounded-md border theme-border px-2 py-0.5 text-[11px] theme-text hover:theme-surface"
+              >
+                Open The Forge <ArrowUpRight size={11} />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       <div className="space-y-2">
         {config.rerankers.map((m) => (
-          <RerankerCard
+          <RerankerChoice
             key={m.id}
             model={m}
             selected={m.id === rerank.model}
             disabled={locked || !rerank.enabled}
             onSelect={() => void save({ model: m.id })}
-            onDownload={() => void act(() => downloadReranker(m.id))}
-            onDelete={() => void act(() => deleteReranker(m.id))}
           />
         ))}
       </div>
@@ -518,72 +557,60 @@ function RerankSection({
 
       <p className="text-[11px] leading-relaxed theme-text-muted">
         Recorded per query in <code className="theme-text">rag_logs.rerank_model</code> and{' '}
-        <code className="theme-text">rerank_scores</code>. Weights are pinned to a Hugging Face commit and
-        stored under <code className="theme-text">data/models/rerankers</code>; after the download nothing
-        here uses the network.
+        <code className="theme-text">rerank_scores</code>. The weights are downloaded and deleted in The
+        Forge → Re-rankers, with every other model on this machine; this panel only chooses.
       </p>
     </div>
   )
 }
 
-function RerankerCard({
-  model, selected, disabled, onSelect, onDownload, onDelete,
+/**
+ * One re-ranker as a choice. Download and delete live in The Forge →
+ * Re-rankers, with every other model on this machine; this card
+ * only selects, and says when the selection still needs downloading.
+ */
+function RerankerChoice({
+  model, selected, disabled, onSelect,
 }: {
   model: RerankerModel
   selected: boolean
   disabled: boolean
   onSelect: () => void
-  onDownload: () => void
-  onDelete: () => void
 }) {
-  const job = model.download
-  const pct = job && job.total ? Math.min(100, Math.round((job.bytes / job.total) * 100)) : 0
   return (
-    <div
-      className={`rounded-lg border p-3 transition-colors ${
-        selected ? 'theme-accent-border theme-surface-strong' : 'theme-border'
-      } ${disabled ? 'opacity-70' : ''}`}
+    <button
+      onClick={onSelect}
+      disabled={disabled || selected}
+      className={`w-full rounded-lg border p-3 text-left transition-colors disabled:cursor-default ${
+        selected ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
+      } ${disabled && !selected ? 'opacity-60' : ''}`}
     >
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onSelect}
-          disabled={disabled || selected}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="truncate text-sm theme-text">{model.label}</span>
+        <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">
+          {model.languages}
+        </span>
+        <span className={`shrink-0 text-[10px] ${model.installed ? 'text-emerald-400' : 'theme-text-muted'}`}>
+          {model.installed ? 'downloaded' : `not downloaded · ${mb(model.size_bytes)}`}
+        </span>
+        <span
+          className={`shrink-0 text-[10px] ${
+            model.fit.verdict === 'safe' ? 'status-ok' : model.fit.verdict === 'marginal' ? 'status-warn' : 'status-bad'
+          }`}
+          title={model.fit.reasons.join(' · ') || 'Fits this machine'}
         >
-          <span className="truncate text-sm theme-text">{model.label}</span>
-          <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">
-            {model.languages}
+          {model.fit.verdict === 'will_not_fit' ? 'will not fit' : model.fit.verdict} ·{' '}
+          {model.fit.latency_source === 'measured' ? '' : '~'}
+          {model.fit.latency_ms < 1000 ? `${model.fit.latency_ms} ms` : `${(model.fit.latency_ms / 1000).toFixed(1)} s`}
+        </span>
+        {model.recommended_for.length > 0 && (
+          <span className="shrink-0 rounded border theme-accent-border px-1.5 py-px text-[10px] theme-accent">
+            Recommended{model.recommended_for.includes('english') ? '' : ' for Malay'}
           </span>
-          {selected && <Check size={14} className="ml-auto shrink-0 theme-accent" />}
-        </button>
-        {job?.status === 'downloading' ? (
-          <span className="flex shrink-0 items-center gap-1 text-[11px] theme-text-muted">
-            <Loader2 size={12} className="animate-spin" /> {pct}%
-          </span>
-        ) : model.installed ? (
-          <button
-            onClick={onDelete}
-            className="shrink-0 rounded p-1 theme-text-muted hover:theme-text"
-            title="Delete the downloaded weights"
-            aria-label={`Delete ${model.label}`}
-          >
-            <Trash2 size={13} />
-          </button>
-        ) : (
-          <button
-            onClick={onDownload}
-            className="flex shrink-0 items-center gap-1 rounded border theme-border px-2 py-1 text-[11px] theme-text hover:theme-surface"
-          >
-            <Download size={12} /> {mb(model.size_bytes)}
-          </button>
         )}
+        {selected && <Check size={14} className="ml-auto shrink-0 theme-accent" />}
       </div>
       <p className="mt-1.5 text-[11px] leading-relaxed theme-text-muted">{model.note}</p>
-      <p className="mt-1 text-[10px] theme-text-muted">
-        <code className="theme-text">{model.repo}</code> @ {model.revision.slice(0, 7)}
-        {model.installed ? ' · downloaded' : ' · not downloaded'}
-        {job?.status === 'error' && <span className="text-rose-400"> · download failed: {job.error}</span>}
-      </p>
-    </div>
+    </button>
   )
 }
