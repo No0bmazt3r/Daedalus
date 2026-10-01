@@ -503,7 +503,7 @@ def events(run_id: str, *, level: str | None = None, limit: int = 500) -> list[d
 
 
 def stats() -> dict[str, Any]:
-    """Corpus totals — for Settings → Databases and the pipeline header."""
+    """Corpus totals — for Settings → System → Storage health and the pipeline header."""
     try:
         with _connect() as conn:
             docs = conn.execute(

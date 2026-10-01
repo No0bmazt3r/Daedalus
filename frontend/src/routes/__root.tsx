@@ -243,12 +243,17 @@ function AppShell() {
               open={settingsModalOpen}
               onClose={() => setSettingsModalOpen(false)}
               onOpenTheme={() => openWindow('theme', () => setThemeModalOpen(true))}
-              onOpenForge={() => openForge('rerankers')}
+              onOpenForge={(tab) => openForge(tab)}
               panel={settingsPanel}
             />
           </MountOnce>
           <MountOnce when={forgeOpen}>
-            <ForgeWindow open={forgeOpen} onClose={() => setForgeOpen(false)} requestedTab={forgeTab} />
+            <ForgeWindow
+              open={forgeOpen}
+              onClose={() => setForgeOpen(false)}
+              requestedTab={forgeTab}
+              onOpenSettings={(panel) => paletteActions.openSettings(panel)}
+            />
           </MountOnce>
           <MountOnce when={blueprintsOpen}>
             <BlueprintsWindow

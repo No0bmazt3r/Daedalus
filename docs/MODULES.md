@@ -320,7 +320,7 @@ The full methodology, including the threats to validity this measurement does
 `backend/app/services/hardware.py` detects CPU model and
 core counts, total/available RAM, swap, GPU and VRAM, free disk where models
 land, and the Ollama version. It is rendered by `HardwareView`, which is shared
-between Settings → Hardware and the Forge window — one component, so the two
+between the Forge's Hardware tab and anything else that reads the machine — one component, so the two
 can never quote different numbers, which matters when one of them ends up in
 the report.
 

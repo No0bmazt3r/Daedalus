@@ -194,7 +194,7 @@ export function GraphCanvas({
   const rafRef = useRef<number | null>(null)
   // The viewport, in graph coordinates. A ref rather than state because the
   // wheel and pan handlers are non-React listeners that must read the current
-  // value, not the one captured when they were attached; `setFrame` is what
+  // value, not the one captured when they were attached; `commit` is what
   // turns a mutation into a repaint.
   // Measured when `height` is not given. `HEIGHT` covers the frame before the
   // first observation, so the fit maths never divides by zero and the canvas
@@ -206,7 +206,21 @@ export function GraphCanvas({
   const viewRef = useRef({ x: 0, y: 0, w: WIDTH, h: drawHeight })
   const fittedRef = useRef({ w: WIDTH, h: drawHeight })
   const panRef = useRef<{ x: number; y: number; view: { x: number; y: number } } | null>(null)
-  const [, setFrame] = useState(0)
+  // What the last commit drew: the view box and a copy of every node's
+  // position. Render reads this, never the refs — the simulation mutates its
+  // nodes in place between frames, and reading a ref while rendering is a side
+  // effect React may replay. `commit` copies the live state across; it is what
+  // every tick, pan, zoom and fit calls in place of a bare re-render.
+  const [snapshot, setSnapshot] = useState<{ view: typeof viewRef.current; nodes: SimNode[] }>(() => ({
+    view: { x: 0, y: 0, w: WIDTH, h: drawHeight },
+    nodes: [],
+  }))
+  const commit = useCallback(() => {
+    setSnapshot({
+      view: { ...viewRef.current },
+      nodes: (simRef.current?.nodes() ?? []).map((n) => ({ ...n })),
+    })
+  }, [])
   const [hovered, setHovered] = useState<string | null>(null)
   const dragRef = useRef<{ id: string } | null>(null)
 
@@ -274,8 +288,8 @@ export function GraphCanvas({
       h,
     }
     fittedRef.current = { w, h }
-    setFrame((f) => f + 1)
-  }, [drawHeight])
+    commit()
+  }, [drawHeight, commit])
 
   /**
    * Keep the viewBox's aspect matched to the frame when the frame changes.
@@ -301,8 +315,8 @@ export function GraphCanvas({
     const nextH = view.w / aspect
     viewRef.current = { ...view, y: view.y + view.h / 2 - nextH / 2, h: nextH }
     fittedRef.current = { ...fittedRef.current, h: fittedRef.current.w / aspect }
-    setFrame((f) => f + 1)
-  }, [drawHeight])
+    commit()
+  }, [drawHeight, commit])
 
   /** Zoom about a point given in 0..1 of the drawing area. */
   const zoomBy = useCallback((factor: number, px = 0.5, py = 0.5) => {
@@ -321,8 +335,8 @@ export function GraphCanvas({
       w: next,
       h: nh,
     }
-    setFrame((f) => f + 1)
-  }, [])
+    commit()
+  }, [commit])
 
   /**
    * Tick the simulation on animation frames until it settles, then stop.
@@ -339,7 +353,7 @@ export function GraphCanvas({
         return
       }
       sim.tick()
-      setFrame((f) => f + 1)
+      commit()
       // Keep going while the drag is live, however long that is; otherwise run
       // until the energy is gone. Stopping is what keeps an idle window free.
       if (!dragRef.current && sim.alpha() < ALPHA_REST) {
@@ -350,7 +364,7 @@ export function GraphCanvas({
       rafRef.current = requestAnimationFrame(step)
     }
     rafRef.current = requestAnimationFrame(step)
-  }, [])
+  }, [commit])
 
   useEffect(() => {
     const sim = forceSimulation<SimNode>(simNodes)
@@ -381,7 +395,7 @@ export function GraphCanvas({
 
     simRef.current = sim
     fit()
-    setFrame((f) => f + 1)
+    commit()
 
     return () => {
       sim.stop()
@@ -391,7 +405,7 @@ export function GraphCanvas({
         rafRef.current = null
       }
     }
-  }, [simNodes, simLinks, fit])
+  }, [simNodes, simLinks, fit, commit])
 
   // Drag: the held node follows the cursor, neighbours yield, and on release
   // everything eases home.
@@ -423,7 +437,7 @@ export function GraphCanvas({
           x: pan.view.x - ((e.clientX - pan.x) / rect.width) * view.w,
           y: pan.view.y - ((e.clientY - pan.y) / rect.height) * view.h,
         }
-        setFrame((f) => f + 1)
+        commit()
         return
       }
 
@@ -484,10 +498,9 @@ export function GraphCanvas({
       window.removeEventListener('pointercancel', up)
       svg.removeEventListener('wheel', wheel)
     }
-  }, [run, zoomBy])
+  }, [run, zoomBy, commit])
 
-  const sim = simRef.current
-  const laidOut = sim?.nodes() ?? []
+  const laidOut = snapshot.nodes
   const byId = new Map(laidOut.map((n) => [n.id, n]))
 
   // What to emphasise: the selected node and everything one hop from it.
@@ -516,7 +529,7 @@ export function GraphCanvas({
       <div ref={frameRef} className="min-h-0 flex-1">
       <svg
         ref={svgRef}
-        viewBox={`${viewRef.current.x} ${viewRef.current.y} ${viewRef.current.w} ${viewRef.current.h}`}
+        viewBox={`${snapshot.view.x} ${snapshot.view.y} ${snapshot.view.w} ${snapshot.view.h}`}
         className="w-full cursor-grab touch-none select-none active:cursor-grabbing"
         style={{ height: drawHeight }}
         onPointerDown={(e) => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ChevronDown, Cloud, Cpu, FlaskConical, Loader2, RefreshCw, Trash2, X,
-  CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Binary,
+  CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Binary, ListOrdered, MessageSquare,
 } from 'lucide-react'
 import {
   modelTable, modelUsage, deleteModel, runBenchmark,
@@ -10,6 +10,8 @@ import {
 import { CapabilityBadges } from '../ui/capability-badges'
 import { ModelArchitecture } from '../ui/model-architecture'
 import { EmbeddingModelsPane } from './EmbeddingModelsPane'
+import { RerankersPane } from './RerankersPane'
+import { fetchRagConfig } from '../../lib/blueprintsClient'
 import { CloudModelsView } from './CloudModelsView'
 import { SkeletonList } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
@@ -273,18 +275,30 @@ function LocalModel({
   )
 }
 
-type PaneId = 'local' | 'embedding' | 'cloud'
+/**
+ * Installed is split by what a model is for — the same three kinds the browse
+ * tabs are: chat models (local, with the cloud baselines beside them),
+ * embedding models, and re-rankers. Each browse tab has its managing half here.
+ */
+type PaneId = 'chat' | 'embedding' | 'rerankers'
+type ChatSource = 'local' | 'cloud'
 type TierFilter = 'all' | 'slm' | 'llm'
 
 export function InstalledModelsView({
-  isPeek, onBrowseChat, onBrowseEmbeddings,
+  isPeek, onBrowseChat, onBrowseEmbeddings, onChooseEmbedding, onBrowseRerankers,
 }: {
   isPeek: boolean
+  /** Where the index's embedding model is chosen — Settings → Vector RAG. */
+  onChooseEmbedding?: () => void
   /** Where to go to find and pull a chat model. Absent outside the Forge. */
   onBrowseChat?: () => void
   onBrowseEmbeddings?: () => void
+  /** Where to find and download a re-ranker. Absent outside the Forge. */
+  onBrowseRerankers?: () => void
 }) {
-  const [pane, setPane] = useState<PaneId>('local')
+  const [pane, setPane] = useState<PaneId>('chat')
+  const [source, setSource] = useState<ChatSource>('local')
+  const [rerankerCount, setRerankerCount] = useState(0)
   const [tier, setTier] = useState<TierFilter>('all')
   const [rows, setRows] = useState<ModelRow[] | null>(null)
   const [embeddingCount, setEmbeddingCount] = useState(0)
@@ -299,11 +313,13 @@ export function InstalledModelsView({
   // remounting them is what makes the one Refresh button refresh every pane.
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const load = useCallback(async () => {
-    // Settled, not all: usage is derived from the audit log and the inventory
-    // from Ollama. Either can fail without the other being useless.
-    const [table, used] = await Promise.allSettled([modelTable(), modelUsage()])
+  // Settled, not all: usage is derived from the audit log and the inventory
+  // from Ollama. Either can fail without the other being useless. State is set
+  // in the promise's callback only, so mounting starts a request rather than
+  // re-rendering synchronously.
+  const load = useCallback(() => Promise.allSettled([modelTable(), modelUsage(), fetchRagConfig()]).then(([table, used, rag]) => {
     if (used.status === 'fulfilled') setUsage(used.value.models)
+    if (rag.status === 'fulfilled') setRerankerCount(rag.value.rerankers.filter((m) => m.installed).length)
     if (table.status === 'fulfilled') {
       const all = table.value.rows
       setRows(all.filter((r) => r.installed && !r.remote && r.tier !== 'embedding'))
@@ -314,7 +330,7 @@ export function InstalledModelsView({
       setRows([])
       setError(table.reason instanceof Error ? table.reason.message : 'request failed')
     }
-  }, [])
+  }), [])
 
   useEffect(() => {
     void load()
@@ -366,6 +382,29 @@ export function InstalledModelsView({
     }
   }, [load])
 
+  // Local and cloud chat models side by side, but never in one list: under
+  // Rule 1 a cloud model is an evaluation baseline, not a deployment target.
+  const sourceSwitch = (
+    <div className="flex items-center gap-1.5">
+      {([
+        { id: 'local' as const, label: 'Local', icon: Cpu, n: rows?.length ?? 0 },
+        { id: 'cloud' as const, label: 'Cloud baselines', icon: Cloud, n: cloudCount },
+      ]).map((entry) => (
+        <button
+          key={entry.id}
+          onClick={() => setSource(entry.id)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
+            source === entry.id
+              ? 'theme-accent-border theme-accent theme-surface-strong'
+              : 'theme-border theme-text-muted hover:theme-text'
+          }`}
+        >
+          <entry.icon size={12} /> {entry.label} <span className="tabular-nums opacity-70">{entry.n}</span>
+        </button>
+      ))}
+    </div>
+  )
+
   const chip = (active: boolean) =>
     `px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
       active
@@ -378,7 +417,8 @@ export function InstalledModelsView({
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
           What this machine has, and what it has been running. Benchmark and delete models,
-          choose the embedding model, and compare against cloud baselines.
+          verify embedding models and benchmark re-rankers — chat (local and cloud baseline),
+          embedding and re-ranking models each in their own list.
         </p>
         <button
           onClick={() => { setRefreshKey((k) => k + 1); void load() }}
@@ -394,9 +434,9 @@ export function InstalledModelsView({
           as the window narrows shifts everything below it for no reason. */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b theme-border pb-2">
         {([
-          { id: 'local' as const, label: 'Local models', icon: Cpu, n: rows?.length ?? 0 },
+          { id: 'chat' as const, label: 'Chat models', icon: MessageSquare, n: (rows?.length ?? 0) + cloudCount },
           { id: 'embedding' as const, label: 'Embedding models', icon: Binary, n: embeddingCount },
-          { id: 'cloud' as const, label: 'Cloud baselines', icon: Cloud, n: cloudCount },
+          { id: 'rerankers' as const, label: 'Re-rankers', icon: ListOrdered, n: rerankerCount },
         ]).map((entry) => (
           <button
             key={entry.id}
@@ -420,11 +460,17 @@ export function InstalledModelsView({
 
       <div key={`${pane}-${refreshKey}`} className="animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out space-y-3">
         {pane === 'embedding' ? (
-          <EmbeddingModelsPane mode="installed" onBrowse={onBrowseEmbeddings} />
-        ) : pane === 'cloud' ? (
-          <CloudModelsView isPeek={isPeek} />
+          <EmbeddingModelsPane mode="installed" onBrowse={onBrowseEmbeddings} onChoose={onChooseEmbedding} />
+        ) : pane === 'rerankers' ? (
+          <RerankersPane mode="installed" onBrowse={onBrowseRerankers} />
+        ) : source === 'cloud' ? (
+          <>
+            {sourceSwitch}
+            <CloudModelsView isPeek={isPeek} />
+          </>
         ) : (
           <>
+            {sourceSwitch}
             <PaneIntro
               action={onBrowseChat && <BrowseLink onClick={onBrowseChat}>Browse chat models</BrowseLink>}
             >

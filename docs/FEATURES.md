@@ -23,8 +23,8 @@ Everything below was read off the source, not from memory.
 | Floating windows | Built — drag, resize, Peek, minimize (chips dock beside the incognito toggle), Escape. All four windows, including the non-modal theme palette |
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
-| Hardware detection | Built — background-scheduled, in Settings → Hardware and the Forge. Container-aware, with GPU passthrough layered on where the host has one |
-| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs: Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed (manage: local, embedding, cloud). Which re-ranker runs is chosen in Settings → Vector RAG, whose *Open The Forge* button lands on the Re-rankers tab |
+| Hardware detection | Built — background-scheduled, in the Forge → Hardware. Container-aware, with GPU passthrough layered on where the host has one |
+| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs — everything about models and the machine (the rule is in §6): Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed — split the same way: Chat models (Local · Cloud baselines), Embedding models (verify), Re-rankers (benchmark, delete); the Re-rankers browse tab shows a downloaded model as *Manage*. Which embedding model builds the index and which re-ranker runs are chosen in Settings → Vector RAG, whose *Open The Forge* buttons land on the right tab |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
@@ -112,7 +112,7 @@ to it.
 | `POST` | `/api/rag/rerankers/{id}/benchmark` | Time re-scoring 20 chunk-sized passages on this machine (median of three, after a warm-up); stored with the weights, it replaces the estimate in the model's verdict |
 | `POST`/`DELETE` | `/api/rag/rerankers/{id}` (`/download` for POST) | Download a re-ranker's pinned weights on a worker thread, or delete them. Called from The Forge → Re-rankers; progress is read back from `/api/rag/config`'s `rerankers` |
 | `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
-| `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it |
+| `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it. `PUT` (Settings → Vector RAG) is refused with 409 while the comparison is frozen |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
 | `POST` | `/api/embeddings/verify` | Embed a probe string and record the width the model actually returns. The only call here that runs a model |
 | `GET`/`PUT` | `/api/search/config` | The web search provider, its fallback chain, and what each provider still needs configured |
@@ -1386,6 +1386,28 @@ content.
 declares its id, label, group, icon, keywords, `adminOnly` and `implemented`
 flag once. Nav, groups and search all read from it, so they cannot drift apart.
 
+**What belongs here, and what belongs in the Forge.** The Forge answers *"what
+models are on this machine, and can it run them"* — acquire, judge fit,
+benchmark, delete. Settings answers *"how does the assistant behave"* — which
+model does which job, retrieval policy, preferences, administration. Anything
+frozen for the comparison, or that changes an answer, is in Settings.
+
+| Group | Panels |
+|---|---|
+| Knowledge | Retrieval Track · **Vector RAG** (embedding model, index state, cloud embedding baseline, re-ranker) *or* **Graph RAG** (agent loop) |
+| Assistant | Background Jobs |
+| Connections | Search · Integrations |
+| Experience | Appearance · Shortcuts |
+| Administration | Agent Tools |
+| System | Storage Health · Process Log · Backup · Danger Zone — four panels, because they are used at different times and the destructive one should not sit a scroll below an everyday one |
+
+Add Models, Added Models and Hardware were removed: each rendered a Forge
+component a second time. Databases became *Storage Health*, one of System's four panels.
+Choosing the embedding model moved from the Forge into Vector RAG — it decides
+Track 1's index, sits beside the re-ranker choice, and is now frozen with the
+comparison like it. Removed panel ids redirect (`REDIRECTS`), so a saved panel
+or an old palette entry still lands somewhere.
+
 - **Search** matches labels, group names *and* keywords — `vram` → Hardware,
   `sqlite` → Databases. Arrow keys navigate, Enter opens, Escape clears.
 - **Resizable rail** — 150–340px, drag below 110px to collapse.
@@ -1531,7 +1553,7 @@ Paths are relative to `frontend/src/`.
 | `components/ui/collapse.tsx` | The one collapse/expand animation, and the mount lifetime it needs. Two variants: `domino` for a list of rows (springy, the sidebar's), `flow` for a panel of sections (the container unfolds via `grid-template-rows`, sections settle downward, no overshoot) |
 | `hooks/useDraggable.ts` | Window drag, plus edge snapping: zones, preview rectangle, restore-under-cursor |
 | `components/ui/skeleton.tsx` | Loading placeholders that hold the shape of what is coming |
-| `components/forge/HardwareView.tsx` | Hardware readout, shared by Settings → Hardware and the Forge |
+| `components/forge/HardwareView.tsx` | Hardware readout — the Forge's Hardware tab |
 | `components/forge/ForgeWindow.tsx` | The Forge (Layer 11) — step 1 of §8.2 |
 | `components/blueprints/BlueprintsWindow.tsx` | Labyrinth Blueprints (MODULES.md §3) — renders the live retrieval track's tabs only, and owns the fallback chain when that track cannot be read or has nothing to show (§3.8) |
 | `components/blueprints/CorpusView.tsx` | Track 1's inventory: documents, and every chunk as the retriever stores them. States why there is no Coverage tab on this arm |
@@ -1600,7 +1622,7 @@ steps** rather than stopping — `@3xl:max-w-3xl @5xl:max-w-5xl` and finally
 `@7xl:max-w-[min(100%,1500px)]`, where the `min()` keeps the cap from exceeding
 the pane it is centred in — and the panes that are made of independent cards
 **tile** once there is width to tile into: the Forge's five hardware readings go
-to two columns at `@4xl` and three at `@7xl`, and Settings → Databases goes to
+to two columns at `@4xl` and three at `@7xl`, and Settings → System's Storage health goes to
 two at `@5xl`. Both use `items-start`, because the cards are different heights
 and stretching them to match is how a grid turns into four cards of padding.
 
@@ -1651,7 +1673,7 @@ how often each is actually used:
 | Surface | Answers | Reached |
 |---|---|---|
 | **Sidebar → Data stores** | "What is in this table right now?" | One click, next to the chats. Includes `corpus` — the ingestion manifest, the per-stage event log, the graph's edit history and the proposal queue, which is where a pipeline question gets answered by reading a row |
-| **Settings → Databases** | "Is every store healthy?" | Settings, occasionally |
+| **Settings → System → Storage health** | "Is every store healthy?" | Settings, occasionally |
 | **Metrics stack** (own port) | "*Why* is this store unhealthy?" | A standing link out of that panel |
 
 Browsing rows is something you do constantly while building, so it belongs in
@@ -1794,7 +1816,7 @@ without it.
 
 What it fixes is *detection*, not inference — Ollama still runs on the host by
 default. Without it the container sees no driver, `services/hardware.py`
-correctly reports no GPU **for the container**, and Settings → Hardware reads as
+correctly reports no GPU **for the container**, and the Forge's Hardware tab reads as
 broken detection on a laptop with the card sitting in it, while the Forge sizes
 models against zero VRAM. `_in_container()` is why the panel now says which
 machine it is describing: with no driver visible it names the passthrough flag

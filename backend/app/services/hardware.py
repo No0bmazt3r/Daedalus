@@ -521,7 +521,7 @@ def _ollama_section() -> dict[str, Any]:
 # ── snapshot cache and background refresh ────────────────────────────────────
 #
 # Detection used to run inside the request: every time the Forge window or
-# Settings → Hardware was opened, this module spawned nvidia-smi, waited out
+# the hardware view was opened, this module spawned nvidia-smi, waited out
 # Ollama's HTTP timeout and — under WSL — paid ~2.5s for a PowerShell interop
 # call, all before the panel could paint. The cost scaled with how often
 # somebody looked at the panel, which is the wrong thing for it to scale with.

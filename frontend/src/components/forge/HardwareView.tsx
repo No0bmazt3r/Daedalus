@@ -10,10 +10,11 @@ import { Skeleton, SkeletonCard } from '../ui/skeleton'
 /**
  * What this machine is — step 1 of the six in PROJECT.md §8.2.
  *
- * Rendered in two places from this one component: Settings → Hardware, and the
- * Forge window in the sidebar. The same numbers in both, because two
- * implementations of "how much RAM is there" would eventually disagree and one
- * of them would be the one quoted in the report.
+ * The Forge's Hardware tab. It used to be rendered a second time as Settings →
+ * Hardware; that panel was removed (the Forge owns everything about the
+ * machine and its models), and the re-ranker fit verdicts read the same
+ * profile through the backend, so there is still one source for "how much RAM
+ * is there".
  *
  * Every field is nullable by design. A machine with no GPU, no `nvidia-smi` and
  * no Ollama is normal; each unknown shows as "—" with the reason, rather than

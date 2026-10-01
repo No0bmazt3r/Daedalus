@@ -307,7 +307,7 @@ def collections() -> list[dict[str, Any]]:
 
 
 def stats(name: str | None = None) -> dict[str, Any]:
-    """Reachability, size and provenance — for Settings → Databases."""
+    """Reachability, size and provenance — for Settings → System → Storage health."""
     mode = "server" if CHROMA_URL else "embedded"
     target = CHROMA_URL or str(CHROMA_DIR)
     info = describe(name)

@@ -136,16 +136,22 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => stopPolling, [stopPolling]);
 
-  const refresh = useCallback(async () => {
-    try {
-      setSessions(await listSessions());
-      setStatus('ready');
-      setError(null);
-    } catch (err) {
-      setStatus('offline');
-      setError(err instanceof Error ? err.message : 'could not load chats');
-    }
-  }, []);
+  // State is set in the promise's callbacks only, so the mount effect below
+  // starts a request rather than synchronously re-rendering.
+  const refresh = useCallback(
+    () =>
+      listSessions()
+        .then((next) => {
+          setSessions(next);
+          setStatus('ready');
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          setStatus('offline');
+          setError(err instanceof Error ? err.message : 'could not load chats');
+        }),
+    [],
+  );
 
   useEffect(() => {
     void refresh();

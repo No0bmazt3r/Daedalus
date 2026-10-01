@@ -521,7 +521,7 @@ def get_recent_messages(session_id: str, *, count: int) -> list[dict[str, Any]]:
 
 
 def stats() -> dict[str, Any]:
-    """Row counts for the Settings → Databases panel."""
+    """Row counts for the Settings → System → Storage health panel."""
     init_db()
     with sqlite_util.connect(DB_PATH) as conn:
         return {

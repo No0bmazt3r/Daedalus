@@ -7,7 +7,7 @@ import {
   type RagConfig, type RerankerModel, type RerankVerdict,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
-import { PaneIntro } from './paneParts'
+import { BrowseLink, EmptyNote, PaneIntro } from './paneParts'
 
 /**
  * The Forge → Re-rankers.
@@ -23,6 +23,11 @@ import { PaneIntro } from './paneParts'
  * answer. The time is an *estimate* until Benchmark measures it on this machine,
  * and the card says which. The recommendation is the strongest model judged
  * safe, once for English and once for Malay.
+ *
+ * Two modes, like the embedding models: `browse` (Forge → Re-rankers) is the
+ * catalogue with its fit verdicts and Download; `installed` (Forge → Installed →
+ * Re-rankers) is what is on disk, with Benchmark and Delete. Each control has
+ * one home — a downloaded model in browse shows Manage, not the controls again.
  *
  * *Which* re-ranker Track 1 uses stays in Settings → Vector RAG: that is a
  * retrieval setting, frozen with the comparison. Downloading is not.
@@ -41,7 +46,15 @@ const VERDICT: Record<RerankVerdict, { icon: typeof CircleCheck; tone: string; l
   will_not_fit: { icon: CircleSlash, tone: 'status-bad', label: 'will not fit' },
 }
 
-export function RerankersPane() {
+export function RerankersPane({
+  mode = 'browse', onManage, onBrowse,
+}: {
+  mode?: 'browse' | 'installed'
+  /** Browse mode: go to where a downloaded model is managed. */
+  onManage?: () => void
+  /** Installed mode: go to where one can be downloaded. */
+  onBrowse?: () => void
+}) {
   const [config, setConfig] = useState<RagConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [benching, setBenching] = useState<string | null>(null)
@@ -89,17 +102,24 @@ export function RerankersPane() {
   const fit = config.rerank_fit
   const free = fit.machine.available_bytes
   // Recommended first, then strongest; the list reads as an answer, not a catalogue.
-  const rows = [...config.rerankers].sort(
-    (a, b) => b.recommended_for.length - a.recommended_for.length || b.quality - a.quality,
-  )
+  const rows = [...config.rerankers]
+    .filter((m) => mode === 'browse' || m.installed)
+    .sort((a, b) => b.recommended_for.length - a.recommended_for.length || b.quality - a.quality)
 
   return (
     <div className="space-y-3">
-      <PaneIntro>
-        Cross-encoders that re-score Track 1's nearest chunks and keep the ones that actually answer
-        the question — judged against this machine. Download one here; choose which Track 1 uses in
-        Settings → Vector RAG.
-      </PaneIntro>
+      {mode === 'browse' ? (
+        <PaneIntro>
+          Cross-encoders that re-score Track 1's nearest chunks and keep the ones that actually answer
+          the question — judged against this machine. Download one here, benchmark it under Installed,
+          and choose which Track 1 uses in Settings → Vector RAG.
+        </PaneIntro>
+      ) : (
+        <PaneIntro action={onBrowse && <BrowseLink onClick={onBrowse}>Browse re-rankers</BrowseLink>}>
+          The re-rankers on this machine. Benchmark one to replace its estimated time with a
+          measurement; choose which Track 1 uses in Settings → Vector RAG.
+        </PaneIntro>
+      )}
 
       <div className="rounded-xl border theme-border p-3 text-[11px] leading-relaxed theme-text-muted">
         Judged for <span className="theme-text">{fit.machine.cpu ?? 'this CPU'}</span>
@@ -117,10 +137,15 @@ export function RerankersPane() {
       )}
 
       <div className="space-y-2">
+        {mode === 'installed' && rows.length === 0 && (
+          <EmptyNote>No re-rankers downloaded yet.</EmptyNote>
+        )}
         {rows.map((m) => (
           <RerankerRow
             key={m.id}
             model={m}
+            mode={mode}
+            onManage={onManage}
             inUse={config.rerank.enabled && config.rerank.model === m.id}
             benching={benching === m.id}
             onDownload={() => void act(() => downloadReranker(m.id))}
@@ -145,9 +170,11 @@ export function RerankersPane() {
 }
 
 function RerankerRow({
-  model, inUse, benching, onDownload, onBenchmark, onDelete,
+  model, mode, onManage, inUse, benching, onDownload, onBenchmark, onDelete,
 }: {
   model: RerankerModel
+  mode: 'browse' | 'installed'
+  onManage?: () => void
   inUse: boolean
   benching: boolean
   onDownload: () => void
@@ -190,6 +217,18 @@ function RerankerRow({
           <span className="flex shrink-0 items-center gap-1 text-[11px] theme-text-muted">
             <Loader2 size={12} className="animate-spin" /> {pct}%
           </span>
+        ) : model.installed && mode === 'browse' ? (
+          onManage ? (
+            <button
+              onClick={onManage}
+              className="shrink-0 rounded-lg border theme-border px-2 py-1 text-[11px] theme-text-muted hover:theme-text"
+              title="Benchmark or delete it under Installed → Re-rankers"
+            >
+              Downloaded · Manage
+            </button>
+          ) : (
+            <span className="shrink-0 text-[11px] status-ok">Downloaded</span>
+          )
         ) : model.installed ? (
           <>
             <button

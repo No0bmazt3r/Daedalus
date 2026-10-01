@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ADV_GROUPS,
@@ -214,15 +214,19 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
   useMinimizeOnOutsideClick(windowRef, open && !minimized, minimize)
 
   // Auto-saved pill, mirroring the flash Odysseus shows on every tweak.
+  // Shown on each new save (adjusted during render), hidden by a timer that
+  // restarts with every save.
   const [pillVisible, setPillVisible] = useState(false)
-  const pillTimer = useRef<number | undefined>(undefined)
+  const [seenSave, setSeenSave] = useState(savedAt)
+  if (savedAt !== seenSave) {
+    setSeenSave(savedAt)
+    if (savedAt) setPillVisible(true)
+  }
   useEffect(() => {
-    if (!savedAt) return
-    setPillVisible(true)
-    window.clearTimeout(pillTimer.current)
-    pillTimer.current = window.setTimeout(() => setPillVisible(false), 1200)
-    return () => window.clearTimeout(pillTimer.current)
-  }, [savedAt])
+    if (!pillVisible) return
+    const timer = window.setTimeout(() => setPillVisible(false), 1200)
+    return () => window.clearTimeout(timer)
+  }, [pillVisible, savedAt])
 
   // Closing clears anything half-finished so the modal reopens clean.
   const handleClose = useCallback(() => {

@@ -16,8 +16,8 @@ import { MarqueeText } from '../ui/marquee-text'
  * | Hardware         | step 1: what is this machine? |
  * | Chat models      | steps 2–4 for answering models: browse, estimate, score, pull |
  * | Embedding models | browse and pull the models that turn chunks into vectors |
- * | Re-rankers       | download and delete Track 1's cross-encoders — a pinned catalogue of two, so browse and manage are one list |
- * | Installed        | what is on it — benchmark, delete, choose the embedding model, cloud baselines |
+ * | Re-rankers       | browse Track 1's cross-encoders: fit verdicts against this machine, download |
+ * | Installed        | what is on it, by kind — chat (local + cloud baselines), embedding, re-rankers: benchmark, verify, delete |
  *
  * Installed is for managing; the two model tabs are for browsing. Every control
  * has one home: a browse card for a model you already have shows Manage, which
@@ -56,17 +56,19 @@ const TABS = [
   { id: 'chat', label: 'Chat models', icon: MessageSquare, hint: 'Browse the models that answer: estimated, scored and ranked against this machine' },
   { id: 'embedding', label: 'Embedding models', icon: Binary, hint: 'Browse the models that turn document chunks into vectors for Track 1' },
   { id: 'rerankers', label: 'Re-rankers', icon: ListOrdered, hint: "Download Track 1's cross-encoders, which re-score the nearest chunks" },
-  { id: 'installed', label: 'Installed', icon: Boxes, hint: 'What this machine has: benchmark, delete, choose the embedding model, cloud baselines' },
+  { id: 'installed', label: 'Installed', icon: Boxes, hint: 'What this machine has: benchmark, delete, verify embedders, cloud baselines' },
 ] as const
 
 export type ForgeTab = (typeof TABS)[number]['id']
 type TabId = ForgeTab
 
 export function ForgeWindow({
-  open, onClose, requestedTab = null,
+  open, onClose, requestedTab = null, onOpenSettings,
 }: {
   open: boolean
   onClose: () => void
+  /** Opens a Settings panel — where an embedding model is chosen for the index. */
+  onOpenSettings?: (panel: string) => void
   /** A tab to land on — Settings → Vector RAG asks for Re-rankers. Sticky, like Blueprints'. */
   requestedTab?: ForgeTab | null
 }) {
@@ -159,10 +161,12 @@ export function ForgeWindow({
                   isPeek={isPeek}
                   onBrowseChat={() => setTab('chat')}
                   onBrowseEmbeddings={() => setTab('embedding')}
+                  onBrowseRerankers={() => setTab('rerankers')}
+                  onChooseEmbedding={onOpenSettings ? () => onOpenSettings('vector-rag') : undefined}
                 />
               )}
               {tab === 'chat' && <ModelsView onManage={() => setTab('installed')} />}
-              {tab === 'rerankers' && <RerankersPane />}
+              {tab === 'rerankers' && <RerankersPane mode="browse" onManage={() => setTab('installed')} />}
               {tab === 'embedding' && (
                 <EmbeddingModelsPane mode="browse" onManage={() => setTab('installed')} />
               )}

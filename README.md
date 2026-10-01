@@ -169,7 +169,7 @@ local with no cloud APIs. `.env` is gitignored if that ever changes.
 ## The five databases
 
 Separate on purpose: a fault in ingestion or logging physically cannot reach the
-sensor data of record. **Settings → Databases** shows all five live, and
+sensor data of record. **Settings → System → Storage health** shows all five live, and
 `./daedalus.sh status` prints the same from the terminal.
 
 | Store | Engine | Access | Holds |
@@ -206,7 +206,7 @@ Each writable store has a **versioned schema** — numbered SQL files applied
 once, in order, inside a transaction, recorded in the database itself and
 applied automatically at startup. See `backend/README.md`.
 
-**No telemetry yet?** Settings → Databases → *Generate demo data* seeds a
+**No telemetry yet?** Settings → System → Storage health → *Generate demo data* seeds a
 plausible run offline. It refuses if data already exists.
 
 ---
@@ -285,13 +285,13 @@ detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
 | **Collapse animation** | One cascade for every collapsible thing: rows arrive from below with a small overshoot, staggered, and leave bottom-up without one. The exit waits on the real animations rather than a timeout, so a two-row section does not sit through a twelve-row section's timing |
 | **Loading skeletons** | Placeholders shaped like the content they precede, in a pixel or smooth style — switchable in Theme → Customize |
 | **Data stores** | Four browsable stores in the sidebar under the chats — chat · audit · sensor · vector. Expand one, click a table, read its rows in a floating window. Preferences is the fifth store and is deliberately absent: it holds this UI's own settings, not evidence |
-| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. Settings → Hardware, and **The Forge**. Reads the host directly, so the GPU it reports is the real card |
+| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. **The Forge** → Hardware. Reads the host directly, so the GPU it reports is the real card |
 | **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` Also where Track 1's re-rankers are downloaded and deleted. |
 | **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
 | **Model manager** | What is installed, badged SLM or LLM, with per-model usage: runs split by chat and benchmark, token totals, and latency as mean / p50 / p95 |
 | **Chat** | `POST /api/chat` runs the whole pipeline: understand the question, refuse control requests, plan tools by rule, read sensors and the selected track's knowledge, build a labelled evidence pack, stream the answer, and replace it with a fallback if it states a number, time or cause the evidence does not. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged apart |
 | **Accessible theming** | Every colour derives from the selected theme and is floored to WCAG AA: body, muted, accent-as-text, on-accent labels and the three status colours. All 16 shipped themes pass on every role, and custom themes run through the same derivation |
-| **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Every panel is built — Databases reports health only |
+| **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Grouped Knowledge · Assistant · Connections · Experience · Administration · System. Settings is *how the assistant behaves*; models and the machine live in **The Forge** — see `docs/FEATURES.md` §6 |
 | **Keyboard shortcuts** | 11 rebindable actions across navigation, conversations and windows. Click a chord, press keys, Enter saves and Escape abandons — nothing commits on the first keypress. Duplicates are shown with the rule that resolves them, unbinding is Backspace, and AltGr is not mistaken for Ctrl+Alt |
 | **Appearance** | Nine switches over the app's own furniture — sidebar brand, New, core modules, chat list, data stores, bottom bar; welcome message, incognito button, full-width transcript. Chrome only: nothing switchable can hide an answer, a citation or a refusal |
 | **Web search** | Six providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper) with an ordered fallback chain, per-provider credentials and a live probe. A **setup** surface for sourcing corpus documents — SearXNG ships as an optional Docker container tuned for technical literature |

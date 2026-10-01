@@ -76,52 +76,60 @@ function LogsCard({ card }: { card: string }) {
   const [level, setLevel] = useState('ALL')
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(200)
-  const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [auto, setAuto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
 
-  const load = useCallback(async (isPoll = false) => {
-    if (!isPoll) setLoading(true)
-    try {
-      // Whether the reader is at the bottom decides whether a poll scrolls.
-      // Measured before the fetch, because the DOM changes underneath it.
-      const box = consoleRef.current
-      const pinned = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40
+  // Loading while the log on screen is not the one these filters ask for —
+  // derived, so a filter change shows it without an effect setting a flag.
+  // A poll keeps the same filters, so it never shows as loading.
+  const wanted = `${level}|${limit}|${query}`
+  const [loaded, setLoaded] = useState<string | null>(null)
+  const loading = loaded !== wanted || refreshing
 
-      const next = await fetchLogs({ limit, level, q: query })
-      setTail(next)
-      setError(null)
+  const load = useCallback(() => {
+    // Whether the reader is at the bottom decides whether a poll scrolls.
+    // Measured before the fetch, because the DOM changes underneath it.
+    const box = consoleRef.current
+    const pinned = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40
 
-      if (pinned) {
-        requestAnimationFrame(() => {
-          if (consoleRef.current) {
-            consoleRef.current.scrollTop = consoleRef.current.scrollHeight
-          }
-        })
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'could not read the log')
-    } finally {
-      setLoading(false)
-    }
-  }, [level, limit, query])
+    return fetchLogs({ limit, level, q: query })
+      .then((next) => {
+        setTail(next)
+        setError(null)
+        if (pinned) {
+          requestAnimationFrame(() => {
+            if (consoleRef.current) {
+              consoleRef.current.scrollTop = consoleRef.current.scrollHeight
+            }
+          })
+        }
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'could not read the log'))
+      .finally(() => setLoaded(wanted))
+  }, [level, limit, query, wanted])
+
+  const refresh = () => {
+    setRefreshing(true)
+    void load().finally(() => setRefreshing(false))
+  }
 
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
     if (!auto) return
-    const id = window.setInterval(() => void load(true), POLL_MS)
+    const id = window.setInterval(() => void load(), POLL_MS)
     return () => window.clearInterval(id)
   }, [auto, load])
 
   return (
     <div className={card}>
-      <h4 className="text-sm font-medium flex items-center gap-1.5 mb-1">
-        <Terminal size={13} className="theme-accent" />
+      <h3 className="text-xl font-medium flex items-center gap-2 mb-1">
+        <Terminal size={18} className="theme-accent" />
         Process log
-      </h4>
-      <p className="text-xs theme-text-muted mb-3">
+      </h3>
+      <p className="text-sm theme-text-muted mb-4">
         What the backend is doing — startup, exceptions, timeouts. Separate from the audit
         database, which records what each answer was built from.
       </p>
@@ -151,7 +159,7 @@ function LogsCard({ card }: { card: string }) {
           options={[100, 200, 500, 1000].map((n) => ({ value: String(n), label: `${n} lines` }))}
         />
         <button
-          onClick={() => load()}
+          onClick={refresh}
           disabled={loading}
           className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
           title="Refresh"
@@ -258,11 +266,11 @@ function BackupCard({ card }: { card: string }) {
 
   return (
     <div className={card}>
-      <h4 className="text-sm font-medium flex items-center gap-1.5 mb-1">
-        <Download size={13} className="theme-accent" />
+      <h3 className="text-xl font-medium flex items-center gap-2 mb-1">
+        <Download size={18} className="theme-accent" />
         Backup
-      </h4>
-      <p className="text-xs theme-text-muted mb-3 leading-relaxed">
+      </h3>
+      <p className="text-sm theme-text-muted mb-4 leading-relaxed">
         Preferences, the committed model and embedding choices, search and MCP
         configuration, and the tool policy — as one JSON file.{' '}
         <span className="theme-text">No credentials are included.</span> A backup gets
@@ -375,11 +383,11 @@ function DangerCard({ card }: { card: string }) {
   // the stylesheet.
   return (
     <div className={card.replace('theme-border', 'status-bad-border')}>
-      <h4 className="text-sm font-medium flex items-center gap-1.5 mb-1 status-bad">
-        <AlertTriangle size={13} />
+      <h3 className="text-xl font-medium flex items-center gap-2 mb-1 status-bad">
+        <AlertTriangle size={18} />
         Danger zone
-      </h4>
-      <p className="text-xs theme-text-muted mb-3 leading-relaxed">
+      </h3>
+      <p className="text-sm theme-text-muted mb-4 leading-relaxed">
         Irreversible, and each one targets a single category. The sensor database is not
         here and cannot be: Rule 2 gives that file to the SCADA subsystem and Daedalus
         opens it read-only. For a full reset including the schema, use{' '}
@@ -431,21 +439,23 @@ function DangerCard({ card }: { card: string }) {
   )
 }
 
-export function SystemPanel({ isPeek }: { isPeek: boolean }) {
-  const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
+/**
+ * Settings → System, as four panels rather than one page. Each answers one
+ * question, and they are used at very different times: storage health and the
+ * log when something is wrong, a backup before moving machines, the danger zone
+ * almost never. On one page the rare, destructive card sat a scroll below the
+ * everyday ones; apart, each is one click and nothing else.
+ */
+const PANEL = 'animate-in fade-in duration-200'
 
-  return (
-    <div className="space-y-5 animate-in fade-in duration-200">
-      <div>
-        <h3 className="text-xl font-medium mb-1">System</h3>
-        <p className="text-sm theme-text-muted">
-          What the backend is doing, how to carry it to another machine, and how to empty it.
-        </p>
-      </div>
+export function LogsPanel() {
+  return <LogsCard card={PANEL} />
+}
 
-      <LogsCard card={card} />
-      <BackupCard card={card} />
-      <DangerCard card={card} />
-    </div>
-  )
+export function BackupPanel() {
+  return <BackupCard card={PANEL} />
+}
+
+export function DangerPanel() {
+  return <DangerCard card={PANEL} />
 }

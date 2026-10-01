@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..services import embedding_models, live_events, ollama_client
+from ..services import embedding_models, live_events, ollama_client, rag_config
 
 router = APIRouter(prefix="/api/embeddings", tags=["embeddings"])
 
@@ -34,7 +34,7 @@ def set_config(
     endpoint_id: str | None = Body(default=None, embed=True),
     dimensions: int | None = Body(default=None, embed=True),
 ) -> dict[str, Any]:
-    """Select an embedding model.
+    """Select an embedding model — Settings → Vector RAG. Refused (409) while frozen.
 
     Selecting one that is not installed is allowed: the panel reports it, and
     refusing would mean you could not record an intended choice before pulling.
@@ -47,6 +47,8 @@ def set_config(
         embedding_models.write(
             provider=provider, model=model, endpoint_id=endpoint_id, dimensions=dimensions
         )
+    except rag_config.ConfigFrozen as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     live_events.publish("embeddings")

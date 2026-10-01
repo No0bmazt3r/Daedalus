@@ -1,4 +1,4 @@
-"""Cloud model endpoints — Settings → Add Models.
+"""Cloud model endpoints — The Forge → Installed → Chat models → Cloud baselines.
 
 **Benchmark configuration, not runtime configuration.** Rule 1 keeps cloud
 APIs out of the live query path; these endpoints exist so the evaluation

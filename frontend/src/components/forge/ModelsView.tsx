@@ -670,10 +670,10 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
   const [tagError, setTagError] = useState<string | null>(null)
   const [tagLoading, setTagLoading] = useState(false)
 
-  const load = useCallback(async () => {
-    // Settled, not all: usage comes from the audit log and the table from the
-    // scorer. The list is useful without the usage figures.
-    const [t, u] = await Promise.allSettled([modelTable(), modelUsage()])
+  // Settled, not all: usage comes from the audit log and the table from the
+  // scorer. The list is useful without the usage figures. State is set in the
+  // callback only.
+  const load = useCallback(() => Promise.allSettled([modelTable(), modelUsage()]).then(([t, u]) => {
     if (u.status === 'fulfilled') setUsage(u.value.models)
     if (t.status === 'fulfilled') {
       setTable(t.value)
@@ -681,7 +681,7 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
     } else {
       setError(t.reason instanceof Error ? t.reason.message : 'request failed')
     }
-  }, [])
+  }), [])
 
   useEffect(() => {
     void load()

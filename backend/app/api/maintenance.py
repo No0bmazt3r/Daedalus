@@ -3,7 +3,7 @@
 Rule 5 — a setup surface. Nothing here is reachable from the chat path, and no
 agent tool wraps it: a model that could call `wipe` could end a study.
 
-Three groups, matching the three cards in Settings → System:
+Three groups, matching three of Settings → System's panels (Process Log, Backup, Danger Zone):
 
 * `GET /api/system/logs` tails the process log, filtered.
 * `GET /api/system/export` and `POST /api/system/import` move configuration

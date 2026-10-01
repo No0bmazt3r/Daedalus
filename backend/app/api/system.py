@@ -1,6 +1,6 @@
 """System/diagnostics endpoints.
 
-Backs the Settings → Databases panel: one call reports the health of all five
+Backs Settings → System → Storage health: one call reports the health of all five
 stores, so a broken deployment is visible in the UI instead of surfacing later
 as a confusing query failure.
 """

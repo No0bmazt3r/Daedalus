@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useLayoutEffect } from 'react';
 import {
   FOCUS_COMPOSER_EVENT,
   KEYBIND_ACTIONS,
@@ -47,10 +47,14 @@ export function useGlobalShortcuts(keybinds: KeybindMap, handlers: ShortcutHandl
   // of the root — which happens whenever a window opens — would mean a window
   // that opens on a keystroke could hand the same keystroke to its replacement.
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
-
   const bindsRef = useRef(keybinds);
-  bindsRef.current = keybinds;
+  // Synced after each render rather than during it: writing a ref while
+  // rendering is a side effect React may replay or discard. Layout timing
+  // keeps them current before any keystroke the new render could receive.
+  useLayoutEffect(() => {
+    handlersRef.current = handlers;
+    bindsRef.current = keybinds;
+  });
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

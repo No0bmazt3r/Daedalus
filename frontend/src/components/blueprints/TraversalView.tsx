@@ -102,10 +102,17 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
   /** 0 = entry only; n = through hop n. Reset whenever the trace changes. */
   const [step, setStep] = useState(0)
 
-  const load = useCallback(() => {
-    if (!queryId) return
+  // A different trace starts from nothing at its entry — reset during render on
+  // the change, so the old walk is never drawn under the new query's id.
+  const [shownQuery, setShownQuery] = useState(queryId)
+  if (shownQuery !== queryId) {
+    setShownQuery(queryId)
     setData(null)
     setStep(0)
+  }
+
+  const load = useCallback(() => {
+    if (!queryId) return
     fetchTraversal(queryId).then(setData).catch((e: Error) => setError(e.message))
   }, [queryId])
 
@@ -115,6 +122,8 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
     setSeeding(true)
     try {
       await seedTraversals(true)
+      setData(null)
+      setStep(0)
       load()
     } catch (e) {
       setError((e as Error).message)

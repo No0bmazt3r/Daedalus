@@ -1265,6 +1265,19 @@ Layer 9 below for the per-step detail.
 - [x] User messages persisted through `POST /api/sessions/{id}/messages`
 - [x] Incognito passes `ephemeral: true`; those sessions are never listed and are swept on restart
 - [ ] Suppress `user_query`/`response_text` in `conversation_logs` for ephemeral sessions *(unblocked — the orchestrator writes these rows now, including for incognito sessions)*
+- [x] **Settings / Forge split.** Settings = how the assistant behaves; the
+      Forge = models and the machine. Removed the three duplicate panels (Add
+      Models, Added Models, Hardware), folded Databases into System as Storage
+      health, regrouped into Knowledge · Assistant · Connections · Experience ·
+      Administration (13 → 9 panels). Embedding model *selection* moved to
+      Settings → Vector RAG and is frozen with the comparison (409 while
+      frozen; 2 tests). Old panel ids redirect
+- [x] Settings → System split into four panels (Storage Health · Process Log ·
+      Backup · Danger Zone) in their own System group; `system` and `databases`
+      redirect to Storage Health. Forge → Installed split by kind like the
+      browse tabs: Chat models (Local · Cloud baselines), Embedding models,
+      Re-rankers (downloaded only — benchmark, delete); the Re-rankers browse
+      tab shows a downloaded model as *Downloaded · Manage*
 - [ ] Archive from the sidebar *(the API supports it; no UI affordance yet)*
 - [ ] Error and loading states for a backend that's down or slow
 
@@ -1406,11 +1419,14 @@ Layer 9 below for the per-step detail.
 - [x] ~~Chat responses are synchronous~~ — resolved: the chat path streams SSE
 - [x] ~~The chat path has no retrieval or tool-calling yet~~ — resolved: M5's
       orchestrator plans tools, builds the evidence pack and validates the answer
-- [ ] 24 oxlint warnings across `src/`, zero errors: 16 `set-state-in-effect`
-      (the legitimate kind — an effect synchronising with the backend on mount)
-      and 8 `react(refs)`, nine of the latter in `GraphCanvas`, which drives a
-      D3 simulation and holds refs on purpose. Counted over the whole tree
-      rather than the handful of files a previous entry had checked
+- [x] ~~oxlint warnings~~ — resolved: zero. The `react(refs)` ones read refs
+      while rendering (`useGlobalShortcuts`, `GraphCanvas` — which now snapshots
+      the simulation into state on each tick). The `set-state-in-effect` ones
+      were two patterns: resets on a prop change, now adjusted during render;
+      and loaders that set state directly, now promise chains that set it only
+      in callbacks, with "busy" derived from what is loaded vs. what is wanted.
+      Fixing `TypewriterText` also fixed a leak — its interval was never
+      cleared on unmount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
 - [ ] Tests are backend-only and not in CI. The backend has 116 `unittest` cases
       (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,

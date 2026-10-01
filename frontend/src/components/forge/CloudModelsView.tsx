@@ -262,15 +262,15 @@ export function CloudModelsView({ isPeek }: { isPeek: boolean }) {
   const [signinUrl, setSigninUrl] = useState<string | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    const [table, used, eps] = await Promise.allSettled([
-      modelTable(), modelUsage(), listEndpoints(),
-    ])
+  // State set in the callback only — see InstalledModelsView's `load`.
+  const load = useCallback(() => Promise.allSettled([
+    modelTable(), modelUsage(), listEndpoints(),
+  ]).then(([table, used, eps]) => {
     if (used.status === 'fulfilled') setUsage(used.value.models)
     if (eps.status === 'fulfilled') setEndpoints(eps.value)
     setEndpointsLoaded(true)
     setCloudRows(table.status === 'fulfilled' ? table.value.rows.filter((r) => r.remote) : [])
-  }, [])
+  }), [])
 
   useEffect(() => {
     void load()

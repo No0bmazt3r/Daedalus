@@ -191,9 +191,13 @@ export function useMinimizeToDock({
   const [minimized, setMinimized] = useState(false)
   const [dock, setDock] = useState<HTMLElement | null>(null)
 
-  useEffect(() => {
+  // Adjusted during render rather than in an effect, so a reopened window never
+  // paints one frame as a chip.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (!open) setMinimized(false)
-  }, [open])
+  }
 
   // The dock node is created here rather than in an effect: this is the first
   // moment it is needed, a click handler is where a DOM side effect belongs,
@@ -301,9 +305,13 @@ export function FloatingWindow({
 
   // Closing and reopening should give a normal window, not a chip. Minimize is
   // a view state, not a preference worth remembering.
-  useEffect(() => {
+  // Adjusted during render rather than in an effect, so a reopened window never
+  // paints one frame as a chip.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (!open) setMinimized(false)
-  }, [open])
+  }
 
   // Declared here, above the Escape handler that uses `restore`.
   const minimize = useCallback(() => {

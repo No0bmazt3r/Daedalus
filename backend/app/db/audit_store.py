@@ -183,7 +183,7 @@ def trace(query_id: str) -> dict[str, list[dict[str, Any]]]:
 
 
 def stats() -> dict[str, int]:
-    """Row counts per table — surfaced in the Settings → Databases panel."""
+    """Row counts per table — surfaced in the Settings → System → Storage health panel."""
     init_db()
     with sqlite_util.connect(AUDIT_DB) as conn:
         return {

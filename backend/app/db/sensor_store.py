@@ -151,7 +151,7 @@ def seed_demo(hours: int = 6, interval_s: int = 5) -> int:
 
 
 def stats() -> dict[str, Any]:
-    """Row counts and coverage window — for Settings → Databases."""
+    """Row counts and coverage window — for Settings → System → Storage health."""
     if not SENSOR_DB.exists():
         return {"exists": False, "rows": 0, "earliest": None, "latest": None}
     with connect_ro() as conn:

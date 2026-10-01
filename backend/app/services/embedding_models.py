@@ -317,6 +317,18 @@ def write(
     if provider == "cloud" and not endpoint_id:
         raise ValueError("a cloud embedding model needs an endpoint_id")
 
+    # Frozen with the comparison. The embedding model decides which index Track
+    # 1 retrieves from, so changing it after seeing results is the same tuning
+    # §5 forbids for the track and the re-ranker — and it used to be the one
+    # Track 1 setting the freeze did not cover.
+    from . import rag_config  # noqa: PLC0415 — rag_config imports this module lazily too
+
+    if rag_config.read()["frozen"]:
+        raise rag_config.ConfigFrozen(
+            "the comparison is frozen — the embedding model decides Track 1's index, so it is "
+            "frozen with the track. Edit config/rag_config.json by hand to unfreeze."
+        )
+
     with _lock:
         current = read()
         payload = {
@@ -554,8 +566,8 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "index_state": "unset",
             "index_detail": (
                 "no embedding model is selected, so nothing can be embedded and no index "
-                "can be built. Pull one in the Forge → Embedding models, then choose it under "
-                "Installed → Embedding models."
+                "can be built. Pull one in the Forge → Embedding models, then choose it in "
+                "Settings → Vector RAG."
             ),
             "index_source": "none",
             "index_documents": None,
@@ -678,13 +690,13 @@ def resolve_for_runtime() -> dict[str, Any]:
         raise NotProductionSafe(
             "no embedding model is selected. The model is stamped onto the index it builds and "
             "changing it later invalidates every vector, so it is chosen rather than defaulted — "
-            "choose one in the Forge → Installed → Embedding models."
+            "choose one in Settings → Vector RAG."
         )
     if config["provider"] != "local":
         raise NotProductionSafe(
             "the selected embedding model is a cloud baseline and cannot serve the local "
             "system. Rule 1 permits cloud models as offline evaluation baselines only — "
-            "select a local model in The Forge → Installed → Embedding models."
+            "select a local model in Settings → Vector RAG."
         )
     dimensions, dimensions_source = effective_dimensions(config)
     # The collection comes back with the model, because the two are one decision:

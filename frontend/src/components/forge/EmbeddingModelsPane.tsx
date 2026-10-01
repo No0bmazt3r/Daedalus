@@ -10,34 +10,40 @@ import {
   type IndexState as IndexStateValue,
 } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
+import { ThemeSelect } from '../ui/theme-select'
 import { EmbeddingRow } from './EmbeddingRow'
 import { PaneIntro, BrowseLink, SectionLabel, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 
 /**
- * The embedding models, in two modes:
+ * The embedding models, in three modes:
  *
  * | mode | where | what it does |
  * |---|---|---|
  * | `browse` | Forge → Embedding models | find and pull: the catalogue, filters, pull any tag by name |
- * | `installed` | Forge → Installed → Embedding models | manage: index state, which model builds the index, verify, cloud baseline |
+ * | `installed` | Forge → Installed → Embedding models | what is on this machine: verify a model's real width |
+ * | `select` | Settings → Vector RAG | which one builds Track 1's index, the index's state, the cloud baseline |
  *
- * One component rather than two so the card, the fetch and the pull logic
+ * One component rather than three so the card, the fetch and the pull logic
  * exist once; the mode only decides which list and which controls are shown.
  *
  * Which model turns chunks into vectors — `architecture/04` Step 5.
  *
- * ## Why this is in the Forge and not in Settings
+ * ## Where each half lives
  *
- * It lived beside the retrieval-track switch first, on the reasoning that the
- * choice is inseparable from the index it produced. That is true and it is still
- * the wrong home: the Forge is the model console, and this is a model. Splitting
- * "models you pull" across two windows by what the model is *for* means neither
- * window answers "what is on this machine".
+ * The line between the two windows is: **the Forge answers "what models are on
+ * this machine, and can it run them"; Settings answers "how does the assistant
+ * behave".** Pulling, verifying and deleting an embedder is the first question,
+ * so it is the Forge's. *Choosing* one is the second: it decides which index
+ * Track 1 retrieves from, so it belongs beside the index's state and the
+ * re-ranker choice in Settings → Vector RAG — and, like them, it is frozen with
+ * the comparison (`embedding_models.write` refuses while `rag_config` is
+ * frozen). It used to be the one Track 1 setting the freeze did not cover.
  *
- * So the Forge owns the whole lifecycle — discover, pull, select, delete — and
- * Settings → Vector RAG keeps only what is genuinely a corpus fact: whether
- * the index matches the selected model.
+ * An earlier version kept selection in the Forge on the argument that the
+ * Forge is the model console. That made the re-ranker (chosen in Settings) and
+ * the embedder (chosen in the Forge) — both Track 1 retrieval decisions —
+ * live in different windows, and left the embedder outside the freeze.
  *
  * ## Browse is for finding, Installed is for managing
  *
@@ -149,16 +155,83 @@ function normaliseTag(tag: string): string {
   return tag.endsWith(':latest') ? tag.slice(0, -':latest'.length) : tag
 }
 
+/**
+ * Settings → Vector RAG's choice: one dropdown over the installed embedders and
+ * a line about the chosen one. The full cards — figures, verify, pull — are the
+ * Forge's; repeating them here is what made the panel a second catalogue.
+ */
+function EmbeddingPicker({
+  models, config, locked, onSelect, onBrowse,
+}: {
+  models: EmbeddingConfig['local_models']
+  config: EmbeddingConfig
+  locked: boolean
+  onSelect: (tag: string) => void
+  onBrowse?: () => void
+}) {
+  const current = config.provider === 'local' ? normaliseTag(config.model) : ''
+  const chosen = models.find((m) => m.tag === current)
+  const options = models.map((m) => ({
+    value: m.tag,
+    label: `${m.label}${m.dimensions ? ` · ${m.dimensions}d` : ''}${m.recommended ? ' · recommended' : ''}`,
+  }))
+  // The selection may name a model that is not installed — a choice recorded
+  // before pulling, or one deleted since. It stays visible rather than the
+  // dropdown silently showing something else.
+  if (current && !chosen) options.unshift({ value: current, label: `${current} (not installed)` })
+
+  return (
+    <div className="space-y-2">
+      <SectionLabel icon={Binary}>Builds the index</SectionLabel>
+      {models.length === 0 && !current ? (
+        <EmptyNote>
+          No embedding models installed yet.{' '}
+          {onBrowse && <BrowseLink onClick={onBrowse}>Pull one in The Forge</BrowseLink>}
+        </EmptyNote>
+      ) : (
+        <>
+          <div className={locked ? 'pointer-events-none opacity-60' : ''}>
+            <ThemeSelect
+              value={current || (options[0]?.value ?? '')}
+              onChange={(tag) => tag !== current && onSelect(tag)}
+              options={options}
+              ariaLabel="Embedding model that builds the index"
+              size="sm"
+            />
+          </div>
+          {chosen ? (
+            <p className="text-[11px] leading-relaxed theme-text-muted">
+              {chosen.dimensions ? `${chosen.dimensions}-dimension vectors` : 'width unknown'}
+              {chosen.verified_at ? ' (verified)' : ''}
+              {chosen.max_tokens ? ` · reads up to ${chosen.max_tokens} tokens a chunk` : ''}
+              {chosen.languages ? ` · ${chosen.languages}` : ''}. Changing it means re-embedding the
+              corpus — the old index is kept, not lost.
+            </p>
+          ) : current ? (
+            <p className="text-[11px] leading-relaxed status-warn">
+              {current} is selected but not installed — pull it in The Forge, or choose another.
+            </p>
+          ) : null}
+        </>
+      )}
+    </div>
+  )
+}
+
 type LangFilter = 'all' | 'english' | 'multilingual'
 
 export function EmbeddingModelsPane({
-  mode, onManage, onBrowse,
+  mode, onManage, onBrowse, onChoose, locked = false,
 }: {
-  mode: 'browse' | 'installed'
+  mode: 'browse' | 'installed' | 'select'
   /** Browse mode: go to where an installed model is managed. */
   onManage?: () => void
-  /** Installed mode: go to where a model can be pulled. */
+  /** Installed and select modes: go to where a model can be pulled. */
   onBrowse?: () => void
+  /** Installed mode: go to where the index's model is chosen (Settings → Vector RAG). */
+  onChoose?: () => void
+  /** Select mode: the comparison is frozen, so the choice is read-only. */
+  locked?: boolean
 }) {
   const [config, setConfig] = useState<EmbeddingConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -173,8 +246,8 @@ export function EmbeddingModelsPane({
 
   const load = () => fetchEmbeddingConfig().then(setConfig).catch((e: Error) => setError(e.message))
   useEffect(() => { load() }, [])
-  // The Browse and Installed instances of this pane, and Settings → Knowledge
-  // Base, all show the same selection; a change in one reaches the others.
+  // The Browse and Installed instances of this pane, and Settings → Vector RAG,
+  // all show the same selection; a change in one reaches the others.
   useLiveRefresh(['models', 'embeddings'], () => void load())
 
   const models = config?.local_models ?? []
@@ -182,7 +255,7 @@ export function EmbeddingModelsPane({
     !!languages && !languages.startsWith('English')
   const needle = search.trim().toLowerCase()
   const shown = models.filter((m) => {
-    if (mode === 'installed') return m.installed
+    if (mode !== 'browse') return m.installed
     if (filter === 'english' && !m.languages?.startsWith('English')) return false
     if (filter === 'multilingual' && !isMultilingual(m.languages)) return false
     if (needle && !`${m.label} ${m.tag} ${m.languages ?? ''}`.toLowerCase().includes(needle)) return false
@@ -230,7 +303,7 @@ export function EmbeddingModelsPane({
             if (typed && !next.local_models.some((m) => m.installed && m.tag === normaliseTag(tag))) {
               setNotice(
                 `${tag} was pulled, but Ollama does not report it as an embedding model, so it is not listed here. ` +
-                'If it is a chat model, it is under Installed → Local models; delete it there if it was a mistake.',
+                'If it is a chat model, it is under Installed → Chat models; delete it there if it was a mistake.',
               )
             } else if (typed) {
               setTypedTag('')
@@ -255,16 +328,23 @@ export function EmbeddingModelsPane({
       {mode === 'browse' ? (
         <p className="text-sm theme-text-muted">
           Models that turn document chunks into vectors for Track 1. Pull one here, then
-          choose which one builds the index under{' '}
-          <span className="theme-text">Installed → Embedding models</span>. Every figure is read
+          choose which one builds the index in{' '}
+          <span className="theme-text">Settings → Vector RAG</span>. Every figure is read
           from the model file; once pulled, it is re-read from the copy on this disk.
         </p>
+      ) : mode === 'installed' ? (
+      <PaneIntro action={onChoose && <BrowseLink onClick={onChoose}>Choose in Settings → Vector RAG</BrowseLink>}>
+        The embedding models on this machine. Verify one to measure its real vector width.
+        Which one builds Track 1's index is chosen in Settings → Vector RAG, with the index's
+        state and the re-ranker. <span className="theme-text">Not the chat model</span> —
+        Track 2 uses none.
+      </PaneIntro>
       ) : (
       <>
-      <PaneIntro action={onBrowse && <BrowseLink onClick={onBrowse}>Browse embedding models</BrowseLink>}>
-        Turns document chunks into vectors for Track 1, once, at ingest.{' '}
+      <PaneIntro action={onBrowse && <BrowseLink onClick={onBrowse}>Pull more in The Forge</BrowseLink>}>
+        Which model turns document chunks into vectors for Track 1, once, at ingest.{' '}
         <span className="theme-text">Not the chat model</span> — changing which model answers
-        never touches the index. Track 2 uses none.
+        never touches the index. Changing <em>this</em> one means re-embedding the corpus.
       </PaneIntro>
 
       <div className="space-y-2">
@@ -347,12 +427,25 @@ export function EmbeddingModelsPane({
       </div>
       )}
 
+      {mode === 'select' ? (
+        <EmbeddingPicker
+          models={models.filter((m) => m.installed)}
+          config={config}
+          locked={locked}
+          onSelect={(tag) => void select('local', tag)}
+          onBrowse={onBrowse}
+        />
+      ) : (
       <div className="@container space-y-2">
-        {mode === 'installed' && (
-          <SectionLabel icon={Binary} count={ordered.length}>Installed</SectionLabel>
+        {mode !== 'browse' && (
+          <SectionLabel icon={Binary} count={ordered.length}>
+            Installed
+          </SectionLabel>
         )}
-        {mode === 'installed' && !ordered.length && (
-          <EmptyNote>No embedding models installed yet.</EmptyNote>
+        {mode !== 'browse' && !ordered.length && (
+          <EmptyNote>
+            No embedding models installed yet.
+          </EmptyNote>
         )}
         {mode === 'browse' && !ordered.length && (
           <p className="text-xs theme-text-muted py-4 text-center">Nothing matches these filters.</p>
@@ -363,7 +456,6 @@ export function EmbeddingModelsPane({
               key={m.tag}
               model={m}
               selected={selectedTag === m.tag}
-              onSelect={() => select('local', m.tag)}
               pulling={pullingTag === m.tag}
               progress={progress}
               onPull={() => pull(m.tag)}
@@ -388,15 +480,16 @@ export function EmbeddingModelsPane({
         {mode === 'installed' && selectedTag && !models.some((m) => m.installed && m.tag === selectedTag) && (
           <p className="rounded-xl border status-warn-border status-warn-bg p-3 text-xs">
             <code>{config.model}</code> is selected but not installed. Pull it, or choose an
-            installed one.
+            installed one in Settings → Vector RAG.
           </p>
         )}
       </div>
+      )}
 
       {/* Cloud sits behind a disclosure, below the local list and after the
           explanation. It is a baseline, not an alternative, and presenting it as
           a peer of the local models would be the wrong shape for Rule 1. */}
-      {mode === 'installed' && (
+      {mode === 'select' && (
       <div className="space-y-2">
       <SectionLabel icon={Cloud}>Cloud baseline</SectionLabel>
       <div className="rounded-xl border theme-border theme-surface">
@@ -435,8 +528,8 @@ export function EmbeddingModelsPane({
 
             {config.cloud_baselines.length === 0 ? (
               <p className="rounded border border-dashed theme-border p-2.5 text-[11px] theme-text-muted">
-                No benchmark endpoints configured. Add one under Cloud baselines first; the same
-                credentials are reused rather than stored twice.
+                No benchmark endpoints configured. Add one in The Forge → Installed → Chat models →
+                Cloud baselines first; the same credentials are reused rather than stored twice.
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -451,7 +544,7 @@ export function EmbeddingModelsPane({
                     <span className="shrink-0 text-[10px] theme-text-muted">{b.provider}</span>
                     <button
                       onClick={() => select('cloud', 'text-embedding-3-large', b.id)}
-                      disabled={!b.has_key || !b.enabled}
+                      disabled={locked || !b.has_key || !b.enabled}
                       className="shrink-0 rounded border theme-border px-2 py-1 text-[10px] theme-text-muted hover:theme-text disabled:opacity-40"
                     >
                       use as baseline
@@ -461,7 +554,7 @@ export function EmbeddingModelsPane({
               </div>
             )}
 
-            {config.provider === 'cloud' && (
+            {config.provider === 'cloud' && !locked && (
               <button
                 onClick={() => select('local', 'nomic-embed-text')}
                 className="inline-flex items-center gap-1.5 rounded border theme-accent-border px-2.5 py-1.5 text-[11px] theme-accent"

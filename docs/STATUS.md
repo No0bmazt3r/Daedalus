@@ -141,7 +141,7 @@ the model nicely. Even a fully compromised prompt cannot write to plant data.
 
 ![Databases panel](screenshots/03-databases.png)
 
-**[SCREENSHOT: `03-databases.png`]** — Settings → **Databases**, showing all five
+**[SCREENSHOT: `03-databases.png`]** — Settings → **System** → *Storage health*, showing all five
 databases and their health, with the sensor database visible.
 
 ![Sensor rows](screenshots/04-sensor-rows.png)
@@ -448,9 +448,9 @@ Save all images to `docs/screenshots/`.
 
 - [ ] `01-chat.png` — chat with past sessions and one answer
 - [ ] `02-chat-streaming.png` *(optional)* — answer mid-stream
-- [ ] `03-databases.png` — Settings → Databases
+- [ ] `03-databases.png` — Settings → System → Storage health
 - [ ] `04-sensor-rows.png` — `sensor_readings` rows in the browser
-- [ ] `05-model-config.png` — The Forge → Installed → Local models
+- [ ] `05-model-config.png` — The Forge → Installed → Chat models (Local)
 - [ ] `06-cloud-endpoints.png` — Settings → Model Endpoints (key masked)
 - [ ] `07-forge-hardware.png` — The Forge → Hardware
 - [ ] `08-forge-models.png` — The Forge → Chat models, Shortlist, fit labels visible

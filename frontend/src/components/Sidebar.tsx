@@ -120,7 +120,7 @@ function SessionRow({
 /**
  * The five stores, browsable from the sidebar.
  *
- * This lives next to the chat history rather than inside Settings → Databases
+ * This lives next to the chat history rather than inside Settings → System (Storage health)
  * on purpose. Settings answers "is everything healthy"; that is a question you
  * ask occasionally. "What is actually in this table right now" is a question
  * you ask constantly while building, so it belongs one click away, in the same

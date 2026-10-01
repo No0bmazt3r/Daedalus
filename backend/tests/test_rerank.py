@@ -161,3 +161,20 @@ class RerankerFitTest(unittest.TestCase):
             self.assertIn(r["fit"]["verdict"], ("safe", "marginal", "will_not_fit"))
             self.assertIn(r["fit"]["latency_source"], ("estimated", "measured"))
         self.assertTrue(any(r["recommended_for"] for r in rows))
+
+
+class EmbeddingFreezeTest(unittest.TestCase):
+    """Choosing the embedding model is a Track 1 setting, frozen with the comparison."""
+
+    def tearDown(self) -> None:
+        fixtures.set_track("vector")
+
+    def test_selection_is_refused_while_frozen(self) -> None:
+        (rag_config.CONFIG_PATH).write_text(json.dumps({"track": "vector", "frozen": True}))
+        with self.assertRaises(rag_config.ConfigFrozen):
+            embedding_models.write(provider="local", model="nomic-embed-text")
+
+    def test_selection_works_when_not_frozen(self) -> None:
+        fixtures.set_track("vector")
+        written = embedding_models.write(provider="local", model="nomic-embed-text")
+        self.assertEqual(written["model"], "nomic-embed-text")

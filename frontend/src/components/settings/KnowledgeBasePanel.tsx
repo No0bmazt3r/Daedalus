@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import {
-  Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, HelpCircle, ArrowUpRight,
+  Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, ArrowUpRight,
   ListOrdered, Route,
 } from 'lucide-react'
 import {
   fetchRagConfig, setGraphSettings, setRagTrack, setRerank,
-  type GraphSettings, type RagConfig, type RagTrack, type RerankerModel, type RerankSettings,
+  type GraphSettings, type RagConfig, type RagTrack, type RerankSettings,
   type TrackStatus,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
 import { ThemeSelect } from '../ui/theme-select'
-import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
+import { EmbeddingModelsPane } from '../forge/EmbeddingModelsPane'
+import type { ForgeTab } from '../forge/ForgeWindow'
 
 /**
  * Settings → Retrieval Track · Vector RAG · Graph RAG — which retrieval track answers a
@@ -145,7 +146,7 @@ function FrozenNotice() {
 }
 
 /** Settings → Vector RAG: Track 1's re-ranking, and whether its index can answer. */
-export function VectorRagPanel({ onOpenForge }: { onOpenForge?: () => void }) {
+export function VectorRagPanel({ onOpenForge }: { onOpenForge?: (tab: ForgeTab) => void }) {
   const { config, setConfig, error } = useRagConfig()
   if (!config) return <LoadState error={error} />
   return (
@@ -159,14 +160,21 @@ export function VectorRagPanel({ onOpenForge }: { onOpenForge?: () => void }) {
       </header>
       {config.frozen && <FrozenNotice />}
       <div className="border-t theme-border pt-4">
-        <RerankSection config={config} onChange={setConfig} onOpenForge={onOpenForge} />
+        <RerankSection
+          config={config}
+          onChange={setConfig}
+          onOpenForge={onOpenForge ? () => onOpenForge('rerankers') : undefined}
+        />
       </div>
-      {/* The index, not the model. Choosing and pulling an embedding model is
-          the Forge's job — it is a model, and the Forge is the model console.
-          What belongs here is the corpus fact: whether the vectors currently
-          stored were produced by the model that is currently selected. */}
+      {/* Which model builds Track 1's index, and whether the index matches it.
+          Choosing is behaviour and is frozen with the comparison, so it lives
+          here; pulling, verifying and deleting are the Forge's. */}
       <div className="border-t theme-border pt-4">
-        <IndexSummary />
+        <EmbeddingModelsPane
+          mode="select"
+          locked={config.frozen}
+          onBrowse={onOpenForge ? () => onOpenForge('embedding') : undefined}
+        />
       </div>
     </div>
   )
@@ -254,76 +262,6 @@ export function KnowledgeBasePanel() {
   )
 }
 
-/**
- * Whether the index matches the selected embedding model.
- *
- * Read-only on purpose. A `stale` index is not fixed by changing a setting here
- * — it is fixed by re-ingesting, so offering a control would imply otherwise.
- *
- * It is worth stating at all because the failure is invisible from the results:
- * an index built by one model and queried through another still returns rows,
- * ranked by comparing vectors from two different spaces. That is not a worse
- * ranking, it is a meaningless one, and nothing in the answer says so. The query
- * path refuses such an index outright; this is where a reader finds out why.
- */
-function IndexSummary() {
-  const [config, setConfig] = useState<EmbeddingConfig | null>(null)
-
-  useEffect(() => {
-    fetchEmbeddingConfig().then(setConfig).catch(() => setConfig(null))
-  }, [])
-
-  if (!config) return <Skeleton className="h-20 w-full" />
-
-  const stale = config.index_state === 'stale'
-  // Chroma being unreachable is not a verdict on the index, so it is neither
-  // red nor an all-clear: amber for a question that could not be asked.
-  const unread = config.index_state === 'unknown'
-  const Icon = stale ? AlertTriangle : unread ? HelpCircle : Check
-
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm theme-text">Vector index</h3>
-      <div
-        className={`flex items-start gap-2 rounded-lg border p-2.5 ${
-          stale
-            ? 'border-rose-400/40 bg-rose-400/10'
-            : unread
-              ? 'border-amber-400/40 bg-amber-400/10'
-              : 'theme-border'
-        }`}
-      >
-        <Icon
-          size={13}
-          className={`mt-0.5 shrink-0 ${
-            stale ? 'text-rose-400' : unread ? 'text-amber-400' : 'theme-text-muted'
-          }`}
-        />
-        <div className="min-w-0 space-y-1">
-          <p className="text-[11px] leading-relaxed theme-text">
-            <span className="theme-text-muted">index {config.index_state} — </span>
-            {config.index_detail}
-          </p>
-          <p className="text-[10px] theme-text-muted">
-            embedding model: <code className="theme-text">{config.model}</code>
-            {config.dimensions ? ` · ${config.dimensions}d` : ''}
-            {/* A declared width is a claim about the tag; a verified one is what
-                a probe actually received. Worth a word, since only the second
-                is the width the store will hold. */}
-            {config.dimensions ? ` (${config.dimensions_source})` : ''}
-            {!config.production_safe && (
-              <span className="text-amber-400"> · cloud baseline, not production-safe</span>
-            )}
-          </p>
-        </div>
-      </div>
-      <p className="flex items-center gap-1 text-[11px] theme-text-muted">
-        <ArrowUpRight size={11} />
-        Pull an embedding model in The Forge → Embedding models; choose which one builds the index in The Forge → Installed.
-      </p>
-    </div>
-  )
-}
 
 const CANDIDATE_OPTIONS = [10, 20, 30, 50].map((n) => ({ value: String(n), label: `${n} candidates` }))
 const BUDGET_OPTIONS = [3, 6, 10, 20].map((n) => ({ value: String(n), label: `${n} s budget` }))
@@ -428,10 +366,6 @@ function GraphModeSection({
   )
 }
 
-function mb(bytes: number) {
-  return `${Math.round(bytes / 1_000_000)} MB`
-}
-
 /**
  * Track 1's second stage: a cross-encoder re-scores the chunks Chroma returns.
  *
@@ -519,17 +453,12 @@ function RerankSection({
         </div>
       )}
 
-      <div className="space-y-2">
-        {config.rerankers.map((m) => (
-          <RerankerChoice
-            key={m.id}
-            model={m}
-            selected={m.id === rerank.model}
-            disabled={locked || !rerank.enabled}
-            onSelect={() => void save({ model: m.id })}
-          />
-        ))}
-      </div>
+      <RerankerPicker
+        config={config}
+        disabled={locked || !rerank.enabled}
+        onSelect={(id) => void save({ model: id })}
+        onOpenForge={onOpenForge}
+      />
 
       <div className="flex items-center gap-3">
         <ThemeSelect
@@ -564,53 +493,74 @@ function RerankSection({
   )
 }
 
+function latency(ms: number) {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
+}
+
 /**
- * One re-ranker as a choice. Download and delete live in The Forge →
- * Re-rankers, with every other model on this machine; this card
- * only selects, and says when the selection still needs downloading.
+ * Which re-ranker Track 1 uses: one dropdown over the *downloaded* models and a
+ * line about the chosen one. The catalogue — every model with its fit verdict,
+ * download and benchmark — is the Forge's Re-rankers tab; listing it again here
+ * made this panel a second catalogue. The current choice stays in the list even
+ * when it is not downloaded, so the dropdown never silently shows another one.
  */
-function RerankerChoice({
-  model, selected, disabled, onSelect,
+function RerankerPicker({
+  config, disabled, onSelect, onOpenForge,
 }: {
-  model: RerankerModel
-  selected: boolean
+  config: RagConfig
   disabled: boolean
-  onSelect: () => void
+  onSelect: (id: string) => void
+  onOpenForge?: () => void
 }) {
-  return (
+  const current = config.rerank.model
+  const usable = config.rerankers.filter((m) => m.installed || m.id === current)
+  const chosen = config.rerankers.find((m) => m.id === current)
+  const best = config.rerankers.find((m) => m.id === config.rerank_fit.recommended.english)
+  const options = usable.map((m) => ({
+    value: m.id,
+    label: `${m.label} · ${m.fit.latency_source === 'measured' ? '' : '~'}${latency(m.fit.latency_ms)}${m.installed ? '' : ' (not downloaded)'}`,
+  }))
+  const forgeLink = onOpenForge && (
     <button
-      onClick={onSelect}
-      disabled={disabled || selected}
-      className={`w-full rounded-lg border p-3 text-left transition-colors disabled:cursor-default ${
-        selected ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
-      } ${disabled && !selected ? 'opacity-60' : ''}`}
+      onClick={onOpenForge}
+      className="inline-flex items-center gap-1 text-[11px] theme-accent hover:underline"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="truncate text-sm theme-text">{model.label}</span>
-        <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">
-          {model.languages}
-        </span>
-        <span className={`shrink-0 text-[10px] ${model.installed ? 'text-emerald-400' : 'theme-text-muted'}`}>
-          {model.installed ? 'downloaded' : `not downloaded · ${mb(model.size_bytes)}`}
-        </span>
-        <span
-          className={`shrink-0 text-[10px] ${
-            model.fit.verdict === 'safe' ? 'status-ok' : model.fit.verdict === 'marginal' ? 'status-warn' : 'status-bad'
-          }`}
-          title={model.fit.reasons.join(' · ') || 'Fits this machine'}
-        >
-          {model.fit.verdict === 'will_not_fit' ? 'will not fit' : model.fit.verdict} ·{' '}
-          {model.fit.latency_source === 'measured' ? '' : '~'}
-          {model.fit.latency_ms < 1000 ? `${model.fit.latency_ms} ms` : `${(model.fit.latency_ms / 1000).toFixed(1)} s`}
-        </span>
-        {model.recommended_for.length > 0 && (
-          <span className="shrink-0 rounded border theme-accent-border px-1.5 py-px text-[10px] theme-accent">
-            Recommended{model.recommended_for.includes('english') ? '' : ' for Malay'}
-          </span>
-        )}
-        {selected && <Check size={14} className="ml-auto shrink-0 theme-accent" />}
-      </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed theme-text-muted">{model.note}</p>
+      Manage in The Forge <ArrowUpRight size={11} />
     </button>
+  )
+
+  if (!config.rerankers.some((m) => m.installed) && !chosen) {
+    return (
+      <p className="text-[11px] leading-relaxed theme-text-muted">
+        No re-ranker downloaded yet — Track 1 answers in plain vector order. {forgeLink}
+      </p>
+    )
+  }
+
+  const tone = chosen?.fit.verdict === 'safe' ? 'status-ok' : chosen?.fit.verdict === 'marginal' ? 'status-warn' : 'status-bad'
+  return (
+    <div className="space-y-1.5">
+      <div className={disabled ? 'pointer-events-none opacity-60' : ''}>
+        <ThemeSelect
+          value={current}
+          onChange={(id) => id !== current && onSelect(id)}
+          options={options}
+          ariaLabel="Re-ranker Track 1 uses"
+          size="sm"
+        />
+      </div>
+      {chosen && (
+        <p className="text-[11px] leading-relaxed theme-text-muted">
+          {chosen.languages} ·{' '}
+          <span className={tone}>
+            {chosen.fit.verdict === 'will_not_fit' ? 'will not fit' : chosen.fit.verdict} on this machine
+          </span>
+          {chosen.fit.reasons.length > 0 && ` — ${chosen.fit.reasons[0]}`}
+          {chosen.recommended_for.length > 0 && ' · recommended'}
+          {best && best.id !== chosen.id && <> · this machine's recommendation is {best.label}</>}
+          . {forgeLink}
+        </p>
+      )}
+    </div>
   )
 }

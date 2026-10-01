@@ -15,7 +15,8 @@ import {
 } from '../../lib/systemClient'
 
 /**
- * Settings → Add Models.
+ * The Forge → Installed → Chat models → Cloud baselines. (It was also Settings → Add Models;
+ * that duplicate was removed — model management is the Forge's.)
  *
  * Configures cloud providers for the **offline evaluation baseline**, not for
  * the live runtime. PROJECT.md Rule 1 forbids cloud APIs in the query path and
@@ -51,18 +52,15 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   const [testing, setTesting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const [cat, eps] = await Promise.all([providerCatalogue(), listEndpoints()])
+  // State set in the promise's callbacks only.
+  const load = useCallback(() => Promise.all([providerCatalogue(), listEndpoints()])
+    .then(([cat, eps]) => {
       setProviders(cat)
       setEndpoints(eps)
       setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'could not load endpoints')
-    } finally {
-      setLoaded(true)
-    }
-  }, [])
+    })
+    .catch((e: unknown) => setError(e instanceof Error ? e.message : 'could not load endpoints'))
+    .finally(() => setLoaded(true)), [])
 
   useEffect(() => {
     void load()

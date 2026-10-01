@@ -18,26 +18,24 @@ import {
 } from '../lib/settingsRegistry'
 import { fetchRagConfig, RAG_TRACK_CHANGED_EVENT, type RagTrack } from '../lib/blueprintsClient'
 import { SettingsSearch } from './settings/SettingsSearch'
-import { DatabasesPanel } from './settings/DatabasesPanel'
-import { HardwarePanel } from './settings/HardwarePanel'
 import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/KnowledgeBasePanel'
-import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
 import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
 import { IntegrationsPanel } from './settings/IntegrationsPanel'
-import { SystemPanel } from './settings/SystemPanel'
+import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
+import { DatabasesPanel } from './settings/DatabasesPanel'
 import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
 import { AppearancePanel } from './settings/AppearancePanel'
 import { ShortcutsPanel } from './settings/ShortcutsPanel'
-import { InstalledModelsView } from './forge/InstalledModelsView'
+import type { ForgeTab } from './forge/ForgeWindow'
 
 interface SettingsModalProps {
   open: boolean
   onClose: () => void
   /** Appearance hands colours and fonts to the Theme window rather than copying them. */
   onOpenTheme?: () => void
-  /** Opens The Forge — where Vector RAG sends you to download a re-ranker. */
-  onOpenForge?: () => void
+  /** Opens The Forge on a tab — where Vector RAG sends you to pull a model. */
+  onOpenForge?: (tab: ForgeTab) => void
   /**
    * A panel to jump to, from the command palette. Not the *current* panel —
    * the window owns that, and lifting it would mean every click on the rail
@@ -47,7 +45,11 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel = null }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
+  // A panel requested at mount opens directly; later requests are applied
+  // during render below, on change.
+  const [activeTab, setActiveTab] = useState(
+    panel && getSettingsPanel(panel) ? panel : DEFAULT_SETTINGS_PANEL_ID,
+  )
 
   // The selected retrieval track decides which track's settings panel is
   // listed. Re-read whenever the track changes, from here or from anywhere
@@ -70,13 +72,18 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
   // Sitting on the other track's panel when the track changes (or asking for
   // it from the palette) lands on the track switch instead of a hidden page.
   const shown = getSettingsPanel(activeTab)
-  const effectiveTab = shown && track && !trackVisible(shown, track) ? 'knowledge' : activeTab
+  // `getSettingsPanel` follows redirects, so a removed panel's id (saved, or
+  // from an old link) renders the panel it moved to.
+  const resolved = shown?.id ?? DEFAULT_SETTINGS_PANEL_ID
+  const effectiveTab = shown && track && !trackVisible(shown, track) ? 'knowledge' : resolved
 
   // Asking for the panel already open is a no-op, which is what makes it safe
   // for the caller to leave the request set rather than having to clear it.
-  useEffect(() => {
+  const [seenPanel, setSeenPanel] = useState(panel)
+  if (panel !== seenPanel) {
+    setSeenPanel(panel)
     if (panel && getSettingsPanel(panel)) setActiveTab(panel)
-  }, [panel])
+  }
 
   // The window is draggable and resizable, so its content can be narrow on a
   // wide screen — a viewport media query would be measuring the wrong thing.
@@ -232,26 +239,19 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
                 the pane it is centred in. */}
             <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl @7xl:max-w-[min(100%,1400px)]">
 
-            {effectiveTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
-
-            {/* The Forge's own Installed view, not a second implementation of
-                it. Same reasoning as ModelEndpointsPanel appearing in both
-                places: one component, two entry points, so the console and the
-                Forge can never describe the deployment differently. */}
-            {effectiveTab === 'added-models' && <InstalledModelsView isPeek={isPeek} />}
-
-            {effectiveTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
-
+            {/* Models (add, installed, hardware) are the Forge's, and store
+                health is part of System — see `settingsRegistry.ts`. */}
             {effectiveTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
-
-            {effectiveTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
             {effectiveTab === 'knowledge' && <KnowledgeBasePanel />}
             {effectiveTab === 'vector-rag' && <VectorRagPanel onOpenForge={onOpenForge} />}
             {effectiveTab === 'graph-rag' && <GraphRagPanel />}
             {effectiveTab === 'search' && <SearchPanel isPeek={isPeek} />}
             {effectiveTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
             {effectiveTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
-            {effectiveTab === 'system' && <SystemPanel isPeek={isPeek} />}
+            {effectiveTab === 'storage' && <DatabasesPanel isPeek={isPeek} />}
+            {effectiveTab === 'logs' && <LogsPanel />}
+            {effectiveTab === 'backup' && <BackupPanel />}
+            {effectiveTab === 'danger' && <DangerPanel />}
 
             {effectiveTab === 'appearance' && (
               <AppearancePanel isPeek={isPeek} onOpenTheme={onOpenTheme} />

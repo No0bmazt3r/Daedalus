@@ -57,10 +57,17 @@ export function ConfirmDialog({
   // drops focus to <body> leaves a keyboard user at the top of the page.
   const opener = useRef<HTMLElement | null>(null)
 
+  // A reopened dialog starts with an empty confirmation field — reset during
+  // render on the closed→open edge, not in the effect below.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setTyped('')
+  }
+
   useEffect(() => {
     if (!open) return
     opener.current = document.activeElement as HTMLElement | null
-    setTyped('')
     // After paint, or the element is not focusable yet.
     const id = window.setTimeout(() => {
       (requireTyped ? inputRef.current : confirmRef.current)?.focus()

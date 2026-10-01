@@ -190,11 +190,13 @@ export function GraphView() {
     return () => window.clearTimeout(timer)
   }, [query, type])
 
+  // Only the selected node's detail, derived rather than cleared in an effect —
+  // so deselecting hides it at once, and a new selection never shows the
+  // previous node's panel while its own loads.
+  const shownDetail = detail && selected && detail.node.id === selected ? detail : null
+
   useEffect(() => {
-    if (!selected) {
-      setDetail(null)
-      return
-    }
+    if (!selected) return
     fetchNode(selected).then(setDetail).catch((e: Error) => setError(e.message))
     // `nearest` does nothing when the panel is already beside the canvas, and
     // brings it up when the container is narrow enough to have stacked it. One
@@ -324,8 +326,8 @@ export function GraphView() {
                   <X size={12} />
                 </button>
               </div>
-              {detail ? (
-                <Detail detail={detail} onNavigate={setSelected} />
+              {shownDetail ? (
+                <Detail detail={shownDetail} onNavigate={setSelected} />
               ) : (
                 <p className="py-6 text-center text-xs theme-text-muted">
                   Loading {shortId(selected)}…
@@ -391,8 +393,8 @@ export function GraphView() {
             does not need to stay whole the way the diagram does. */}
         {view === 'table' && (
           <div className="rounded-lg border theme-border theme-card p-4">
-            {detail ? (
-              <Detail detail={detail} onNavigate={setSelected} />
+            {shownDetail ? (
+              <Detail detail={shownDetail} onNavigate={setSelected} />
             ) : (
               <p className="py-8 text-center text-xs theme-text-muted">
                 {selected ? `Loading ${shortId(selected)}…` : 'Select a node to see its neighbours.'}

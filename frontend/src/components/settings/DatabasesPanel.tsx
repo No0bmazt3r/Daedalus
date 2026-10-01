@@ -55,24 +55,26 @@ function humanizeKey(key: string): string {
 export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   const [databases, setDatabases] = useState<DatabaseInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  // True from mount: the first load starts in an effect, and setting the flag
+  // there would be a synchronous re-render. Later reloads set it themselves.
+  const [busy, setBusy] = useState(true)
   const [seedResult, setSeedResult] = useState<string | null>(null)
   const [obs, setObs] = useState<Observability | null>(null)
 
-  const load = useCallback(async () => {
-    setBusy(true)
-    try {
-      const res = await fetch('/api/system/databases')
+  const load = useCallback(() => fetch('/api/system/databases')
+    .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = (await res.json()) as { databases: DatabaseInfo[] }
       setDatabases(data.databases)
       setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'request failed')
-    } finally {
-      setBusy(false)
-    }
-  }, [])
+    })
+    .catch((e: unknown) => setError(e instanceof Error ? e.message : 'request failed'))
+    .finally(() => setBusy(false)), [])
+
+  const reload = () => {
+    setBusy(true)
+    void load()
+  }
 
   useEffect(() => {
     void load()
@@ -117,7 +119,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xl font-medium mb-1">Databases</h3>
+          <h3 className="text-xl font-medium mb-1">Storage health</h3>
           <p className="text-sm theme-text-muted">
             Daedalus keeps its stores physically separate — a fault in ingestion or
             logging cannot reach the sensor data of record.
@@ -134,7 +136,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <button
-            onClick={() => void load()}
+            onClick={reload}
             disabled={busy}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
           >

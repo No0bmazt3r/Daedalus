@@ -80,14 +80,11 @@ function ContainerControl({ onChanged }: { onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const status = await fetchContainers()
-      setState(status.containers.find((c) => c.name === 'searxng') ?? null)
-    } catch {
-      setState(null)
-    }
-  }, [])
+  // State set in the promise's callbacks only, so mounting starts a request
+  // rather than re-rendering synchronously.
+  const load = useCallback(() => fetchContainers()
+    .then((status) => setState(status.containers.find((c) => c.name === 'searxng') ?? null))
+    .catch(() => setState(null)), [])
 
   useEffect(() => { void load() }, [load])
 
@@ -184,9 +181,8 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
     setApiKey('')
   }, [])
 
-  const load = useCallback(async () => {
-    try {
-      const next = await fetchSearchConfig()
+  const load = useCallback(() => fetchSearchConfig()
+    .then((next) => {
       setConfig(next)
       setProvider(next.provider)
       setCount(next.result_count)
@@ -194,10 +190,9 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
       setChain(next.fallback_chain)
       adoptProvider(next, next.provider)
       setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'could not load search settings')
-    }
-  }, [adoptProvider])
+    })
+    .catch((e: unknown) => setError(e instanceof Error ? e.message : 'could not load search settings')),
+  [adoptProvider])
 
   useEffect(() => {
     void load()

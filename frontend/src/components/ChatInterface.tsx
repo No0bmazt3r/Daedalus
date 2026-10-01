@@ -24,25 +24,33 @@ import { useSessions } from '../contexts/SessionsContext'
 import { Sources, withCitations } from './Citations'
 
 function TypewriterText({ text }: { text: string }) {
-  const [displayedText, setDisplayedText] = useState('')
-  
+  // How much of `text` is typed. Keyed by the text it counts, so a new text
+  // restarts from nothing without an effect having to clear it first.
+  const [typed, setTyped] = useState({ text, count: 0 })
+  if (typed.text !== text) setTyped({ text, count: 0 })
+
   useEffect(() => {
-    setDisplayedText('')
     let i = 0
-    const timeout = setTimeout(() => {
-      const interval = setInterval(() => {
-        setDisplayedText(text.slice(0, i + 1))
+    let interval: number | undefined
+    const timeout = window.setTimeout(() => {
+      interval = window.setInterval(() => {
         i++
-        if (i >= text.length) clearInterval(interval)
+        setTyped({ text, count: i })
+        if (i >= text.length) window.clearInterval(interval)
       }, 40)
-      return () => clearInterval(interval)
     }, 100)
-    return () => clearTimeout(timeout)
+    // Both timers, always. The interval used to be cleared only by a cleanup
+    // returned from inside the timeout, which nothing ever called — so an
+    // unmount mid-greeting left it ticking.
+    return () => {
+      window.clearTimeout(timeout)
+      window.clearInterval(interval)
+    }
   }, [text])
 
   return (
     <span className="inline-flex items-center">
-      {displayedText}
+      {text.slice(0, typed.text === text ? typed.count : 0)}
       <span className="animate-[pulse_1s_ease-in-out_infinite] inline-block w-[3px] h-[0.9em] bg-current ml-1 rounded-sm opacity-70"></span>
     </span>
   )
