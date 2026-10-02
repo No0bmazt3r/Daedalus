@@ -1710,6 +1710,13 @@ Layer 9 below for the per-step detail.
       end-to-end for cloud rows are measured directly and are sound
       (`BENCHMARK.md` §7)
 - [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
+- [ ] **Over-engineering audit (2026-10-02): 0 of 19 cuts done.** Dead code,
+      two unused frontend deps (`@tanstack/react-query`, `@tanstack/router-devtools`),
+      a duplicated hook and the unused Chroma server mode — about −457 lines.
+      Plus one undecided judgment call: the ~3,700-line theming subsystem.
+      Itemised with a check command per row in
+      [`docs/AUDIT_OVERENGINEERING.md`](docs/AUDIT_OVERENGINEERING.md); update
+      the count here when you tick rows there
 
 ---
 
