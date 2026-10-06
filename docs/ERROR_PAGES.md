@@ -91,7 +91,7 @@ get still pictures; that rule is in `animations.css` and wins over every code's
 ### Colour letters
 
 The `art` field is rows of letters, one per pixel, `.` for empty. Pictures are
-square, 12 or 13 wide; a wider scene (400 is 56×17) also works: the page goes full width and the picture takes its whole column at its own aspect.
+square, 12 or 13 wide; a wider scene (400 is 56×17, 402 is 48×42) also works: the page goes full width and the picture takes its whole column at its own aspect.
 
 | Letter | Colour | Class |
 |---|---|---|
@@ -103,26 +103,24 @@ square, 12 or 13 wide; a wider scene (400 is 56×17) also works: the page goes f
 | `g` | OK / green | `.px-g` |
 | `d` | Muted, a separate letter so it can move on its own (the 502 rubble, the 510 missing piece) | `.px-d` |
 | `b` | Info / blue (the 507 item that will not fit) | `.px-b` |
-| `S V K W G N` | Minecraft people: skin, villager skin / unibrow / eye white / eye / nose (401, 402) | `.px-<letter>` |
 | `k c o h j x z y q p u e i f F P Q` | Minecraft materials for the 400 circuit (cobblestone, block front face, wood, lever on/off, redstone dust, repeater torch, dust sparks, piston head top/front, arm top/front, pushed-out head top/front), mixed from theme colours; unlit dust is `--dust-off` | `.px-<letter>` |
 
-New letters go in `COLOURS` in `PixelArt.tsx`.
+Shared letters go in `COLOURS` in `PixelArt.tsx`. A picture that needs many colours of its own (402) sets a `colours` map in its code file instead; its letters override the shared ones for that picture only.
 
 ### Shared motions (`animations.css`)
 
 | Keyframe | What it does | Used by |
 |---|---|---|
-| `pix-pulse` | Fades to 35% and back | 403 411 415 417 421 422 428 429 431 451 504 505 506 511 |
-| `pix-glint` | Two quick blinks, then holds | 401 407 409 412 422 426 510 |
+| `pix-pulse` | Fades to 35% and back | 402 403 411 415 417 421 422 428 429 431 451 504 505 506 511 |
+| `pix-glint` | Two quick blinks, then holds | 401 402 407 409 412 422 426 510 |
 | `pix-rattle` | Pause, then a short sideways shake | 403 407 423 424 507 511 |
-| `pix-wiggle` | Bobs up 0.4 cells and back | 402 411 |
+| `pix-wiggle` | Bobs up 0.4 cells and back | 411 |
 | `pix-on` | Hidden, shown for the middle half of the cycle (use `steps(1)`) | 400 |
 | `pix-poke` | An arm reaches in twice, then rests | 401 |
-| `pix-nope` | A quick side-to-side head shake | 402 |
 | `pix-twinkle` | A spark pops up, drifts up and shrinks away (pair with `pix-on` to gate it) | 400 |
 | `pix-power` | Redstone dust: dark red, bright red, dark again (use `steps(1)`) | 400 |
 | `pix-wiggle-big` | Sways ±1.5° | 451 |
-| `pix-flow` | Drifts 0.6 cells sideways and back (water, scrolls) | 410 414 502 |
+| `pix-flow` | Drifts 0.6 cells sideways and back (water, scrolls) | 402 410 414 502 |
 | `pix-fall` | Drops 5 cells and fades out | 424 502 |
 | `pix-drift` | Floats down while swaying, fades in and out | 410 416 |
 | `pix-item` | 3D spin with a bob, like a dropped item | 415 |
@@ -154,7 +152,7 @@ New letters go in `COLOURS` in `PixelArt.tsx`.
 |---|---|---|---|---|---|
 | 400 | Bad Request | The circuit is miswired | The request was malformed, so the server couldn't read it | Minecraft in a 3/4 view (blocks show a top and a front face): one lever feeds two dust lines; the right one fires its piston, the other passes a repeater, hits one missing dust, and its piston never moves | Possible |
 | 401 | Unauthorized | The gate asks your name | Not signed in, or the sign-in expired | Steve clicks an iron door twice and nothing happens; the button beside it glints | No (no login) |
-| 402 | Payment Required | The ferryman wants a coin | Payment is needed before it can go ahead | Steve, empty-handed, before a villager whose bubble asks for an emerald; the villager shakes its head | No |
+| 402 | Payment Required | The ferryman wants an emerald | Payment is needed before it can go ahead | The ferry: Steve on a wooden dock, a villager rocking in an oak boat holds out an open palm under a blinking emerald outline and asks "emerald?"; Steve's bubble shows a crossed-out emerald, the villager shakes its head | No |
 | 403 | Forbidden | King Minos says no | The server knows who you are, but you're not allowed | A block wall with a pulsing red X that shakes off a knock | No (no login) |
 | 404 | Not Found | Lost in the labyrinth | The page or resource doesn't exist, or has moved | A maze, with you (a dot) wandering the corridor | **Yes** |
 | 405 | Method Not Allowed | Wrong tool for this block | The address exists, but not for this kind of request | A pickaxe that swings and bounces off | Only from a coding bug |

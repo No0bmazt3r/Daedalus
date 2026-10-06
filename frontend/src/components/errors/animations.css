@@ -63,15 +63,6 @@
   38% { transform: translate(-1px, -1px); }
   44%, 100% { transform: translate(0, 0); }
 }
-/* A villager's "no" head shake (402) */
-@keyframes pix-nope {
-  0%, 50% { transform: translateX(0); }
-  54% { transform: translateX(-0.5px); }
-  58% { transform: translateX(0.5px); }
-  62% { transform: translateX(-0.5px); }
-  66% { transform: translateX(0.5px); }
-  70%, 100% { transform: translateX(0); }
-}
 @keyframes pix-twinkle {
   0% { transform: translateY(0) scale(0); }
   25% { transform: translateY(-0.3px) scale(0.6); }

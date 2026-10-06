@@ -19,6 +19,8 @@ export interface ErrorInfo {
    * (moves on its own) · b info. See `COLOURS` in PixelArt.tsx.
    */
   art: string[]
+  /** Extra colour letters for this picture only, over the shared ones in PixelArt.tsx. */
+  colours?: Record<string, string>
   /**
    * This code's animation: CSS rules on `.pix-<code>` (the whole picture) and
    * `.pix-<code> .px-<letter>` (one colour's pixels, with `--x` / `--y` set).

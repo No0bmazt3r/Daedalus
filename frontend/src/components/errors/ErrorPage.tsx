@@ -67,6 +67,7 @@ export function ErrorPage({ code, detail, preview = false }: {
           <PixelArt
             rows={info.art}
             anim={shownCode}
+            colours={info.colours}
             // A wide scene (400) spans the page and takes its whole column at its own aspect; the rest stay square.
             className={wide ? 'relative w-full [&>svg]:h-auto' : 'relative h-[min(60vh,440px)] w-[min(80vw,440px)]'}
           />

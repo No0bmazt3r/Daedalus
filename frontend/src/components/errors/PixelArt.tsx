@@ -30,13 +30,8 @@ export const COLOURS: Record<string, string> = {
   F: 'color-mix(in srgb, var(--status-warn) 22%, var(--bg))', // piston arm, front
   P: 'color-mix(in srgb, var(--status-warn) 45%, var(--bg))', // pushed-out piston head, top
   Q: 'color-mix(in srgb, var(--status-warn) 22%, var(--bg))', // pushed-out piston head, front
-  // Minecraft people (401 Steve's arm, 402 Steve and the villager). Steve's shirt is b (info blue).
+  // Steve's arm (401). His shirt is b (info blue).
   S: 'color-mix(in srgb, var(--status-warn) 30%, var(--text-main))', // skin
-  V: 'color-mix(in srgb, var(--status-warn) 30%, var(--text-main))', // villager skin (shakes on its own)
-  K: 'color-mix(in srgb, var(--text-muted) 22%, var(--bg))', // villager unibrow
-  W: 'var(--text-main)', // villager eye white
-  G: 'var(--status-ok)', // villager eye
-  N: 'color-mix(in srgb, var(--status-warn) 45%, var(--text-muted))', // villager nose
 }
 
 /**
@@ -45,7 +40,18 @@ export const COLOURS: Record<string, string> = {
  * position as `--x` / `--y`, so the CSS can move one part of a picture (the
  * dot in the maze, the sand in the hourglass) or stagger an effect across it.
  */
-export function PixelArt({ rows, anim, className = '' }: { rows: string[]; anim: number; className?: string }) {
+export function PixelArt({
+  rows,
+  anim,
+  colours,
+  className = '',
+}: {
+  rows: string[]
+  anim: number
+  colours?: Record<string, string>
+  className?: string
+}) {
+  const palette = colours ? { ...COLOURS, ...colours } : COLOURS
   const w = Math.max(...rows.map((r) => r.length))
   return (
     // The wrapper takes the shadow and the whole-picture motion, the SVG the per-pixel motion.
@@ -57,14 +63,14 @@ export function PixelArt({ rows, anim, className = '' }: { rows: string[]; anim:
       >
         {rows.flatMap((row, y) =>
           [...row].map((c, x) =>
-            COLOURS[c] ? (
+            palette[c] ? (
               <rect
                 key={`${x}-${y}`}
                 x={x}
                 y={y}
                 width={1}
                 height={1}
-                fill={COLOURS[c]}
+                fill={palette[c]}
                 className={`px-${c}`}
                 style={{ '--x': x, '--y': y } as CSSProperties}
               />
