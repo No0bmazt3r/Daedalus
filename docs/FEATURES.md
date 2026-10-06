@@ -115,6 +115,7 @@ to it.
 | `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it. `PUT` (Settings → Vector RAG) is refused with 409 while the comparison is frozen |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE (`total_bytes`, `completed_bytes`, `percent` per line) |
+| `GET`/`PUT` | `/api/assistant/config` | Settings → Assistant: site timezone, system prompt, refusal wording and extra blocked phrases, with the built-in defaults and rules. A null field resets it. Prompt and safety edits are refused with 409 while the comparison is frozen; the timezone is not |
 | `GET` | `/api/events` | Live updates as SSE. Each event names a topic (`models`, `embeddings`, `endpoints`, `sessions`, `rag`, `corpus`) and carries no data; views re-fetch what they show. `rag` and `corpus` are published by middleware after any successful write under `/api/rag` or `/api/corpus` |
 | `POST` | `/api/embeddings/verify` | Embed a probe string and record the width the model actually returns. The only call here that runs a model |
 | `GET`/`PUT` | `/api/search/config` | The web search provider, its fallback chain, and what each provider still needs configured |
@@ -935,8 +936,9 @@ covered.
 
 **Times are resolved by rules, not the model.** "At 10:00", "between 23:00 and
 23:30", "the last 15 minutes", "this morning", "yesterday" become UTC bounds on
-the site clock (`DAEDALUS_TZ`, else the machine's zone; "UTC" in the question
-overrides). When the feed has stopped, relative times count back from its last
+the site clock (Settings → Assistant: a zone picked by hand, else `DAEDALUS_TZ`,
+else the zone the browser reports, else the machine's; "UTC" in the question
+overrides). The `get_current_time` tool reports local time on the same clock. When the feed has stopped, relative times count back from its last
 reading and the evidence says so. A phrase it cannot place ("during the last
 run") ends the turn with a clarifying question.
 
@@ -1566,6 +1568,32 @@ through a modal covering it. Appearance links to it instead of copying the
 controls, which is how two screens end up disagreeing about the current font.
 
 ---
+
+### 6.3 Assistant — `components/settings/AssistantPanel.tsx` · `services/assistant_settings.py`
+
+What the assistant is told and when it refuses, editable without touching code.
+Stored as one preference row (`assistant`), read by the backend on every
+question, so a change applies to the next message.
+
+- **Date and time.** A live clock on the site zone and where it came from. Auto
+  by default: the app reports the browser's zone on start
+  (`reportBrowserTimezone`), which matters because the backend container's own
+  clock is usually UTC. Or pick a zone by hand from a searchable list. Order:
+  manual, `DAEDALUS_TZ`, browser, machine. Used by `timeparse` and
+  `get_current_time`.
+- **System prompt.** The rules the model answers under (`orchestration/prompt.py`
+  `SYSTEM_PROMPT` is the default). Edit, save, discard or reset. The answer
+  validator still runs whatever the prompt says.
+- **Safety.** The built-in refusals (control, data, override) are listed
+  read-only: they are regular expressions in `query_pipeline/safety.py` and stay
+  deterministic. Their wording can change, and extra blocked phrases can be
+  added (whole words, any case). Those run after the built-in checks with reason
+  `custom_rule`, so they only ever add refusals.
+
+Prompt and safety edits are refused while the comparison is frozen. An
+evaluation run records these settings in its snapshot (`assistant`), and they
+join the configuration fingerprint only when customised, so runs on the defaults
+keep their old fingerprint.
 
 ## 7. Frontend structure
 

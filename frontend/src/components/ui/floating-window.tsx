@@ -242,11 +242,11 @@ function renderChip({
   // Square, matching `Switch` and the pixel skeletons rather than the round
   // buttons it sits beside. Height still 36px so it lines up with them.
   return (
-    <span className="pointer-events-auto inline-flex items-center h-9 rounded-[3px] border theme-border theme-text text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] animate-in fade-in slide-in-from-top-1 duration-200">
+    <span className="pointer-events-auto inline-flex min-w-0 items-center h-9 rounded-[3px] border theme-border theme-text text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] animate-in fade-in slide-in-from-top-1 duration-200">
       <button
         onClick={onRestore}
         title={`Restore ${name}`}
-        className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-full rounded-l-[2px]"
+        className="flex min-w-0 items-center gap-1.5 pl-2.5 pr-1.5 h-full rounded-l-[2px] [&>svg]:shrink-0"
       >
         {icon}
         <span className="truncate max-w-[140px]">{title}</span>
@@ -255,7 +255,7 @@ function renderChip({
         onClick={onClose}
         aria-label={`Close ${name}`}
         title="Close without restoring"
-        className="flex items-center h-full pr-2 pl-0.5 rounded-r-[2px] theme-text-muted hover:text-[var(--status-bad)]"
+        className="flex shrink-0 items-center h-full pr-2 pl-0.5 rounded-r-[2px] theme-text-muted hover:text-[var(--status-bad)]"
       >
         <X size={13} />
       </button>

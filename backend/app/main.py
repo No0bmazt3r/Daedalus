@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
-    background_jobs, chat, corpus, embeddings, events, forge, graph, health, logs, maintenance,
+    assistant, background_jobs, chat, corpus, embeddings, events, forge, graph, health, logs, maintenance,
     mcp, prefs, providers, search, sessions, system, tools,
 )
 from .db import migrations, paths, sqlite_util
@@ -155,6 +155,7 @@ app.include_router(maintenance.router)
 app.include_router(chat.router)
 app.include_router(events.router)
 app.include_router(background_jobs.router)
+app.include_router(assistant.router)
 
 
 # ── Serve the built dashboard ────────────────────────────────────────────────

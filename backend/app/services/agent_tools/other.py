@@ -25,6 +25,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from .. import assistant_settings
 from .registry import Effect, Param, ToolError, register
 
 _MAX_OPTIONS = 5
@@ -49,7 +50,8 @@ def get_current_time() -> dict[str, Any]:
     somebody converts it wrongly later.
     """
     now_utc = datetime.now(timezone.utc)
-    now_local = now_utc.astimezone()
+    # The site clock from Settings → Assistant, not the container's (usually UTC).
+    now_local = now_utc.astimezone(assistant_settings.site_tz())
     return {
         "data": {
             "utc": now_utc.isoformat(timespec="seconds"),

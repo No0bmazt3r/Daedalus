@@ -465,7 +465,8 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       not. Runs twice: on the raw text, and on the rewritten follow-up ("open it")
 - [x] Tool planner (intent → tool set) — deterministic, one `why` per call.
       Times are resolved by rules (`orchestration/timeparse.py`), never by the
-      model: `DAEDALUS_TZ` is the site clock, "at 10:00" / "between…and…" /
+      model: the site clock is Settings → Assistant's zone (manual, else
+      `DAEDALUS_TZ`, else the browser's, else the machine's), "at 10:00" / "between…and…" /
       "last N minutes" / "this morning" / "yesterday" all resolve to UTC bounds.
       A stopped feed anchors relative times to its last reading and says so. A
       time it cannot place ("during the last run") ends the turn with a
@@ -797,6 +798,13 @@ Layer 9 below for the per-step detail.
       - [x] Deleting an embedding model also forgets its verified width
             (`embedding_models.forget_measurements`), not just its benchmark, so
             a re-pull starts fresh
+- [x] **Settings → Assistant** *(2026-10-06)* — site timezone (auto-detected
+      from the browser, or picked by hand, with a live clock), an editable
+      system prompt with reset, and safety: built-in refusals shown read-only,
+      their wording editable, plus extra blocked phrases that only add
+      refusals. `services/assistant_settings.py`, `api/assistant.py`,
+      `tests/test_assistant_settings.py`. Frozen with the comparison; recorded
+      in evaluation snapshots
 - [x] **Code-split the floating windows.** Forge, Blueprints, Settings, Theme,
       Store and the command palette are `React.lazy` chunks
       (`components/LazyWindows.tsx`, `lib/windowLoaders.ts`), each mounted the

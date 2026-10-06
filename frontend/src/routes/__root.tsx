@@ -13,6 +13,7 @@ import {
   MountOnce,
 } from '../components/LazyWindows'
 import { prefetchWindows } from '../lib/windowLoaders'
+import { reportBrowserTimezone } from '../lib/assistantClient'
 import { SettingsProvider, useSettings } from '../contexts/SettingsContext'
 import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
@@ -91,6 +92,8 @@ function AppShell() {
   // Every window is its own chunk, fetched once the page is idle so that the
   // first open does not wait on the network. See `lib/windowLoaders.ts`.
   useEffect(() => prefetchWindows(), [])
+  // Auto-detect: the assistant's clock follows this browser unless a zone is picked in Settings.
+  useEffect(() => { void reportBrowserTimezone() }, [])
 
   const { keybinds } = useUiPrefs()
   const {

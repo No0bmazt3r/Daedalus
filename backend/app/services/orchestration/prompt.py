@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import chat_service
+from .. import assistant_settings, chat_service
 from ..query_pipeline import Understanding
 from .evidence import EvidencePack
 
@@ -65,7 +65,8 @@ def build(
     pack: EvidencePack,
     understood: Understanding,
 ) -> list[dict[str, str]]:
-    system = SYSTEM_PROMPT
+    # Settings → Assistant can replace the prompt; SYSTEM_PROMPT is the default.
+    system = assistant_settings.system_prompt(SYSTEM_PROMPT)
     if hint := _LANGUAGE.get(understood.normalised.language):
         system += "\n" + hint
 

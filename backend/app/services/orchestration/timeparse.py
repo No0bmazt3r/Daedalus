@@ -10,9 +10,10 @@ from — the answer can say *which* window it described.
 
 ## Whose clock
 
-Operators mean the clock on the lab wall. `SITE_TZ` is that zone:
-`DAEDALUS_TZ` (an IANA name, e.g. `Asia/Kuala_Lumpur`) when set, else this
-machine's local zone. Rows are stored in UTC, so every bound is converted before
+Operators mean the clock on the lab wall. `site_tz()` is that zone: the one
+picked in Settings → Assistant, else `DAEDALUS_TZ` (an IANA name, e.g.
+`Asia/Kuala_Lumpur`), else the browser's detected zone, else this machine's
+(see `assistant_settings`). Rows are stored in UTC, so every bound is converted before
 it leaves this module.
 
 ## What "now" means when the feed has stopped
@@ -34,28 +35,19 @@ planner decides: ask, or use a stated default window. It never guesses a date.
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from typing import Any
 
+from .. import assistant_settings
+
 FEED_GAP = timedelta(minutes=10)
 
 
-def _site_tz() -> tzinfo:
-    name = os.environ.get("DAEDALUS_TZ", "").strip()
-    if name:
-        try:
-            from zoneinfo import ZoneInfo  # noqa: PLC0415
-
-            return ZoneInfo(name)
-        except Exception:  # noqa: BLE001 — a bad name falls back, it does not crash the chat path
-            pass
-    return datetime.now().astimezone().tzinfo or timezone.utc
-
-
-SITE_TZ = _site_tz()
+def site_tz() -> tzinfo:
+    """The site clock, read per call so a change in Settings applies at once."""
+    return assistant_settings.site_tz()
 
 
 @dataclass
@@ -86,7 +78,7 @@ class TimeScope:
             "end": iso(self.end),
             "anchor": iso(self.anchor),
             "anchored_to_data": self.anchored_to_data,
-            "timezone": str(SITE_TZ),
+            "timezone": str(site_tz()),
             "notes": self.notes,
         }
 
@@ -139,7 +131,7 @@ def _clock(h: str, m: str | None, s: str | None, ampm: str | None) -> time | Non
 
 
 def _on(day: date, t: time, tz: tzinfo | None = None) -> datetime:
-    return datetime.combine(day, t, tzinfo=tz or SITE_TZ)
+    return datetime.combine(day, t, tzinfo=tz or site_tz())
 
 
 def _not_after(value: datetime, anchor: datetime) -> datetime:
@@ -160,7 +152,7 @@ def resolve(match: str, *, now: datetime | None = None, latest: datetime | None 
             "relative times are measured back from that reading, not from the wall clock"
         )
     # "at 15:15 UTC" means UTC, whatever the site's zone is.
-    tz: tzinfo = timezone.utc if re.search(r"\b(?:utc|gmt|zulu)\b", match) else SITE_TZ
+    tz: tzinfo = timezone.utc if re.search(r"\b(?:utc|gmt|zulu)\b", match) else site_tz()
     day = anchor.astimezone(tz).date()
 
     def on(d: date, t: time) -> datetime:

@@ -411,8 +411,9 @@ export function ChatInterface() {
   return (
     <div className="flex-1 flex flex-col theme-text relative w-full h-full transition-colors duration-200">
     <TooltipProvider delay={200}>
-      {/* In the layout flow, not floating: when minimized windows wrap onto a
-          second row, the chat moves down instead of scrolling underneath. */}
+      {/* In the layout flow, not floating, so the chat never scrolls underneath.
+          Minimized windows stay on one line: chips shrink and truncate their
+          titles rather than wrapping onto a second row. */}
       <div className="relative z-50 shrink-0 flex items-start justify-end gap-3 px-6 pt-4">
         {/* Minimized windows land here, to the left of the incognito toggle.
             `FloatingWindow` portals into this node by id; see `getDock` there.
@@ -421,7 +422,7 @@ export function ChatInterface() {
             place guaranteed to compete for attention while you are typing. */}
         <div
           id={MINIMIZED_DOCK_SLOT}
-          className="flex flex-wrap items-center justify-end gap-2 max-w-[min(60vw,640px)]"
+          className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2"
         />
         {/* Hideable, but the mode is not: the shortcut and Settings → Shortcuts
             both still toggle it, and the composer still says so in its

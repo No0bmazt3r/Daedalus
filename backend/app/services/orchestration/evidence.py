@@ -125,7 +125,7 @@ def _when(ts: str | None) -> str:
         at = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except ValueError:
         return ts
-    local = at.astimezone(timeparse.SITE_TZ)
+    local = at.astimezone(timeparse.site_tz())
     return f"{at.astimezone(timezone.utc):%Y-%m-%d %H:%M:%S} UTC ({local:%H:%M} site time)"
 
 

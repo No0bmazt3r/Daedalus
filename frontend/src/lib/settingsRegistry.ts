@@ -6,6 +6,7 @@
 // between the nav list and the search index.
 
 import {
+  Bot,
   Boxes,
   Clock,
   Globe,
@@ -102,6 +103,14 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: [
       'track 2', 'graph', 'graphrag', 'agent', 'agent loop', 'walk', 'hops', 'budget', 'steps',
       'traversal', 'sufficiency',
+    ],
+  }),
+
+  panel({
+    id: 'assistant', label: 'Assistant', group: 'assistant', icon: Bot, implemented: true,
+    keywords: [
+      'assistant', 'system prompt', 'prompt', 'instructions', 'rules', 'timezone', 'time zone',
+      'date', 'time', 'clock', 'safety', 'refuse', 'refusal', 'block', 'blocked', 'flag', 'guard',
     ],
   }),
 

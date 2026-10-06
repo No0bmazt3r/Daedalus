@@ -26,6 +26,7 @@ import { IntegrationsPanel } from './settings/IntegrationsPanel'
 import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
+import { AssistantPanel } from './settings/AssistantPanel'
 import { AppearancePanel } from './settings/AppearancePanel'
 import { ShortcutsPanel } from './settings/ShortcutsPanel'
 import type { ForgeTab } from './forge/ForgeWindow'
@@ -247,6 +248,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
 
             {/* Models (add, installed, hardware) are the Forge's, and store
                 health is part of System — see `settingsRegistry.ts`. */}
+            {effectiveTab === 'assistant' && <AssistantPanel isPeek={isPeek} />}
             {effectiveTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
             {effectiveTab === 'knowledge' && <KnowledgeBasePanel />}
             {effectiveTab === 'vector-rag' && <VectorRagPanel onOpenForge={onOpenForge} />}

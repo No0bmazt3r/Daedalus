@@ -542,9 +542,25 @@ def snapshot() -> dict[str, Any]:
                            "gpus": [g.get("name") for g in (profile.get("gpu") or {}).get("devices", [])]}
     except Exception:  # noqa: BLE001
         snap["machine"] = {}
+    # Settings → Assistant changes what the model is told and what is refused.
+    from . import assistant_settings  # noqa: PLC0415
+    from .orchestration.prompt import SYSTEM_PROMPT  # noqa: PLC0415
+
+    custom = assistant_settings.read()
+    prompt = custom["system_prompt"] or SYSTEM_PROMPT
+    snap["assistant"] = {
+        "system_prompt_sha": _sha(prompt.encode()),
+        "custom_prompt": custom["system_prompt"] is not None,
+        "refusals": custom["refusals"],
+        "blocked_phrases": custom["blocked_phrases"],
+        "timezone": str(assistant_settings.site_tz()),
+    }
+    customised = snap["assistant"]["custom_prompt"] or custom["refusals"] or custom["blocked_phrases"]
     # What makes two official runs "the same": the frozen choices and the inputs.
-    fingerprint = json.dumps({k: snap.get(k) for k in ("rag_config", "embedding", "chat_model", "graph")},
-                             sort_keys=True, default=str)
+    # The assistant settings join only when customised, so runs on the defaults
+    # keep the fingerprint they had before these settings existed.
+    keys = ("rag_config", "embedding", "chat_model", "graph") + (("assistant",) if customised else ())
+    fingerprint = json.dumps({k: snap.get(k) for k in keys}, sort_keys=True, default=str)
     snap["fingerprint"] = _sha(fingerprint.encode())
     return snap
 
