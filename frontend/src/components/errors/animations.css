@@ -1,6 +1,10 @@
 /* Shared motions for the error-page pictures. Each code's own rules live in
    its file under codes/ and are injected only while that page is shown. */
-.pix { display: block; }
+.pix {
+  display: block;
+  /* Unlit redstone dust (400), from the theme */
+  --dust-off: color-mix(in srgb, var(--status-bad) 35%, var(--bg));
+}
 
 .pix rect { transform-box: fill-box; transform-origin: center; }
 
@@ -48,6 +52,32 @@
 }
 
 @keyframes pix-wiggle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.4px); } }
+
+/* Redstone (400): on for the middle half of the cycle, off the rest. Use with steps(1). */
+@keyframes pix-on { 0% { opacity: 0; } 15% { opacity: 1; } 65% { opacity: 0; } }
+/* An arm reaching in to click, twice, then resting (401) */
+@keyframes pix-poke {
+  0%, 20% { transform: translate(0, 0); }
+  26% { transform: translate(-1px, -1px); }
+  32% { transform: translate(0, 0); }
+  38% { transform: translate(-1px, -1px); }
+  44%, 100% { transform: translate(0, 0); }
+}
+/* A villager's "no" head shake (402) */
+@keyframes pix-nope {
+  0%, 50% { transform: translateX(0); }
+  54% { transform: translateX(-0.5px); }
+  58% { transform: translateX(0.5px); }
+  62% { transform: translateX(-0.5px); }
+  66% { transform: translateX(0.5px); }
+  70%, 100% { transform: translateX(0); }
+}
+@keyframes pix-twinkle {
+  0% { transform: translateY(0) scale(0); }
+  25% { transform: translateY(-0.3px) scale(0.6); }
+  100% { transform: translateY(-1.5px) scale(0); }
+}
+@keyframes pix-power { 0% { fill: var(--dust-off); } 15% { fill: var(--status-bad); } 65% { fill: var(--dust-off); } }
 
 @keyframes pix-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 

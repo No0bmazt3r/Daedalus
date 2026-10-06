@@ -13,7 +13,8 @@ export interface ErrorInfo {
   /** Plain words: what to try. */
   fix: string
   /**
-   * The picture: rows of colour letters, '.' for empty. Square, 12 or 13 wide.
+   * The picture: rows of colour letters, '.' for empty. Usually square, 12 or 13 wide;
+   * a wider scene (e.g. 400, 24×10) is scaled to fit.
    * Letters: a primary · t text · m muted · r bad · w warn · g ok · d muted
    * (moves on its own) · b info. See `COLOURS` in PixelArt.tsx.
    */

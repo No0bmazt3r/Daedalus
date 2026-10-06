@@ -36,6 +36,7 @@ export function ErrorPage({ code, detail, preview = false }: {
   const known = ERRORS[code]
   const shownCode = known ? code : code >= 500 ? 500 : 400
   const info = ERRORS[shownCode]
+  const wide = info.art[0].length > info.art.length
   const retryable = code === 429 || code >= 500
 
   // Portalled to <body>: the whole window, sidebar included, and clear of the
@@ -52,7 +53,7 @@ export function ErrorPage({ code, detail, preview = false }: {
         backgroundSize: '48px 48px',
       }}
     >
-      <div className="mx-auto grid min-h-full max-w-7xl items-center gap-10 px-8 py-12 lg:grid-cols-[5fr_6fr] lg:gap-16 lg:px-16">
+      <div className={`mx-auto grid min-h-full items-center gap-10 px-8 py-12 lg:gap-16 lg:px-16 ${wide ? 'lg:grid-cols-[3fr_2fr]' : 'max-w-7xl lg:grid-cols-[5fr_6fr]'}`}>
         {/* This code's own animation, from its file in codes/. */}
         <style>{info.css}</style>
         <div className="relative flex items-center justify-center">
@@ -63,7 +64,12 @@ export function ErrorPage({ code, detail, preview = false }: {
           >
             {code}
           </span>
-          <PixelArt rows={info.art} anim={shownCode} className="relative h-[min(60vh,440px)] w-[min(80vw,440px)]" />
+          <PixelArt
+            rows={info.art}
+            anim={shownCode}
+            // A wide scene (400) spans the page and takes its whole column at its own aspect; the rest stay square.
+            className={wide ? 'relative w-full [&>svg]:h-auto' : 'relative h-[min(60vh,440px)] w-[min(80vw,440px)]'}
+          />
         </div>
 
         <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
