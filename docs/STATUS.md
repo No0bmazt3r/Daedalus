@@ -202,11 +202,14 @@ in five steps:
 4. **Rank** a curated catalogue of 37 models (plus live Hugging Face search).
 5. **Pull**, benchmark and select the chosen model.
 
-It has four tabs. **Installed** is for managing what is on the machine: local
+It has five tabs: Hardware, Chat models, Embedding models, Re-rankers and
+Installed. **Installed** is for managing what is on the machine: local
 models with their run history (p50/p95 latency), benchmark and delete; the
-embedding model and which one builds the index; and the cloud baselines.
-**Chat models** and **Embedding models** are for browsing: search, filter, pull and
-star, with a Manage button on anything already installed that jumps to Installed.
+embedding models and which one builds the index; the re-rankers; and the cloud
+baselines. **Chat models**, **Embedding models** and **Re-rankers** are for browsing: search, filter, pull and
+star, with a Manage button on anything already installed that jumps to that
+model's own list in Installed (chat, embedding or re-ranker). Pulls show a
+progress bar, and deletes ask through the app's own dialog.
 Chat models is one list filtered by Shortlist / Everything / Hugging Face, SLM /
 LLM and Runnable only, with each model shown once and its quantisation (Q4, Q8,
 FP16) chosen on the card. You can star models to build your own shortlist; the six

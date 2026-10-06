@@ -190,9 +190,10 @@ def delete_model(tag: str) -> dict[str, Any]:
     except ollama_client.OllamaUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     forge_service.invalidate_cache()
-    # An embedder's benchmark described the copy that was just removed; a later
-    # pull of the same tag may be a different build, so it is measured afresh.
-    embedding_models.forget_benchmark(tag)
+    # An embedder's benchmark and verified width described the copy that was just
+    # removed; a later pull of the same tag may be a different build, so it is
+    # measured afresh.
+    embedding_models.forget_measurements(tag)
     live_events.publish("models", source="delete", tag=tag)
     live_events.publish("embeddings")
     return {"deleted": True, "tag": tag}

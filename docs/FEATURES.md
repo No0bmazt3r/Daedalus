@@ -24,7 +24,7 @@ Everything below was read off the source, not from memory.
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
 | Hardware detection | Built — background-scheduled, in the Forge → Hardware. Container-aware, with GPU passthrough layered on where the host has one |
-| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs — everything about models and the machine (the rule is in §6): Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed — split the same way: Chat models (Local · Cloud baselines), Embedding models (verify), Re-rankers (benchmark, delete); the Re-rankers browse tab shows a downloaded model as *Manage*. Which embedding model builds the index and which re-ranker runs are chosen in Settings → Vector RAG, whose *Open The Forge* buttons land on the right tab |
+| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs — everything about models and the machine (the rule is in §6): Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed — split the same way: Chat models (Local · Cloud baselines), Embedding models (verify), Re-rankers (benchmark, delete); the Re-rankers browse tab shows a downloaded model as *Manage*. Which embedding model builds the index and which re-ranker runs are chosen in Settings → Vector RAG, whose *Open The Forge* buttons land on the right tab; an installed embedder can also be chosen with one click from Blueprints → Build → Embedding. *Manage* on a browse card opens Installed on that model's own list. Pulls show a progress bar, and every delete asks through the app's own dialog |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
@@ -114,7 +114,8 @@ to it.
 | `POST`/`DELETE` | `/api/rag/rerankers/{id}` (`/download` for POST) | Download a re-ranker's pinned weights on a worker thread, or delete them. Called from The Forge → Re-rankers; progress is read back from `/api/rag/config`'s `rerankers` |
 | `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it. `PUT` (Settings → Vector RAG) is refused with 409 while the comparison is frozen |
-| `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE |
+| `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE (`total_bytes`, `completed_bytes`, `percent` per line) |
+| `GET` | `/api/events` | Live updates as SSE. Each event names a topic (`models`, `embeddings`, `endpoints`, `sessions`, `rag`, `corpus`) and carries no data; views re-fetch what they show. `rag` and `corpus` are published by middleware after any successful write under `/api/rag` or `/api/corpus` |
 | `POST` | `/api/embeddings/verify` | Embed a probe string and record the width the model actually returns. The only call here that runs a model |
 | `GET`/`PUT` | `/api/search/config` | The web search provider, its fallback chain, and what each provider still needs configured |
 | `PUT` | `/api/search/providers/{id}` | One provider's URL, key or engine id. Write-only for the key — it returns a masked hint |
@@ -618,6 +619,15 @@ back to the config only when Chroma cannot be reached:
 
 `index_source` says which of the two answered, because "a fact about the
 vectors" and "a note kept beside them" are different claims.
+
+**Choosing, pulling and deleting.** Nothing is selected by default: a pulled
+model is installed, not chosen. You choose in Settings → Vector RAG, or with one
+click from Blueprints → Build → Embedding, which lists every installed embedder
+when none is selected. Both send the same `PUT /api/embeddings/config`. A pull
+stores the model in Ollama on this machine until it is deleted, and the card
+shows a progress bar while it downloads. Deleting removes it from Ollama and
+forgets its benchmark and verified width (`forget_measurements`), so pulling it
+again starts fresh. The index it built is kept.
 
 **Cloud embedding models are quarantined.** Rule 1 permits cloud models as
 offline evaluation baselines, and the exposure here is worse than for a chat
@@ -1159,7 +1169,8 @@ per-category results rather than stopping at the first failure.
 
 Each row's button says **Delete**, not just a bin glyph: on the row that empties
 the evaluation evidence, the control should be a word. Confirmation is a themed
-`ConfirmDialog` rather than `window.confirm` — the browser's own dialog ignores
+`ConfirmDialog` rather than `window.confirm` (the Forge's model deletes use the
+same dialog through `useConfirm()`) — the browser's own dialog ignores
 the theme, cannot describe what is about to happen, and cannot ask for anything
 to be typed. The graver categories (the audit log, *everything*) keep the
 confirm button disabled until `DELETE` is typed: two clicks in a row can be

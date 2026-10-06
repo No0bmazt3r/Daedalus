@@ -168,3 +168,25 @@ export function ConfirmDialog({
     document.body,
   )
 }
+
+type ConfirmOptions = Omit<ConfirmDialogProps, 'open' | 'busy' | 'onConfirm' | 'onCancel'>
+
+/**
+ * `window.confirm`, but themed: `if (!(await confirm({...}))) return`.
+ * Render the returned dialog anywhere in the component.
+ */
+export function useConfirm() {
+  const [pending, setPending] = useState<{ options: ConfirmOptions; resolve: (ok: boolean) => void } | null>(null)
+  const confirm = useCallback(
+    (options: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ options, resolve })),
+    [],
+  )
+  const close = (ok: boolean) => {
+    pending?.resolve(ok)
+    setPending(null)
+  }
+  const dialog = pending && (
+    <ConfirmDialog {...pending.options} open onConfirm={() => close(true)} onCancel={() => close(false)} />
+  )
+  return [confirm, dialog] as const
+}

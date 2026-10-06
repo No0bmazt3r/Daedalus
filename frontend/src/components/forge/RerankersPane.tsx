@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useConfirm } from '../ui/confirm-dialog'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   AlertTriangle, CircleAlert, CircleCheck, CircleSlash, Download, Gauge, Loader2, Sparkles, Trash2,
@@ -59,6 +60,7 @@ export function RerankersPane({
   const [config, setConfig] = useState<RagConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [benching, setBenching] = useState<string | null>(null)
+  const [confirm, confirmDialog] = useConfirm()
 
   const load = useCallback(
     () => fetchRagConfig().then(setConfig).catch((e: Error) => setError(e.message)),
@@ -110,6 +112,7 @@ export function RerankersPane({
 
   return (
     <div className="space-y-3">
+      {confirmDialog}
       {mode === 'browse' ? (
         <PaneIntro>
           Cross-encoders that re-score Track 1's nearest chunks and keep the ones that actually answer
@@ -152,9 +155,14 @@ export function RerankersPane({
             benching={benching === m.id}
             onDownload={() => void act(() => downloadReranker(m.id))}
             onBenchmark={() => void bench(m)}
-            onDelete={() => {
-              if (!window.confirm(`Delete ${m.label}'s weights from this machine?`)) return
-              void act(() => deleteReranker(m.id))
+            onDelete={async () => {
+              const ok = await confirm({
+                title: `Delete ${m.label}?`,
+                body: 'This removes its downloaded weights from this machine. You can download it again later for a fresh install.',
+                confirmLabel: 'Delete',
+                danger: true,
+              })
+              if (ok) void act(() => deleteReranker(m.id))
             }}
           />
         ))}

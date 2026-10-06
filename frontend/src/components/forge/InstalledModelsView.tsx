@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConfirm } from '../ui/confirm-dialog'
 import {
   AlertTriangle, ChevronDown, Cloud, Cpu, FlaskConical, Loader2, RefreshCw, Trash2, X,
   CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Binary, ListOrdered, MessageSquare,
@@ -299,6 +300,7 @@ export function InstalledModelsView({
   onBrowseRerankers?: () => void
 }) {
   const [pane, setPane] = useState<PaneId>(initialPane)
+  const [confirm, confirmDialog] = useConfirm()
   const [source, setSource] = useState<ChatSource>('local')
   const [rerankerCount, setRerankerCount] = useState(0)
   const [tier, setTier] = useState<TierFilter>('all')
@@ -371,7 +373,13 @@ export function InstalledModelsView({
   }, [load])
 
   const handleDelete = useCallback(async (row: ModelRow) => {
-    if (!window.confirm(`Delete ${row.tag} from this machine?`)) return
+    const ok = await confirm({
+      title: `Delete ${row.tag}?`,
+      body: 'This removes the model from Ollama on this machine, along with its benchmark results. You can pull it again later for a fresh install.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })
+    if (!ok) return
     setBusy(row.tag)
     try {
       await deleteModel(row.tag)
@@ -382,7 +390,7 @@ export function InstalledModelsView({
     } finally {
       setBusy(null)
     }
-  }, [load])
+  }, [load, confirm])
 
   // Local and cloud chat models side by side, but never in one list: under
   // Rule 1 a cloud model is an evaluation baseline, not a deployment target.
@@ -416,6 +424,7 @@ export function InstalledModelsView({
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
           What this machine has, and what it has been running. Benchmark and delete models,

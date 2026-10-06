@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useConfirm } from '../ui/confirm-dialog'
 import {
   Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, Download, Loader2, Search, Database, Binary,
 } from 'lucide-react'
@@ -283,6 +284,7 @@ export function EmbeddingModelsPane({
   const [error, setError] = useState<string | null>(null)
   const [pullingTag, setPullingTag] = useState<string | null>(null)
   const [progress, setProgress] = useState<PullStatus | null>(null)
+  const [confirm, confirmDialog] = useConfirm()
   const [showCloud, setShowCloud] = useState(false)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [benchmarking, setBenchmarking] = useState<string | null>(null)
@@ -334,10 +336,10 @@ export function EmbeddingModelsPane({
     setNotice(null)
     const stream = pullEmbeddingModel(tag, (e) => {
       if (e.error) setError(e.error)
-      else if (e.total) {
+      else if (e.total_bytes) {
         // Ollama names each layer "pulling <digest>"; the hash means nothing to a person.
-        const completed = e.completed ?? 0
-        setProgress({ label: `${Math.round((completed / e.total) * 100)}%`, completed, total: e.total })
+        const completed = e.completed_bytes ?? 0
+        setProgress({ label: `${Math.round((completed / e.total_bytes) * 100)}%`, completed, total: e.total_bytes })
       } else if (e.status) setProgress({ label: e.status })
     })
     stream.done
@@ -371,15 +373,20 @@ export function EmbeddingModelsPane({
       .finally(() => { setVerifying(null); load() })
   }
 
-  const remove = (m: EmbeddingConfig['local_models'][number]) => {
+  const remove = async (m: EmbeddingConfig['local_models'][number]) => {
     // Deleting the model that builds the index leaves Track 1 unable to embed a
     // question — its index stays on disk, but nothing can query it until the
     // model is back or another is chosen. Said before, not discovered after.
     const builds = config?.provider === 'local' && normaliseTag(config.model) === m.tag
-    const message = builds
-      ? `${m.label} builds Track 1's index. Delete it and Track 1 cannot answer until you pull it again or choose another model in Settings → Vector RAG (the index itself is kept). Delete anyway?`
-      : `Delete ${m.label} from this machine?`
-    if (!window.confirm(message)) return
+    const ok = await confirm({
+      title: `Delete ${m.label}?`,
+      body: builds
+        ? `${m.label} builds Track 1's index. If you delete it, Track 1 can't answer until you pull it again or choose another model in Settings → Vector RAG. The index itself is kept.`
+        : 'This removes the model from Ollama on this machine, along with its benchmark and verified width. You can pull it again later for a fresh install.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })
+    if (!ok) return
     setDeleting(m.tag)
     setError(null)
     deleteModel(m.installed_tag ?? m.tag)
@@ -401,6 +408,7 @@ export function EmbeddingModelsPane({
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       {mode === 'browse' ? (
         <p className="text-sm theme-text-muted">
           Models that turn document chunks into vectors for Track 1. Pull one here, then

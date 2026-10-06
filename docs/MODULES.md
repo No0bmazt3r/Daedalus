@@ -694,7 +694,10 @@ clue which to touch first. Going *back* is always allowed, because adjusting
 chunk settings against the preview is inherently repetitive; going *forward* is
 gated, and the rail says why rather than just disabling itself.
 
-Step 3 **reports** the embedding model and hands management off to the Forge. It
+Step 3 **reports** the embedding model and hands management off to the Forge.
+When none is selected it also lists each installed embedder as a one-click
+*Use <model>*: choosing stays an explicit act, it is just not a trip to Settings.
+It
 is a step rather than a footnote because it is the only choice in the flow that
 is irreversible with respect to the work — the model is stamped onto the index it
 builds, and changing it afterwards invalidates every vector — so the run should

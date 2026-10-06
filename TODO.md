@@ -769,16 +769,34 @@ Layer 9 below for the per-step detail.
 ## M10 — Dashboard completion  ▸ Layer 9B
 
 - [x] **Live updates** — `GET /api/events` (SSE, `services/live_events.py`)
-      announces `models` / `embeddings` / `endpoints` changes; views re-fetch
-      rather than receive data, so every list keeps one source of truth.
-      Published by pull, delete, embedding selection/verify and endpoint edits,
-      plus a watcher that polls Ollama every 5s *while a tab is listening*, so
+      announces `models` / `embeddings` / `endpoints` / `sessions` / `rag` /
+      `corpus` changes; views re-fetch rather than receive data, so every list
+      keeps one source of truth. Published by pull, delete, embedding
+      selection/verify and endpoint edits; `rag` and `corpus` come from one
+      middleware in `main.py` that publishes after any successful write under
+      `/api/rag` or `/api/corpus` (preview excluded), plus the end of an ingest
+      or resume run and of a re-ranker download. Also a watcher that polls Ollama every 5s *while a tab is listening*, so
       `ollama rm` in a terminal reaches the UI too. One EventSource per tab
       (`lib/liveEvents.ts`, `hooks/useLiveRefresh.ts`); a reconnect re-fetches
-      everything. The composer's picker, every Forge list and the embedding
-      panes follow it; a deleted selected model falls back to the committed one.
+      everything. The composer's picker, every Forge list (Installed counts and
+      Re-rankers included), the embedding panes, Settings → Vector RAG / Graph
+      RAG / Retrieval track, and Blueprints (track badge, Corpus, every Build
+      step) follow it; a deleted selected model falls back to the committed one.
       uvicorn now runs with `--timeout-graceful-shutdown 3`, since open streams
       would otherwise hold a reload or stop indefinitely
+- [x] **Model UX pass** *(2026-10-06)*
+      - [x] Embedding pulls show a progress bar (bytes and percent) on the card
+            and under the pull-by-name box. The pane was reading `total` /
+            `completed`, but the backend sends `total_bytes` / `completed_bytes`,
+            so it only ever showed the raw "pulling <digest>" status
+      - [x] Blueprints → Build → Embedding offers a one-click *Use <model>* for
+            each installed embedder when none is selected. Still an explicit
+            choice, never a default
+      - [x] *Manage* on a browse card opens Installed on that model's own list
+            (chat, embedding or re-ranker), not always Chat models
+      - [x] Deleting an embedding model also forgets its verified width
+            (`embedding_models.forget_measurements`), not just its benchmark, so
+            a re-pull starts fresh
 - [x] **Code-split the floating windows.** Forge, Blueprints, Settings, Theme,
       Store and the command palette are `React.lazy` chunks
       (`components/LazyWindows.tsx`, `lib/windowLoaders.ts`), each mounted the
@@ -1607,8 +1625,9 @@ Layer 9 below for the per-step detail.
       `window.confirm` — which ignores the theme, cannot describe what is about
       to happen, and cannot ask for anything to be typed. The audit log and
       *everything* require typing `DELETE`: two clicks can be muscle memory
-      - [-] The Forge's two `window.confirm` calls (delete a pulled model) could
-            adopt the same dialog. Left alone for now — they were not in scope *(cut from FYP2, 2026-10-01)*
+      - [x] The Forge's deletes (chat model, embedding model, re-ranker) use the
+            same dialog through `useConfirm()` in `ui/confirm-dialog.tsx`. No
+            `window.confirm` is left in the frontend *(2026-10-06)*
 - [x] **SearXNG can be started and stopped from Settings → Search**, when a
       Docker socket is mounted into the backend. **Off by default**, and that is
       a position: a process that can reach the socket can do anything Docker can
