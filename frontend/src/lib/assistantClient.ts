@@ -16,7 +16,11 @@ export interface AssistantSettings {
   system_prompt: string | null;
   refusals: Partial<Record<RefusalKind, string>>;
   blocked_phrases: string[];
+  /** Built-in rules switched off in Settings → Safety. */
+  disabled_rules: RuleKind[];
 }
+
+export type RuleKind = Exclude<RefusalKind, 'custom'>;
 
 export interface AssistantStatus {
   settings: AssistantSettings;
@@ -24,7 +28,7 @@ export interface AssistantStatus {
   timezone_source: 'manual' | 'env' | 'browser' | 'machine';
   frozen: boolean;
   defaults: { system_prompt: string; refusals: Record<RefusalKind, string> };
-  built_in_rules: { kind: RefusalKind; label: string; examples: string[] }[];
+  built_in_rules: { kind: RuleKind; label: string; examples: string[] }[];
 }
 
 /** A null field resets it to the default. */
@@ -34,6 +38,7 @@ export type AssistantPatch = {
   system_prompt?: string | null;
   refusals?: Partial<Record<RefusalKind, string | null>>;
   blocked_phrases?: string[];
+  disabled_rules?: RuleKind[];
 };
 
 export const fetchAssistant = () => request<AssistantStatus>('/api/assistant/config');

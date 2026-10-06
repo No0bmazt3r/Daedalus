@@ -17,8 +17,8 @@ from ..services.query_pipeline import safety
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
-# What the fixed guard refuses, in plain words. Read-only in the UI: these are
-# regular expressions in safety.py and are not editable on purpose.
+# What the built-in guard refuses, in plain words. The patterns live in
+# safety.py / vocabulary.py; Settings can switch each rule off, not rewrite it.
 BUILT_IN_RULES = [
     {"kind": "control", "label": "Controlling the reactor",
      "examples": ["open ABV-1", "start desorption", "set the temperature to 80"]},

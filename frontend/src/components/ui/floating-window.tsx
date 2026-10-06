@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, CircleDashed, Minus } from 'lucide-react'
 import { useDraggable } from '../../hooks/useDraggable'
@@ -114,6 +114,34 @@ function useRestoreRegistration(id: string | undefined, minimized: boolean, rest
       if (restorers.get(id) === restore) restorers.delete(id)
     }
   }, [id, minimized, restore])
+}
+
+/**
+ * Windows snapped to a full-height half of the screen.
+ *
+ * A half-snapped window is tiled, not modal: the app shell reads this through
+ * `useTiledInset()` and leaves that side free, so the chat stays usable in the
+ * other half. Corner snaps and maximize stay modal.
+ */
+type TileSide = 'left' | 'right'
+const tiles = new Map<string, { side: TileSide; width: number }>()
+const tileListeners = new Set<() => void>()
+let tileInset = { left: 0, right: 0 }
+
+function publishTiles() {
+  const next = { left: 0, right: 0 }
+  for (const { side, width } of tiles.values()) next[side] = Math.max(next[side], width)
+  if (next.left === tileInset.left && next.right === tileInset.right) return
+  tileInset = next
+  tileListeners.forEach((l) => l())
+}
+
+/** How many pixels on each side are taken by a tiled window. */
+export function useTiledInset() {
+  return useSyncExternalStore(
+    (l) => { tileListeners.add(l); return () => { tileListeners.delete(l) } },
+    () => tileInset,
+  )
 }
 
 let fallbackDock: HTMLDivElement | null = null
@@ -323,6 +351,24 @@ export function FloatingWindow({
 
   useRestoreRegistration(id, minimized, restore)
 
+  // Snapped to a full-height half: tile beside the app instead of covering it.
+  const tileSide: TileSide | null =
+    snapRect && snapRect.top === 0 && typeof window !== 'undefined'
+      && snapRect.height >= window.innerHeight - 1 && snapRect.width < window.innerWidth
+      ? (snapRect.left === 0 ? 'left' : 'right')
+      : null
+  const tileKey = useId()
+  const tileWidth = snapRect?.width ?? 0
+  useEffect(() => {
+    if (!open || minimized || !tileSide) return
+    tiles.set(tileKey, { side: tileSide, width: tileWidth })
+    publishTiles()
+    return () => {
+      tiles.delete(tileKey)
+      publishTiles()
+    }
+  }, [open, minimized, tileSide, tileWidth, tileKey])
+
   // Recomputed each time the window opens, so it lands centred even if the
   // browser has been resized since. Dragging takes over from `position` after.
   const anchor = useMemo(() => {
@@ -368,12 +414,15 @@ export function FloatingWindow({
           work — a filtered model table, a half-written API key, an open store
           row — and a stray click outside it should set that aside, not throw
           it away. Closing stays deliberate: the ✕, or Escape. */}
-      <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"
-        style={{ opacity: isPeek ? 0 : 1 }}
-        onClick={minimize}
-        title="Click to set this aside"
-      />
+      {/* No backdrop while tiled: the other half is the app, still usable. */}
+      {!tileSide && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"
+          style={{ opacity: isPeek ? 0 : 1 }}
+          onClick={minimize}
+          title="Click to set this aside"
+        />
+      )}
 
       {/* The dashed target, drawn under the window and over the page, while a
           drag is over an edge. Portalled to <body> so it is not clipped by the

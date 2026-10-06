@@ -804,7 +804,22 @@ Layer 9 below for the per-step detail.
       their wording editable, plus extra blocked phrases that only add
       refusals. `services/assistant_settings.py`, `api/assistant.py`,
       `tests/test_assistant_settings.py`. Frozen with the comparison; recorded
-      in evaluation snapshots
+      in evaluation snapshots. Split into three panels: Date & Time, System
+      Prompt, Safety. Each built-in rule has a switch: off needs a typed
+      `DISABLE`, is refused while frozen, and is recorded in evaluation
+      snapshots (`disabled_rules`); a warning shows while any is off. Custom
+      phrases show an empty state and are removed with the × on each chip
+- [x] **Half-snapped windows tile beside the chat** *(2026-10-06)* — no
+      backdrop, the app shell shrinks into the other half and the sidebar folds
+      (restored on unsnap). `useTiledInset()` in `ui/floating-window.tsx`
+- [x] **Error pages** *(2026-10-06)* — 14 HTTP codes, Daedalus × block-built
+      theme with pixel art in theme colours, plain *what happened / what to
+      try*. Full-screen. Router 404 and crash pages, a 503 page while the
+      backend is down (`hooks/useBackendDown.ts`, polls `/api/health`), the
+      `/error/<code>` route (preview row there only, dev only), `HttpError`
+      status on `request()` failures. Each picture has its own CSS loop
+      (`.pix-<code>`), still under `prefers-reduced-motion`.
+      `components/ErrorPage.tsx`
 - [x] **Code-split the floating windows.** Forge, Blueprints, Settings, Theme,
       Store and the command palette are `React.lazy` chunks
       (`components/LazyWindows.tsx`, `lib/windowLoaders.ts`), each mounted the

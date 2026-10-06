@@ -14,11 +14,12 @@ Which clock "this morning" and "at 10:00" mean. In order:
 
 ## Prompt and safety
 
-The system prompt can be replaced and reset. The safety guard's built-in rules
-(`query_pipeline/safety.py`) stay fixed: they are deterministic on purpose, and
-a setting that could switch them off would be a guard that can be argued with.
-What can change is the wording of each refusal, plus extra blocked phrases that
-only ever *add* refusals.
+The system prompt can be replaced and reset. The safety guard's three built-in
+rules (`query_pipeline/safety.py`) stay deterministic, but each can be switched
+off here (`disabled_rules`): this is a single-operator console and the operator
+owns that call. The UI asks for a typed confirmation, and every evaluation run
+records the state. The wording of each refusal can change too, and extra
+blocked phrases only ever *add* refusals.
 
 Prompt and safety edits are refused while the comparison is frozen
 (`PROJECT.md` §5), for the same reason a track or embedding change is: tuning
@@ -38,6 +39,8 @@ KEY = "assistant"
 
 #: Which refusal texts can be reworded, and the guard reason each one answers.
 REFUSAL_KINDS = ("control", "data", "override", "custom")
+#: The built-in rules that can be switched off.
+RULE_KINDS = ("control", "data", "override")
 
 DEFAULT_CUSTOM_REFUSAL = "I can't help with that here. Ask me about the reactor's readings, trends or procedures."
 
@@ -74,6 +77,7 @@ def read() -> dict[str, Any]:
         "system_prompt": raw.get("system_prompt") or None,
         "refusals": {k: v for k, v in refusals.items() if k in REFUSAL_KINDS and isinstance(v, str) and v},
         "blocked_phrases": [p for p in phrases if isinstance(p, str) and p.strip()],
+        "disabled_rules": [k for k in RULE_KINDS if k in (raw.get("disabled_rules") or [])],
     }
 
 
@@ -118,6 +122,11 @@ def blocked_phrases() -> list[str]:
     return read()["blocked_phrases"]
 
 
+def enabled_rules() -> set[str]:
+    """The built-in rules currently on. All three unless switched off in Settings."""
+    return set(RULE_KINDS) - set(read()["disabled_rules"])
+
+
 def _clean_phrases(value: Any) -> list[str]:
     if not isinstance(value, list):
         raise SettingsError("blocked_phrases must be a list of strings")
@@ -140,7 +149,7 @@ def _clean_phrases(value: Any) -> list[str]:
 def write(patch: dict[str, Any], *, frozen: bool = False) -> dict[str, Any]:
     """Merge `patch` into the stored settings. A field set to null resets it."""
     current = _stored()
-    behaviour = {"system_prompt", "refusals", "blocked_phrases"} & patch.keys()
+    behaviour = {"system_prompt", "refusals", "blocked_phrases", "disabled_rules"} & patch.keys()
     if behaviour and frozen:
         raise SettingsFrozen(
             "the comparison is frozen, so the prompt and safety rules can't change. "
@@ -186,6 +195,12 @@ def write(patch: dict[str, Any], *, frozen: bool = False) -> dict[str, Any]:
 
     if "blocked_phrases" in patch:
         current["blocked_phrases"] = _clean_phrases(patch["blocked_phrases"] or [])
+
+    if "disabled_rules" in patch:
+        rules = patch["disabled_rules"] or []
+        if not isinstance(rules, list) or any(r not in RULE_KINDS for r in rules):
+            raise SettingsError(f"disabled_rules must be a list drawn from {list(RULE_KINDS)}")
+        current["disabled_rules"] = [k for k in RULE_KINDS if k in rules]
 
     prefs_store.set_pref(KEY, current)
     return read()

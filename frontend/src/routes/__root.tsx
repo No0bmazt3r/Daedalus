@@ -3,7 +3,7 @@ import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { Sidebar } from '../components/Sidebar'
 import { Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
-import { restoreWindow } from '../components/ui/floating-window'
+import { restoreWindow, useTiledInset } from '../components/ui/floating-window'
 import { BackgroundEffects } from '../components/BackgroundEffects'
 import type { BlueprintsTab } from '../components/blueprints/tabs'
 import type { ForgeTab } from '../components/forge/ForgeWindow'
@@ -19,10 +19,17 @@ import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { UiPrefsProvider, useUiPrefs } from '../contexts/UiPrefsContext'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
+import { ErrorPage, statusOf } from '../components/ErrorPage'
+import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 
 export const Route = createRootRoute({
   component: RootLayout,
+  // Full-screen pages; ErrorPage portals itself over the whole window.
+  notFoundComponent: () => <ErrorPage code={404} />,
+  errorComponent: ({ error }) => (
+    <ErrorPage code={statusOf(error) ?? 500} detail={error instanceof Error ? error.message : undefined} />
+  ),
 })
 
 /**
@@ -67,6 +74,22 @@ function RootLayout() {
  */
 function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Nothing works without the backend, so say so with the full 503 page. It
+  // lifts by itself once /api/health answers again.
+  const backendDown = useBackendDown()
+  // A window snapped to a half of the screen tiles beside the app: the shell
+  // shrinks into the other half and the sidebar folds away to give the chat
+  // room. Unsnapping puts the sidebar back the way it was.
+  const inset = useTiledInset()
+  const tiled = inset.left > 0 || inset.right > 0
+  const [sidebarBeforeTile, setSidebarBeforeTile] = useState<boolean | null>(null)
+  if (tiled && sidebarBeforeTile === null) {
+    setSidebarBeforeTile(sidebarOpen)
+    setSidebarOpen(false)
+  } else if (!tiled && sidebarBeforeTile !== null) {
+    setSidebarOpen(sidebarBeforeTile)
+    setSidebarBeforeTile(null)
+  }
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [forgeOpen, setForgeOpen] = useState(false)
@@ -195,7 +218,11 @@ function AppShell() {
 
   return (
     <>
-        <div className="flex h-screen theme-bg theme-text relative overflow-hidden transition-colors duration-200">
+        {backendDown && <ErrorPage code={503} detail={backendDown} />}
+        <div
+          className="flex h-screen theme-bg theme-text relative overflow-hidden transition-[padding,background-color,color] duration-300"
+          style={{ paddingLeft: inset.left, paddingRight: inset.right }}
+        >
           {/* Sidebar Container */}
           <div 
             /* attention-zone, and deliberately no theme-sidebar: the Sidebar

@@ -16,6 +16,13 @@ export interface RequestOptions extends RequestInit {
   timeoutMs?: number;
 }
 
+/** An Error that also carries the HTTP status, for the error pages to read. */
+export type HttpError = Error & { status: number };
+
+function withStatus(message: string, status: number): HttpError {
+  return Object.assign(new Error(message), { status });
+}
+
 export async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const controller = new AbortController();
   const timer = window.setTimeout(
@@ -31,10 +38,10 @@ export async function request<T>(path: string, init?: RequestOptions): Promise<T
       headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     });
   } catch (err) {
-    throw new Error(
-      err instanceof Error && err.name === 'AbortError'
-        ? 'the backend did not respond in time'
-        : 'could not reach the backend',
+    const timedOut = err instanceof Error && err.name === 'AbortError';
+    throw withStatus(
+      timedOut ? 'the backend did not respond in time' : 'could not reach the backend',
+      timedOut ? 504 : 503,
     );
   } finally {
     window.clearTimeout(timer);
@@ -48,7 +55,7 @@ export async function request<T>(path: string, init?: RequestOptions): Promise<T
     } catch {
       /* non-JSON error body — the status is the message */
     }
-    throw new Error(detail);
+    throw withStatus(detail, res.status);
   }
 
   try {

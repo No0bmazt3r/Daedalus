@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { AlertCircle, Clock, Lock, MessageSquareText, Plus, ShieldAlert, X } from 'lucide-react'
 import {
   browserTimezone,
@@ -7,24 +7,26 @@ import {
   type AssistantPatch,
   type AssistantStatus,
   type RefusalKind,
+  type RuleKind,
 } from '../../lib/assistantClient'
+import { Switch } from '../ui/switch'
 import { Skeleton } from '../ui/skeleton'
 import { ThemeSelect } from '../ui/theme-select'
 import { useConfirm } from '../ui/confirm-dialog'
 
 /**
- * Settings → Assistant — what the assistant is told, and when it says no.
+ * Settings → Assistant's three panels: what the assistant is told, and when it
+ * says no.
  *
- * Three things, all read by the backend on every question, so a change applies
+ * All three are read by the backend on every question, so a change applies
  * to the next message without a restart:
  *
  * - **Date and time.** Which clock "this morning" and "at 10:00" mean.
  *   Auto-detected from this browser, or picked by hand.
  * - **System prompt.** The rules the model answers under. Replace it here, or
  *   reset it to the built-in default.
- * - **Safety.** The built-in refusals are fixed, and shown so you can see what
- *   they cover. Their wording can change, and extra blocked phrases can be
- *   added, but nothing here can switch a built-in rule off.
+ * - **Safety.** The three built-in refusals, each switchable off behind a
+ *   typed confirmation; their wording; and extra blocked phrases.
  */
 
 const SOURCE_LABEL: Record<AssistantStatus['timezone_source'], string> = {
@@ -71,7 +73,8 @@ function useClock(timeZone: string) {
   }
 }
 
-export function AssistantPanel(_props: { isPeek?: boolean }) {
+/** Loads the settings once per panel; each panel renders one section of them. */
+function AssistantShell({ render }: { render: (props: SectionProps) => ReactNode }) {
   const [status, setStatus] = useState<AssistantStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -103,29 +106,33 @@ export function AssistantPanel(_props: { isPeek?: boolean }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {confirmDialog}
-      <header>
-        <h3 className="text-sm theme-text">Assistant</h3>
-        <p className="mt-1 text-xs leading-relaxed theme-text-muted">
-          What the assistant is told and when it refuses. Changes apply to the next question, no
-          restart needed.
-        </p>
-      </header>
-
       {error && <ErrorNote message={error} />}
-
-      <TimeSection status={status} saving={saving} save={save} />
-      <PromptSection status={status} saving={saving} save={save} confirm={confirm} />
-      <SafetySection status={status} saving={saving} save={save} />
+      {render({ status, saving, save, confirm })}
     </div>
   )
+}
+
+// Three panels under Settings → Assistant. `isPeek` is accepted for the modal's
+// uniform panel signature; nothing here is translucent.
+export function DateTimePanel(_props: { isPeek?: boolean }) {
+  return <AssistantShell render={(p) => <TimeSection {...p} />} />
+}
+
+export function SystemPromptPanel(_props: { isPeek?: boolean }) {
+  return <AssistantShell render={(p) => <PromptSection {...p} />} />
+}
+
+export function SafetyPanel(_props: { isPeek?: boolean }) {
+  return <AssistantShell render={(p) => <SafetySection {...p} />} />
 }
 
 type SectionProps = {
   status: AssistantStatus
   saving: boolean
   save: (patch: AssistantPatch) => Promise<boolean>
+  confirm: ReturnType<typeof useConfirm>[0]
 }
 
 function TimeSection({ status, saving, save }: SectionProps) {
@@ -175,9 +182,7 @@ function FrozenNote() {
   )
 }
 
-function PromptSection({
-  status, saving, save, confirm,
-}: SectionProps & { confirm: ReturnType<typeof useConfirm>[0] }) {
+function PromptSection({ status, saving, save, confirm }: SectionProps) {
   const current = status.settings.system_prompt ?? status.defaults.system_prompt
   const [draft, setDraft] = useState(current)
   const isDefault = status.settings.system_prompt === null
@@ -248,10 +253,26 @@ function PromptSection({
   )
 }
 
-function SafetySection({ status, saving, save }: SectionProps) {
+function SafetySection({ status, saving, save, confirm }: SectionProps) {
   const [phrase, setPhrase] = useState('')
   const phrases = status.settings.blocked_phrases
   const locked = status.frozen || saving
+  const off = status.settings.disabled_rules
+
+  // Off asks for a typed DISABLE; back on is one click, since on is the safe side.
+  const toggleRule = async (kind: RuleKind, label: string, on: boolean) => {
+    if (!on) {
+      const ok = await confirm({
+        title: `Turn off "${label}"?`,
+        body: 'Questions in this category will no longer be refused before the model runs. The model still has no tool that can change the reactor or its data, but it may claim it did. Evaluation runs record that this rule was off.',
+        confirmLabel: 'Turn off',
+        danger: true,
+        requireTyped: 'DISABLE',
+      })
+      if (!ok) return
+    }
+    await save({ disabled_rules: on ? off.filter((k) => k !== kind) : [...off, kind] })
+  }
 
   const addPhrase = async () => {
     const p = phrase.trim()
@@ -271,21 +292,36 @@ function SafetySection({ status, saving, save }: SectionProps) {
       {status.frozen && <FrozenNote />}
 
       <div className="space-y-2">
-        <p className="text-xs theme-text">Always refused</p>
+        <p className="text-xs theme-text">Built-in rules</p>
         <p className="text-[11px] leading-relaxed theme-text-muted">
-          Built in and fixed, so they can't be turned off from here. Asking <em>how</em> to do any of
-          these is fine; only asking the assistant to <em>do</em> it is refused.
+          On by default. Asking <em>how</em> to do any of these is always fine; only asking the
+          assistant to <em>do</em> it is refused. Turning one off asks you to type DISABLE.
         </p>
+        {off.length > 0 && (
+          <p className="flex items-start gap-1.5 rounded-lg border status-warn-border status-warn-bg px-3 py-2 text-[11px] leading-relaxed status-warn">
+            <ShieldAlert size={12} className="mt-0.5 shrink-0" />
+            {off.length === 1 ? '1 built-in rule is' : `${off.length} built-in rules are`} off. Those
+            questions now go to the model instead of being refused.
+          </p>
+        )}
         <ul className="space-y-1.5">
-          {status.built_in_rules.map((r) => (
-            <li key={r.kind} className="flex items-start gap-2 rounded-lg theme-surface-strong px-3 py-2">
-              <Lock size={12} className="mt-0.5 shrink-0 theme-text-muted" />
-              <div className="min-w-0">
-                <p className="text-xs theme-text">{r.label}</p>
-                <p className="text-[11px] theme-text-muted">e.g. {r.examples.map((e) => `"${e}"`).join(', ')}</p>
-              </div>
-            </li>
-          ))}
+          {status.built_in_rules.map((r) => {
+            const on = !off.includes(r.kind)
+            return (
+              <li key={r.kind} className={`flex items-start gap-3 rounded-lg theme-surface-strong px-3 py-2 ${on ? '' : 'opacity-60'}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs theme-text">{r.label}</p>
+                  <p className="text-[11px] theme-text-muted">e.g. {r.examples.map((e) => `"${e}"`).join(', ')}</p>
+                </div>
+                <Switch
+                  checked={on}
+                  onChange={(next) => void toggleRule(r.kind, r.label, next)}
+                  disabled={locked}
+                  label={`${r.label}: ${on ? 'on' : 'off'}`}
+                />
+              </li>
+            )
+          })}
         </ul>
       </div>
 
@@ -294,6 +330,11 @@ function SafetySection({ status, saving, save }: SectionProps) {
         <p className="text-[11px] leading-relaxed theme-text-muted">
           Whole words or phrases, any capitalisation. These only add refusals.
         </p>
+        {phrases.length === 0 && (
+          <p className="text-[11px] italic theme-text-muted">
+            None yet. Phrases you add show here, each with an × to remove it.
+          </p>
+        )}
         {phrases.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {phrases.map((p) => (

@@ -8,6 +8,8 @@
 import {
   Bot,
   Boxes,
+  CalendarClock,
+  ShieldAlert,
   Clock,
   Globe,
   Keyboard,
@@ -107,11 +109,18 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   }),
 
   panel({
-    id: 'assistant', label: 'Assistant', group: 'assistant', icon: Bot, implemented: true,
-    keywords: [
-      'assistant', 'system prompt', 'prompt', 'instructions', 'rules', 'timezone', 'time zone',
-      'date', 'time', 'clock', 'safety', 'refuse', 'refusal', 'block', 'blocked', 'flag', 'guard',
-    ],
+    id: 'assistant-time', label: 'Date & Time', group: 'assistant', icon: CalendarClock, implemented: true,
+    keywords: ['date', 'time', 'clock', 'timezone', 'time zone', 'region', 'auto', 'detect'],
+  }),
+
+  panel({
+    id: 'assistant-prompt', label: 'System Prompt', group: 'assistant', icon: Bot, implemented: true,
+    keywords: ['system prompt', 'prompt', 'instructions', 'rules', 'persona', 'assistant'],
+  }),
+
+  panel({
+    id: 'assistant-safety', label: 'Safety', group: 'assistant', icon: ShieldAlert, implemented: true,
+    keywords: ['safety', 'refuse', 'refusal', 'block', 'blocked', 'flag', 'guard', 'phrases', 'words'],
   }),
 
   panel({
@@ -199,6 +208,7 @@ const REDIRECTS: Readonly<Record<string, string>> = Object.freeze({
   services: DEFAULT_SETTINGS_PANEL_ID,
   'added-models': DEFAULT_SETTINGS_PANEL_ID,
   hardware: DEFAULT_SETTINGS_PANEL_ID,
+  assistant: 'assistant-prompt',
 });
 
 const byId = new Map(SETTINGS_PANELS.map((p) => [p.id, p]));

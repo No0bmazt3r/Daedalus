@@ -35,8 +35,10 @@ from being refused alongside "open the valve" (hardware).
 | `instruction_override` | "ignore your rules and…", "you are now in developer mode" | same, for the rules |
 | `custom_rule` | any phrase added in Settings → Assistant | the custom refusal |
 
-The three built-in reasons cannot be switched off from Settings; only their
-wording can change. Custom phrases run after them and only ever add refusals.
+Each built-in reason can be switched off in Settings → Safety (a typed
+confirmation, refused while the comparison is frozen, recorded in evaluation
+runs). Switching one off skips only its own checks; the others still run.
+Custom phrases run after them and only ever add refusals.
 
 ## Where it runs
 
@@ -129,19 +131,23 @@ def _object(verb: str, rest: str) -> str | None:
     return rest[: _WEAK_OBJECT_WINDOW if head in vocab.WEAK_VERBS else _OBJECT_WINDOW]
 
 
-def _control(clause: str) -> Verdict | None:
+def _control(clause: str, enabled: set[str]) -> Verdict | None:
     body = _strip_prefix(clause)
     if not body or vocab.QUESTION_START_RE.match(body):
         return None
 
-    if _BARE_COMMAND_RE.match(body):
+    control = "control" in enabled
+    if control and _BARE_COMMAND_RE.match(body):
         return _refuse("control_command", clause, body)
 
-    m = _DATA_RE.match(body)
+    m = _DATA_RE.match(body) if "data" in enabled else None
     if m:
         obj = _object(m.group("verb"), m.group("rest"))
         if obj is not None and vocab.DATA_TARGET_RE.search(obj):
             return _refuse("data_write", clause, body)
+
+    if not control:
+        return None
 
     m = _ACTUATE_RE.match(body)
     if m:
@@ -199,9 +205,11 @@ def check(match: str) -> Verdict:
     if not match:
         return ALLOW
 
-    if vocab.SQL_WRITE_RE.search(match):
+    # Settings → Safety can switch a built-in rule off; only its checks are skipped.
+    enabled = assistant_settings.enabled_rules()
+    if "data" in enabled and vocab.SQL_WRITE_RE.search(match):
         return _refuse("data_write", match, match)
-    override = vocab.OVERRIDE_RE.search(match)
+    override = vocab.OVERRIDE_RE.search(match) if "override" in enabled else None
     if override:
         return _refuse("instruction_override", override.group(0), override.group(0))
 
@@ -209,7 +217,7 @@ def check(match: str) -> Verdict:
         clause = clause.strip(" '\"()")
         if not clause:
             continue
-        verdict = _control(clause)
+        verdict = _control(clause, enabled)
         if verdict:
             return verdict
 

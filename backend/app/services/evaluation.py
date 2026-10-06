@@ -553,9 +553,11 @@ def snapshot() -> dict[str, Any]:
         "custom_prompt": custom["system_prompt"] is not None,
         "refusals": custom["refusals"],
         "blocked_phrases": custom["blocked_phrases"],
+        "disabled_rules": custom["disabled_rules"],
         "timezone": str(assistant_settings.site_tz()),
     }
-    customised = snap["assistant"]["custom_prompt"] or custom["refusals"] or custom["blocked_phrases"]
+    customised = (snap["assistant"]["custom_prompt"] or custom["refusals"] or custom["blocked_phrases"]
+                  or custom["disabled_rules"])
     # What makes two official runs "the same": the frozen choices and the inputs.
     # The assistant settings join only when customised, so runs on the defaults
     # keep the fingerprint they had before these settings existed.

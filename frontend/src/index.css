@@ -565,6 +565,147 @@ body.theme-frosted [data-slot='menu-popup'] {
   border-color: color-mix(in srgb, var(--text-main) 20%, transparent) !important;
 }
 
+/* ── Error page pixel art ──
+   One loop per code, matching its picture (ErrorPage.tsx). `.pix-<code>` moves
+   the whole picture; `.px-<colour>` moves the pixels of one colour, which carry
+   their grid position as --x / --y so effects can ripple across them. Inside
+   the SVG a CSS px is one grid cell. */
+.pix { display: block; }
+.pix rect { transform-box: fill-box; transform-origin: center; }
+
+/* 400 — the tangled thread wiggles, a wave running along it */
+.pix-400 .px-a { animation: pix-wiggle 1.6s ease-in-out infinite; animation-delay: calc(var(--x) * -0.13s); }
+
+/* 401 — someone tries the handle; the keyhole glints */
+.pix-401 { animation: pix-rattle 3.2s ease-in-out infinite; }
+.pix-401 .px-w { animation: pix-glint 3.2s steps(1) infinite; }
+
+/* 403 — the red X pulses; the wall shrugs off a knock */
+.pix-403 { animation: pix-rattle 4s ease-in-out infinite 1s; }
+.pix-403 .px-r { animation: pix-pulse 1.4s ease-in-out infinite; }
+
+/* 404 — you wander the corridor, looking for the way out */
+.pix-404 .px-a { animation: pix-wander 7s infinite; }
+
+/* 405 — the pickaxe swings and bounces off */
+.pix-405 { transform-origin: 50% 90%; animation: pix-swing 1.5s cubic-bezier(.5, 0, .3, 1) infinite; }
+
+/* 409 — the blades clash */
+.pix-409 { animation: pix-clash 1.8s ease-in-out infinite; }
+.pix-409 .px-t { animation: pix-glint 1.8s steps(1) infinite; animation-delay: -0.8s; }
+
+/* 413 — the wings flap hard, the chest barely lifts and drops back */
+.pix-413 { animation: pix-heavy 2.4s ease-in-out infinite; }
+.pix-413 .px-m { transform-origin: 50% 100%; animation: pix-flap 0.3s ease-in-out infinite alternate; }
+
+/* 415 — a dropped item: spins and bobs */
+.pix-415 { animation: pix-item 3.6s linear infinite; }
+.pix-415 .px-a { animation: pix-pulse 1.2s ease-in-out infinite; }
+
+/* 422 — the crafting grid lights up slot by slot; the wrong slot blinks */
+.pix-422 .px-a { animation: pix-pulse 2s ease-in-out infinite; animation-delay: calc((var(--x) + var(--y)) * 0.08s); }
+.pix-422 .px-r { animation: pix-glint 0.9s steps(1) infinite; }
+
+/* 429 — the sun turns slowly and its rays flare */
+.pix-429 { animation: pix-spin 24s linear infinite; }
+.pix-429 .px-w { animation: pix-pulse 1.6s ease-in-out infinite; animation-delay: calc(var(--x) * 0.1s); }
+
+/* 500 — the fire flickers, every pixel on its own beat */
+.pix-500 { transform-origin: 50% 100%; animation: pix-blaze 0.9s ease-in-out infinite alternate; }
+.pix-500 .px-r, .pix-500 .px-w, .pix-500 .px-a {
+  animation: pix-flicker 0.7s steps(2) infinite;
+  animation-delay: calc(var(--x) * -0.17s + var(--y) * -0.11s);
+}
+
+/* 502 — the river flows; rubble keeps falling out of the gap */
+.pix-502 .px-a { animation: pix-flow 1.8s ease-in-out infinite; animation-delay: calc(var(--x) * -0.15s); }
+.pix-502 .px-d { animation: pix-fall 2.2s ease-in infinite; animation-delay: calc(var(--y) * -0.5s); }
+
+/* 503 — the hammer comes down on the anvil, and it sparks */
+.pix-503 { transform-origin: 50% 100%; animation: pix-strike 1.3s ease-in infinite; }
+.pix-503 .px-w { animation: pix-spark 1.3s ease-out infinite; }
+
+/* 504 — the sand runs out, the hourglass turns over */
+.pix-504 { animation: pix-flip 5s ease-in-out infinite; }
+.pix-504 .px-w { animation: pix-pulse 2.5s ease-in-out infinite; animation-delay: calc(var(--y) * -0.2s); }
+
+@keyframes pix-wiggle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.4px); } }
+@keyframes pix-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes pix-glint { 0%, 70%, 100% { opacity: 1; } 75% { opacity: 0.2; } 85% { opacity: 1; } 90% { opacity: 0.2; } }
+@keyframes pix-rattle {
+  0%, 78%, 100% { transform: translateX(0); }
+  82% { transform: translateX(-6px) rotate(-1deg); }
+  86% { transform: translateX(6px) rotate(1deg); }
+  90% { transform: translateX(-4px); }
+  94% { transform: translateX(3px); }
+}
+/* One cell per step along the open corridor of row 9. */
+@keyframes pix-wander {
+  0% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  25% { transform: translateX(-5px); }
+  55% { transform: translateX(4px); }
+  65% { transform: translateX(4px); }
+  85% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
+}
+.pix-404 .px-a { animation-timing-function: steps(5, end); }
+@keyframes pix-swing {
+  0%, 100% { transform: rotate(-22deg); }
+  45% { transform: rotate(14deg); }
+  52% { transform: rotate(8deg); }
+  58% { transform: rotate(12deg); }
+}
+@keyframes pix-clash {
+  0%, 40%, 100% { transform: scale(1); }
+  46% { transform: scale(1.08) translateX(-3px); }
+  52% { transform: scale(0.98) translateX(3px); }
+  58% { transform: scale(1.02); }
+}
+@keyframes pix-heavy {
+  0%, 100% { transform: translateY(0); }
+  55% { transform: translateY(-12px); }
+  70% { transform: translateY(2px); }
+  80% { transform: translateY(0); }
+}
+@keyframes pix-flap { from { transform: scaleY(1); } to { transform: scaleY(0.35); } }
+@keyframes pix-item {
+  0% { transform: perspective(600px) rotateY(0deg) translateY(0); }
+  50% { transform: perspective(600px) rotateY(180deg) translateY(-14px); }
+  100% { transform: perspective(600px) rotateY(360deg) translateY(0); }
+}
+@keyframes pix-spin { to { transform: rotate(360deg); } }
+@keyframes pix-blaze { from { transform: scaleY(1) scaleX(1); } to { transform: scaleY(1.05) scaleX(0.97); } }
+@keyframes pix-flicker { 0% { opacity: 1; } 50% { opacity: 0.55; } 100% { opacity: 0.9; } }
+@keyframes pix-flow { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(0.6px); } }
+@keyframes pix-fall {
+  0% { transform: translateY(0); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(5px); opacity: 0; }
+}
+@keyframes pix-strike {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  40% { transform: translateY(-10px) scaleY(1); }
+  50% { transform: translateY(0) scaleY(0.92); }
+  60% { transform: translateY(0) scaleY(1); }
+}
+@keyframes pix-spark {
+  0%, 45% { opacity: 0; transform: translateY(0) scale(1); }
+  52% { opacity: 1; transform: translateY(-0.5px) scale(1.3); }
+  80% { opacity: 0; transform: translateY(-1.5px) scale(0.6); }
+  100% { opacity: 0; }
+}
+@keyframes pix-flip {
+  0%, 40% { transform: rotate(0deg); }
+  50%, 90% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Still pictures for anyone who has asked their system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .pix, .pix * { animation: none !important; }
+}
+
 /* ── Sliders in the theme modal ── */
 input[type='range'].theme-range {
   -webkit-appearance: none;

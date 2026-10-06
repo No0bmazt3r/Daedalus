@@ -1572,6 +1572,8 @@ controls, which is how two screens end up disagreeing about the current font.
 ### 6.3 Assistant — `components/settings/AssistantPanel.tsx` · `services/assistant_settings.py`
 
 What the assistant is told and when it refuses, editable without touching code.
+Three panels under the Assistant group: **Date & Time**, **System Prompt** and
+**Safety** (the old single `assistant` id redirects to System Prompt).
 Stored as one preference row (`assistant`), read by the backend on every
 question, so a change applies to the next message.
 
@@ -1584,11 +1586,30 @@ question, so a change applies to the next message.
 - **System prompt.** The rules the model answers under (`orchestration/prompt.py`
   `SYSTEM_PROMPT` is the default). Edit, save, discard or reset. The answer
   validator still runs whatever the prompt says.
-- **Safety.** The built-in refusals (control, data, override) are listed
-  read-only: they are regular expressions in `query_pipeline/safety.py` and stay
-  deterministic. Their wording can change, and extra blocked phrases can be
-  added (whole words, any case). Those run after the built-in checks with reason
+- **Safety.** The three built-in refusals (control, data, override) are on by
+  default and each has a switch (`disabled_rules`). Turning one off asks you to
+  type `DISABLE`; turning it back on is one click, and a warning shows while any
+  is off. Switching a rule off skips only its own checks in `safety.check()`;
+  the other rules and custom phrases still run. Refusal wording can change, and
+  extra blocked phrases can be added (whole words, any case) and removed with
+  the × on each chip. Custom phrases run after the built-in checks with reason
   `custom_rule`, so they only ever add refusals.
+
+**Why the switches are guarded rather than absent.** This is a single-operator
+console, so the operator owns the call. What the guard protects against is the
+model *claiming* it moved hardware (no tool can write), and an evaluation being
+scored with the guard silently off. So switching is refused while the
+comparison is frozen, and every evaluation snapshot records `disabled_rules`.
+
+**Changing what a built-in rule matches** (e.g. a new valve tag) is still code:
+
+| To | Edit |
+|---|---|
+| Add a word or tag a rule should catch | the verb lists and `*_TARGET_RE` patterns in `query_pipeline/vocabulary.py` (`ACTUATE_VERBS`, `ADJUST_VERBS`, `DATA_VERBS`, `PLANT_TARGET_RE`, `PARAMETER_TARGET_RE`, `DATA_TARGET_RE`, `OVERRIDE_RE`, `SQL_WRITE_RE`) |
+| Change what Settings shows for it | `BUILT_IN_RULES` in `api/assistant.py` |
+
+Then run `tests/test_safety.py`, which pins what each rule must and must not
+refuse, and update it to match the new intent.
 
 Prompt and safety edits are refused while the comparison is frozen. An
 evaluation run records these settings in its snapshot (`assistant`), and they
@@ -1711,6 +1732,12 @@ halves, the four quadrants, or the whole screen from the top edge. The bottom
 edge is deliberately inert — it is where a window ends up while you are reaching
 for something below it.
 
+- **A half-snap tiles; everything else stays modal.** Snapped to the left or
+  right half, a window drops its backdrop and registers itself
+  (`useTiledInset()` in `floating-window.tsx`). The app shell pads that side
+  away, the sidebar folds, and the chat keeps working in the other half.
+  Unsnapping puts the sidebar back as it was. Quadrants and maximize keep the
+  backdrop, since they leave no usable column.
 - **The pointer decides the zone, not the window.** A window is grabbed wherever
   you happened to click it, so its own edges say more about where the cursor
   started than about where you are aiming.
@@ -1781,6 +1808,46 @@ That threshold and that behaviour are Odysseus' `isDesktopSidebarMode`, which
 gates the same thing at the same width. The stored width and collapsed flag are
 left untouched while compact, so widening the window restores exactly what the
 user had set.
+
+### Error pages — `components/ErrorPage.tsx`
+
+One full-screen page for every HTTP error: 400, 401, 403, 404, 405, 409, 413,
+415, 422, 429, 500, 502, 503 and 504. It covers the whole window, sidebar
+included (portalled to `<body>`, under the floating windows), with a large
+picture on the left and the text on the right, stacking on narrow screens, over
+a faint block grid. Each is themed half Daedalus (the labyrinth,
+Icarus, the workshop) and half block-built: a 12×12 pixel-art picture drawn in
+the theme's own colours (so it follows every theme), the code, a title, one
+myth line and one block line. Then the useful part in plain words: *what
+happened* and *what to try*. Buttons go back to the chat, back a page, or (for
+429 and 5xx) retry.
+
+- **Where they appear.** The router shows 404 for any unknown route
+  (`notFoundComponent`) and the error's own status for a crash
+  (`errorComponent`, falling back to 500). **503** covers the app while the
+  backend is down: `hooks/useBackendDown.ts` polls `/api/health` (every 10 s,
+  every 3 s while down), shows the page after two misses in a row so a dev
+  reload does not flash it, and lifts it once the backend answers. `/error/<code>`
+  opens any page directly; an unknown code gets its family's page (4xx or 5xx).
+  Only there, and only in development, a row of every code sits underneath for
+  previewing.
+- **Why the rest stay inline.** Panels catch their own request failures and show
+  the message where the action was (a 409 under the setting that clashed). A
+  full page for one failed save would throw away where you were. 401 and 403
+  cannot happen (no login); 405 and 415 only come from a coding mistake.
+- **Status travels with the error.** `request()` in `lib/http.ts` attaches
+  `status` to what it throws (`HttpError`): the response's code, 504 for a
+  timeout, 503 when the backend cannot be reached. Messages are unchanged.
+- **Every picture is animated**, CSS only (`.pix-<code>` in `index.css`): the
+  thread wiggles (400), the door rattles (401), you wander the maze (404), the
+  pickaxe swings (405), the blades clash (409), the wings flap under the chest
+  (413), the unknown block spins like a dropped item (415), the crafting grid
+  lights slot by slot (422), the sun turns (429), the fire flickers (500), the
+  river flows under falling rubble (502), the anvil is struck and sparks (503),
+  and the hourglass flips (504). Each pixel carries its colour as a class and
+  its grid position as `--x`/`--y`, so one part can move or an effect can ripple.
+  `prefers-reduced-motion` shows them still.
+- 2xx and 3xx have no page: they are not errors.
 
 ### Conversation state is server-owned
 
