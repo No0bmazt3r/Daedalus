@@ -37,7 +37,7 @@ export function AppearancePanel({
         <h3 className="text-xl font-medium mb-1">Appearance</h3>
         <p className="text-sm theme-text-muted">
           Which parts of the interface are drawn. Hiding one never hides an answer or a
-          warning — only navigation and decoration are switchable.
+          warning. Only navigation and decoration can be turned off.
         </p>
         {changed > 0 && (
           <p className="flex items-center gap-2 text-xs theme-text-muted mt-1.5">
@@ -107,7 +107,7 @@ export function AppearancePanel({
                     <Switch
                       checked={chrome[toggle.key]}
                       onChange={(next) => setChrome(toggle.key, next)}
-                      label={`${toggle.label} — shown or hidden`}
+                      label={`Show or hide ${toggle.label}`}
                     />
                   </div>
                 </div>

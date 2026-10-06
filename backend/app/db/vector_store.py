@@ -169,7 +169,7 @@ def mismatch(collection: Any) -> str | None:
             return None
         return (
             f"{collection.name} was built with {stamped}, but {selected} is selected. "
-            "Vectors from two embedding models are not comparable — re-ingest before querying."
+            "Vectors from two different embedding models can't be compared, so re-ingest before querying."
         )
 
     try:

@@ -57,11 +57,11 @@ const ICONS: Record<RagTrack, typeof Network> = { vector: Boxes, graph: Network 
 const BLURB: Record<RagTrack, string> = {
   vector:
     'Chunks the corpus, embeds it, and retrieves the top-k most similar chunks. ' +
-    'Retrieval is arithmetic, so it returns something regardless of how capable the model is — ' +
-    'but the index is pinned to one embedding model, and changing that means re-ingesting everything.',
+    'Retrieval is plain math, so it always returns something, however capable the model is. ' +
+    'But the index is pinned to one embedding model, and changing that means re-ingesting everything.',
   graph:
     'Walks a hand-authored knowledge graph over multiple hops, checking between steps whether it has ' +
-    'enough. No embedding model at all — entry points come from authored aliases. In exchange the ' +
+    'enough. It needs no embedding model, because starting points come from hand-written aliases. The catch is that the ' +
     'model drives retrieval, so a model too small to tool-call reliably finds no path at all.',
 }
 
@@ -98,7 +98,7 @@ function TrackCard({
           className={`h-1.5 w-1.5 rounded-full ${track.ready ? 'bg-emerald-400' : 'bg-amber-400'}`}
         />
         <span className="text-[10px] theme-text-muted">
-          {track.ready ? 'ready' : `not ready${track.blocked_by ? ` — needs ${track.blocked_by}` : ''}`}
+          {track.ready ? 'ready' : `not ready${track.blocked_by ? `, needs ${track.blocked_by}` : ''}`}
           {' · '}{track.detail}
         </span>
       </div>
@@ -138,7 +138,7 @@ function FrozenNotice() {
       <Lock size={13} className="mt-0.5 shrink-0 text-amber-400" />
       <p className="text-[11px] leading-relaxed theme-text">
         The comparison is frozen. Changing a track after seeing its results invalidates the
-        evaluation, so this is read-only — edit <code>config/rag_config.json</code> by hand to
+        evaluation, so this is read-only. Edit <code>config/rag_config.json</code> by hand to
         change it.
       </p>
     </div>
@@ -226,8 +226,8 @@ export function KnowledgeBasePanel() {
       <header>
         <h3 className="text-sm theme-text">Retrieval track</h3>
         <p className="mt-1 text-xs leading-relaxed theme-text-muted">
-          Which strategy answers a troubleshooting or SOP question. Sensor readings are unaffected —
-          a number always comes from a tool, never from retrieval.
+          Which strategy answers a troubleshooting or SOP question. Sensor readings aren't affected,
+          because numbers always come from a tool, never from retrieval.
         </p>
       </header>
 
@@ -255,8 +255,8 @@ export function KnowledgeBasePanel() {
         Committed to <code className="theme-text">config/rag_config.json</code>, read on every
         knowledge query and recorded per query in <code className="theme-text">rag_logs.track</code>,
         so a result can always be traced to the track that produced it. Each query's walk is visible
-        in Labyrinth Blueprints → Replay. The selected track's own settings — re-ranking for Vector
-        RAG, the agent loop for Graph RAG — appear as a panel below this one in the settings list.
+        in Labyrinth Blueprints → Replay. The selected track's own settings (re-ranking for Vector
+        RAG, the agent loop for Graph RAG) appear as a panel below this one in the settings list.
       </p>
     </div>
   )
@@ -316,7 +316,7 @@ function GraphModeSection({
           </h3>
           <p className="mt-1 text-xs leading-relaxed theme-text-muted">
             On: the local model chooses each hop through the graph and decides when it has enough
-            (<code className="theme-text">graph_agent</code>). Off: the fixed path — sensor → threshold →
+            (<code className="theme-text">graph_agent</code>). Off: the fixed path, sensor → threshold →
             condition → procedure → steps (<code className="theme-text">graph_walk</code>). Compare the
             two inside Track 2 by running the same questions in each mode.
           </p>
@@ -348,8 +348,8 @@ function GraphModeSection({
         />
       </div>
       <p className="text-[11px] leading-relaxed theme-text-muted">
-        The budget is a hard limit on the whole loop, model calls included — past it the answer uses
-        what was gathered. With no local model installed the fixed walk runs instead, recorded as such.
+        The budget is a hard limit on the whole loop, model calls included. Once it runs out, the answer uses
+        whatever was gathered. With no local model installed the fixed walk runs instead, recorded as such.
       </p>
 
       {error && (
@@ -360,7 +360,7 @@ function GraphModeSection({
 
       <p className="text-[11px] leading-relaxed theme-text-muted">
         Each walk is recorded in <code className="theme-text">rag_logs.traversal_path</code> with its mode,
-        why it stopped, and the model's verdict after every hop — replay it in Labyrinth Blueprints.
+        why it stopped, and the model's verdict after every hop. You can replay it in Labyrinth Blueprints.
       </p>
     </div>
   )
@@ -532,7 +532,7 @@ function RerankerPicker({
   if (!config.rerankers.some((m) => m.installed) && !chosen) {
     return (
       <p className="text-[11px] leading-relaxed theme-text-muted">
-        No re-ranker downloaded yet — Track 1 answers in plain vector order. {forgeLink}
+        No re-ranker downloaded yet, so Track 1 uses plain vector order. {forgeLink}
       </p>
     )
   }
@@ -555,7 +555,7 @@ function RerankerPicker({
           <span className={tone}>
             {chosen.fit.verdict === 'will_not_fit' ? 'will not fit' : chosen.fit.verdict} on this machine
           </span>
-          {chosen.fit.reasons.length > 0 && ` — ${chosen.fit.reasons[0]}`}
+          {chosen.fit.reasons.length > 0 && `: ${chosen.fit.reasons[0]}`}
           {chosen.recommended_for.length > 0 && ' · recommended'}
           {best && best.id !== chosen.id && <> · this machine's recommendation is {best.label}</>}
           . {forgeLink}

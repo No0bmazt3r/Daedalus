@@ -84,7 +84,7 @@ function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
           className={`h-1.5 w-1.5 shrink-0 rounded-full ${
             chunk.embedded ? 'bg-emerald-400' : 'bg-amber-400'
           }`}
-          title={chunk.embedded ? `embedded with ${chunk.embedding_model}` : 'no vector — not retrievable'}
+          title={chunk.embedded ? `embedded with ${chunk.embedding_model}` : "no vector yet, so it can't be retrieved"}
         />
       </button>
       {open && (
@@ -139,7 +139,7 @@ export function CorpusView() {
           <p className="mt-2 text-xs theme-text">The corpus is empty.</p>
           <p className="mx-auto mt-1 max-w-md text-[11px] leading-relaxed theme-text-muted">
             Nothing has been ingested, so Track 1 has nothing to retrieve from and cannot answer a
-            knowledge question. That is a state, not a failure — import documents in the
+            knowledge question. That's expected, not an error. Import documents in the
             <span className="theme-accent"> Build </span>
             tab and they appear here with their chunks.
           </p>
@@ -178,7 +178,7 @@ export function CorpusView() {
       <p className="text-[10px] leading-relaxed theme-text-muted">
         Track 2 has a Coverage tab and this arm does not, because the two fail differently. An
         authored graph fails by <span className="theme-text">omission</span>, and omission over a
-        fixed schema is enumerable — an anomaly type with no procedure attached is a question it
+        fixed schema can be listed out. An anomaly type with no procedure attached is a question it
         provably cannot answer. A vector corpus returns its nearest chunks for every query,
         including ones it knows nothing about, so its failure is a bad match rather than a missing
         edge and there is no list of the passages nobody wrote. The counts above are the part that
@@ -239,7 +239,7 @@ export function CorpusView() {
                 {visible.length === 0 && (
                   <p className="py-3 text-center text-[10px] theme-text-muted">
                     {chunks.length === 0
-                      ? 'This document has no chunks — it has been imported but never ingested.'
+                      ? 'This document has no chunks yet. It was imported but never ingested.'
                       : `No chunk contains “${filter}”.`}
                   </p>
                 )}

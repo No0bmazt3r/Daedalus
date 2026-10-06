@@ -72,7 +72,7 @@ export const KEYBIND_LABELS: Record<KeybindAction, { label: string; hint: string
   focus_input: { label: 'Focus the composer', hint: 'Put the cursor in the message box' },
   open_settings: { label: 'Open Settings', hint: 'The window you are reading this in' },
   new_chat: { label: 'New chat', hint: 'Start a conversation and select it' },
-  delete_chat: { label: 'Delete this chat', hint: 'Asks first — it cannot be undone' },
+  delete_chat: { label: 'Delete this chat', hint: "Asks first, because it can't be undone" },
   toggle_incognito: { label: 'Toggle incognito', hint: 'Stop recording this session to history' },
   open_theme: { label: 'Open Theme & Appearance', hint: 'Colours, font, background effect' },
   open_forge: { label: 'Open The Forge', hint: 'Hardware, model fit, benchmarks' },

@@ -68,7 +68,7 @@ function HopRow({ hop, nodes }: { hop: Hop; nodes: Traversal['nodes'] }) {
           // the evidence that the graph was asked and had no answer, and it is
           // what a coverage gap costs at answer time.
           <span className="rounded border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-400">
-            reached nothing — no edge of this type was authored
+            reached nothing: no edge of this type has been added
           </span>
         ) : (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -87,7 +87,7 @@ function HopRow({ hop, nodes }: { hop: Hop; nodes: Traversal['nodes'] }) {
           <span className="text-[11px] theme-text-muted">
             sufficient? <span className={hop.sufficient ? 'text-emerald-400' : 'theme-text'}>
               {hop.sufficient ? 'yes' : 'no'}
-            </span> — {hop.reason}
+            </span> · {hop.reason}
           </span>
         </div>
       )}
@@ -173,7 +173,7 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
         blockedBy="M5 / M6"
         reason={
           'Nothing has recorded a graph traversal yet, because the orchestrator is not wired. ' +
-          'Seed a set of real walks to develop and review this view against — they run through ' +
+          'Seed some real walks to build and review this view with. They run through ' +
           'the actual graph tools, so what is stored is what those tools really did.'
         }
         action={
@@ -215,7 +215,7 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
             {data.hop_count} {data.hop_count === 1 ? 'hop' : 'hops'}
           </span>
           <span className="rounded border theme-border px-1.5 py-0.5 theme-text-muted">
-            {data.retrieval_latency_ms ?? '—'} ms
+            {data.retrieval_latency_ms ?? '-'} ms
           </span>
           {/* The evidence that Track 2 stayed embedding-free, read from the
               data rather than asserted. A `vector` value here would mean the
@@ -264,7 +264,7 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
             caption={
               step === 0
                 ? `Entry: ${path.entry_nodes.length} starting node${path.entry_nodes.length === 1 ? '' : 's'}, found by ${path.entry_strategy}. Step through the hops below.`
-                : `Hop ${step} of ${path.hops.length}${path.hops[step - 1]?.reason ? ` — ${path.hops[step - 1].reason}` : ''}`
+                : `Hop ${step} of ${path.hops.length}${path.hops[step - 1]?.reason ? `: ${path.hops[step - 1].reason}` : ''}`
             }
           />
 

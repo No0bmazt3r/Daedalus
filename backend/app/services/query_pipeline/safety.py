@@ -71,7 +71,7 @@ REFUSAL_OVERRIDE = (
 # Appended to a control refusal, because the operator usually wants the
 # procedure, and the refusal should point at the question that gets it.
 _PROCEDURE_HINT = (
-    " If you need the procedure, ask me how to do it — for example, "
+    " If you need the procedure, ask me how to do it. For example, "
     '"How do I {phrase}?"'
 )
 

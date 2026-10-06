@@ -66,7 +66,7 @@ function Row({
           <p className="truncate font-mono text-[11px] theme-text">
             {isNode
               ? proposal.element_id
-              : `${proposal.source_id} —${proposal.edge_type}→ ${proposal.target_id}`}
+              : `${proposal.source_id} -${proposal.edge_type}→ ${proposal.target_id}`}
           </p>
           {isNode && Object.keys(proposal.attributes).length > 0 && (
             <p className="mt-0.5 text-[10px] theme-text-muted">
@@ -82,7 +82,7 @@ function Row({
             disabled={busy}
             title={
               invalid
-                ? 'The schema refused this when it was proposed. Accepting re-checks against the graph as it is now — which may have changed.'
+                ? 'The schema rejected this when it was proposed. Accepting checks it again against the current graph, which may have changed.'
                 : 'Add this to the graph'
             }
             className={`rounded-md border px-2 py-0.5 text-[10px] transition-colors disabled:opacity-40 ${
@@ -159,8 +159,8 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed theme-text-muted">
-        Reads the ingested corpus and proposes nodes and edges that fit this graph's schema —
-        seven node types, seven relations, fixed endpoints. Nothing is written until you accept it,
+        Reads your ingested documents and suggests nodes and edges that fit this graph's schema
+        (seven node types, seven relations, fixed endpoints). Nothing is written until you accept it,
         and every proposal quotes the sentence it came from so the review is checking a claim
         rather than trusting a model.
       </p>
@@ -195,7 +195,7 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
       {nothingToRead && (
         <p className="flex items-start gap-1.5 text-[10px] leading-relaxed theme-text-muted">
           <AlertCircle size={11} className="mt-0.5 shrink-0" />
-          There is nothing to read yet. The proposer extracts from ingested chunks — import and
+          There is nothing to read yet. Suggestions come from ingested chunks, so import and
           ingest documents in Corpus → Build first. It deliberately never reads the web: unreviewed
           external text in the graph would break the provenance this queue exists to protect.
         </p>
@@ -236,8 +236,8 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
         <p className="flex items-start gap-1.5 text-[10px] leading-relaxed theme-text-muted">
           <AlertTriangle size={11} className="mt-0.5 shrink-0" />
           Nothing pending. Everything the last run found was either already in the graph or has
-          been decided — a high duplicate count means the corpus is already well represented,
-          which is a useful thing to learn early.
+          been decided. A high duplicate count means the graph already covers your documents well,
+          which is good to know early.
         </p>
       )}
     </div>

@@ -49,7 +49,7 @@ __all__ = ["Understanding", "understand", "normalise", "safety", "MAX_QUERY_CHAR
 
 REPLY_TOO_LONG = (
     "That message is too long for me to answer reliably ({length:,} characters; the limit is "
-    "{limit:,}). Please ask a shorter question — one reading, trend or procedure at a time."
+    "{limit:,}). Please ask a shorter question, one reading, trend or procedure at a time."
 )
 REPLY_OUT_OF_SCOPE = (
     "That is outside what I can help with. I answer questions about the CO2 sorption reactor: "
@@ -62,7 +62,7 @@ REPLY_ABOUT = (
     'reactor.'
 )
 REPLY_SMALLTALK = (
-    "Hello — I'm Daedalus. Ask me about the reactor's readings, trends or "
+    "Hello, I'm Daedalus. Ask me about the reactor's readings, trends or "
     "procedures whenever you're ready."
 )
 

@@ -10,7 +10,7 @@ import { Brain, Wrench, Eye } from 'lucide-react'
  * Hints are deliberately terse — they are tooltips, not documentation.
  */
 const BADGES = [
-  { id: 'thinking', icon: Brain, hint: 'Reasoning — thinks before answering' },
+  { id: 'thinking', icon: Brain, hint: 'Reasoning: thinks before answering' },
   { id: 'tools', icon: Wrench, hint: 'Tool calling' },
   { id: 'vision', icon: Eye, hint: 'Accepts images' },
 ] as const

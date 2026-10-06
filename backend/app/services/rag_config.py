@@ -89,7 +89,7 @@ STEPS_RANGE = (1, 4)
 DEFAULT: dict[str, Any] = {
     "track": "vector",
     "frozen": False,
-    "note": "Track 1 (vector) is the baseline/control arm — see PROJECT.md §5.",
+    "note": "Track 1 (vector) is the baseline/control arm. See PROJECT.md §5.",
     "rerank": {"enabled": True, "model": "ms-marco-minilm-l6", "candidates": DEFAULT_CANDIDATES},
     "graph": {"mode": "agent", "budget_s": 6.0, "max_steps": 4},
 }
@@ -182,7 +182,7 @@ def write(
         current = read()
         if current["frozen"]:
             raise ConfigFrozen(
-                "the comparison is frozen — edit config/rag_config.json by hand to change it. "
+                "the comparison is frozen. Edit config/rag_config.json by hand to change it. "
                 "PROJECT.md §5: tuning a track after seeing its results invalidates the comparison."
             )
         payload = {
@@ -351,13 +351,13 @@ def status() -> dict[str, Any]:
         elif not corpus.get("documents"):
             vector_blocker = "documents"
             vector_detail = (
-                "the corpus is empty — import documents in Blueprints → Corpus"
+                "the corpus is empty. Import documents in Blueprints → Corpus"
             )
         elif not corpus.get("chunks"):
             vector_blocker = "an ingest run"
             vector_detail = (
-                f"{corpus['documents']} document(s) imported but never chunked — "
-                "run the pipeline in Blueprints → Corpus"
+                f"{corpus['documents']} document(s) imported but never chunked. "
+                "Run the pipeline in Blueprints → Corpus"
             )
         elif not corpus.get("embedded"):
             vector_blocker = "embedding"

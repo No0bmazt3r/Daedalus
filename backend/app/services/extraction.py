@@ -110,7 +110,7 @@ def pdf_available() -> tuple[bool, str]:
     except ImportError:
         return False, (
             "PDF support needs the `pypdf` package, which is not installed in this "
-            "image. It is listed in backend/requirements.txt — rebuild the backend "
+            "image. It is listed in backend/requirements.txt, so rebuild the backend "
             "container to pick it up. Text and Markdown documents work without it."
         )
     return True, ""
@@ -178,8 +178,8 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
             reader.decrypt("")
         except Exception as exc:  # noqa: BLE001
             raise ExtractionError(
-                "this PDF is password-protected. Remove the password and upload it again — "
-                "storing the password to open it later would put a credential in the corpus."
+                "this PDF is password-protected. Remove the password and upload it again. "
+                "Saving the password to open it later would put a credential in the corpus."
             ) from exc
 
     parts: list[str] = []
@@ -206,7 +206,7 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
     if len(text) < _EMPTY_THRESHOLD:
         raise ExtractionError(
             f"no readable text in {pages} page{'s' if pages != 1 else ''}. This is almost "
-            "certainly a scanned PDF — the pages are images, so there is no text layer to "
+            "certainly a scanned PDF. The pages are images, so there is no text layer to "
             "extract. Daedalus has no OCR; run one over the file and upload the result."
         )
     return Extracted(

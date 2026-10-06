@@ -330,7 +330,7 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
         <Globe size={16} className="shrink-0 mt-0.5 status-warn" />
         <div className="text-xs leading-relaxed theme-text-muted">
           <span className="font-medium theme-text">Setup use only.</span>{' '}
-          {config.purpose_detail} Model weights already work this way — §8.2 calls
+          {config.purpose_detail} Model weights already work this way: §8.2 calls
           downloading them “a one-time setup activity performed when internet is
           available”, and this is the same line drawn for documents. The store
           enforces it: a row whose purpose is anything but <code>setup</code> cannot
@@ -583,7 +583,7 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
               {chain.length === 0 && (
                 <p className="text-[11px] theme-text-muted">
                   None. A failed search reports why it failed rather than quietly asking
-                  somebody else — a second provider is a second party seeing the query.
+                  somebody else, because a second provider means another party sees your query.
                 </p>
               )}
             </div>
@@ -655,7 +655,7 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
         <div className={card}>
           <h4 className="text-sm font-medium mb-1">Run a search</h4>
           <p className="text-xs theme-text-muted mb-3">
-            Uses the chain above and shows every attempt it made — which is the only way
+            Uses the chain above and shows every attempt it made. It's the only way
             to see a fallback actually happen.
           </p>
           <div className="flex gap-2">

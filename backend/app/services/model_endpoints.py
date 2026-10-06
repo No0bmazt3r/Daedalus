@@ -147,7 +147,7 @@ def test_endpoint(endpoint_id: str) -> dict[str, Any]:
     except ImportError:  # pragma: no cover - httpx is a declared dependency
         return store.record_test(
             endpoint_id, ok=False,
-            detail="httpx is not installed — run ./sync.sh to install backend deps",
+            detail="httpx is not installed. Run ./sync.sh to install backend deps",
         )
 
     url = f"{base_url.rstrip('/')}/models"
@@ -160,7 +160,7 @@ def test_endpoint(endpoint_id: str) -> dict[str, Any]:
     except httpx.TimeoutException:
         return store.record_test(
             endpoint_id, ok=False,
-            detail=f"timed out after {TEST_TIMEOUT_S:.0f}s — host unreachable or very slow",
+            detail=f"timed out after {TEST_TIMEOUT_S:.0f}s. The host is unreachable or very slow",
         )
     except httpx.HTTPError as exc:
         # Covers DNS failure, refused connections and TLS problems. The class
@@ -180,7 +180,7 @@ def test_endpoint(endpoint_id: str) -> dict[str, Any]:
     if response.status_code == 404:
         return store.record_test(
             endpoint_id, ok=False,
-            detail=f"no /models endpoint at {base_url} — check the base URL",
+            detail=f"no /models endpoint at {base_url}. Check the base URL",
         )
     if response.status_code >= 400:
         return store.record_test(

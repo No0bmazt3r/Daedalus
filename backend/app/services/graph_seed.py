@@ -133,7 +133,7 @@ def seed(force: bool = False) -> dict[str, Any]:
             "SELECT COUNT(*) FROM rag_logs WHERE vector_db_used = ?", (SEED_MARKER,)
         ).fetchone()[0]
         if existing and not force:
-            return {"seeded": 0, "existing": existing, "note": "already seeded — nothing written"}
+            return {"seeded": 0, "existing": existing, "note": "already seeded, nothing written"}
         if force:
             conn.execute("DELETE FROM rag_logs WHERE vector_db_used = ?", (SEED_MARKER,))
 

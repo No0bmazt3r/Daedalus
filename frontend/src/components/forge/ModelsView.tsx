@@ -41,7 +41,7 @@ import { Collapse } from '../ui/collapse'
  */
 
 function bytes(n: number | null | undefined, digits = 1): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   if (n < 1024) return `${n} B`
   const units = ['KB', 'MB', 'GB', 'TB']
   let v = n / 1024
@@ -142,7 +142,7 @@ function Section({ title, children, right }: {
 }
 
 function ms(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   return n >= 1000 ? `${(n / 1000).toFixed(1)}s` : `${Math.round(n)}ms`
 }
 
@@ -211,7 +211,7 @@ function Detail({ row, usage }: { row: ModelRow; usage?: ModelUsage }) {
         title="Score"
         right={
           <span className="text-[11px] font-mono theme-text">
-            {row.score ?? '—'}
+            {row.score ?? '-'}
             <span className="theme-text-muted"> / 100</span>
           </span>
         }
@@ -293,7 +293,7 @@ function Detail({ row, usage }: { row: ModelRow; usage?: ModelUsage }) {
             />
             <Fact
               label="Generation p50"
-              value={usage.tokens_per_sec.p50 ? `${usage.tokens_per_sec.p50} tok/s` : '—'}
+              value={usage.tokens_per_sec.p50 ? `${usage.tokens_per_sec.p50} tok/s` : '-'}
               hint="From the engine's own counters, so it measures the model rather than the machine's other work."
             />
             <Fact
@@ -308,8 +308,8 @@ function Detail({ row, usage }: { row: ModelRow; usage?: ModelUsage }) {
         <Section title="Hugging Face">
           <div className="divide-y divide-[color-mix(in_srgb,var(--border)_60%,transparent)]">
             <Fact label="Repository" value={row.hf.repo} mono={false} />
-            <Fact label="Architecture" value={row.hf.architecture ?? '—'} />
-            <Fact label="Downloads" value={row.hf.downloads?.toLocaleString() ?? '—'} />
+            <Fact label="Architecture" value={row.hf.architecture ?? '-'} />
+            <Fact label="Downloads" value={row.hf.downloads?.toLocaleString() ?? '-'} />
           </div>
           <a
             href={row.hf.url}
@@ -454,7 +454,7 @@ function ModelCard({
           <span className="w-[13px] shrink-0" />
         )}
         <span className="text-[11px] font-mono theme-text-muted tabular-nums w-5 shrink-0 pt-0.5">
-          {row.score === null ? '—' : row.rank}
+          {row.score === null ? '-' : row.rank}
         </span>
 
         <div className="min-w-0 flex-1">
@@ -509,7 +509,7 @@ function ModelCard({
                 Estimated
               </div>
               <div className="text-xs font-mono" title={row.estimate?.formula}>
-                {row.estimate ? `${row.estimate.weights_source === 'declared' ? '~' : ''}${bytes(row.estimate.total_bytes)}` : '—'}
+                {row.estimate ? `${row.estimate.weights_source === 'declared' ? '~' : ''}${bytes(row.estimate.total_bytes)}` : '-'}
               </div>
             </div>
             <div>
@@ -532,7 +532,7 @@ function ModelCard({
                 Est. speed
               </div>
               <div className="text-xs font-mono theme-text-muted" title={row.speed?.basis}>
-                {row.speed?.tokens_per_sec ? `~${row.speed.tokens_per_sec} tok/s` : '—'}
+                {row.speed?.tokens_per_sec ? `~${row.speed.tokens_per_sec} tok/s` : '-'}
               </div>
             </div>
             <div>
@@ -564,7 +564,7 @@ function ModelCard({
           {row.installed ? (
             onManage && <button
               onClick={onManage}
-              title="Benchmark, see its run history, or delete it — in Installed."
+              title="Benchmark it, see its run history, or delete it in Installed."
               className="flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
             >
               Manage <ArrowRight size={12} />
@@ -900,7 +900,7 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
             placeholder={
               scope === 'huggingface'
                 ? 'Search Hugging Face GGUF models…'
-                : 'Filter by name, tag or vendor — or paste a tag like qwen3:30b'
+                : 'Filter by name, tag or vendor, or paste a tag like qwen3:30b'
             }
             spellCheck={false}
             className="w-full pl-7 pr-2 py-1.5 text-[11px] rounded-lg border theme-border theme-surface theme-text placeholder:theme-text-muted focus:outline-none focus:theme-accent-border"

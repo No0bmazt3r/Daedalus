@@ -42,7 +42,7 @@ const PLAIN: Record<string, { title: string; does: string; usedFor: string; labe
   graph_agent: {
     title: 'Knowledge graph agent',
     does: 'Starts from what the question names, then the local model chooses each step through the graph and stops when it has enough.',
-    usedFor: '“Pressure and temperature both spiked — what do I do?”',
+    usedFor: '“Pressure and temperature both spiked. What do I do?”',
     label: 'G',
   },
   graph_walk: {
@@ -70,7 +70,7 @@ function Row({ tool }: { tool: AgentTool }) {
       >
         <span
           className={`h-1.5 w-1.5 rounded-full shrink-0 ${on ? 'bg-emerald-400' : 'bg-amber-400'}`}
-          title={on ? 'Active — used when a question needs it' : `Off — ${why}`}
+          title={on ? 'Active, used when a question needs it' : `Off: ${why}`}
         />
         <span className="text-xs theme-text shrink-0">{plain?.title ?? tool.name}</span>
         <span className="text-[11px] theme-text-muted truncate flex-1">{plain?.does ?? tool.summary}</span>
@@ -120,7 +120,7 @@ export function AgentToolsSimple({ catalogue, card }: { catalogue: ToolCatalogue
           <h4 className="text-xs font-medium theme-text">Read the reactor database</h4>
         </div>
         <p className="text-[11px] theme-text-muted mb-2">
-          Every number in an answer comes from one of these — never from the model.
+          Every number in an answer comes from one of these, never from the model.
         </p>
         <div className="rounded-xl border theme-border px-3">
           {sensor.map((tool) => <Row key={tool.name} tool={tool} />)}
@@ -136,7 +136,7 @@ export function AgentToolsSimple({ catalogue, card }: { catalogue: ToolCatalogue
           </span>
         </div>
         <p className="text-[11px] theme-text-muted mb-2">
-          Procedures and explanations. Only the selected track is used — change it in Settings → Retrieval Track.
+          Procedures and explanations. Only the selected track is used. You can change it in Settings → Retrieval Track.
         </p>
         <div className="rounded-xl border theme-border px-3">
           {retrieval ? <Row tool={retrieval} /> : (
@@ -147,7 +147,7 @@ export function AgentToolsSimple({ catalogue, card }: { catalogue: ToolCatalogue
 
       <p className="flex items-start gap-2 text-[11px] theme-text-muted leading-relaxed">
         <Lock size={12} className="shrink-0 mt-0.5" />
-        These are the only tools that can run while Simple is on — the other {others} are refused, whatever
+        These are the only tools that can run while Simple is on. The other {others} are blocked, no matter what
         Advanced&apos;s switches say. All of these only read: nothing here can change the reactor or its data,
         and a request to do so is refused before any tool runs. Switch to Advanced for the rest.
       </p>

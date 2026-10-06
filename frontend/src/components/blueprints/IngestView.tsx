@@ -88,8 +88,8 @@ const SOURCE_LABEL: Record<string, string> = Object.fromEntries(SOURCE_TYPES.map
  * a setpoint, a step — has to say it is another installation's guidance.
  */
 const ORIGINS: { id: DocumentOrigin; label: string; hint: string }[] = [
-  { id: 'rig', label: 'This rig', hint: "This lab's own document — its manuals, its SOPs" },
-  { id: 'reference', label: 'Reference', hint: "Another installation's document — fine for concepts, not for this rig's specifics" },
+  { id: 'rig', label: 'This rig', hint: "This lab's own documents, like its manuals and SOPs" },
+  { id: 'reference', label: 'Reference', hint: "A document from another installation. Good for concepts, not for this rig's specifics" },
 ]
 
 const ORIGIN_BADGE: Record<DocumentOrigin, string> = {
@@ -182,8 +182,8 @@ function ImportStep({
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed theme-text-muted">
-        The documents Track 1 will retrieve from — manuals, SOPs, troubleshooting and safety documents. Text is
-        extracted on upload, so a file that cannot be read is refused now rather than at the run.
+        The documents Track 1 searches: manuals, SOPs, troubleshooting and safety guides. Text is
+        pulled out on upload, so a file that can't be read is rejected right away instead of failing later.
       </p>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -247,7 +247,7 @@ function ImportStep({
         </p>
         <p className="text-[10px] theme-text-muted">
           {extraction.extensions.join('  ')}
-          {!extraction.pdf_available && ' — PDF needs pypdf, see below'}
+          {!extraction.pdf_available && ' (PDF needs pypdf, see below)'}
         </p>
         <input
           ref={input}
@@ -273,8 +273,8 @@ function ImportStep({
 
       {documents.length === 0 ? (
         <p className="rounded-lg border border-dashed theme-border px-4 py-5 text-center text-[11px] leading-relaxed theme-text-muted">
-          Nothing imported yet. This is where the pipeline starts — the corpus being empty is a
-          state, not a failure, and Track 1 stays unable to answer until something lands here.
+          Nothing imported yet. This is where the pipeline starts. An empty corpus is
+          expected, but Track 1 can't answer anything until you add documents here.
         </p>
       ) : (
         <div className="space-y-1.5">
@@ -292,7 +292,7 @@ function ImportStep({
                   <span className="truncate">{d.filename}</span>
                   <button
                     onClick={() => void flip(d)}
-                    title={`${d.origin === 'rig' ? "This lab's own" : "Another installation's"} — click to change. Applies from the next question; no re-ingest.`}
+                    title={`${d.origin === 'rig' ? "From this lab" : "From another installation"}. Click to change. Takes effect from the next question, no re-ingest needed.`}
                     className={`shrink-0 rounded border px-1.5 py-px text-[10px] ${ORIGIN_BADGE[d.origin ?? 'reference']}`}
                   >
                     {d.origin === 'rig' ? 'This rig' : 'Reference'}
@@ -441,7 +441,7 @@ function ChunkStep({
           </button>
           <p className="text-[10px] leading-relaxed theme-text-muted">
             Saving does not re-chunk. Anything already ingested keeps the boundaries it was
-            ingested with — the run in step 4 is what applies a change.
+            ingested with. Running step 4 is what applies the change.
           </p>
         </div>
 
@@ -546,7 +546,7 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
       <p className="text-[11px] leading-relaxed theme-text-muted">
         The model that turns chunks into vectors. Not the chat model, and the one choice in this
         flow that cannot be changed cheaply afterwards: it is stamped onto the index it builds, and
-        vectors from two models are not comparable — so changing it later means re-embedding
+        vectors from two different models can't be compared, so changing it later means re-embedding
         everything.
       </p>
 
@@ -568,7 +568,7 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
                 <p className="mt-0.5 text-[10px] leading-relaxed theme-text-muted">
                   Nothing is chosen, and nothing is assumed. The model is stamped onto the index
                   it builds and changing it afterwards invalidates every vector, so this is picked
-                  rather than defaulted — the run is blocked until it is.
+                  rather than defaulted. The run won't start until you choose one.
                 </p>
               </>
             ) : (
@@ -588,7 +588,7 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
                     ? 'Ollama unreachable'
                     : installed
                       ? 'pulled and ready'
-                      : 'not pulled — the run will chunk, then fail every embed batch'}
+                      : 'not pulled yet. The run will chunk, then fail at every embed step'}
                   {!config.production_safe && ' · cloud baseline, not production-safe'}
                 </p>
               </>
@@ -614,7 +614,7 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
         <Cpu size={13} className="shrink-0 theme-text-muted" />
         <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text-muted">
           Pulling a model, switching to a different one, or checking what it costs on this hardware
-          is the Forge's job — this step only reports what the run will use.
+          happens in the Forge. This step just shows what the run will use.
         </p>
         {onOpenForge && (
           <button
@@ -748,7 +748,7 @@ function RunStep({
             ['Documents', `${readable} readable`],
             ['Chunking', `${config.strategy} ${config.chunk_size}/${config.chunk_overlap}`],
             ['Embedding', embedding.model ?? 'none selected'],
-            ['Index', embedding.collection ?? '—'],
+            ['Index', embedding.collection ?? '-'],
           ] as const).map(([k, v]) => (
             <div key={k}>
               <dt className="text-[10px] uppercase tracking-wider theme-text-muted">{k}</dt>
@@ -761,8 +761,8 @@ function RunStep({
       {!embedding.ollama_available && (
         <p className="flex items-start gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5 text-[11px] theme-text">
           <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-400" />
-          Ollama is unreachable. The run will chunk and write, then fail every embed batch — which
-          is recoverable with Resume, but pulling the model first is cheaper.
+          Can't reach Ollama. The run will chunk and save, then fail at every embed step. You can
+          fix that later with Resume, but it's easier to pull the model first.
         </p>
       )}
 
@@ -800,7 +800,7 @@ function RunStep({
         <button
           onClick={() => onAct('clear', () => clearVectors())}
           disabled={!!busy || corpus.embedded === 0}
-          title="Drop every vector, keep every chunk — what an embedding-model change needs"
+          title="Delete all vectors but keep the chunks. Do this when you change the embedding model"
           className="flex items-center gap-1.5 rounded-md border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:text-rose-400 disabled:opacity-40"
         >
           <Eraser size={11} /> Clear vectors

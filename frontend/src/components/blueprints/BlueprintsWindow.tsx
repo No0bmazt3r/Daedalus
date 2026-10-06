@@ -117,23 +117,23 @@ interface TrackSpec {
 const TRACKS: Record<RagTrack, TrackSpec> = {
   vector: {
     label: 'Track 1 · Vector',
-    full: 'Track 1 — traditional vector RAG',
+    full: 'Track 1: traditional vector RAG',
     icon: Boxes,
     tabs: [
       { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Every document and chunk, as the retriever stores them' },
       { id: 'retrieval', label: 'Replay', icon: Route, hint: 'Which passages a query actually pulled, and at what distance' },
-      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed — the ingestion pipeline' },
+      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed your documents' },
     ],
   },
   graph: {
     label: 'Track 2 · Graph',
-    full: 'Track 2 — agentic GraphRAG',
+    full: 'Track 2: agentic GraphRAG',
     icon: Network,
     tabs: [
       { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 7 node types, 7 edge types' },
-      { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: 'Orphans and gaps — every row is a question the graph cannot answer' },
+      { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: "Orphans and gaps. Each row is a question the graph can't answer" },
       { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
-      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges — Track 2 gets knowledge by being authored' },
+      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges. Track 2 only knows what you add here' },
     ],
   },
 }
@@ -217,12 +217,12 @@ function NotReady({ live }: { live: TrackStatus }) {
       <AlertCircle size={13} className="mt-0.5 shrink-0 text-amber-400" />
       <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text">
         <span className="theme-text-muted">{TRACKS[live.id].full}</span> is the selected track and
-        has nothing to show yet{live.blocked_by ? ` — it needs ${live.blocked_by}` : ''}.{' '}
+        has nothing to show yet{live.blocked_by ? `. It needs ${live.blocked_by}` : ''}.{' '}
         <span className="theme-text-muted">{live.detail}</span>
         <br />
         <span className="theme-text-muted">
-          The other track's views are not reachable from here while this one is selected — change
-          the track in Settings → Retrieval Track.
+          The other track's views are hidden while this one is selected. You can switch
+          tracks in Settings → Retrieval Track.
         </span>
       </p>
     </div>
@@ -442,7 +442,7 @@ export function BlueprintsWindow({
               <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
                 <AlertCircle size={13} className="shrink-0 text-amber-400" />
                 <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text">
-                  Couldn't read which retrieval track is live —{' '}
+                  Couldn't tell which retrieval track is active:{' '}
                   <span className="theme-text-muted">{configError}</span>
                   {config && <span className="theme-text-muted"> · showing the last known track</span>}
                 </p>
@@ -470,10 +470,9 @@ export function BlueprintsWindow({
               configError ? (
                 <Unavailable
                   reason={
-                    "Which retrieval track is live could not be read, and this window shows " +
-                    "one track — the one answering queries. Showing either arm without knowing " +
-                    "which is selected would be a guess about the thing that decides what you " +
-                    "are looking at, so it shows neither. Retry above, or check the backend."
+                    "Couldn't tell which retrieval track is active. This window only shows the " +
+                    "active track, so rather than guess, it shows nothing. Try again above, or " +
+                    "check that the backend is running."
                   }
                 />
               ) : (

@@ -153,9 +153,9 @@ def validate(size: int, overlap: int, strategy: str) -> tuple[int, int, Strategy
         raise ChunkingError(f"overlap cannot be negative, got {overlap}")
     if overlap >= size:
         raise ChunkingError(
-            f"overlap ({overlap}) must be smaller than the chunk size ({size}) — "
-            "an overlap at or above the size means each chunk starts at or before the "
-            "previous one did, and the splitter never advances."
+            f"overlap ({overlap}) must be smaller than the chunk size ({size}). "
+            "Otherwise each chunk starts at or before the previous one, and the splitter "
+            "never moves forward."
         )
     return size, overlap, strategy  # type: ignore[return-value]
 
@@ -384,7 +384,7 @@ def describe() -> dict[str, Any]:
             {
                 "id": "paragraph",
                 "label": "Paragraph",
-                "hint": "Blank lines only. Never breaks a paragraph — so a long one becomes one long chunk.",
+                "hint": "Blank lines only. It never splits a paragraph, so a long one becomes one long chunk.",
                 "recommended": False,
             },
             {
@@ -405,7 +405,7 @@ def describe() -> dict[str, Any]:
         },
         "note": (
             "Sizes are characters. Tokens are estimated at 4 characters each and labelled "
-            "as estimates — counting real tokens would need the embedding model's tokenizer, "
-            "which would stop preview working before a model is pulled."
+            "as estimates. Counting real tokens would need the embedding model's tokenizer, "
+            "and then the preview wouldn't work until a model is pulled."
         ),
     }

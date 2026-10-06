@@ -449,7 +449,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               onMouseDown={(e) => e.stopPropagation()}
               onClick={minimize}
               aria-label="Minimize"
-              title="Collapse to the bar at the top. Nothing is lost — the window reopens exactly as you left it."
+              title="Collapse to the bar at the top. Nothing is lost, and the window reopens just as you left it."
               className="p-1 hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded theme-text-muted hover:theme-text"
             >
               <Minus size={16} />
@@ -884,7 +884,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                   ? 'Saved to the Daedalus backend.'
                   : syncStatus === 'loading'
                     ? 'Loading preferences…'
-                    : 'Backend unreachable — changes apply now but will not persist.'}
+                    : "Can't reach the backend. Changes apply now but won't be saved."}
               </p>
 
               <button

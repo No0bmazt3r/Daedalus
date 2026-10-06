@@ -73,9 +73,9 @@ function QueryPicker({
             >
               <span className="block truncate text-xs theme-text">{r.query_text || '(no text)'}</span>
               <span className="mt-0.5 flex items-center gap-1.5 text-[10px] theme-text-muted">
-                <span>top {r.top_k ?? '—'}</span>
+                <span>top {r.top_k ?? '-'}</span>
                 <span>·</span>
-                <span className="tabular-nums">{r.retrieval_latency_ms ?? '—'}ms</span>
+                <span className="tabular-nums">{r.retrieval_latency_ms ?? '-'}ms</span>
               </span>
             </button>
           </li>
@@ -119,13 +119,13 @@ function Detail({ queryId }: { queryId: string | null }) {
         <p className="text-xs theme-text">{data.query_text}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] theme-text-muted">
           <span className="flex items-center gap-1">
-            <Layers size={10} /> {data.chunks.length} of top {data.top_k ?? '—'}
+            <Layers size={10} /> {data.chunks.length} of top {data.top_k ?? '-'}
           </span>
           <span className="flex items-center gap-1">
             {/* Retrieval only. No model call is inside this number, and
                 BENCHMARK.md §9.7 is about exactly this being quoted as if it
                 were end-to-end. */}
-            <Timer size={10} /> {data.retrieval_latency_ms ?? '—'}ms retrieval
+            <Timer size={10} /> {data.retrieval_latency_ms ?? '-'}ms retrieval
           </span>
           {data.collection && <code className="theme-text-muted">{data.collection}</code>}
         </div>
@@ -134,14 +134,14 @@ function Detail({ queryId }: { queryId: string | null }) {
       {data.missing_count > 0 && (
         <p className="flex items-start gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5 text-[11px] leading-relaxed theme-text">
           <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-400" />
-          {data.missing_count} of these passages no longer exist in the corpus — it has been
+          {data.missing_count} of these passages no longer exist in the corpus. It has been
           re-chunked since this query ran. The answer was grounded in text the corpus can no longer
           produce, which is worth knowing before citing it.
         </p>
       )}
 
       {data.chunks.length === 0 ? (
-        <Unavailable reason="This query retrieved nothing. The corpus was searched and had no passage for it — which is a result, not a failure, and is what an honest 'I don't have that' is built on." />
+        <Unavailable reason="This query found nothing. The corpus was searched and had no matching passage. That's a valid result, not an error, and it's what lets the system honestly say 'I don't have that'." />
       ) : (
         <ol className="space-y-1.5">
           {data.chunks.map((c) => (
@@ -162,7 +162,7 @@ function Detail({ queryId }: { queryId: string | null }) {
                   {c.section_title ? ` · ${c.section_title}` : ''}
                 </span>
                 <span className={`shrink-0 tabular-nums ${distanceTone(c.distance)}`}>
-                  {c.distance != null ? c.distance.toFixed(4) : '—'}
+                  {c.distance != null ? c.distance.toFixed(4) : '-'}
                 </span>
               </div>
               {c.missing ? (
@@ -180,8 +180,8 @@ function Detail({ queryId }: { queryId: string | null }) {
       )}
 
       <p className="text-[10px] leading-relaxed theme-text-muted">
-        Distances are cosine distance exactly as the store returned them — lower is closer, and
-        they are not converted to a similarity percentage so that each one can be checked against
+        Distances are cosine distances, exactly as the store returned them. Lower means closer. They
+        are not converted to a similarity percentage so that each one can be checked against
         Chroma directly.
       </p>
     </div>
@@ -214,7 +214,7 @@ export function RetrievalView() {
       <Unavailable
         reason={
           'No vector retrieval has been recorded yet. A row is written when a traced query runs ' +
-          'search_corpus — so this fills once the orchestrator is asking questions against an ' +
+          'search_corpus, so this fills up once the orchestrator is asking questions against an ' +
           'ingested corpus. Trialling the tool in Settings deliberately writes nothing: a trial ' +
           'is not a query, and a row for one would land in the evaluation set as though it were.'
         }

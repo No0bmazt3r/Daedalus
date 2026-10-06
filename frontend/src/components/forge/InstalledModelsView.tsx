@@ -46,7 +46,7 @@ import { useLiveRefresh } from '../../hooks/useLiveRefresh'
  */
 
 function bytes(n: number | null | undefined, digits = 1): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   if (n < 1024) return `${n} B`
   const units = ['KB', 'MB', 'GB', 'TB']
   let v = n / 1024
@@ -66,7 +66,7 @@ function count(n: number | null | undefined): string {
 }
 
 function ms(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   return n >= 1000 ? `${(n / 1000).toFixed(1)}s` : `${Math.round(n)}ms`
 }
 
@@ -193,7 +193,7 @@ function LocalModel({
         <Stat label="On disk" value={bytes(row.size_bytes)} />
         <Stat
           label="Context"
-          value={row.context_length ? `${(row.context_length / 1024).toFixed(0)}K` : '—'}
+          value={row.context_length ? `${(row.context_length / 1024).toFixed(0)}K` : '-'}
         />
         <Stat
           label="Runs"
@@ -258,7 +258,7 @@ function LocalModel({
             />
             <Stat
               label="Generation"
-              value={usage.tokens_per_sec.p50 ? `${usage.tokens_per_sec.p50} tok/s` : '—'}
+              value={usage.tokens_per_sec.p50 ? `${usage.tokens_per_sec.p50} tok/s` : '-'}
               title="From the engine's own counters, so it measures the model rather than the machine's other work."
             />
           </div>
@@ -417,8 +417,8 @@ export function InstalledModelsView({
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
           What this machine has, and what it has been running. Benchmark and delete models,
-          verify embedding models and benchmark re-rankers — chat (local and cloud baseline),
-          embedding and re-ranking models each in their own list.
+          verify embedding models and benchmark re-rankers. Chat (local and cloud baseline),
+          embedding and re-ranking models each have their own list.
         </p>
         <button
           onClick={() => { setRefreshKey((k) => k + 1); void load() }}

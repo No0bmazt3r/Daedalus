@@ -36,7 +36,7 @@ function count(n: number | null | undefined): string {
 }
 
 function ms(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   return n >= 1000 ? `${(n / 1000).toFixed(1)}s` : `${Math.round(n)}ms`
 }
 
@@ -108,7 +108,7 @@ function CloudModel({
           <button
             onClick={() => onBenchmark(row)}
             disabled={!!busy}
-            title="Benchmark as a baseline — runs on Ollama's servers, logged apart"
+            title="Benchmark as a baseline. Runs on Ollama's servers and is logged separately"
             className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40"
           >
             {isBusy ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
@@ -117,8 +117,8 @@ function CloudModel({
       </div>
 
       <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-2 px-3 pb-3">
-        <Stat label="Parameters" value={row.params_b ? `${row.params_b}B` : '—'} />
-        <Stat label="On disk" value="—" title="Nothing is stored locally: the tag is a pointer." />
+        <Stat label="Parameters" value={row.params_b ? `${row.params_b}B` : '-'} />
+        <Stat label="On disk" value="-" title="Nothing is stored locally: the tag is a pointer." />
         <Stat label="Runs" value={usage ? count(usage.runs) : '0'} />
         <Stat label="Last used" value={usage ? since(usage.last_used) : 'never'} />
       </div>
@@ -136,7 +136,7 @@ function CloudModel({
           <div className="flex items-center gap-1.5 mb-2">
             <Activity size={11} className="theme-accent" />
             <span className="text-[10px] uppercase tracking-wide theme-text-muted">
-              Baseline — Ollama's hardware, not this machine
+              Baseline: Ollama's hardware, not this machine
               {measured.rate_source === 'wall_clock' && ' · rate approximate'}
             </span>
           </div>
@@ -152,7 +152,7 @@ function CloudModel({
               }
               title={
                 measured.rate_source === 'engine'
-                  ? "Engine-reported — a property of the model"
+                  ? "Reported by the engine, so it reflects the model itself"
                   : 'Wall-clock estimate: no engine counters from the cloud, so this is '
                     + 'not a trustworthy rate. TTFT and end-to-end are sound.'
               }
@@ -189,7 +189,7 @@ function CloudModel({
                   Sign in to Ollama
                   <ExternalLink size={10} />
                 </a>
-                {' '}— free — then try again.
+                {' '}(it's free), then try again.
               </>
             ) : lastError ? (
               <> Try again once that clears.</>

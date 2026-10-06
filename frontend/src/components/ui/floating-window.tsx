@@ -431,7 +431,7 @@ export function FloatingWindow({
               onMouseDown={(e) => e.stopPropagation()}
               onClick={minimize}
               aria-label="Minimize"
-              title="Collapse to the bar at the bottom. Nothing is lost — the window reopens exactly as you left it."
+              title="Collapse to the bar at the bottom. Nothing is lost, and the window reopens just as you left it."
               className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"
             >
               <Minus size={16} />

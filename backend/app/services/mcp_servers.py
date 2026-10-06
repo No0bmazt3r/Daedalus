@@ -131,7 +131,7 @@ def call(label: str, tool: str, arguments: dict[str, Any] | None = None) -> dict
         # the snapshot exists to prevent.
         raise mcp_client.McpError(
             f"{label} has no pinned tool list, so nothing on it can be called. "
-            "Pin it in Settings → Integrations — that is the snapshot results get "
+            "Pin it in Settings → Integrations. That snapshot is what results get "
             "attributed to."
         )
 

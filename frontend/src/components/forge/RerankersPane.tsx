@@ -111,7 +111,7 @@ export function RerankersPane({
       {mode === 'browse' ? (
         <PaneIntro>
           Cross-encoders that re-score Track 1's nearest chunks and keep the ones that actually answer
-          the question — judged against this machine. Download one here, benchmark it under Installed,
+          the question, rated for how well they run on this machine. Download one here, benchmark it under Installed,
           and choose which Track 1 uses in Settings → Vector RAG.
         </PaneIntro>
       ) : (
@@ -209,7 +209,7 @@ function RerankerRow({
         ))}
         {inUse && (
           <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text">
-            {model.installed ? 'used by Track 1' : 'selected — needs download'}
+            {model.installed ? 'used by Track 1' : 'selected, needs download'}
           </span>
         )}
         <span className="ml-auto" />

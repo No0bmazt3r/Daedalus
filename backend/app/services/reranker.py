@@ -110,7 +110,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "quantized": False,
         "quality": 1,
         "licence": "Apache-2.0",
-        "note": "Two layers. Near-instant on any machine, and the weakest ranking — for a slow machine, or as an ablation floor.",
+        "note": "Two layers. Near-instant on any machine, and the weakest ranking. Good for a slow machine, or as an ablation floor.",
     },
     "ms-marco-minilm-l6": {
         "id": "ms-marco-minilm-l6",
@@ -205,7 +205,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "quantized": True,
         "quality": 6,
         "licence": "Apache-2.0 (BAAI weights; community ONNX export)",
-        "note": "The strongest here, and multilingual. XLM-RoBERTa large: seconds per question on a laptop CPU — for a machine with a GPU-class CPU budget, or offline evaluation.",
+        "note": "The strongest here, and multilingual. XLM-RoBERTa large: seconds per question on a laptop CPU. Best for a machine with a GPU-class CPU budget, or offline evaluation.",
     },
 }
 
@@ -269,7 +269,7 @@ def runtime_available() -> tuple[bool, str]:
         import onnxruntime  # noqa: F401, PLC0415
         import tokenizers  # noqa: F401, PLC0415
     except ImportError as exc:
-        return False, f"the re-ranking runtime is not installed ({exc.name}) — pip install onnxruntime tokenizers"
+        return False, f"the re-ranking runtime is not installed ({exc.name}). Run: pip install onnxruntime tokenizers"
     return True, "onnxruntime + tokenizers"
 
 
@@ -521,7 +521,7 @@ def _load(model_id: str) -> tuple[Any, Any, set[str]]:
         raise RerankUnavailable(why)
     if not installed(model_id):
         raise RerankUnavailable(
-            f"{CATALOGUE[model_id]['label']} is not downloaded — The Forge → Re-rankers"
+            f"{CATALOGUE[model_id]['label']} is not downloaded. Get it in The Forge → Re-rankers"
         )
 
     import onnxruntime as ort  # noqa: PLC0415

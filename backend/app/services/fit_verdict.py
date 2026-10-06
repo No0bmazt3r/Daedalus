@@ -62,10 +62,10 @@ def verdict(
             reasons.append("would take over half the free memory, beside the chat model")
     if latency_ms > OVER_BUDGET * budget_ms:
         level = 2
-        reasons.append(f"~{_time(latency_ms)} {per} — most of the answer budget on its own")
+        reasons.append(f"~{_time(latency_ms)} {per}, which uses most of the answer budget on its own")
     elif latency_ms > budget_ms:
         level = max(level, 1)
-        reasons.append(f"~{_time(latency_ms)} {per} — over its {_time(budget_ms)} budget")
+        reasons.append(f"~{_time(latency_ms)} {per}, over its {_time(budget_ms)} budget")
     return VERDICTS[level], reasons
 
 

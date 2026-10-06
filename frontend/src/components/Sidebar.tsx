@@ -103,7 +103,7 @@ function SessionRow({
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={onRetitle}
-            title="Name this chat from what it is about — a model writes it in the background"
+            title="Name this chat based on what it's about. A model writes it in the background"
             className="py-2 px-2 cursor-pointer hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] rounded-md text-sm"
           >
             <Sparkles size={14} className="mr-2 theme-text-muted" /> Auto-name
@@ -179,7 +179,7 @@ function DataStores({
 
       {error && (
         <span className="px-2 py-1 text-xs status-warn block">
-          Backend unreachable — stores can't be listed
+          Can't reach the backend, so stores can't be listed
         </span>
       )}
       {!stores && !error && (
@@ -246,7 +246,7 @@ function DataStores({
                         <Table2 size={11} className="shrink-0 mr-2 opacity-60" />
                         <span className="truncate flex-1 text-left font-mono">{table.name}</span>
                         <span className="shrink-0 ml-2 tabular-nums opacity-60">
-                          {table.rows ?? '—'}
+                          {table.rows ?? '-'}
                         </span>
                       </button>
                     )
@@ -329,7 +329,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               variant="ghost"
               onClick={item.onClick}
               disabled={!item.onClick}
-              title={item.onClick ? undefined : 'Not built yet — see docs/MODULES.md'}
+              title={item.onClick ? undefined : 'Not built yet. See docs/MODULES.md'}
               className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default"
             >
               <item.icon size={15} className="mr-2 shrink-0 theme-accent" />
@@ -386,7 +386,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             {isIncognito && (
               <div className="flex items-center h-8 px-2 text-sm incognito-text opacity-80">
                 <Ghost size={13} className="shrink-0 mr-2" />
-                <span className="truncate">Off the record — not saved</span>
+                <span className="truncate">Off the record, not saved</span>
               </div>
             )}
 
@@ -403,7 +403,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
 
             {status === 'offline' && (
               <span className="px-2 py-1 text-xs status-warn">
-                Backend unreachable — chats can't be listed
+                Can't reach the backend, so chats can't be listed
               </span>
             )}
 

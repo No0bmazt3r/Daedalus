@@ -339,8 +339,8 @@ def write(
 
     if rag_config.read()["frozen"]:
         raise rag_config.ConfigFrozen(
-            "the comparison is frozen — the embedding model decides Track 1's index, so it is "
-            "frozen with the track. Edit config/rag_config.json by hand to unfreeze."
+            "the comparison is frozen. The embedding model decides Track 1's index, so it is "
+            "frozen along with the track. Edit config/rag_config.json by hand to unfreeze."
         )
 
     with _lock:
@@ -627,7 +627,7 @@ def fit(rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         hard = []
         window = row.get("max_tokens")
         if window and window < chunk:
-            hard.append(f"reads {window} tokens and a chunk is ~{chunk} — every chunk would be cut short")
+            hard.append(f"reads {window} tokens but a chunk is ~{chunk}, so every chunk would be cut short")
         verdict, reasons = fit_verdict.verdict(
             memory_bytes=memory, available_bytes=machine["available_bytes"],
             latency_ms=latency, budget_ms=QUERY_BUDGET_MS, hard_failures=hard,
@@ -687,7 +687,7 @@ def benchmark(tag: str, *, runs: int = 5) -> dict[str, Any]:
     tag = normalise_tag(tag)
     row = next((r for r in local_models_without_fit() if r["tag"] == tag and r["installed"]), None)
     if row is None:
-        raise ValueError(f"{tag} is not installed — pull it before benchmarking")
+        raise ValueError(f"{tag} is not installed. Pull it before benchmarking")
     name = row["installed_tag"] or tag
     # Prefixed as a real question is — an instruction prefix is tokens the
     # model has to read, and a timing without it would flatter it.
@@ -810,7 +810,7 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "index_state": "stale",
             "index_detail": (
                 f"{name} holds {documents} chunks built with {stamped}, but {config['model']} is "
-                "selected — re-ingest before querying"
+                "selected. Re-ingest before querying"
             ),
             "index_source": "collection",
             "index_documents": documents,
@@ -822,7 +822,7 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "index_state": "stale",
             "index_detail": (
                 f"{name} holds {documents} chunks with no record of which model embedded them, "
-                "so they cannot be trusted as comparable — re-ingest"
+                "so they can't be trusted to match. Re-ingest"
             ),
             "index_source": "collection",
             "index_documents": documents,
@@ -838,7 +838,7 @@ def index_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "index_state": "stale",
             "index_detail": (
                 f"{name} was embedded with document prefix {built_with!r}, but {config['model']} "
-                f"now uses {expected!r} — the vectors differ, so re-ingest before querying"
+                f"now uses {expected!r}. The vectors differ, so re-ingest before querying"
             ),
             "index_source": "collection",
             "index_documents": documents,
@@ -901,14 +901,14 @@ def resolve_for_runtime() -> dict[str, Any]:
     if not selected(config):
         raise NotProductionSafe(
             "no embedding model is selected. The model is stamped onto the index it builds and "
-            "changing it later invalidates every vector, so it is chosen rather than defaulted — "
-            "choose one in Settings → Vector RAG."
+            "changing it later breaks every vector, so there is no default. "
+            "Choose one in Settings → Vector RAG."
         )
     if config["provider"] != "local":
         raise NotProductionSafe(
             "the selected embedding model is a cloud baseline and cannot serve the local "
-            "system. Rule 1 permits cloud models as offline evaluation baselines only — "
-            "select a local model in Settings → Vector RAG."
+            "system. Rule 1 only allows cloud models as offline evaluation baselines. "
+            "Select a local model in Settings → Vector RAG."
         )
     dimensions, dimensions_source = effective_dimensions(config)
     # The collection comes back with the model, because the two are one decision:

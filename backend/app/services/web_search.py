@@ -100,7 +100,7 @@ PROVIDERS: Final[tuple[Provider, ...]] = (
         needs_engine_id=False,
         key_label="",
         hint=(
-            "Self-hosted and private — the query reaches a container on this "
+            "Self-hosted and private. The query goes to a container on this "
             "machine, which fans out to public engines with no key and no "
             "account. Bundled: `./daedalus.sh start --with-search`."
         ),
@@ -115,7 +115,7 @@ PROVIDERS: Final[tuple[Provider, ...]] = (
         key_label="",
         hint=(
             "No key, no account. Rate-limited in return, so heavy use starts "
-            "returning nothing — worth a fallback underneath it."
+            "returning nothing. Worth adding a fallback below it."
         ),
         docs_url=None,
     ),
@@ -149,7 +149,7 @@ PROVIDERS: Final[tuple[Provider, ...]] = (
         needs_url=False,
         needs_engine_id=False,
         key_label="Tavily API key",
-        hint="Built for machine reading — returns longer extracts than a SERP.",
+        hint="Built for machine reading, so it returns longer extracts than a normal results page.",
         docs_url="https://tavily.com/",
     ),
     Provider(
@@ -235,7 +235,7 @@ def _configured(provider_id: str, row: dict[str, Any] | None) -> tuple[bool, str
         alive, detail = _reachable(base_url)
         if not alive:
             return False, (
-                f"{detail} — start it with `./daedalus.sh dev --with-search` "
+                f"{detail}. Start it with `./daedalus.sh dev --with-search` "
                 "(or `start --with-search`)"
             )
         return True, detail
@@ -283,7 +283,7 @@ def status() -> dict[str, Any]:
         # same sentence about what it is allowed to be used for.
         "purpose_detail": (
             "A setup surface (Rule 5). Web results are for finding and checking "
-            "the documents M2 ingests — they never reach an answer, and the "
+            "the documents M2 ingests. They never reach an answer, and the "
             "query path cannot call this."
         ),
     }
@@ -317,13 +317,13 @@ def _post(url: str, **kwargs: Any) -> httpx.Response:
 
 def _raise_for_status(response: httpx.Response, label: str) -> None:
     if response.status_code == 429:
-        raise SearchError(f"{label} rate limit — try again later or add a fallback")
+        raise SearchError(f"{label} rate limit reached. Try again later or add a fallback")
     if response.status_code in (401, 403):
         raise SearchError(f"{label} rejected the credential ({response.status_code})")
     # Brave answers 422 to an invalid subscription token rather than 401, and
     # "HTTP 422" sends you looking at the query instead of at the key.
     if response.status_code == 422:
-        raise SearchError(f"{label} rejected the request (422) — most often an invalid key")
+        raise SearchError(f"{label} rejected the request (422). This is usually an invalid key")
     if response.status_code >= 400:
         raise SearchError(f"{label} returned HTTP {response.status_code}")
 
@@ -341,7 +341,7 @@ def _searxng(query: str, count: int, creds: tuple, safesearch: str) -> list[dict
     base_url = searxng_url(creds[0])
     if not base_url:
         raise SearchError(
-            "no SearXNG URL configured — start the bundled one with "
+            "no SearXNG URL configured. Start the bundled one with "
             "`./daedalus.sh start --with-search`, or enter an address"
         )
     params = {
@@ -532,7 +532,7 @@ def _google_pse(query: str, count: int, creds: tuple, safesearch: str) -> list[d
     except httpx.RequestError as exc:
         raise SearchError(f"Google PSE unreachable ({exc.__class__.__name__})") from exc
     if response.status_code == 400:
-        raise SearchError("Google PSE rejected the request — check the engine id (CX)")
+        raise SearchError("Google PSE rejected the request. Check the engine id (CX)")
     _raise_for_status(response, "Google PSE")
     data = _json(response, "Google PSE")
     return [

@@ -94,7 +94,7 @@ function MessageActions({
             className={`p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors ${
               rating === 1 ? 'theme-accent' : 'theme-text-muted hover:theme-text'
             }`}
-            title={rating === 1 ? 'Rated helpful — click to withdraw' : 'Helpful and correct'}
+            title={rating === 1 ? 'Rated helpful. Click to undo' : 'Helpful and correct'}
           >
             <ThumbsUp size={14} fill={rating === 1 ? 'currentColor' : 'none'} />
           </button>
@@ -104,7 +104,7 @@ function MessageActions({
             className={`p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors ${
               rating === -1 ? 'status-bad' : 'theme-text-muted hover:theme-text'
             }`}
-            title={rating === -1 ? 'Rated unhelpful — click to withdraw' : 'Unhelpful or wrong'}
+            title={rating === -1 ? 'Rated unhelpful. Click to undo' : 'Unhelpful or wrong'}
           >
             <ThumbsDown size={14} fill={rating === -1 ? 'currentColor' : 'none'} />
           </button>
@@ -116,14 +116,14 @@ function MessageActions({
       <button
         disabled
         className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
-        title="Fork conversation from this point — not available yet"
+        title="Fork the chat from here (coming soon)"
       >
         <GitFork size={14} />
       </button>
       <button
         disabled
         className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
-        title="Rerun prompt — not available yet"
+        title="Rerun this prompt (coming soon)"
       >
         <RefreshCw size={14} />
       </button>
@@ -132,7 +132,7 @@ function MessageActions({
           className={`text-[11px] ml-1 select-none flex items-center gap-1 ${
             fromCloud ? 'status-warn' : 'theme-text-muted'
           }`}
-          title={fromCloud ? 'Answered off this machine — logged as chat_cloud' : undefined}
+          title={fromCloud ? 'Answered by a cloud model, not this machine' : undefined}
         >
           {fromCloud && <Cloud size={10} />}
           {modelTag}
@@ -176,7 +176,7 @@ function ComposerControls({
     } else if (models.length > 0) {
       modelOptions = models.map(m => ({ value: m.name, label: m.name, capabilities: m.capabilities }))
     } else {
-      modelOptions = [{ value: '', label: 'No local models — pull one in The Forge' }]
+      modelOptions = [{ value: '', label: 'No local models yet. Pull one in The Forge' }]
     }
   }
 

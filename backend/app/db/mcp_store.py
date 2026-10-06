@@ -177,7 +177,7 @@ def create_server(
         raise McpStoreError(f"unknown transport {transport!r}; expected stdio or http")
     label = (label or "").strip()[:MAX_LABEL_CHARS]
     if not label:
-        raise McpStoreError("a server needs a label — it is how a tool call names it")
+        raise McpStoreError("a server needs a label, because that is how tool calls refer to it")
     if transport == "stdio" and not (command or "").strip():
         raise McpStoreError("a stdio server needs a command")
     if transport == "http" and not (url or "").strip():
@@ -290,7 +290,7 @@ def tools_drifted(server_id: str, tools: list[dict[str, Any]]) -> tuple[bool, st
     server = get_server(server_id)
     pinned = server["tools_hash"]
     if not pinned:
-        return False, "no pinned snapshot — nothing to compare against yet"
+        return False, "no pinned snapshot yet, so there is nothing to compare against"
 
     current = tools_hash(tools)
     if current == pinned:

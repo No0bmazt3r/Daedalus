@@ -176,7 +176,7 @@ function Capabilities({ catalogue, onChange }: {
         }}
         title={
           closed.size === catalogue.unlockable.length
-            ? 'Reopen all four — the default for a single-operator console.'
+            ? 'Reopen all four. This is the default for a single-operator console.'
             : 'Close all four: the fully-offline, read-only shape PROJECT.md §3 describes. Do this before recording a result you intend to cite.'
         }
         className="text-[11px] px-2 py-1 rounded-lg theme-text-muted hover:theme-text transition-colors"
@@ -303,14 +303,14 @@ function ToolRow({ tool, onChange }: {
         title={
           tool.disabled
             ? `${tool.name} is OFF: not offered to the model, and refused if it asks anyway.`
-            : `${tool.name} is ON: in the model's tool list. Turning it off does not change what it may touch — that is the capability row above.`
+            : `${tool.name} is ON: in the model's tool list. Turning it off doesn't change what it's allowed to touch. That's set by the capability row above.`
         }
       >
         <Switch
           checked={!tool.disabled}
           onChange={() => void toggleEnabled()}
           disabled={switching}
-          label={`${tool.name} — on or off`}
+          label={`Turn ${tool.name} on or off`}
         />
       </div>
       </div>
@@ -356,7 +356,7 @@ function ToolRow({ tool, onChange }: {
               </button>
             )}
             <span className="text-[10px] theme-text-muted">
-              optional — runs once now and is logged as a trial. Nothing here needs testing.
+              optional. Runs once now and is logged as a trial. Nothing here needs testing.
             </span>
           </div>
 
@@ -511,7 +511,7 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
         </p>
         {switchedOff.length > 0 && (
           <p className="flex items-center gap-2 text-xs theme-text-muted mt-1.5">
-            {switchedOff.length} switched off — not offered to the model.
+            {switchedOff.length} switched off, so the model can't use them.
             <button
               onClick={async () => setCatalogue(await enableTool())}
               className="underline underline-offset-2 hover:theme-text transition-colors"
@@ -532,7 +532,7 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
           <span className="text-xs theme-text shrink-0">Extended capabilities</span>
           <span className="text-[11px] theme-text-muted truncate flex-1">
             {refusedNow.length === 0
-              ? 'all on — nothing is refused at runtime'
+              ? 'all on, nothing is blocked'
               : `${refusedNow.length} off · tools needing ${refusedNow.join(', ')} are refused`}
           </span>
           <ChevronDown
@@ -568,7 +568,7 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
       {/* An absence is not self-explaining, but it does not need a card either. */}
       {catalogue.excluded.map((e) => (
         <p key={e.name} className="text-[10px] theme-text-muted leading-relaxed">
-          <span className="theme-text">Not implemented:</span> <code>{e.name}</code> — {e.reason}
+          <span className="theme-text">Not implemented:</span> <code>{e.name}</code>: {e.reason}
         </p>
       ))}
     </div>

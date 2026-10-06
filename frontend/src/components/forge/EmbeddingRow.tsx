@@ -29,7 +29,7 @@ import { Collapse } from '../ui/collapse'
  */
 
 function bytes(n: number | null | undefined): string {
-  if (!n) return '—'
+  if (!n) return '-'
   const units = ['B', 'KB', 'MB', 'GB']
   let v = n, u = 0
   while (v >= 1024 && u < units.length - 1) { v /= 1024; u++ }
@@ -37,9 +37,9 @@ function bytes(n: number | null | undefined): string {
 }
 
 const SOURCE_HINT: Record<FigureSource, string> = {
-  verified: 'the width an actual embedding came back with — ground truth for what the vector store receives',
+  verified: 'the width of a real embedding from this model, which is exactly what the vector store receives',
   measured: "read from this model's GGUF header after pulling. No model was run for it",
-  declared: 'from the catalogue — a claim about the published tag, not yet verified against a file',
+  declared: 'from the catalogue. What the published tag claims, not yet checked against a real file',
   unknown: 'neither measured nor declared: this tag is not in the catalogue and has not been pulled',
 }
 
@@ -163,13 +163,13 @@ export function EmbeddingRow({
             <Fact
               label="dimensions"
               source={model.dimensions_source}
-              value={model.dimensions ? `${model.dimensions}` : '—'}
+              value={model.dimensions ? `${model.dimensions}` : '-'}
               hint="Vector width. Wider is not simply better: it doubles the index and the per-query comparison cost, and changing it invalidates an existing index entirely."
             />
             <Fact
               label="context"
               source={model.max_tokens_source}
-              value={model.max_tokens ? `${model.max_tokens} tok` : '—'}
+              value={model.max_tokens ? `${model.max_tokens} tok` : '-'}
               tone={tooNarrow ? 'warn' : undefined}
               hint={
                 tooNarrow
@@ -239,7 +239,7 @@ export function EmbeddingRow({
               title={
                 model.dimensions_source === 'verified'
                   ? `Verified ${model.verified_at ?? ''}. Re-run to check again.`
-                  : 'Embed a short probe string and measure the vector that comes back — the only figure that is ground truth for what the vector store receives. Briefly loads the model.'
+                  : 'Embed a short test string and measure the vector that comes back. This is the only way to know exactly what the vector store receives. Briefly loads the model.'
               }
               className="inline-flex items-center gap-1.5 rounded-lg border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text disabled:opacity-40"
             >
@@ -292,7 +292,7 @@ export function EmbeddingRow({
       >
           <div className="grid grid-cols-2 @md:grid-cols-3 gap-x-4 gap-y-2">
             <Fact label="tag" value={model.tag} />
-            <Fact label="languages" value={model.languages ?? '—'} />
+            <Fact label="languages" value={model.languages ?? '-'} />
             <Fact
               label="per vector"
               value={bytes(model.bytes_per_vector)}
@@ -308,9 +308,9 @@ export function EmbeddingRow({
                 blanks before pulling would read as missing data. */}
             {model.installed && (
               <>
-                <Fact label="family" source="measured" value={model.family ?? '—'} />
-                <Fact label="parameters" source="measured" value={model.parameter_size ?? '—'} />
-                <Fact label="quantization" source="measured" value={model.quantization ?? '—'} />
+                <Fact label="family" source="measured" value={model.family ?? '-'} />
+                <Fact label="parameters" source="measured" value={model.parameter_size ?? '-'} />
+                <Fact label="quantization" source="measured" value={model.quantization ?? '-'} />
               </>
             )}
           </div>
@@ -318,8 +318,8 @@ export function EmbeddingRow({
           {model.installed && model.dimensions_source === 'measured' && (
             <p className="text-[10px] leading-relaxed theme-text-muted">
               These figures were read from the pulled model's GGUF header, not from the catalogue.
-              Where the two disagree — a repackaged or re-quantized tag can ship a different
-              context window than its model card advertises — what is on this disk wins. Verify to
+              If the two disagree (a repackaged or re-quantized tag can ship a different
+              context window than its model card says), what's on this disk wins. Verify to
               confirm the vector width by actually embedding something.
             </p>
           )}
@@ -334,7 +334,7 @@ export function EmbeddingRow({
 
           {model.dimensions_source === 'verified' && !model.dimensions_mismatch && (
             <p className="text-[10px] leading-relaxed theme-text-muted">
-              Vector width confirmed by embedding a probe string — the header and the real output
+              Vector width confirmed by embedding a test string. The header and the real output
               agree.
             </p>
           )}

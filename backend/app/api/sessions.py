@@ -165,7 +165,7 @@ def regenerate_title(session_id: str) -> dict:
     if background_models.read()["title"]["mode"] != "model":
         raise HTTPException(
             status_code=409,
-            detail="chat titles are set to use the first message — change that in "
-                   "Settings → Background Jobs to have a model name chats",
+            detail="chat titles are set to use the first message. To have a model name chats, "
+                   "change that in Settings → Background Jobs",
         )
     return {"ok": True, "scheduled": session_titles.schedule(session_id, force=True)}

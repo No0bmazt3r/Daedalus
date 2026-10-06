@@ -96,7 +96,7 @@ def available() -> bool:
 def _client() -> httpx.Client:
     if not SOCKET_PATH:
         raise ContainerError(
-            "container control is off. Set DOCKER_SOCKET in .env to enable it — and read "
+            "container control is off. Set DOCKER_SOCKET in .env to turn it on, but read "
             "the warning first: it is a host-level privilege, and `execute_code` should be "
             "locked if you turn it on."
         )
@@ -138,7 +138,7 @@ def _inspect(client: httpx.Client, container: str) -> dict[str, Any] | None:
         # container is uid 1000, so without `group_add` it is present and
         # unopenable — a failure that otherwise reads as "Docker is down".
         hint = (
-            " — the socket is mounted but not readable by this container's user. "
+            ". The socket is mounted, but this container's user can't read it. "
             "Set DOCKER_GID in .env to the host's `docker` group id."
             if isinstance(exc.__cause__, PermissionError)
             or "Permission denied" in str(exc)
@@ -203,7 +203,7 @@ def start(name: str) -> dict[str, Any]:
         if found is None:
             raise ContainerError(
                 f"{spec['container']} has never been created. Run `{spec['compose_hint']}` "
-                "once — after that it can be started and stopped from here."
+                "once. After that you can start and stop it from here."
             )
         if found.get("State") == "running":
             return {"name": name, "running": True, "detail": f"{spec['label']} is already running"}

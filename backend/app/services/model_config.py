@@ -137,7 +137,7 @@ def write(
         # Refused only when Ollama says so: pinning a model before it is pulled
         # stays allowed (`resolve` reports it as not installed).
         if ollama_client.can_answer(tag) is False:
-            raise ValueError(f"{tag} is an embedding model — it cannot answer a question, so it cannot be the chat model")
+            raise ValueError(f"{tag} is an embedding model. It can't answer questions, so it can't be the chat model")
 
     config = {
         "schema_version": SCHEMA_VERSION,
@@ -218,7 +218,7 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
                 "mode": "pinned",
                 "tag": None,
                 "resolved": False,
-                "reason": f"pinned to {tag}, which is an embedding model and cannot answer — pin a chat model, or switch to auto.",
+                "reason": f"pinned to {tag}, which is an embedding model and can't answer. Pin a chat model, or switch to auto.",
                 "row": match,
                 "candidates_considered": len(installed),
                 "config": config,
@@ -271,7 +271,7 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         else:
             reason = (
                 f"{len(fits)} installed model(s) fit this machine, but none can generate text "
-                "— an embedding model cannot answer a query. Pull a chat model in the Forge."
+                "(embedding models can't answer questions). Pull a chat model in the Forge."
             )
         return {
             "mode": "auto",

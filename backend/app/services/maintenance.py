@@ -202,7 +202,7 @@ def import_data(payload: dict[str, Any]) -> dict[str, Any]:
 
     # Credentials are not in the file to begin with.
     if payload.get("endpoints"):
-        skipped.append("endpoint credentials (never exported — re-enter them)")
+        skipped.append("endpoint credentials (never exported, so enter them again)")
 
     return {
         "ok": True,
@@ -318,8 +318,8 @@ WIPES: Final[dict[str, dict[str, Any]]] = {
         "label": "Audit & evaluation logs",
         "detail": (
             "Every tool, retrieval, model, error and feedback row. This is the evidence "
-            "§9.2's figures are computed from — deleting it is sometimes right and never "
-            "casual."
+            "§9.2's figures are computed from. Deleting it is sometimes the right call, but "
+            "never a casual one."
         ),
         "run": _wipe_audit,
         "grave": True,

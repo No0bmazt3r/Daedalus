@@ -289,8 +289,8 @@ function AppShell() {
           body={
             <>
               <strong className="theme-text">{confirmDelete?.title}</strong> and every
-              message in it are removed. The audit log keeps its own record — this is the
-              conversation, not the evidence.
+              message in it are removed. The audit log keeps its own record, so this only
+              removes the conversation, not the evidence.
             </>
           }
           confirmLabel="Delete"
@@ -309,7 +309,7 @@ function AppShell() {
           body={
             <>
               There are zero models in the system. Please add a model first, before starting
-              any task — open <strong className="theme-text">The Forge</strong>, pick one that
+              any task. Open <strong className="theme-text">The Forge</strong>, pick one that
               fits this machine, and pull it. If you already have models, check that Ollama is
               running.
             </>

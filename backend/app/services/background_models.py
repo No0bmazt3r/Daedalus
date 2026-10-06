@@ -120,7 +120,7 @@ def write(raw: dict[str, Any]) -> dict[str, Any]:
         if tag != AUTO and local and tag not in local:
             raise ValueError(
                 f"{tag} is not a local model that can generate text. Background jobs run on "
-                "this machine only — see Settings → Background Jobs."
+                "this machine only. See Settings → Background Jobs."
             )
 
     payload = _clean(merged)

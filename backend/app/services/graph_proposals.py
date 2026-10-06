@@ -264,8 +264,8 @@ def _pick_model(requested: str | None) -> str:
     tag = choice.get("tag")
     if not tag:
         raise ProposalError(
-            "no model is available to extract with. Pull one in the Forge — this runs a local "
-            "model over the corpus and cannot work without one."
+            "no model is available to extract with. Pull one in the Forge. This step runs a local "
+            "model over the corpus and can't work without one."
         )
     return str(tag)
 

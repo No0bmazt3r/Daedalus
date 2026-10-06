@@ -43,7 +43,7 @@ const SECTIONS: { key: keyof Coverage; title: string; consequence: string }[] = 
   {
     key: 'thresholds_without_triggers',
     title: 'Thresholds that trigger nothing',
-    consequence: 'The limit is recorded but leads nowhere — a dead end one hop in.',
+    consequence: 'The limit is recorded but leads nowhere. It is a dead end after one hop.',
   },
   {
     key: 'empty_sops',

@@ -66,9 +66,9 @@ const STEPS: readonly Step[] = [
   // accepting what survives is faster than typing, and what it cannot find is
   // exactly what steps 2 and 3 are for. Nothing forces it — an empty corpus or
   // no model simply leaves the queue empty and the manual steps unaffected.
-  { id: 1, label: 'Propose', icon: Sparkles, hint: 'Extract candidates from the corpus — nothing is written until you accept' },
+  { id: 1, label: 'Propose', icon: Sparkles, hint: 'Suggest nodes and edges from your documents. Nothing is saved until you accept' },
   { id: 2, label: 'Nodes', icon: Boxes, hint: 'The things the graph knows about' },
-  { id: 3, label: 'Edges', icon: Link2, hint: 'How they relate — each edge type has fixed endpoints' },
+  { id: 3, label: 'Edges', icon: Link2, hint: 'How they connect. Each edge type links two fixed node types' },
   { id: 4, label: 'Review', icon: History, hint: 'Gaps, and every edit including the refused ones' },
 ]
 
@@ -138,7 +138,7 @@ function NodeForm({
 
       <label className="block">
         <span className="text-[10px] theme-text-muted">
-          Id — the prefix is fixed, because it is what makes an id self-describing in a traversal
+          Id. The prefix is fixed so you can always tell what kind of node an id points to
         </span>
         <span className="mt-1 flex items-center rounded-md border theme-border theme-surface">
           <span className="shrink-0 px-2 py-1 font-mono text-[11px] theme-text-muted">
@@ -155,7 +155,7 @@ function NodeForm({
 
       {spec.fields.map((f) => (
         <label key={f.name} className="block">
-          <span className="text-[10px] theme-text-muted">{f.name} — {f.hint}</span>
+          <span className="text-[10px] theme-text-muted">{f.name}: {f.hint}</span>
           <input
             value={fields[f.name] ?? ''}
             onChange={(e) => setFields((prev) => ({ ...prev, [f.name]: e.target.value }))}
@@ -263,7 +263,7 @@ function EdgeForm({
         ([label, value, set, options]) => (
           <div key={label}>
             <span className="text-[10px] theme-text-muted">
-              {label} {options.length === 0 && '— no node of that type exists yet'}
+              {label} {options.length === 0 && '(no node of this type yet)'}
             </span>
             {options.length === 0 ? (
               <p className="mt-1 rounded-md border border-dashed theme-border px-2 py-1.5 text-[10px] theme-text-muted">
@@ -385,8 +385,8 @@ export function AuthoringView() {
   // that cannot be completed.
   const noPair = !connectable
     ? nodes.length === 0
-      ? 'Add a node first — an edge needs two that already exist'
-      : 'No edge type has both of its endpoint types yet — add the other end'
+      ? 'Add a node first. An edge needs two existing nodes to connect'
+      : 'No edge type has both of its node types yet. Add a node for the other end'
     : undefined
   const blocked: Record<number, string | undefined> = {
     1: undefined, 2: undefined, 3: noPair, 4: undefined,
@@ -422,7 +422,7 @@ export function AuthoringView() {
         </div>
         <div className="rounded-lg border theme-border theme-card px-3 py-2">
           <div className="text-lg tabular-nums theme-text">
-            {(status.coverage.total_gaps as number) ?? '—'}
+            {(status.coverage.total_gaps as number) ?? '-'}
           </div>
           <div className="text-[10px] uppercase tracking-wider theme-text-muted">Gaps</div>
           <div className="mt-0.5 text-[10px] theme-text-muted opacity-70">see Coverage</div>
@@ -430,8 +430,8 @@ export function AuthoringView() {
       </div>
 
       <p className="text-[10px] leading-relaxed theme-text-muted">
-        Authored to <code className="theme-text">{status.path}</code>. Still a git-tracked YAML —
-        every edit here is validated before it is written, and a refused edit leaves the file
+        Authored to <code className="theme-text">{status.path}</code>. It's still a git-tracked YAML
+        file. Every edit is checked before it's saved, and a rejected edit leaves the file
         untouched.
       </p>
 
@@ -472,7 +472,7 @@ export function AuthoringView() {
               <span className="min-w-0 flex-1 truncate text-[10px] theme-text-muted">{n.id}</span>
               <button
                 onClick={() => remove(() => deleteGraphNode(n.id))}
-                title="Refused while edges point at it — pass cascade to take them with it"
+                title="Can't delete while edges point to it. Use cascade to delete those edges too"
                 className="shrink-0 rounded p-0.5 theme-text-muted transition-colors hover:text-rose-400"
               >
                 <Trash2 size={11} />
@@ -525,8 +525,8 @@ export function AuthoringView() {
         <div className="flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
           <ListChecks size={13} className="mt-0.5 shrink-0 text-amber-400" />
           <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text">
-            {status.coverage.total_gaps as number} structural gap(s) — nodes that are legal but
-            leave a question unanswerable.{' '}
+            {status.coverage.total_gaps as number} structural gap(s): nodes that are valid but
+            leave some question without an answer.{' '}
             <span className="theme-text-muted">
               The Coverage tab lists them one by one; a hand-authored graph fails by omission, and
               omission is invisible from the answer side.

@@ -210,7 +210,7 @@ export function ShortcutsPanel({ isPeek }: { isPeek: boolean }) {
         {conflicts.size > 0 && (
           <p className="flex items-center gap-1.5 text-xs status-warn mt-1.5">
             <AlertTriangle size={12} />
-            Two actions share a chord — the first one listed below is the one that fires.
+            Two actions share a shortcut. The first one listed below is the one that runs.
           </p>
         )}
       </div>

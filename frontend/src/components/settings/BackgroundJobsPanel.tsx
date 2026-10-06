@@ -103,7 +103,7 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
       <header>
         <h3 className="text-sm theme-text">Background jobs</h3>
         <p className="mt-1 text-xs leading-relaxed theme-text-muted">
-          Model work that runs after an answer is delivered, on its own thread — you never wait
+          Model work that runs after an answer is delivered, on its own thread, so you never wait
           for it. Each job can use a different local model from the one answering chat.
         </p>
       </header>
@@ -161,7 +161,7 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
         <p className="text-[11px] leading-relaxed theme-text-muted">
           When a long chat no longer fits the history budget, the oldest turns are folded into a
           short summary that later prompts replay. Every measured value is removed from it before
-          it is stored — a summary is context, never evidence. With no model, it falls back to a
+          it is stored, because a summary is context, never evidence. With no model, it falls back to a
           list of your earlier questions.
         </p>
         <ThemeSelect
@@ -195,7 +195,7 @@ function Resolved({ job }: { job: ResolvedJob }) {
     <p className={`text-[11px] leading-relaxed ${warn ? 'text-amber-400' : 'theme-text-muted'}`}>
       {job.tag ? (
         <>
-          Runs on <code className="theme-text">{job.tag}</code> — {job.reason}
+          Runs on <code className="theme-text">{job.tag}</code> · {job.reason}
         </>
       ) : (
         <>No model can run this job: {job.reason}</>

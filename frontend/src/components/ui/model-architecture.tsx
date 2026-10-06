@@ -32,23 +32,23 @@ export function ModelArchitecture({ arch }: { arch?: ModelArch | null }) {
     ['layers', String(arch.layers), 'Transformer blocks. The KV cache scales linearly with this.'],
     [
       'attn heads',
-      arch.heads ? String(arch.heads) : '—',
+      arch.heads ? String(arch.heads) : '-',
       'Query heads per block. heads x head_dim is the hidden size.',
     ],
     [
       'KV heads',
-      arch.kv_heads ? String(arch.kv_heads) : '—',
+      arch.kv_heads ? String(arch.kv_heads) : '-',
       'Fewer than attention heads means grouped-query attention, which is what makes the KV cache affordable.',
     ],
     [
       'head dim',
-      arch.head_dim ? String(arch.head_dim) : '—',
-      'The width of one attention head. Internal to the model — not a retrieval vector width.',
+      arch.head_dim ? String(arch.head_dim) : '-',
+      'The width of one attention head. Internal to the model, not a retrieval vector width.',
     ],
     [
       'hidden size',
-      arch.embedding_length ? String(arch.embedding_length) : '—',
-      "The model's internal width. Not a retrieval vector width — an embedding model's dimensions are a different quantity that happens to share a GGUF key.",
+      arch.embedding_length ? String(arch.embedding_length) : '-',
+      "The model's internal width. This is not a retrieval vector width. An embedding model's dimensions are a different number that just happens to share a GGUF key.",
     ],
   ]
 

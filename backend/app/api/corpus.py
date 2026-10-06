@@ -105,7 +105,7 @@ async def upload_document(
 
     raw = await request.body()
     if not raw:
-        raise HTTPException(400, "the request body is empty — send the file as the body")
+        raise HTTPException(400, "the request body is empty. Send the file as the body")
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(
             413, f"{len(raw) // 1024 // 1024}MB exceeds the {MAX_UPLOAD_BYTES // 1024 // 1024}MB limit"
@@ -304,7 +304,7 @@ def start_ingest(
     if active:
         return {"run": corpus_store.get_run(active) or {"run_id": active, "status": "running"}}
     latest = corpus_store.list_runs(limit=1)
-    return {"run": latest[0] if latest else {}, "note": "still starting — poll /api/corpus/runs"}
+    return {"run": latest[0] if latest else {}, "note": "still starting. Poll /api/corpus/runs"}
 
 
 @router.post("/resume")

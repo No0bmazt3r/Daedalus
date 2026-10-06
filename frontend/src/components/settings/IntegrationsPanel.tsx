@@ -133,7 +133,7 @@ function ServerRow({ server, onChange }: {
           </button>
           <button
             onClick={async () => onChange(await setMcpServerEnabled(server.id, !server.enabled))}
-            title={server.enabled ? 'Disable — kept, but refused by tool calls.' : 'Enable.'}
+            title={server.enabled ? 'Disable. It stays saved, but tool calls to it are blocked.' : 'Enable.'}
             className="p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors"
           >
             {server.enabled ? <Check size={12} className="status-ok" /> : <X size={12} />}
@@ -182,7 +182,7 @@ function ServerRow({ server, onChange }: {
           {result.drifted && (
             <p className="theme-text-muted mt-1 leading-relaxed">
               The live tool list no longer matches the snapshot. Tools that are not pinned
-              are refused, so nothing new can be called until you re-pin — which is the
+              are refused, so nothing new can be called until you re-pin. That's the
               moment to decide whether a changed tool list is one you want results
               attributed to.
             </p>
@@ -348,8 +348,8 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
           )}
 
           <p className="text-[11px] theme-text-muted mt-2 leading-relaxed">
-            A stdio server is a program this backend starts, with a scrubbed environment —
-            it never inherits <code>.env</code>. Adding one is an operator action for that
+            A stdio server is a program this backend starts, with a clean environment,
+            so it never sees <code>.env</code>. Adding one is an operator action for that
             reason: the agent can call servers, but cannot create them.
           </p>
 

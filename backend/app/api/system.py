@@ -121,7 +121,7 @@ def databases() -> dict[str, Any]:
                 # Separate from the audit log on purpose: a user owns their
                 # transcript and may delete it; audit rows are the evidence a
                 # response was grounded. See db/paths.py.
-                "purpose": "Conversation sessions and messages — the assistant's memory across sessions.",
+                "purpose": "Chats and their messages. This is how the assistant remembers past conversations.",
                 "path": str(paths.CHAT_DB),
                 "size_bytes": _file_size(paths.CHAT_DB),
                 "available": True,
@@ -184,7 +184,7 @@ def seed_demo() -> dict[str, Any]:
     return {
         "ok": True,
         "rows_inserted": inserted,
-        "note": "already populated — nothing written" if inserted == 0 else "demo run generated",
+        "note": "already filled in, nothing written" if inserted == 0 else "demo run generated",
     }
 
 
@@ -268,7 +268,7 @@ def list_models() -> dict[str, Any]:
                 "capabilities": capabilities,
                 # Tooltip text: one line, not a paragraph.
                 "note": (
-                    "Runs on Ollama's cloud — logged as chat_cloud, not the "
+                    "Runs on Ollama's cloud, so it is logged separately and is not the "
                     "production path"
                     if remote
                     else None
@@ -292,7 +292,7 @@ def list_models() -> dict[str, Any]:
                 "provider": ep["provider"],
                 "type": "cloud",
                 "capabilities": [],
-                "note": "Benchmark endpoint — evaluation baseline only",
+                "note": "Benchmark endpoint, for evaluation baselines only",
                 "details": {"base_url": ep["base_url"]},
             })
     except Exception:

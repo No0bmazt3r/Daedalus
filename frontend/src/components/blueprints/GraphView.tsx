@@ -82,7 +82,7 @@ function Detail({ detail, onNavigate }: { detail: NodeDetail; onNavigate: (id: s
             title={
               nodeOrigin(node) === 'rig'
                 ? "This rig's own knowledge"
-                : "From another installation's documents — set origin: rig in Authoring if it is this lab's"
+                : "From another installation's documents. Set origin to rig in Authoring if it belongs to this lab"
             }
             className={`rounded border px-1.5 py-px text-[10px] ${
               nodeOrigin(node) === 'rig'
@@ -114,7 +114,7 @@ function Detail({ detail, onNavigate }: { detail: NodeDetail; onNavigate: (id: s
       {node.aliases && node.aliases.length > 0 && (
         <section>
           <h4 className="text-[11px] theme-text-muted">
-            Aliases — how a question reaches this node
+            Aliases: the words that lead a question to this node
           </h4>
           {/* Load-bearing, not decoration: Track 2 is embedding-free, so these
               are the entry points. Every alias not authored is a phrasing the
@@ -152,7 +152,7 @@ function Detail({ detail, onNavigate }: { detail: NodeDetail; onNavigate: (id: s
 
       {outgoing.length === 0 && incoming.length === 0 && (
         <p className="rounded border border-dashed theme-border p-3 text-[11px] theme-text-muted">
-          No edges. This node is unreachable by any traversal — see Coverage.
+          No edges, so no search can reach this node. See Coverage.
         </p>
       )}
     </div>
@@ -221,8 +221,8 @@ export function GraphView() {
         <div>
           <p>{error}</p>
           <p className="mt-1 theme-text-muted">
-            A graph that does not validate is not served as an empty one — fix the authoring
-            error named above in <code>knowledge_graph.yaml</code>.
+            The graph has an error, so it is not shown at all rather than shown empty. Fix the
+            error above in <code>knowledge_graph.yaml</code>.
           </p>
         </div>
       </div>
@@ -266,7 +266,7 @@ export function GraphView() {
             <button
               key={id}
               onClick={() => setView(id)}
-              title={id === 'diagram' ? 'Node-link diagram — structure' : 'Grouped list — inventory'}
+              title={id === 'diagram' ? 'Diagram: how nodes connect' : 'List: every node, grouped'}
               className={`px-2 py-1.5 transition-colors ${
                 view === id ? 'theme-bg-primary theme-text-on-primary' : 'theme-text-muted hover:theme-text'
               }`}
@@ -302,7 +302,7 @@ export function GraphView() {
             <Skeleton className="h-full min-h-[420px] w-full" />
           ) : nodes.length === 0 ? (
             <p className="rounded border border-dashed theme-border p-8 text-center text-xs theme-text-muted">
-              No node matches. The graph holds {schema?.total_nodes ?? '—'} nodes.
+              No node matches. The graph holds {schema?.total_nodes ?? '-'} nodes.
             </p>
           ) : (
             <GraphCanvas nodes={nodes} edges={edges} selected={selected} onSelect={setSelected} />
@@ -349,7 +349,7 @@ export function GraphView() {
           {nodes === null && <Skeleton className="h-40 w-full" />}
           {nodes !== null && nodes.length === 0 && (
             <p className="rounded border border-dashed theme-border p-4 text-center text-xs theme-text-muted">
-              No node matches. The graph holds {schema?.total_nodes ?? '—'} nodes.
+              No node matches. The graph holds {schema?.total_nodes ?? '-'} nodes.
             </p>
           )}
           {grouped.map(([nodeType, list]) => (

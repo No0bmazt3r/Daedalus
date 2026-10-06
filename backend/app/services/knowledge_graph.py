@@ -228,7 +228,7 @@ def load(force: bool = False) -> Any:
         path = source_path()
         if not path.exists():
             raise GraphValidationError(
-                f"no graph file — looked for the authored copy at {GRAPH_PATH} "
+                f"no graph file found. Looked for the authored copy at {GRAPH_PATH} "
                 f"and the packaged seed at {SEED_PATH}"
             )
         mtime = path.stat().st_mtime

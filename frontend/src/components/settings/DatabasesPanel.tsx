@@ -27,7 +27,7 @@ interface DatabaseInfo {
 }
 
 function formatBytes(bytes: number | null): string {
-  if (bytes === null || bytes === undefined) return '—'
+  if (bytes === null || bytes === undefined) return '-'
   if (bytes < 1024) return `${bytes} B`
   const units = ['KB', 'MB', 'GB']
   let value = bytes / 1024
@@ -40,7 +40,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 function formatMetric(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—'
+  if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'number') return value.toLocaleString()
   const text = String(value)
   // ISO timestamps are unreadable at a glance in a metrics grid.
@@ -121,8 +121,8 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
         <div>
           <h3 className="text-xl font-medium mb-1">Storage health</h3>
           <p className="text-sm theme-text-muted">
-            Daedalus keeps its stores physically separate — a fault in ingestion or
-            logging cannot reach the sensor data of record.
+            Daedalus keeps its stores separate, so a problem in ingestion or
+            logging can't affect the sensor data.
           </p>
           <p className="text-xs theme-text-muted mt-2">
             Only the vector store runs as a container. The SQLite stores are
@@ -180,7 +180,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                     title={
                       db.deployment === 'service'
                         ? 'Runs as its own container'
-                        : 'A file opened directly by the backend — no server process'
+                        : 'A file the backend opens directly, with no server process'
                     }
                   >
                     {db.deployment}
@@ -214,7 +214,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
                 {db.available ? 'Healthy' : 'Not healthy'}
               </span>
               <span className="theme-text-muted">
-                {db.available ? formatBytes(db.size_bytes) : '—'}
+                {db.available ? formatBytes(db.size_bytes) : '-'}
               </span>
             </div>
           </div>
@@ -283,7 +283,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             <div className="font-medium">Metrics &amp; container logs</div>
             <p className="text-xs theme-text-muted mt-1">
               This panel says <em>whether</em> a store is healthy. The metrics
-              stack — Prometheus, Grafana, and the container logs — is where you
+              stack (Prometheus, Grafana and the container logs) is where you
               find out <em>why</em> it isn't.
             </p>
             {obs?.configured ? (
@@ -299,7 +299,7 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             ) : (
               <p className="text-xs theme-text-muted mt-3">
                 Not configured. Set <code className="theme-text">DAEDALUS_OBSERVABILITY_URL</code>{' '}
-                in <code className="theme-text">.env</code> once the stack is running — see
+                in <code className="theme-text">.env</code> once the stack is running. See
                 M7 in <code className="theme-text">TODO.md</code>.
               </p>
             )}

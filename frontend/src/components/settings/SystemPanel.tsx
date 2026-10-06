@@ -130,7 +130,7 @@ function LogsCard({ card }: { card: string }) {
         Process log
       </h3>
       <p className="text-sm theme-text-muted mb-4">
-        What the backend is doing — startup, exceptions, timeouts. Separate from the audit
+        What the backend is doing: startup, errors and timeouts. Separate from the audit
         database, which records what each answer was built from.
       </p>
 
@@ -190,7 +190,7 @@ function LogsCard({ card }: { card: string }) {
         ) : !tail || tail.lines.length === 0 ? (
           <p style={{ color: '#6b7a90' }}>
             {tail && !tail.exists
-              ? 'No log file yet — it appears once the backend has written something.'
+              ? 'No log file yet. It shows up once the backend writes something.'
               : 'Nothing matches those filters.'}
           </p>
         ) : (
@@ -254,7 +254,7 @@ function BackupCard({ card }: { card: string }) {
       setMessage({
         ok: true,
         text: result.skipped.length
-          ? `${result.detail} — skipped: ${result.skipped.join('; ')}`
+          ? `${result.detail}. Skipped: ${result.skipped.join('; ')}`
           : result.detail,
       })
     } catch (e) {
@@ -272,7 +272,7 @@ function BackupCard({ card }: { card: string }) {
       </h3>
       <p className="text-sm theme-text-muted mb-4 leading-relaxed">
         Preferences, the committed model and embedding choices, search and MCP
-        configuration, and the tool policy — as one JSON file.{' '}
+        configuration, and the tool policy, all in one JSON file.{' '}
         <span className="theme-text">No credentials are included.</span> A backup gets
         emailed and left in a downloads folder, which is the wrong place for an API key,
         so keys are recorded as set/unset and re-entered after a restore.
@@ -306,7 +306,7 @@ function BackupCard({ card }: { card: string }) {
             if (file) void doImport(file)
           }}
         />
-        <span className="text-[11px] theme-text-muted">Import is additive — nothing is deleted</span>
+        <span className="text-[11px] theme-text-muted">Import only adds, nothing is deleted</span>
       </div>
 
       {message && (
@@ -424,7 +424,7 @@ function DangerCard({ card }: { card: string }) {
               <p className="mt-2">
                 {pending.kind === 'audit'
                   ? 'These rows are what §9.2’s latency figures and the groundedness scoring are computed from. Anything already measured stops being reproducible.'
-                  : 'Every category at once — transcripts, audit rows, the vector index, credentials and configuration.'}
+                  : 'Every category at once: chats, audit rows, the vector index, credentials and settings.'}
               </p>
             )}
           </>

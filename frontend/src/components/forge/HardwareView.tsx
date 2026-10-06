@@ -17,7 +17,7 @@ import { Skeleton, SkeletonCard } from '../ui/skeleton'
  * is there".
  *
  * Every field is nullable by design. A machine with no GPU, no `nvidia-smi` and
- * no Ollama is normal; each unknown shows as "—" with the reason, rather than
+ * no Ollama is normal; each unknown shows as "-" with the reason, rather than
  * the panel failing or — worse — inventing a plausible number.
  *
  * ## Where these numbers come from
@@ -36,7 +36,7 @@ import { Skeleton, SkeletonCard } from '../ui/skeleton'
  */
 
 function bytes(n: number | null | undefined, digits = 1): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   if (n < 1024) return `${n} B`
   const units = ['KB', 'MB', 'GB', 'TB']
   let v = n / 1024
@@ -382,13 +382,13 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         </div>
         <div className="text-sm mb-3 break-words">{hw.cpu.model ?? 'Unknown CPU'}</div>
         <div className="grid grid-cols-2 @sm:grid-cols-4 gap-x-4 gap-y-2">
-          <Stat label="Physical cores" value={hw.cpu.cores_physical?.toString() ?? '—'} />
-          <Stat label="Logical cores" value={hw.cpu.cores_logical?.toString() ?? '—'} />
+          <Stat label="Physical cores" value={hw.cpu.cores_physical?.toString() ?? '-'} />
+          <Stat label="Logical cores" value={hw.cpu.cores_logical?.toString() ?? '-'} />
           <Stat
             label="Base clock"
-            value={hw.cpu.base_clock_mhz ? `${(hw.cpu.base_clock_mhz / 1000).toFixed(2)} GHz` : '—'}
+            value={hw.cpu.base_clock_mhz ? `${(hw.cpu.base_clock_mhz / 1000).toFixed(2)} GHz` : '-'}
           />
-          <Stat label="Architecture" value={hw.cpu.arch ?? '—'} />
+          <Stat label="Architecture" value={hw.cpu.arch ?? '-'} />
         </div>
       </div>
 
@@ -468,7 +468,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
                 <Meter percent={usedPct} tone={usedPct > 85 ? 'warn' : 'primary'} />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
                   <Stat label="VRAM" value={bytes(d.vram_total_bytes)} />
-                  <Stat label="Driver" value={d.driver_version ?? '—'} />
+                  <Stat label="Driver" value={d.driver_version ?? '-'} />
                 </div>
               </div>
             )
@@ -505,7 +505,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         <div className="grid grid-cols-2 @sm:grid-cols-3 @lg:grid-cols-5 gap-x-4 gap-y-2">
           <Stat
             label="Platform"
-            value={`${hw.host.platform ?? '—'}${hw.host.wsl ? ' (WSL)' : ''}`}
+            value={`${hw.host.platform ?? '-'}${hw.host.wsl ? ' (WSL)' : ''}`}
             title={hw.host.release ?? undefined}
           />
           <Stat

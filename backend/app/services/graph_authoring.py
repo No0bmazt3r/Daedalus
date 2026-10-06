@@ -257,8 +257,8 @@ def create_node(node_type: str, node_id: str, attributes: dict[str, Any] | None 
             raise AuthoringError("a node needs an id")
         if not node_id.startswith(f"{node_type}:"):
             raise AuthoringError(
-                f"a {node_type} node's id must start with {node_type}: — got {node_id!r}. "
-                "The prefix is what makes an id self-describing in a traversal path."
+                f"a {node_type} node's id must start with {node_type}: but got {node_id!r}. "
+                "The prefix is how you can tell what kind of node an id points to."
             )
 
         raw = _read_raw()
@@ -288,8 +288,8 @@ def update_node(node_id: str, attributes: dict[str, Any]) -> dict[str, Any]:
             raise AuthoringError(f"no node {node_id!r}")
         if "id" in attributes or "type" in attributes:
             raise AuthoringError(
-                "a node's id and type cannot be edited in place — an edge's validity depends "
-                "on both. Delete the node and create it again, which makes the edges explicit."
+                "a node's id and type can't be edited in place, because its edges depend "
+                "on both. Delete the node and create it again so the edges are rebuilt on purpose."
             )
 
         before = dict(raw["nodes"][index])
@@ -429,7 +429,7 @@ def schema() -> dict[str, Any]:
 _FIELDS: dict[str, list[dict[str, str]]] = {
     "Sensor": [
         {"name": "label", "hint": "Display name"},
-        {"name": "column", "hint": "The sensor_readings column — the join to live telemetry"},
+        {"name": "column", "hint": "The sensor_readings column that links to live readings"},
         {"name": "unit", "hint": "°C, ppm, bar"},
         {"name": "description", "hint": "What it measures"},
     ],
@@ -446,7 +446,7 @@ _FIELDS: dict[str, list[dict[str, str]]] = {
     ],
     "SOPDocument": [
         {"name": "label", "hint": "Display name"},
-        {"name": "filename", "hint": "Joins to chunk metadata's source_file — must match a real document"},
+        {"name": "filename", "hint": "Matches source_file in chunk metadata, so it must be a real document"},
         {"name": "version", "hint": "Document version"},
         {"name": "origin", "hint": "rig if this lab's own; blank = reference (another installation)"},
     ],

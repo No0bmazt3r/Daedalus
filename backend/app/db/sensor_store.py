@@ -69,8 +69,8 @@ def connect_ro() -> Iterator[sqlite3.Connection]:
     ensure_dirs()
     if not SENSOR_DB.exists():
         raise FileNotFoundError(
-            f"sensor database not found at {SENSOR_DB} — "
-            "run the SCADA ingestion subsystem, or seed a demo set for development"
+            f"sensor database not found at {SENSOR_DB}. "
+            "Run the SCADA ingestion subsystem, or seed a demo set for development"
         )
     conn = sqlite3.connect(f"file:{SENSOR_DB}?mode=ro", uri=True, timeout=5.0)
     try:

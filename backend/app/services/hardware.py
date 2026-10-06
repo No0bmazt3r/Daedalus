@@ -270,7 +270,7 @@ def _in_container() -> bool:
 # it. The panel renders `error` verbatim when the device list is empty.
 _NO_PASSTHROUGH: Final = (
     "No NVIDIA driver is visible inside this container, so the host's GPU cannot be "
-    "read from here. It is not passed through — restart with `./daedalus.sh dev --gpu` "
+    "read from here. It isn't passed through, so restart with `./daedalus.sh dev --gpu` "
     "(or `--gpu` on `start`). Nothing is wrong with the machine or the card."
 )
 

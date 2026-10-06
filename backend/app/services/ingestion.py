@@ -159,7 +159,7 @@ def read_text(document: dict[str, Any]) -> extraction.Extracted:
     if not path.exists():
         raise IngestionError(
             f"{document['filename']}'s stored copy is missing from {paths.CORPUS_DIR}. "
-            "The row survived but the bytes did not — delete the document and upload it again."
+            "The record is still there but the file is gone. Delete the document and upload it again."
         )
     return extraction.extract(path.read_bytes(), document["filename"])
 
@@ -269,8 +269,8 @@ def ingest(
     """
     if not _run_lock.acquire(blocking=False):
         raise IngestionError(
-            f"an ingest is already running ({_active['run_id']}). Wait for it to finish — "
-            "two runs over one document would race on its chunks."
+            f"an ingest is already running ({_active['run_id']}). Wait for it to finish, "
+            "because two runs on the same document would clash over its chunks."
         )
 
     run_id = corpus_store.new_id("run")
@@ -310,7 +310,7 @@ def _run(
         if document_ids is None or d["document_id"] in set(document_ids)
     ]
     if not documents:
-        raise IngestionError("no documents to ingest — upload one first")
+        raise IngestionError("no documents to ingest. Upload one first")
 
     corpus_store.start_run(
         run_id=run_id, kind=kind, strategy=strategy, chunk_size=size, chunk_overlap=overlap,
@@ -418,7 +418,7 @@ def _run(
             corpus_store.log(
                 run_id, "stamp",
                 f"could not stamp {collection_name}: {exc}. The index will be refused at query "
-                "time until it is stamped — re-run the ingest.",
+                "time until it is stamped. Run the ingest again.",
                 level="error",
             )
             failures.append("stamp")
@@ -450,7 +450,7 @@ def _embed_document(
     if collection is None:
         corpus_store.log(
             run_id, "embed",
-            f"{name}: chunks written but not embedded — the vector store is unreachable. "
+            f"{name}: chunks saved but not embedded, because the vector store can't be reached. "
             "Resume this run once it is back.",
             level="error", document_id=document_id,
         )
@@ -537,7 +537,7 @@ def resume(document_id: str | None = None) -> dict[str, Any]:
         pending = corpus_store.pending_chunks(document_id)
         if not pending:
             raise IngestionError(
-                "every chunk already has a vector — nothing to resume. Re-ingest if you "
+                "every chunk already has a vector, so there is nothing to resume. Re-ingest if you "
                 "want different chunk boundaries."
             )
 

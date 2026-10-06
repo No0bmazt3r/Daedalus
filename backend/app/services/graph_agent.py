@@ -279,5 +279,5 @@ def _fallback(query: str, limit: int, reason: str) -> dict[str, Any]:
     data = result.get("data") or {}
     if isinstance(data.get("path"), dict):
         data["path"]["stop_reason"] = reason
-    result["detail"] = f"{result.get('detail')} — fixed walk, the agent could not run ({reason})"
+    result["detail"] = f"{result.get('detail')}. Used the fixed walk because the agent could not run ({reason})"
     return result

@@ -208,8 +208,8 @@ def graph_traversal(query_id: str) -> dict[str, Any]:
             "available": False,
             "reason": (
                 f"no retrieval was recorded for {query_id}. The question was answered "
-                "from sensor tools alone, refused, or asked which time was meant — "
-                "none of which retrieves."
+                "from sensor tools alone, was refused, or needed a time clarified, "
+                "and none of those retrieve documents."
             ),
         }
 

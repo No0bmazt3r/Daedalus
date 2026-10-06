@@ -125,7 +125,7 @@ function IndexState({ config }: { config: EmbeddingConfig }) {
       <div className="flex items-start gap-2">
         <Icon size={13} className={`mt-0.5 shrink-0 ${tone.tint}`} />
         <p className="text-[11px] leading-relaxed theme-text">
-          <span className="theme-text-muted">index {config.index_state} — </span>
+          <span className="theme-text-muted">index {config.index_state}: </span>
           {config.index_detail}
         </p>
       </div>
@@ -157,7 +157,7 @@ function normaliseTag(tag: string): string {
 }
 
 function gb(bytes: number | null | undefined) {
-  return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : '—'
+  return bytes ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : '-'
 }
 
 /**
@@ -182,7 +182,7 @@ function FitSummary({ config }: { config: EmbeddingConfig }) {
         {fit.recommended.malay && fit.recommended.malay !== fit.recommended.english && (
           <> · for Malay questions <span className="theme-text">{pick(fit.recommended.malay)}</span></>
         )}
-        {fit.recommended.malay && fit.recommended.malay === fit.recommended.english && ' — multilingual, so it covers Malay too'}
+        {fit.recommended.malay && fit.recommended.malay === fit.recommended.english && ' (multilingual, so it covers Malay too)'}
         .
       </p>
     </div>
@@ -251,11 +251,11 @@ function EmbeddingPicker({
                   {models.find((m) => m.tag === config.fit.recommended.english)?.label ?? config.fit.recommended.english}
                 </>
               )}
-              . Changing it means re-embedding the corpus — the old index is kept, not lost.
+              . Changing it means re-embedding the corpus, but the old index is kept.
             </p>
           ) : current ? (
             <p className="text-[11px] leading-relaxed status-warn">
-              {current} is selected but not installed — pull it in The Forge, or choose another.
+              {current} is selected but not installed. Pull it in The Forge, or pick another.
             </p>
           ) : null}
         </>
@@ -413,14 +413,14 @@ export function EmbeddingModelsPane({
       <PaneIntro action={onChoose && <BrowseLink onClick={onChoose}>Choose in Settings → Vector RAG</BrowseLink>}>
         The embedding models on this machine. Verify one to measure its real vector width.
         Which one builds Track 1's index is chosen in Settings → Vector RAG, with the index's
-        state and the re-ranker. <span className="theme-text">Not the chat model</span> —
-        Track 2 uses none.
+        state and the re-ranker. <span className="theme-text">This is not the chat model.</span>
+        Track 2 doesn't use one.
       </PaneIntro>
       ) : (
       <>
       <PaneIntro action={onBrowse && <BrowseLink onClick={onBrowse}>Pull more in The Forge</BrowseLink>}>
         Which model turns document chunks into vectors for Track 1, once, at ingest.{' '}
-        <span className="theme-text">Not the chat model</span> — changing which model answers
+        <span className="theme-text">This is not the chat model.</span> Changing which model answers
         never touches the index. Changing <em>this</em> one means re-embedding the corpus.
       </PaneIntro>
 
@@ -598,12 +598,12 @@ export function EmbeddingModelsPane({
               baselines only</span>, and embeddings are a bigger exposure than a chat turn:
               embedding the corpus sends <span className="theme-text">every document</span> to a
               third party, and every later query must be embedded by the same model to be
-              comparable — so every question goes out too. There is no one-off cloud embedding.
+              comparable. That means every question goes out too. There is no one-off cloud embedding.
             </p>
             <p className="text-[11px] leading-relaxed theme-text-muted">
               A cloud selection writes its own collection, under a separate{' '}
               <code className="theme-text">daedalus_knowledge_cloud_baseline</code> prefix, and
-              cannot serve the local system — the runtime refuses it. Its index sits alongside
+              can't be used by the local system (the runtime blocks it). Its index sits alongside
               the local one rather than replacing it, which is what makes the two comparable.
             </p>
 
