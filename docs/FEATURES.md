@@ -1809,10 +1809,27 @@ gates the same thing at the same width. The stored width and collapsed flag are
 left untouched while compact, so widening the window restores exactly what the
 user had set.
 
-### Error pages — `components/ErrorPage.tsx`
+### Error pages — `components/errors/`
 
-One full-screen page for every HTTP error: 400, 401, 403, 404, 405, 409, 413,
-415, 422, 429, 500, 502, 503 and 504. It covers the whole window, sidebar
+| File | Holds |
+|---|---|
+| `codes/<code>.ts` | Everything about one code: name, title, myth and block lines, *what happened*, *what to try*, the picture, and its animation CSS (`css`) |
+| `catalogue.ts` | Finds every file in `codes/` by name (`import.meta.glob`), so adding `codes/<code>.ts` is all a new page needs |
+| `types.ts` | `ErrorInfo`, the shape each code file follows |
+| `ErrorPage.tsx` | The full-screen layout, and `statusOf()` |
+| `PixelArt.tsx` | Draws a picture; the colour letters (`COLOURS`) |
+| `animations.css` | The shared keyframes, and the reduced-motion rule |
+
+Only the shown code's `css` is injected, while its page is open.
+
+One full-screen page for every standard HTTP error code: all 40 registered 4xx
+and 5xx codes (400–418, 421–426, 428, 429, 431, 451, 500–508, 510, 511), each
+with its own picture, text and animation, so a page is ready whenever a feature
+starts returning one. Most will never appear here (418 is a joke code, 402 and
+451 have nothing to apply to); the ones that realistically can are 404, 409,
+413, 415, 422, 429, 500, 503, 504 and 507. A non-standard code (e.g. 499) shows
+its family's page (400 or 500) with its real number. Adding or changing one is
+one file, `codes/<code>.ts`. It covers the whole window, sidebar
 included (portalled to `<body>`, under the floating windows), with a large
 picture on the left and the text on the right, stacking on narrow screens, over
 a faint block grid. Each is themed half Daedalus (the labyrinth,
@@ -1838,13 +1855,16 @@ happened* and *what to try*. Buttons go back to the chat, back a page, or (for
 - **Status travels with the error.** `request()` in `lib/http.ts` attaches
   `status` to what it throws (`HttpError`): the response's code, 504 for a
   timeout, 503 when the backend cannot be reached. Messages are unchanged.
-- **Every picture is animated**, CSS only (`.pix-<code>` in `index.css`): the
+- **Every picture is animated**, CSS only (each code's `css`, on top of `animations.css`). Some
+  of them: the
   thread wiggles (400), the door rattles (401), you wander the maze (404), the
-  pickaxe swings (405), the blades clash (409), the wings flap under the chest
-  (413), the unknown block spins like a dropped item (415), the crafting grid
+  pickaxe swings (405), the torch burns out and relights (408), the blades
+  clash (409), a feather drifts onto the water (410), the wings flap under the
+  chest (413), the unknown block spins like a dropped item (415), the crafting grid
   lights slot by slot (422), the sun turns (429), the fire flickers (500), the
-  river flows under falling rubble (502), the anvil is struck and sparks (503),
-  and the hourglass flips (504). Each pixel carries its colour as a class and
+  scaffolding fills row by row (501), the river flows under falling rubble
+  (502), the anvil is struck and sparks (503), the hourglass flips (504), and
+  one more item bounces off a full chest (507). Each pixel carries its colour as a class and
   its grid position as `--x`/`--y`, so one part can move or an effect can ripple.
   `prefers-reduced-motion` shows them still.
 - 2xx and 3xx have no page: they are not errors.

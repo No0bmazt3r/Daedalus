@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ErrorPage } from '../components/ErrorPage'
+import { ErrorPage } from '../components/errors/ErrorPage'
 
 // `/error/404`, `/error/503`, … Any page can send the user here; an unknown or
 // non-numeric code shows the closest family page (4xx or 5xx).

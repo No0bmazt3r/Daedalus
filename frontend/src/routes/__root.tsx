@@ -19,7 +19,7 @@ import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { UiPrefsProvider, useUiPrefs } from '../contexts/UiPrefsContext'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
-import { ErrorPage, statusOf } from '../components/ErrorPage'
+import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 

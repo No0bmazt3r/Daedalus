@@ -1,0 +1,143 @@
+/* Shared motions for the error-page pictures. Each code's own rules live in
+   its file under codes/ and are injected only while that page is shown. */
+.pix { display: block; }
+
+.pix rect { transform-box: fill-box; transform-origin: center; }
+
+@keyframes pix-blink { 0%, 88%, 100% { transform: scaleY(1); } 93% { transform: scaleY(0.08); } }
+
+@keyframes pix-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-3px); opacity: 0; }
+}
+
+@keyframes pix-grow {
+  0% { transform: scale(0); opacity: 0; }
+  30%, 85% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes pix-wiggle-big { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+
+@keyframes pix-burnout {
+  0%, 15% { transform: scale(1); opacity: 1; }
+  70% { transform: scale(0.25); opacity: 0.3; }
+  80% { transform: scale(0); opacity: 0; }
+  92% { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pix-drift {
+  0% { transform: translate(0, -3px); opacity: 0; }
+  15% { opacity: 1; }
+  40% { transform: translate(1px, 0); }
+  65% { transform: translate(-1px, 2.5px); opacity: 1; }
+  85%, 100% { transform: translate(0, 3.5px); opacity: 0; }
+}
+
+@keyframes pix-build { 0% { opacity: 0; } 10%, 85% { opacity: 1; } 95%, 100% { opacity: 0; } }
+
+@keyframes pix-reject {
+  0% { transform: translateY(-3px); opacity: 0; }
+  20% { opacity: 1; }
+  45% { transform: translateY(1px); }
+  60% { transform: translateY(-1.5px); }
+  75% { transform: translateY(0.5px); opacity: 1; }
+  100% { transform: translateY(-3px); opacity: 0; }
+}
+
+@keyframes pix-wiggle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.4px); } }
+
+@keyframes pix-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+@keyframes pix-glint { 0%, 70%, 100% { opacity: 1; } 75% { opacity: 0.2; } 85% { opacity: 1; } 90% { opacity: 0.2; } }
+
+@keyframes pix-rattle {
+  0%, 78%, 100% { transform: translateX(0); }
+  82% { transform: translateX(-6px) rotate(-1deg); }
+  86% { transform: translateX(6px) rotate(1deg); }
+  90% { transform: translateX(-4px); }
+  94% { transform: translateX(3px); }
+}
+
+/* One cell per step along the open corridor of row 9. */
+
+@keyframes pix-wander {
+  0% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  25% { transform: translateX(-5px); }
+  55% { transform: translateX(4px); }
+  65% { transform: translateX(4px); }
+  85% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes pix-swing {
+  0%, 100% { transform: rotate(-22deg); }
+  45% { transform: rotate(14deg); }
+  52% { transform: rotate(8deg); }
+  58% { transform: rotate(12deg); }
+}
+
+@keyframes pix-clash {
+  0%, 40%, 100% { transform: scale(1); }
+  46% { transform: scale(1.08) translateX(-3px); }
+  52% { transform: scale(0.98) translateX(3px); }
+  58% { transform: scale(1.02); }
+}
+
+@keyframes pix-heavy {
+  0%, 100% { transform: translateY(0); }
+  55% { transform: translateY(-12px); }
+  70% { transform: translateY(2px); }
+  80% { transform: translateY(0); }
+}
+
+@keyframes pix-flap { from { transform: scaleY(1); } to { transform: scaleY(0.35); } }
+
+@keyframes pix-item {
+  0% { transform: perspective(600px) rotateY(0deg) translateY(0); }
+  50% { transform: perspective(600px) rotateY(180deg) translateY(-14px); }
+  100% { transform: perspective(600px) rotateY(360deg) translateY(0); }
+}
+
+@keyframes pix-spin { to { transform: rotate(360deg); } }
+
+@keyframes pix-blaze { from { transform: scaleY(1) scaleX(1); } to { transform: scaleY(1.05) scaleX(0.97); } }
+
+@keyframes pix-flicker { 0% { opacity: 1; } 50% { opacity: 0.55; } 100% { opacity: 0.9; } }
+
+@keyframes pix-flow { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(0.6px); } }
+
+@keyframes pix-fall {
+  0% { transform: translateY(0); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(5px); opacity: 0; }
+}
+
+@keyframes pix-strike {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  40% { transform: translateY(-10px) scaleY(1); }
+  50% { transform: translateY(0) scaleY(0.92); }
+  60% { transform: translateY(0) scaleY(1); }
+}
+
+@keyframes pix-spark {
+  0%, 45% { opacity: 0; transform: translateY(0) scale(1); }
+  52% { opacity: 1; transform: translateY(-0.5px) scale(1.3); }
+  80% { opacity: 0; transform: translateY(-1.5px) scale(0.6); }
+  100% { opacity: 0; }
+}
+
+@keyframes pix-flip {
+  0%, 40% { transform: rotate(0deg); }
+  50%, 90% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Still pictures for anyone who has asked their system for less motion. */
+
+@media (prefers-reduced-motion: reduce) {
+  .pix, .pix * { animation: none !important; }
+}

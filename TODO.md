@@ -812,14 +812,14 @@ Layer 9 below for the per-step detail.
 - [x] **Half-snapped windows tile beside the chat** *(2026-10-06)* — no
       backdrop, the app shell shrinks into the other half and the sidebar folds
       (restored on unsnap). `useTiledInset()` in `ui/floating-window.tsx`
-- [x] **Error pages** *(2026-10-06)* — 14 HTTP codes, Daedalus × block-built
+- [x] **Error pages** *(2026-10-06)* — all 40 standard 4xx/5xx codes (non-standard ones fall back to their family page), Daedalus × block-built
       theme with pixel art in theme colours, plain *what happened / what to
       try*. Full-screen. Router 404 and crash pages, a 503 page while the
       backend is down (`hooks/useBackendDown.ts`, polls `/api/health`), the
       `/error/<code>` route (preview row there only, dev only), `HttpError`
       status on `request()` failures. Each picture has its own CSS loop
-      (`.pix-<code>`), still under `prefers-reduced-motion`.
-      `components/ErrorPage.tsx`
+      (`.pix-<code>`), still under `prefers-reduced-motion`. One file per
+      code in `components/errors/codes/`, auto-discovered by `catalogue.ts`
 - [x] **Code-split the floating windows.** Forge, Blueprints, Settings, Theme,
       Store and the command palette are `React.lazy` chunks
       (`components/LazyWindows.tsx`, `lib/windowLoaders.ts`), each mounted the
