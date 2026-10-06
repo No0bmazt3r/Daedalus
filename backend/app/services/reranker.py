@@ -84,7 +84,7 @@ from pathlib import Path
 from typing import Any
 
 from ..db import paths
-from . import fit_verdict
+from . import fit_verdict, live_events
 
 log = logging.getLogger("daedalus.reranker")
 
@@ -429,8 +429,15 @@ def download(model_id: str) -> bool:
             return False
         _downloads[model_id] = {"status": "downloading", "bytes": 0,
                                 "total": CATALOGUE[model_id]["size_bytes"], "error": None}
-    threading.Thread(target=_download, args=(model_id,), name=f"rerank-dl-{model_id}", daemon=True).start()
+    threading.Thread(target=_download_and_announce, args=(model_id,), name=f"rerank-dl-{model_id}", daemon=True).start()
     return True
+
+
+def _download_and_announce(model_id: str) -> None:
+    try:
+        _download(model_id)
+    finally:
+        live_events.publish("rag")
 
 
 def _download(model_id: str) -> None:

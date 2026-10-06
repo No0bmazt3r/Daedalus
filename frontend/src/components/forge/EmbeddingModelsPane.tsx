@@ -12,7 +12,7 @@ import {
 import { Skeleton } from '../ui/skeleton'
 import { ThemeSelect } from '../ui/theme-select'
 import { deleteModel } from '../../lib/forgeClient'
-import { EmbeddingRow } from './EmbeddingRow'
+import { EmbeddingRow, PullBar, type PullStatus } from './EmbeddingRow'
 import { PaneIntro, BrowseLink, SectionLabel, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 
@@ -282,7 +282,7 @@ export function EmbeddingModelsPane({
   const [config, setConfig] = useState<EmbeddingConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pullingTag, setPullingTag] = useState<string | null>(null)
-  const [progress, setProgress] = useState<string | null>(null)
+  const [progress, setProgress] = useState<PullStatus | null>(null)
   const [showCloud, setShowCloud] = useState(false)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [benchmarking, setBenchmarking] = useState<string | null>(null)
@@ -334,9 +334,11 @@ export function EmbeddingModelsPane({
     setNotice(null)
     const stream = pullEmbeddingModel(tag, (e) => {
       if (e.error) setError(e.error)
-      else if (e.total && e.completed) {
-        setProgress(`${Math.round((e.completed / e.total) * 100)}%`)
-      } else if (e.status) setProgress(e.status)
+      else if (e.total) {
+        // Ollama names each layer "pulling <digest>"; the hash means nothing to a person.
+        const completed = e.completed ?? 0
+        setProgress({ label: `${Math.round((completed / e.total) * 100)}%`, completed, total: e.total })
+      } else if (e.status) setProgress({ label: e.status })
     })
     stream.done
       .catch((e: Error) => setError(e.message))
@@ -413,7 +415,7 @@ export function EmbeddingModelsPane({
       <PaneIntro action={onChoose && <BrowseLink onClick={onChoose}>Choose in Settings → Vector RAG</BrowseLink>}>
         The embedding models on this machine. Verify one to measure its real vector width.
         Which one builds Track 1's index is chosen in Settings → Vector RAG, with the index's
-        state and the re-ranker. <span className="theme-text">This is not the chat model.</span>
+        state and the re-ranker. <span className="theme-text">This is not the chat model.</span>{' '}
         Track 2 doesn't use one.
       </PaneIntro>
       ) : (
@@ -487,10 +489,12 @@ export function EmbeddingModelsPane({
             className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border theme-border theme-text-muted hover:theme-text transition-colors disabled:opacity-40"
           >
             {pullingTag === typedTag.trim() && pullingTag
-              ? <><Loader2 size={12} className="animate-spin" />{progress ?? 'pulling…'}</>
+              ? <><Loader2 size={12} className="animate-spin" />{progress?.label ?? 'pulling…'}</>
               : <><Download size={12} />Pull</>}
           </button>
         </div>
+
+        {pullingTag && pullingTag === typedTag.trim() && <PullBar progress={progress} className="mt-2" />}
 
         {notice && (
           <div className="flex items-start gap-2 p-2.5 rounded-lg border status-warn-border status-warn-bg text-[11px]">

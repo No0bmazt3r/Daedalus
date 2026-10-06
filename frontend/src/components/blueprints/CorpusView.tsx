@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import { FileText, AlertCircle, Search, ChevronRight, Database } from 'lucide-react'
 import {
   fetchCorpusStatus, fetchCorpusDocuments, fetchDocumentChunks,
@@ -110,12 +111,14 @@ export function CorpusView() {
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     void fetchCorpusStatus().then(setStatus).catch(() => setStatus(null))
     void fetchCorpusDocuments()
       .then((r) => setDocuments(r.documents))
       .catch((e: Error) => { setDocuments([]); setError(e.message) })
   }, [])
+  useEffect(reload, [reload])
+  useLiveRefresh(['corpus'], reload)
 
   const load = useCallback((id: string) => {
     setSelected(id)

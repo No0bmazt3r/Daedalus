@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Map, Network, ListChecks, Route, Library, Boxes, RefreshCw, AlertCircle,
   PenLine, Upload,
@@ -318,6 +319,18 @@ export function BlueprintsWindow({
     loadTraces()
     loadConfig(requestedTab)
   }, [open, requestedTab, loadTraces, loadConfig])
+
+  // Live: keep the badge and readiness current, and only move the tab if the track itself changed.
+  useLiveRefresh(['rag', 'corpus', 'embeddings'], () => {
+    if (!open) return
+    fetchRagConfig()
+      .then((c) => {
+        if (config && config.track !== c.track) show(c.track)
+        setConfigError(null)
+        setConfig(c)
+      })
+      .catch(() => undefined)
+  })
 
   // Two more ways the track changes while this window is not looking.
   //

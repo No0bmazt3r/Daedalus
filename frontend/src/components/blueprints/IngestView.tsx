@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Upload, FileText, Trash2, Play, RotateCcw, AlertCircle, AlertTriangle, Check,
   Loader2, Eraser, ChevronRight, Scissors, Cpu, Hammer, ArrowUpRight,
@@ -10,7 +11,7 @@ import {
   type CorpusStatus, type CorpusDocument, type CorpusConfig, type ChunkPreview, type DocumentOrigin,
   type IngestRun, type IngestEvent,
 } from '../../lib/blueprintsClient'
-import { fetchEmbeddingConfig, type EmbeddingConfig } from '../../lib/embeddingsClient'
+import { fetchEmbeddingConfig, setEmbeddingModel, type EmbeddingConfig } from '../../lib/embeddingsClient'
 import { Skeleton } from '../ui/skeleton'
 import { StepRail, StepFooter, type Step } from '../ui/stepper'
 import { ThemeSelect } from '../ui/theme-select'
@@ -523,6 +524,7 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
     fetchEmbeddingConfig().then(setConfig).catch((e: Error) => setError(e.message))
   }, [])
   useEffect(() => { load() }, [load])
+  useLiveRefresh(['models', 'embeddings'], load)
 
   if (error && !config) {
     return (
@@ -532,6 +534,17 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
     )
   }
   if (!config) return <Skeleton className="h-48 w-full" />
+
+  // Choosing is still an explicit click, so nothing is defaulted behind your back.
+  const choose = async (tag: string) => {
+    setError(null)
+    try {
+      setConfig(await setEmbeddingModel({ provider: 'local', model: tag }))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+  const installedModels = config.local_models.filter((m) => m.installed)
 
   const chosen = (config.model || '').trim()
   const selected = config.local_models.find((m) => m.tag === chosen)
@@ -570,6 +583,20 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
                   it builds and changing it afterwards invalidates every vector, so this is picked
                   rather than defaulted. The run won't start until you choose one.
                 </p>
+                {installedModels.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {installedModels.map((m) => (
+                      <button
+                        key={m.tag}
+                        onClick={() => void choose(m.tag)}
+                        className="flex items-center gap-1.5 rounded-md border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
+                      >
+                        <Check size={11} /> Use {m.label ?? m.tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {error && <p className="mt-1.5 text-[10px] text-rose-400">{error}</p>}
               </>
             ) : (
               <>
@@ -846,6 +873,7 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
+  useLiveRefresh(['corpus'], refresh)
 
   // A run is a server-side job that outlives this component, so on mount we
   // adopt whatever is already going — and jump to the step that shows it,

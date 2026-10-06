@@ -28,6 +28,13 @@ import { Collapse } from '../ui/collapse'
  * that flag was added to prevent.
  */
 
+/** One pull's state: `label` for the button, bytes for the bar once Ollama reports a size. */
+export interface PullStatus {
+  label: string
+  completed?: number
+  total?: number
+}
+
 function bytes(n: number | null | undefined): string {
   if (!n) return '-'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -97,6 +104,24 @@ const VERDICT = {
  * `onManage` instead, so an installed model points to where it is managed
  * rather than repeating those controls.
  */
+/** A pull's progress: fills once Ollama reports a size, pulses until then. */
+export function PullBar({ progress, className = '' }: { progress: PullStatus | null; className?: string }) {
+  return (
+    <div className={className}>
+      <div className="h-1.5 rounded-full theme-track overflow-hidden">
+        <div
+          className={`h-full rounded-full theme-bg-primary transition-[width] duration-300 ${progress?.total ? '' : 'animate-pulse'}`}
+          style={{ width: progress?.total ? `${((progress.completed ?? 0) / progress.total) * 100}%` : '100%' }}
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] theme-text-muted tabular-nums">
+        <span>{progress?.total ? 'Downloading' : (progress?.label ?? 'Starting…')}</span>
+        {progress?.total && <span>{progress.completed ? bytes(progress.completed) : '0 MB'} of {bytes(progress.total)} · {progress.label}</span>}
+      </div>
+    </div>
+  )
+}
+
 export function EmbeddingRow({
   model, selected, pulling, progress, onPull, onVerify, verifying = false, onSelect, onManage,
   onBenchmark, benchmarking = false, onDelete, deleting = false,
@@ -104,7 +129,7 @@ export function EmbeddingRow({
   model: EmbeddingModel
   selected: boolean
   pulling: boolean
-  progress: string | null
+  progress: PullStatus | null
   onPull: () => void
   onVerify?: () => void
   verifying?: boolean
@@ -197,6 +222,7 @@ export function EmbeddingRow({
           {model.fit.reasons.length > 0 && (
             <p className={`mt-1.5 text-[10px] leading-relaxed ${verdict.tone}`}>{model.fit.reasons.join(' · ')}</p>
           )}
+          {pulling && <PullBar progress={progress} className="mt-2.5" />}
         </div>
 
         <div className="shrink-0 flex items-center gap-1.5">
@@ -266,7 +292,7 @@ export function EmbeddingRow({
               className="inline-flex items-center gap-1.5 rounded-lg border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text disabled:opacity-40"
             >
               {pulling
-                ? <><RefreshCw size={11} className="animate-spin" />{progress ?? 'pulling…'}</>
+                ? <><RefreshCw size={11} className="animate-spin" />{progress?.label ?? 'pulling…'}</>
                 : <><Download size={11} />Pull</>}
             </button>
           )}

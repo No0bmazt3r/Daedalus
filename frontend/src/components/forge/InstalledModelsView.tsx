@@ -280,14 +280,16 @@ function LocalModel({
  * tabs are: chat models (local, with the cloud baselines beside them),
  * embedding models, and re-rankers. Each browse tab has its managing half here.
  */
-type PaneId = 'chat' | 'embedding' | 'rerankers'
+export type PaneId = 'chat' | 'embedding' | 'rerankers'
 type ChatSource = 'local' | 'cloud'
 type TierFilter = 'all' | 'slm' | 'llm'
 
 export function InstalledModelsView({
-  isPeek, onBrowseChat, onBrowseEmbeddings, onChooseEmbedding, onBrowseRerankers,
+  isPeek, onBrowseChat, onBrowseEmbeddings, onChooseEmbedding, onBrowseRerankers, initialPane = 'chat',
 }: {
   isPeek: boolean
+  /** Which list to open on: Manage on a browse card lands on that model's own list. */
+  initialPane?: PaneId
   /** Where the index's embedding model is chosen — Settings → Vector RAG. */
   onChooseEmbedding?: () => void
   /** Where to go to find and pull a chat model. Absent outside the Forge. */
@@ -296,7 +298,7 @@ export function InstalledModelsView({
   /** Where to find and download a re-ranker. Absent outside the Forge. */
   onBrowseRerankers?: () => void
 }) {
-  const [pane, setPane] = useState<PaneId>('chat')
+  const [pane, setPane] = useState<PaneId>(initialPane)
   const [source, setSource] = useState<ChatSource>('local')
   const [rerankerCount, setRerankerCount] = useState(0)
   const [tier, setTier] = useState<TierFilter>('all')
@@ -337,7 +339,7 @@ export function InstalledModelsView({
   }, [load])
   // Deleting here updates at once through `load`; this covers everything else —
   // a pull in Chat models, or a model removed from a terminal.
-  useLiveRefresh(['models'], () => void load())
+  useLiveRefresh(['models', 'embeddings', 'rag'], () => void load())
 
   const { slm, llm, visible } = useMemo(() => {
     const all = rows ?? []

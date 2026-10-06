@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, ArrowUpRight,
   ListOrdered, Route,
@@ -115,9 +116,10 @@ function TrackCard({
 function useRagConfig() {
   const [config, setConfig] = useState<RagConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    fetchRagConfig().then(setConfig).catch((e: Error) => setError(e.message))
-  }, [])
+  const load = () => { fetchRagConfig().then(setConfig).catch((e: Error) => setError(e.message)) }
+  useEffect(load, [])
+  // Readiness depends on the corpus and the embedding model too, not just this config.
+  useLiveRefresh(['rag', 'corpus', 'embeddings'], load)
   return { config, setConfig, error, setError }
 }
 

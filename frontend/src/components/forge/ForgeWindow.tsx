@@ -4,7 +4,7 @@ import { FloatingWindow } from '../ui/floating-window'
 import { HardwareView } from './HardwareView'
 import { ModelsView } from './ModelsView'
 import { EmbeddingModelsPane } from './EmbeddingModelsPane'
-import { InstalledModelsView } from './InstalledModelsView'
+import { InstalledModelsView, type PaneId } from './InstalledModelsView'
 import { RerankersPane } from './RerankersPane'
 import { MarqueeText } from '../ui/marquee-text'
 
@@ -73,6 +73,8 @@ export function ForgeWindow({
   requestedTab?: ForgeTab | null
 }) {
   const [tab, setTab] = useState<TabId>(requestedTab ?? 'hardware')
+  const [installedPane, setInstalledPane] = useState<PaneId>('chat')
+  const manage = (pane: PaneId) => () => { setInstalledPane(pane); setTab('installed') }
   // A new request (or the same one after the window was closed) moves the tab.
   // Adjusted during render rather than in an effect, so the window never paints
   // one frame on the old tab first.
@@ -159,16 +161,17 @@ export function ForgeWindow({
               {tab === 'installed' && (
                 <InstalledModelsView
                   isPeek={isPeek}
+                  initialPane={installedPane}
                   onBrowseChat={() => setTab('chat')}
                   onBrowseEmbeddings={() => setTab('embedding')}
                   onBrowseRerankers={() => setTab('rerankers')}
                   onChooseEmbedding={onOpenSettings ? () => onOpenSettings('vector-rag') : undefined}
                 />
               )}
-              {tab === 'chat' && <ModelsView onManage={() => setTab('installed')} />}
-              {tab === 'rerankers' && <RerankersPane mode="browse" onManage={() => setTab('installed')} />}
+              {tab === 'chat' && <ModelsView onManage={manage('chat')} />}
+              {tab === 'rerankers' && <RerankersPane mode="browse" onManage={manage('rerankers')} />}
               {tab === 'embedding' && (
-                <EmbeddingModelsPane mode="browse" onManage={() => setTab('installed')} />
+                <EmbeddingModelsPane mode="browse" onManage={manage('embedding')} />
               )}
             </div>
           </div>

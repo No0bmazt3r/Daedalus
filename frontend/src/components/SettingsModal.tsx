@@ -17,6 +17,7 @@ import {
   type SettingsPanel,
 } from '../lib/settingsRegistry'
 import { fetchRagConfig, RAG_TRACK_CHANGED_EVENT, type RagTrack } from '../lib/blueprintsClient'
+import { subscribe } from '../lib/liveEvents'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/KnowledgeBasePanel'
 import { SearchPanel } from './settings/SearchPanel'
@@ -63,7 +64,12 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
       if (next) setTrack(next)
     }
     window.addEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+    // Another tab or window changing the track arrives as a live event instead.
+    const unsubscribe = subscribe(['rag'], () => {
+      fetchRagConfig().then((c) => { if (!cancelled) setTrack(c.track) }).catch(() => undefined)
+    })
     return () => {
+      unsubscribe()
       cancelled = true
       window.removeEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
     }

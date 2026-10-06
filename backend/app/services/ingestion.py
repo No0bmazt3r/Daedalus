@@ -48,7 +48,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from ..db import corpus_store, paths, vector_store
-from . import chunking, corpus_config, embedding_models, extraction, ollama_client
+from . import chunking, corpus_config, embedding_models, extraction, live_events, ollama_client
 
 # How many chunks to embed between progress writes. Small enough that the UI
 # moves, large enough that the run is not dominated by SQLite round trips.
@@ -280,6 +280,7 @@ def ingest(
     finally:
         _active["run_id"] = None
         _run_lock.release()
+        live_events.publish("corpus")
 
 
 def _run(
@@ -598,6 +599,7 @@ def resume(document_id: str | None = None) -> dict[str, Any]:
     finally:
         _active["run_id"] = None
         _run_lock.release()
+        live_events.publish("corpus")
 
 
 def clear_vectors() -> dict[str, Any]:

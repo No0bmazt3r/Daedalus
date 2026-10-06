@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   AlertTriangle, CircleAlert, CircleCheck, CircleSlash, Download, Gauge, Loader2, Sparkles, Trash2,
 } from 'lucide-react'
@@ -67,6 +68,7 @@ export function RerankersPane({
   useEffect(() => {
     void load()
   }, [load])
+  useLiveRefresh(['rag'], () => void load())
 
   // While a download runs, re-read until it lands. The backend does the work
   // on its own thread; this only watches.

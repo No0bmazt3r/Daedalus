@@ -122,6 +122,22 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+# Any successful write under these prefixes tells every open view to re-read,
+# so a change made in one window shows in all the others straight away.
+_WRITE_TOPICS = (("/api/corpus", "corpus"), ("/api/rag", "rag"))
+
+
+@app.middleware("http")
+async def publish_writes(request, call_next):
+    response = await call_next(request)
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and response.status_code < 400:
+        for prefix, topic in _WRITE_TOPICS:
+            # Preview is a POST only because it takes a body; it changes nothing.
+            if request.url.path.startswith(prefix) and request.url.path != "/api/corpus/preview":
+                live_events.publish(topic)
+    return response
+
+
 app.include_router(health.router)
 app.include_router(prefs.router)
 app.include_router(sessions.router)
