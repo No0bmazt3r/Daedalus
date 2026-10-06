@@ -25,8 +25,8 @@ build when it does not.
 every layer uses it: the composer's model list (`GET /api/system/models`)
 leaves embedders out, `inference.choose_model` refuses an override to one and
 answers with the configured model, and `model_config` refuses to pin one. An
-embedder is chosen only in Settings → Vector RAG, or from the one-click list
-in Blueprints → Build → Embedding, which sends the same request. Guarded by
+embedder is chosen only in Settings → Vector RAG, or from the dropdown in
+Blueprints → Build → Embedding, which sends the same request. Guarded by
 `tests/test_chat_models_only.py`.
 
 Chat models have a richer scorer because they are the expensive part: weights

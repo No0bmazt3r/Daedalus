@@ -411,7 +411,9 @@ export function ChatInterface() {
   return (
     <div className="flex-1 flex flex-col theme-text relative w-full h-full transition-colors duration-200">
     <TooltipProvider delay={200}>
-      <div className="absolute top-4 right-6 flex items-center gap-3 z-50">
+      {/* In the layout flow, not floating: when minimized windows wrap onto a
+          second row, the chat moves down instead of scrolling underneath. */}
+      <div className="relative z-50 shrink-0 flex items-start justify-end gap-3 px-6 pt-4">
         {/* Minimized windows land here, to the left of the incognito toggle.
             `FloatingWindow` portals into this node by id; see `getDock` there.
             An existing, always-visible control cluster beats a floating bar:
@@ -498,7 +500,7 @@ export function ChatInterface() {
             {/* pt-20 clears the control cluster pinned at top-4: the incognito
                 toggle is always there, and minimized-window chips sit beside
                 it, so the first message has to start below both. */}
-            <div className={`flex flex-col pt-20 px-4 gap-6 pb-10 ${columnWidth}`}>
+            <div className={`flex flex-col pt-4 px-4 gap-6 pb-10 ${columnWidth}`}>
               {messages.map((msg) => (
                 <div key={msg.key} className={`flex w-full group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (

@@ -24,7 +24,7 @@ Everything below was read off the source, not from memory.
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
 | Hardware detection | Built — background-scheduled, in the Forge → Hardware. Container-aware, with GPU passthrough layered on where the host has one |
-| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs — everything about models and the machine (the rule is in §6): Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed — split the same way: Chat models (Local · Cloud baselines), Embedding models (verify), Re-rankers (benchmark, delete); the Re-rankers browse tab shows a downloaded model as *Manage*. Which embedding model builds the index and which re-ranker runs are chosen in Settings → Vector RAG, whose *Open The Forge* buttons land on the right tab; an installed embedder can also be chosen with one click from Blueprints → Build → Embedding. *Manage* on a browse card opens Installed on that model's own list. Pulls show a progress bar, and every delete asks through the app's own dialog |
+| The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs — everything about models and the machine (the rule is in §6): Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed — split the same way: Chat models (Local · Cloud baselines), Embedding models (verify), Re-rankers (benchmark, delete); the Re-rankers browse tab shows a downloaded model as *Manage*. Which embedding model builds the index and which re-ranker runs are chosen in Settings → Vector RAG, whose *Open The Forge* buttons land on the right tab; an installed embedder can also be chosen or switched from the dropdown in Blueprints → Build → Embedding. *Manage* on a browse card opens Installed on that model's own list. Pulls show a progress bar, and every delete asks through the app's own dialog |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
@@ -621,9 +621,8 @@ back to the config only when Chroma cannot be reached:
 vectors" and "a note kept beside them" are different claims.
 
 **Choosing, pulling and deleting.** Nothing is selected by default: a pulled
-model is installed, not chosen. You choose in Settings → Vector RAG, or with one
-click from Blueprints → Build → Embedding, which lists every installed embedder
-when none is selected. Both send the same `PUT /api/embeddings/config`. A pull
+model is installed, not chosen. You choose in Settings → Vector RAG, or from the
+dropdown in Blueprints → Build → Embedding, which lists every installed embedder. Both send the same `PUT /api/embeddings/config`. A pull
 stores the model in Ollama on this machine until it is deleted, and the card
 shows a progress bar while it downloads. Deleting removes it from Ollama and
 forgets its benchmark and verified width (`forget_measurements`), so pulling it

@@ -695,8 +695,9 @@ chunk settings against the preview is inherently repetitive; going *forward* is
 gated, and the rail says why rather than just disabling itself.
 
 Step 3 **reports** the embedding model and hands management off to the Forge.
-When none is selected it also lists each installed embedder as a one-click
-*Use <model>*: choosing stays an explicit act, it is just not a trip to Settings.
+It also has a dropdown of every installed embedder, so choosing or switching is
+not a trip to Settings. Choosing stays an explicit act: nothing is defaulted, and
+switching builds a separate index while the old one is kept.
 It
 is a step rather than a footnote because it is the only choice in the flow that
 is irreversible with respect to the work — the model is stamped onto the index it

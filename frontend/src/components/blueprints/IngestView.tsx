@@ -583,20 +583,6 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
                   it builds and changing it afterwards invalidates every vector, so this is picked
                   rather than defaulted. The run won't start until you choose one.
                 </p>
-                {installedModels.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {installedModels.map((m) => (
-                      <button
-                        key={m.tag}
-                        onClick={() => void choose(m.tag)}
-                        className="flex items-center gap-1.5 rounded-md border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
-                      >
-                        <Check size={11} /> Use {m.label ?? m.tag}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {error && <p className="mt-1.5 text-[10px] text-rose-400">{error}</p>}
               </>
             ) : (
               <>
@@ -624,6 +610,28 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
         </div>
       </div>
 
+      {/* Any installed embedder can be picked or swapped here. Swapping is safe:
+          each model owns its own collection, so the old index is kept. */}
+      {installedModels.length > 0 && (
+        <div>
+          <ThemeSelect
+            size="sm"
+            label="Embedding model"
+            value={installed ? chosen : ''}
+            onChange={(tag) => { if (tag && tag !== chosen) void choose(tag) }}
+            options={[
+              ...(installed ? [] : [{ value: '', label: 'Choose an installed model…' }]),
+              ...installedModels.map((m) => ({ value: m.tag, label: `${m.label} (${m.tag})` })),
+            ]}
+          />
+          <p className="mt-1 text-[10px] leading-relaxed theme-text-muted">
+            Switching builds a separate index for the new model. The old one is kept, so switching
+            back costs nothing.
+          </p>
+          {error && <p className="mt-1 text-[10px] text-rose-400">{error}</p>}
+        </div>
+      )}
+
       <dl className="grid gap-2 @2xl:grid-cols-2">
         {([
           ['Index it builds', config.collection || 'none until a model is chosen'],
@@ -640,8 +648,8 @@ function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
       <div className="flex flex-wrap items-center gap-2 rounded-lg border theme-border theme-card p-2.5">
         <Cpu size={13} className="shrink-0 theme-text-muted" />
         <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text-muted">
-          Pulling a model, switching to a different one, or checking what it costs on this hardware
-          happens in the Forge. This step just shows what the run will use.
+          Pulling a new model or checking what it costs on this hardware happens in the Forge.
+          Pick between the ones already installed above.
         </p>
         {onOpenForge && (
           <button

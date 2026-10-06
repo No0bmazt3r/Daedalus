@@ -120,7 +120,7 @@ export function ConfirmDialog({
         <div className="text-xs theme-text-muted leading-relaxed">{body}</div>
 
         {requireTyped && (
-          <label className="block mt-4 text-left">
+          <label className="block mt-4">
             <span className="text-[11px] theme-text-muted">
               Type <code className="font-semibold theme-text">{requireTyped}</code> to confirm
             </span>
@@ -131,9 +131,10 @@ export function ConfirmDialog({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && unlocked && !busy) onConfirm()
               }}
+              placeholder={requireTyped}
               autoComplete="off"
               spellCheck={false}
-              className="mt-1 w-full px-2.5 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-xs font-mono outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--status-bad)_55%,transparent)]"
+              className="mt-1.5 w-full text-center tracking-widest placeholder:opacity-30 px-2.5 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-xs font-mono outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--status-bad)_55%,transparent)]"
             />
           </label>
         )}

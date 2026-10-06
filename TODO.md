@@ -789,9 +789,9 @@ Layer 9 below for the per-step detail.
             and under the pull-by-name box. The pane was reading `total` /
             `completed`, but the backend sends `total_bytes` / `completed_bytes`,
             so it only ever showed the raw "pulling <digest>" status
-      - [x] Blueprints → Build → Embedding offers a one-click *Use <model>* for
-            each installed embedder when none is selected. Still an explicit
-            choice, never a default
+      - [x] Blueprints → Build → Embedding has a dropdown of every installed
+            embedder, to choose or switch without going to Settings. Still an
+            explicit choice, never a default
       - [x] *Manage* on a browse card opens Installed on that model's own list
             (chat, embedding or re-ranker), not always Chat models
       - [x] Deleting an embedding model also forgets its verified width
