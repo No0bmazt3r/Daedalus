@@ -1820,7 +1820,9 @@ user had set.
 | `PixelArt.tsx` | Draws a picture; the colour letters (`COLOURS`) |
 | `animations.css` | The shared keyframes, and the reduced-motion rule |
 
-Only the shown code's `css` is injected, while its page is open.
+Only the shown code's `css` is injected, while its page is open. The full list
+of pages and a guide to tweaking their animations is in
+[`ERROR_PAGES.md`](ERROR_PAGES.md).
 
 One full-screen page for every standard HTTP error code: all 40 registered 4xx
 and 5xx codes (400–418, 421–426, 428, 429, 431, 451, 500–508, 510, 511), each

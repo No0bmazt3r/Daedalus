@@ -20,6 +20,7 @@ over anything else here.
 | Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
 | Run it | [`../README.md`](../README.md) |
 | Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |
+| See every error page, or tweak a picture or its animation | [`ERROR_PAGES.md`](ERROR_PAGES.md) |
 | Know what this project borrowed, and from whom | [`../ACKNOWLEDGMENTS.md`](../ACKNOWLEDGMENTS.md) |
 
 ## Precedence — read this before trusting any file
