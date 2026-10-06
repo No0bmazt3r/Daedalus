@@ -549,6 +549,21 @@ body.theme-frosted [data-slot='menu-popup'] {
   border-color: color-mix(in srgb, var(--text-main) 22%, transparent) !important;
 }
 
+/* ── Confirm dialog ──
+   Still glass, but mostly opaque and built on the theme's own card colour, so
+   its text reads on every theme, light ones included. */
+.confirm-glass {
+  background-color: color-mix(in srgb, var(--card, var(--bg)) 90%, transparent) !important;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text-main, #fff) 10%, transparent) 0%,
+    transparent 45%
+  );
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-color: color-mix(in srgb, var(--text-main) 20%, transparent) !important;
+}
+
 /* ── Sliders in the theme modal ── */
 input[type='range'].theme-range {
   -webkit-appearance: none;

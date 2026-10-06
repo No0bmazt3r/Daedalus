@@ -1626,8 +1626,11 @@ Layer 9 below for the per-step detail.
       to happen, and cannot ask for anything to be typed. The audit log and
       *everything* require typing `DELETE`: two clicks can be muscle memory
       - [x] The Forge's deletes (chat model, embedding model, re-ranker) use the
-            same dialog through `useConfirm()` in `ui/confirm-dialog.tsx`. No
-            `window.confirm` is left in the frontend *(2026-10-06)*
+            same dialog through `useConfirm()` in `ui/confirm-dialog.tsx`, and
+            require typing `DELETE`. No `window.confirm` is left in the frontend.
+            The panel is mostly opaque glass on the theme's card colour
+            (`.confirm-glass`), since the old 5% tint was unreadable on light
+            themes *(2026-10-06)*
 - [x] **SearXNG can be started and stopped from Settings → Search**, when a
       Docker socket is mounted into the backend. **Off by default**, and that is
       a position: a process that can reach the socket can do anything Docker can

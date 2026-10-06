@@ -107,60 +107,56 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className="relative w-full max-w-md rounded-xl border theme-border theme-surface shadow-2xl p-5 animate-in zoom-in-95 duration-150"
+        className="relative w-full max-w-sm rounded-2xl border confirm-glass shadow-2xl px-6 pt-6 pb-5 text-center animate-in zoom-in-95 duration-150"
       >
-        <div className="flex items-start gap-3">
-          {danger && <AlertTriangle size={18} className="status-bad shrink-0 mt-0.5" />}
-          <div className="min-w-0 flex-1">
-            <h3
-              id="confirm-dialog-title"
-              className={`text-sm font-medium mb-1 ${danger ? 'status-bad' : 'theme-text'}`}
-            >
-              {title}
-            </h3>
-            <div className="text-xs theme-text-muted leading-relaxed">{body}</div>
-
-            {requireTyped && (
-              <label className="block mt-3">
-                <span className="text-[11px] theme-text-muted">
-                  Type <code className="theme-text">{requireTyped}</code> to confirm
-                </span>
-                <input
-                  ref={inputRef}
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && unlocked && !busy) onConfirm()
-                  }}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border theme-border theme-surface-strong theme-text text-xs font-mono outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--status-bad)_55%,transparent)]"
-                />
-              </label>
-            )}
+        {danger && (
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full status-bad-bg">
+            <AlertTriangle size={20} className="status-bad" />
           </div>
-        </div>
+        )}
+        <h3 id="confirm-dialog-title" className="text-sm font-semibold theme-text mb-1.5">
+          {title}
+        </h3>
+        <div className="text-xs theme-text-muted leading-relaxed">{body}</div>
 
-        <div className="flex items-center justify-end gap-2 mt-4">
-          <button
-            onClick={onCancel}
-            disabled={busy}
-            className="px-3 py-1.5 rounded-lg text-xs theme-text-muted hover:theme-text disabled:opacity-40 transition-colors"
-          >
-            {cancelLabel}
-          </button>
+        {requireTyped && (
+          <label className="block mt-4 text-left">
+            <span className="text-[11px] theme-text-muted">
+              Type <code className="font-semibold theme-text">{requireTyped}</code> to confirm
+            </span>
+            <input
+              ref={inputRef}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && unlocked && !busy) onConfirm()
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-1 w-full px-2.5 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-xs font-mono outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--status-bad)_55%,transparent)]"
+            />
+          </label>
+        )}
+
+        {/* Stacked, full width: the action first, the way out right under it. */}
+        <div className="mt-5 flex flex-col gap-2">
           <button
             ref={confirmRef}
             onClick={onConfirm}
             disabled={busy || !unlocked}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-80 ${
-              danger
-                ? 'status-bad status-bad-border status-bad-bg'
-                : 'theme-border theme-text'
+            className={`flex w-full items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90 ${
+              danger ? 'status-bad-fill text-white' : 'theme-bg-primary theme-text-on-primary'
             }`}
           >
             {busy && <Loader2 size={12} className="animate-spin" />}
             {confirmLabel}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="w-full py-2 rounded-lg border theme-border text-xs theme-text hover:theme-surface-strong disabled:opacity-40 transition-colors"
+          >
+            {cancelLabel}
           </button>
         </div>
       </div>

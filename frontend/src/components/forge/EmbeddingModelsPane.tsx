@@ -384,6 +384,7 @@ export function EmbeddingModelsPane({
         ? `${m.label} builds Track 1's index. If you delete it, Track 1 can't answer until you pull it again or choose another model in Settings → Vector RAG. The index itself is kept.`
         : 'This removes the model from Ollama on this machine, along with its benchmark and verified width. You can pull it again later for a fresh install.',
       confirmLabel: 'Delete',
+      requireTyped: 'DELETE',
       danger: true,
     })
     if (!ok) return

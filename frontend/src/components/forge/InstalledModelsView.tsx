@@ -377,6 +377,7 @@ export function InstalledModelsView({
       title: `Delete ${row.tag}?`,
       body: 'This removes the model from Ollama on this machine, along with its benchmark results. You can pull it again later for a fresh install.',
       confirmLabel: 'Delete',
+      requireTyped: 'DELETE',
       danger: true,
     })
     if (!ok) return

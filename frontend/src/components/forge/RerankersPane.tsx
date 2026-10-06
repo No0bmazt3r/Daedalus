@@ -160,6 +160,7 @@ export function RerankersPane({
                 title: `Delete ${m.label}?`,
                 body: 'This removes its downloaded weights from this machine. You can download it again later for a fresh install.',
                 confirmLabel: 'Delete',
+                requireTyped: 'DELETE',
                 danger: true,
               })
               if (ok) void act(() => deleteReranker(m.id))

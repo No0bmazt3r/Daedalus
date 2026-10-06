@@ -1170,7 +1170,9 @@ per-category results rather than stopping at the first failure.
 Each row's button says **Delete**, not just a bin glyph: on the row that empties
 the evaluation evidence, the control should be a word. Confirmation is a themed
 `ConfirmDialog` rather than `window.confirm` (the Forge's model deletes use the
-same dialog through `useConfirm()`) — the browser's own dialog ignores
+same dialog through `useConfirm()`, and also require typing `DELETE`). The panel
+is mostly opaque glass on the theme's own card colour (`.confirm-glass`), so it
+reads on light themes too — the browser's own dialog ignores
 the theme, cannot describe what is about to happen, and cannot ask for anything
 to be typed. The graver categories (the audit log, *everything*) keep the
 confirm button disabled until `DELETE` is typed: two clicks in a row can be
