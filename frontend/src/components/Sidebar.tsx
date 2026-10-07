@@ -24,6 +24,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onOpenForge: () => void;
   onOpenBlueprints: () => void;
+  onOpenThread: () => void;
   /** Opens the raw-row window on one table. */
   onOpenStore: (store: string, table: string) => void;
   /** The table currently open in that window, so the row can be highlighted. */
@@ -261,7 +262,7 @@ function DataStores({
   )
 }
 
-export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenStore, activeStore }: SidebarProps) {
+export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenThread, onOpenStore, activeStore }: SidebarProps) {
   const { sessions, activeSessionId, status, newChat, selectSession, rename, retitle, remove } = useSessions()
   const { isIncognito } = useSettings()
   const { show } = useUiPrefs()
@@ -316,11 +317,9 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
       {show('sidebar-modules') && (
       <div className="px-3 shrink-0">
         <div className="flex flex-col gap-0.5 mb-4">
-          {/* The three core modules — designed in docs/MODULES.md. Two are
-              built; Ariadne's Thread carries a dot and says so rather than
-              being a button that silently does nothing. */}
+          {/* The three core modules — designed in docs/MODULES.md. */}
           {[
-            { title: "Ariadne's Thread", icon: Network, onClick: undefined },
+            { title: "Ariadne's Thread", icon: Network, onClick: onOpenThread },
             { title: 'The Forge', icon: Hammer, onClick: onOpenForge },
             { title: 'Labyrinth Blueprints', icon: Map, onClick: onOpenBlueprints },
           ].map((item) => (
@@ -328,15 +327,10 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               key={item.title}
               variant="ghost"
               onClick={item.onClick}
-              disabled={!item.onClick}
-              title={item.onClick ? undefined : 'Not built yet. See docs/MODULES.md'}
-              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default"
+              className="w-full justify-start h-8 px-2 text-sm font-normal theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"
             >
               <item.icon size={15} className="mr-2 shrink-0 theme-accent" />
               <span className="truncate flex-1 text-left">{item.title}</span>
-              {!item.onClick && (
-                <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] opacity-50" />
-              )}
             </Button>
           ))}
         </div>

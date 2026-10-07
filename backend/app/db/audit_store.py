@@ -182,6 +182,63 @@ def trace(query_id: str) -> dict[str, list[dict[str, Any]]]:
     return out
 
 
+def recent_queries(
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    session_id: str | None = None,
+    intent: str | None = None,
+    grounded: str | None = None,
+    search: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Chat turns, newest first, with how many tools, retrievals and errors each had.
+
+    One row per `query_id` — the latest `conversation_logs` row for it, which is
+    the one that records how the turn ended. `grounded` filters on that row:
+    `yes`, `no` (checked and not grounded), or `unchecked` (no model ran, or it
+    failed before there was an answer to check). Returns the page and the total
+    the filters match.
+    """
+    init_db()
+    where = ["c.id IN (SELECT MAX(id) FROM conversation_logs GROUP BY query_id)"]
+    params: list[Any] = []
+    if session_id:
+        where.append("c.session_id = ?")
+        params.append(session_id)
+    if intent:
+        where.append("c.intent = ?")
+        params.append(intent)
+    if grounded == "yes":
+        where.append("c.grounded_flag = 1")
+    elif grounded == "no":
+        where.append("c.grounded_flag = 0")
+    elif grounded == "unchecked":
+        where.append("c.grounded_flag IS NULL")
+    if search:
+        where.append("(c.user_query LIKE ? ESCAPE '\\' OR c.query_id LIKE ? ESCAPE '\\')")
+        like = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        params += [like, like]
+    clause = " AND ".join(where)
+    with sqlite_util.connect(AUDIT_DB) as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) AS n FROM conversation_logs c WHERE {clause}", params
+        ).fetchone()["n"]
+        rows = conn.execute(
+            f"""
+            SELECT c.*,
+                   (SELECT COUNT(*) FROM tool_logs t WHERE t.query_id = c.query_id) AS tool_count,
+                   (SELECT COUNT(*) FROM rag_logs r WHERE r.query_id = c.query_id) AS retrieval_count,
+                   (SELECT COUNT(*) FROM error_logs e WHERE e.query_id = c.query_id) AS error_count
+              FROM conversation_logs c
+             WHERE {clause}
+             ORDER BY c.timestamp DESC, c.id DESC
+             LIMIT ? OFFSET ?
+            """,
+            [*params, limit, offset],
+        ).fetchall()
+    return [dict(r) for r in rows], total
+
+
 def stats() -> dict[str, int]:
     """Row counts per table — surfaced in the Settings → System → Storage health panel."""
     init_db()

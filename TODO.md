@@ -832,18 +832,27 @@ Layer 9 below for the per-step detail.
 - [x] SSE streaming rendering — tokens append as they arrive; `lib/http.ts`
       `streamEvents()` owns the framing for both streaming endpoints
 - [-] Source badges — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]` *(cut from FYP2, 2026-10-01)*
-- [-] Collapsible tool-call trace (Thought → Action → Observation) — the inline
-      half of Ariadne's Thread, below *(cut from FYP2, 2026-10-01)*
+- [x] Collapsible tool-call trace (Thought → Action → Observation) — the inline
+      half of Ariadne's Thread, below *(cut 2026-10-01, built 2026-10-07)*
 - [-] Graph visualiser for GraphRAG traversal paths — traversal replay, the
       centrepiece of Labyrinth Blueprints, below *(cut from FYP2, 2026-10-01)*
-- [~] The three sidebar modules — **the Forge and Labyrinth Blueprints are built;
-      Ariadne's Thread is designed only and cut from FYP2.** Full spec in
+- [x] The three sidebar modules — **all three built** (Ariadne's Thread on
+      2026-10-07, after being cut on 2026-10-01 and put back). Full spec in
       [`docs/MODULES.md`](docs/MODULES.md); each is a `PROJECT.md` §10.2
       "glass box" promise given a home:
-  - [-] **Ariadne's Thread** — provenance. Joins the seven audit tables on
-        `query_id` into one causal trace, with a number-by-number
-        groundedness verdict over the answer *(cut from FYP2, 2026-10-01)*.
-        For FYP2, Replay and the raw store browser cover provenance
+  - [x] **Ariadne's Thread** — provenance *(2026-10-07)*. Joins the seven
+        audit tables on `query_id` into one ordered trace — question → intent →
+        tools and retrieval → evidence → context → model → validation → answer
+        — with a number-by-number groundedness verdict over the answer.
+        `GET /api/trace` (filter by chat, intent, verdict, text),
+        `/api/trace/{id}`, `/api/trace/{id}/groundedness`
+        (`services/thread.py`). The sidebar window (`Ctrl+Alt+A`, and in the
+        palette) and a collapsed `2 tools · 1.8s · grounded` strip under every
+        chat answer that opens the thread in place. The verdict *mirrors* the
+        stored validator result rather than re-deciding it, and adds the
+        evidence line each green number came from. 8 tests
+        (`tests/test_thread.py`). Not shown: the assembled prompt (never
+        stored), and the evidence lines of a deleted chat
   - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
         steps built,** as three tabs: Hardware · Models · Added Models.
         `HardwareView` is still shared with Settings → Hardware. The two model
@@ -1391,6 +1400,35 @@ Layer 9 below for the per-step detail.
 
 ---
 
+## M11 — Cross-platform installer CLI
+
+`daedalus.sh` installs, builds and runs today, but only from a bash shell and
+with a three-tool prerequisite check (node, python3, pnpm). Turn it into one
+CLI that works the same on Windows, macOS and Linux.
+
+- [ ] **Detect the OS and architecture** (Windows, macOS, Linux; x64 or arm64;
+      WSL counts as Linux but says so) and pick that platform's install path.
+      Windows needs an entry point that does not need bash (PowerShell, or a
+      Python/Node CLI that `daedalus.sh` and a `daedalus.ps1` both call)
+- [ ] **A full prerequisite check** — `doctor`: for each tool, found or not,
+      its version against the minimum, and where it came from. Node (and
+      whether nvm, fnm or volta manages it), npm, corepack, pnpm, Python and
+      `venv`/pip, git, Ollama (installed and the server reachable), curl, and
+      Docker only when `--with-search` is asked for. Plus the things that are
+      not tools: free disk, RAM, the ports the app uses, and a GPU if present.
+      One table, then a pass or fail with the exact fix for each failure
+- [ ] **Install what is missing, per OS**, only after asking: winget or
+      Chocolatey on Windows, Homebrew on macOS, apt, dnf or pacman on Linux;
+      nvm (nvm-windows on Windows) for Node when no Node is installed, corepack
+      for pnpm. Never `sudo` without saying so first
+- [ ] **Keep the existing commands** — `setup`, `dev`, `start`, `stop`,
+      `status`, `migrate` — and fold in `sync.sh` and `reset.sh` as
+      subcommands, with `help` listing them all
+- [ ] **Check:** a clean run of `doctor` and `setup` on each of the three
+      OSes (a fresh VM or CI runner each), recorded here with the date
+
+---
+
 ## Done
 
 - [x] React dashboard shell — Vite · TanStack Router · Tailwind v4 · shadcn/base-ui
@@ -1536,7 +1574,7 @@ Layer 9 below for the per-step detail.
       Fixing `TypewriterText` also fixed a leak — its interval was never
       cleared on unmount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
-- [ ] Tests are backend-only and not in CI. The backend has 191 `unittest` cases
+- [ ] Tests are backend-only and not in CI. The backend has 204 `unittest` cases
       (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,
       background jobs, model fit, embedding prefixes, evaluation harness); the frontend has none, and the **migration runner** still
       has no test — it is the piece that can quietly break every other store

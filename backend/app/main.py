@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import (
     assistant, background_jobs, chat, corpus, embeddings, events, forge, graph, health, logs, maintenance,
-    mcp, prefs, providers, search, sessions, system, tools,
+    mcp, prefs, providers, search, sessions, system, thread, tools,
 )
 from .db import migrations, paths, sqlite_util
 from .services import app_logs
@@ -142,6 +142,7 @@ app.include_router(health.router)
 app.include_router(prefs.router)
 app.include_router(sessions.router)
 app.include_router(logs.router)
+app.include_router(thread.router)
 app.include_router(providers.router)
 app.include_router(system.router)
 app.include_router(forge.router)

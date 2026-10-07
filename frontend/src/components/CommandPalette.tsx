@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Search, Plus, Ghost, PanelLeft, Palette, Hammer, Map, Settings2,
+  Search, Plus, Ghost, PanelLeft, Palette, Hammer, Map, Network, Settings2,
   Database, HardDrive, Circle, CornerDownLeft, type LucideIcon,
 } from 'lucide-react'
 import { useSessions } from '../contexts/SessionsContext'
@@ -87,6 +87,7 @@ export interface PaletteActions {
   openTheme: () => void
   openForge: () => void
   openBlueprints: (tab?: BlueprintsTab) => void
+  openThread: () => void
   newChat: () => void
   toggleIncognito: () => void
   toggleSidebar: () => void
@@ -232,6 +233,11 @@ export function CommandPalette({
       id: 'go:theme', group: 'Go to', icon: Palette, label: 'Theme & Appearance',
       keywords: 'colour color font preset custom window',
       run: actions.openTheme,
+    })
+    push({
+      id: 'go:thread', group: 'Go to', icon: Network, label: "Ariadne's Thread",
+      keywords: 'trace provenance grounded groundedness audit numbers evidence answer window',
+      run: actions.openThread,
     })
     push({
       id: 'go:forge', group: 'Go to', icon: Hammer, label: 'The Forge',

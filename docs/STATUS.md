@@ -61,7 +61,7 @@ Counted from `TODO.md` checkboxes (done / total tasks).
 | M7 Observability | 10 | 5 / 10 | 50% | Every turn fully logged on one `query_id`; no log viewer yet |
 | M8 Evaluation | — | 0 / 10 | **0%** | Not started — waits on the real corpus |
 | M9 Hardware & model console | 11 | 15 / 18 | 83% | Working ("The Forge") |
-| M10 Dashboard | 9B | 99 / 113 | 88%\* | Working; Ariadne's Thread not built |
+| M10 Dashboard | 9B | 99 / 113 | 88%\* | Working; Ariadne's Thread built 2026-10-07 |
 
 \* **Inflated.** Many ticked boxes in M2 and M10 are small setup or UI
 sub-tasks.
@@ -479,7 +479,7 @@ Save all images to `docs/screenshots/`.
 | Track 1 — vector RAG | Query expansion, hybrid dense + BM25, contextual compression, multi-hop re-retrieval, `VectorStoreAdapter` | M6 |
 | Evaluation | 30–50 query golden set, hand labels, groundedness / hallucination scoring, precision@3/@5, recall, MRR, latency p50/p95, three comparison runs (Track 1 · Track 2 walk · Track 2 agent), human panel | M8 |
 | Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); verify inference with networking disabled | M4 |
-| Provenance UI | Ariadne's Thread — the per-query trace viewer; source badges | M10 |
+| Provenance UI | Source badges (Ariadne's Thread, the per-query trace viewer, was built 2026-10-07) | M10 |
 | Validator | A check for prompt rule 9 (rig-specific facts backed only by references) | M5 |
 | PyQt5 tab | Not started — optional / Phase 2 | — |
 

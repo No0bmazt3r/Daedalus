@@ -63,6 +63,9 @@ to it.
 | `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
 | `GET` | `/api/logs/catalogue` | Browsable tables with live row counts — backs the sidebar's Data stores section. Five stores: chat, audit, sensor, corpus (the ingestion manifest and authoring history) and the Chroma collections. `prefs` is absent on purpose, and `model_endpoints` for the stronger reason that it holds API keys |
 | `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
+| `GET` | `/api/trace` | Ariadne's Thread: chat turns, newest first, each with a status word and its tool, retrieval and error counts. Filters `session_id`, `intent`, `grounded` (`yes`·`no`·`unchecked`), `q`; paged |
+| `GET` | `/api/trace/{query_id}` | One turn as ordered steps: question → intent → tools and retrieval → evidence → context → model → validation → answer, plus errors and the rating |
+| `GET` | `/api/trace/{query_id}/groundedness` | Every number in the answer the model wrote, marked `supported`·`unsupported`·`stale`·`not_a_claim`·`unchecked`, with the evidence line each supported one came from |
 | `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
 | `GET`/`POST` | `/api/providers` | List / add a benchmark endpoint |
 | `PATCH`/`DELETE` | `/api/providers/{id}` | Edit or remove one |
@@ -440,6 +443,23 @@ Rows are ordered by `rowid`, not a timestamp column — every table has one, it 
 always insertion order, and same-second rows would otherwise be arbitrary.
 Cells over 4000 characters are truncated with a count, so one large transcript
 cannot push megabytes into the browser.
+
+### Ariadne's Thread — `services/thread.py`
+
+The product view of the audit store (`MODULES.md` §1): one answer, reassembled
+from the seven tables on its `query_id`, plus the evidence pack the transcript
+keeps beside the answer. Read-only, never on the chat path.
+
+| Property | How |
+|---|---|
+| One status per turn | `error` · `refused` (the guard) · `no_model` (answered by the pipeline) · `blocked` (the validator replaced the answer) · `grounded` · `ungrounded` (passed, cited nothing) |
+| Retrieval sits under its tool | Each retrieval tool writes one `rag_logs` row in the order the tools ran, so the n-th row is paired with the n-th retrieval tool |
+| The verdict is the validator's | Red and amber come from the stored `validation_json`; the Thread only adds where each green number came from. Re-deciding against the transcript's smaller evidence set would contradict the record (`MODULES.md` §1.7) |
+| The model's own text is judged | When the validator replaced an answer, the marks are on what the model wrote, with the fallback the operator saw beside it |
+| Survives a deleted chat | Audit rows outlive the transcript; the trace still reads and reports `evidence_available: false` |
+
+In the UI: the sidebar window (`Ctrl+Alt+A`), and a collapsed strip under every
+chat answer (`2 tools · 1.8s · grounded`) that expands the thread in place.
 
 ### Dynamic Model Discovery — `/api/system/models`
 
@@ -1478,7 +1498,7 @@ be declared will need them before it exists.
 
 ### 6.1 Shortcuts — `lib/keybinds.ts` · `hooks/useGlobalShortcuts.ts`
 
-Eleven rebindable actions, ported from Odysseus' keybind layer with this
+Twelve rebindable actions, ported from Odysseus' keybind layer with this
 codebase's two standing differences: the map is a typed table rather than a bag
 of strings, so an action without a handler fails to compile, and it persists to
 the `keybinds` preference rather than to `localStorage`.
@@ -1487,9 +1507,9 @@ the `keybinds` preference rather than to `localStorage`.
 |---|---|---|
 | Navigation | Toggle sidebar · Command palette · Focus composer | `Ctrl+Alt+B` · `Ctrl+K` · `Ctrl+/` |
 | Conversations | New chat · Delete this chat · Toggle incognito | `Ctrl+Alt+N` · `Ctrl+Alt+D` · `Ctrl+Alt+I` |
-| Windows | Settings · Theme · Forge · Blueprints · Close the open window | `Ctrl+,` · `Ctrl+Alt+T` · `Ctrl+Alt+G` · `Ctrl+Alt+P` · `Esc` |
+| Windows | Settings · Theme · Forge · Blueprints · Ariadne's Thread · Close the open window | `Ctrl+,` · `Ctrl+Alt+T` · `Ctrl+Alt+G` · `Ctrl+Alt+P` · `Ctrl+Alt+A` · `Esc` |
 
-**`Ctrl+K` opens a command palette.** Chats, every settings panel, the four
+**`Ctrl+K` opens a command palette.** Chats, every settings panel, the five
 floating windows, Blueprints' individual tabs, every store table with its live
 row count, and the toggle actions — one overlay, `↑↓` to move, `↵` to open,
 `esc` to close. It replaced an inline filter over the chat list, which was good
@@ -2014,7 +2034,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **191 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), and the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers). Everything else is still verified by direct API calls |
+| Backend | **204 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters). Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

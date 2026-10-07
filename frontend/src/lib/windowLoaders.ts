@@ -10,12 +10,13 @@ export const loadThemeModal = () => import('../components/ThemeModal')
 export const loadSettingsModal = () => import('../components/SettingsModal')
 export const loadForgeWindow = () => import('../components/forge/ForgeWindow')
 export const loadBlueprintsWindow = () => import('../components/blueprints/BlueprintsWindow')
+export const loadThreadWindow = () => import('../components/thread/ThreadWindow')
 export const loadStoreWindow = () => import('../components/stores/StoreWindow')
 export const loadCommandPalette = () => import('../components/CommandPalette')
 
 const ALL = [
   loadCommandPalette, loadSettingsModal, loadForgeWindow,
-  loadBlueprintsWindow, loadThemeModal, loadStoreWindow,
+  loadBlueprintsWindow, loadThreadWindow, loadThemeModal, loadStoreWindow,
 ]
 
 /**

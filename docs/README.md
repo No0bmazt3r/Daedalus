@@ -14,7 +14,7 @@ over anything else here.
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
 | Report progress (advisor, examiner) | [`STATUS.md`](STATUS.md) — plain-language status with screenshot placeholders |
-| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — The Forge and Labyrinth Blueprints built; Ariadne's Thread designed only |
+| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — all three built: Ariadne's Thread, The Forge, Labyrinth Blueprints |
 | Know how a model is judged against this machine, or add one | [`MODEL_FIT.md`](MODEL_FIT.md) — the fit contract for chat, embedding and re-ranker models |
 | Run the dual-track evaluation | [`EVALUATION.md`](EVALUATION.md) — query set, freeze-then-run, metrics, what a run writes |
 | Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
@@ -40,7 +40,7 @@ two disagree, resolve in this order:
    ingestion for Track 1, assisted graph authoring for Track 2). §3.4's storage
    decision is settled (NetworkX over git-tracked YAML), with the *authored*
    copy in `config/` so it stays writable in the container and still reviews in
-   a diff. **Ariadne's Thread is not built.**
+   a diff. Ariadne's Thread is built too; §1.7 records where it departs from the design.
 4. **[`BENCHMARK.md`](BENCHMARK.md)** — canonical for *how latency is measured
    and what may be concluded from it*. Elaborates `MODULES.md` §2.3. Written to
    be defended: §9 names the limitations rather than hiding them.

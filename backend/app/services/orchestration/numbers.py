@@ -68,6 +68,15 @@ def extract(text: str) -> list[Number]:
     return [n for n, _ in _scan(text)]
 
 
+def spans(text: str) -> list[tuple[Number, int, int]]:
+    """Every quantity with where it sits in `text` — for marking an answer up.
+
+    Positions are into `text` itself: the only rewrite `_scan` makes before
+    reading (`₂` → `2`, and blanking) keeps every character where it was.
+    """
+    return [(n, start, end) for n, (start, end) in _scan(text)]
+
+
 def redact(text: str, *, keep_small: int = 10, mask: str = "…") -> str:
     """`text` with every quantity above `keep_small` replaced by `mask`.
 

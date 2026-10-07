@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import {
   loadThemeModal, loadSettingsModal, loadForgeWindow,
-  loadBlueprintsWindow, loadStoreWindow, loadCommandPalette,
+  loadBlueprintsWindow, loadThreadWindow, loadStoreWindow, loadCommandPalette,
 } from '../lib/windowLoaders'
 
 /**
@@ -14,6 +14,7 @@ export const ForgeWindow = lazy(() => loadForgeWindow().then((m) => ({ default: 
 export const BlueprintsWindow = lazy(() =>
   loadBlueprintsWindow().then((m) => ({ default: m.BlueprintsWindow })),
 )
+export const ThreadWindow = lazy(() => loadThreadWindow().then((m) => ({ default: m.ThreadWindow })))
 export const StoreWindow = lazy(() => loadStoreWindow().then((m) => ({ default: m.StoreWindow })))
 export const CommandPalette = lazy(() => loadCommandPalette().then((m) => ({ default: m.CommandPalette })))
 

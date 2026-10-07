@@ -9,7 +9,7 @@ import type { BlueprintsTab } from '../components/blueprints/tabs'
 import type { ForgeTab } from '../components/forge/ForgeWindow'
 import type { PaletteActions } from '../components/CommandPalette'
 import {
-  ThemeModal, SettingsModal, ForgeWindow, BlueprintsWindow, StoreWindow, CommandPalette,
+  ThemeModal, SettingsModal, ForgeWindow, BlueprintsWindow, ThreadWindow, StoreWindow, CommandPalette,
   MountOnce,
 } from '../components/LazyWindows'
 import { prefetchWindows } from '../lib/windowLoaders'
@@ -22,6 +22,7 @@ import { ConfirmDialog } from '../components/ui/confirm-dialog'
 import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
+import { OPEN_THREAD_EVENT } from '../lib/threadClient'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -94,6 +95,10 @@ function AppShell() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [forgeOpen, setForgeOpen] = useState(false)
   const [blueprintsOpen, setBlueprintsOpen] = useState(false)
+  const [threadOpen, setThreadOpen] = useState(false)
+  // The answer a chat strip asked the Thread to show. Like `blueprintsTab`, the
+  // window reads it as a prop and follows each new value.
+  const [threadQuery, setThreadQuery] = useState<string | null>(null)
   // Which panel/tab the palette last asked for. Held rather than fired because
   // both windows read it as a prop; asking for the one already showing is a
   // no-op, so neither needs clearing afterwards.
@@ -131,13 +136,14 @@ function AppShell() {
     if (paletteOpen) return setPaletteOpen(false)
     if (confirmDelete) return setConfirmDelete(null)
     if (storeTarget) return setStoreTarget(null)
+    if (threadOpen) return setThreadOpen(false)
     if (blueprintsOpen) return setBlueprintsOpen(false)
     if (forgeOpen) return setForgeOpen(false)
     if (themeModalOpen) return setThemeModalOpen(false)
     if (settingsModalOpen) return setSettingsModalOpen(false)
   }, [
     blueprintsOpen, confirmDelete, forgeOpen, paletteOpen, settingsModalOpen,
-    storeTarget, themeModalOpen,
+    storeTarget, themeModalOpen, threadOpen,
   ])
 
   /**
@@ -157,6 +163,22 @@ function AppShell() {
       setForgeOpen(true)
     })
   }, [])
+
+  /** Open Ariadne's Thread, on one answer when a chat strip asked for it. */
+  const openThread = useCallback((queryId: string | null = null) => {
+    openWindow('thread', () => {
+      if (queryId) setThreadQuery(queryId)
+      setThreadOpen(true)
+    })
+  }, [])
+
+  // The chat cannot reach this shell's callbacks through the router's Outlet,
+  // so its "open in Thread" link is an event. See `lib/threadClient.ts`.
+  useEffect(() => {
+    const onOpen = (e: Event) => openThread((e as CustomEvent<{ queryId?: string }>).detail?.queryId ?? null)
+    window.addEventListener(OPEN_THREAD_EVENT, onOpen)
+    return () => window.removeEventListener(OPEN_THREAD_EVENT, onOpen)
+  }, [openThread])
 
   const openBlueprints = useCallback((tab: BlueprintsTab | null = null) => {
     openWindow('blueprints', () => {
@@ -185,11 +207,12 @@ function AppShell() {
       openTheme: () => openWindow('theme', () => setThemeModalOpen(true)),
       openForge: () => openForge(),
       openBlueprints: (tab) => openBlueprints(tab ?? null),
+      openThread: () => openThread(),
       newChat,
       toggleIncognito: () => setIsIncognito(!isIncognito),
       toggleSidebar: () => setSidebarOpen((v) => !v),
     }),
-    [isIncognito, newChat, openBlueprints, openForge, selectSession, setIsIncognito],
+    [isIncognito, newChat, openBlueprints, openForge, openThread, selectSession, setIsIncognito],
   )
 
   useGlobalShortcuts(keybinds, {
@@ -213,6 +236,7 @@ function AppShell() {
     open_theme: () => openWindow('theme', () => setThemeModalOpen(true)),
     open_forge: () => openForge(),
     open_blueprints: () => openBlueprints(),
+    open_thread: () => openThread(),
     close_window: closeTopWindow,
   })
 
@@ -237,6 +261,7 @@ function AppShell() {
                 onOpenSettings={() => openWindow('settings', () => setSettingsModalOpen(true))}
                 onOpenForge={() => openForge()}
                 onOpenBlueprints={() => openBlueprints()}
+                onOpenThread={() => openThread()}
                 onOpenStore={(store, table) =>
                   openWindow('stores', () => setStoreTarget({ store, table }))
                 }
@@ -291,6 +316,13 @@ function AppShell() {
               onClose={() => setBlueprintsOpen(false)}
               requestedTab={blueprintsTab}
               onOpenForge={() => openForge()}
+            />
+          </MountOnce>
+          <MountOnce when={threadOpen}>
+            <ThreadWindow
+              open={threadOpen}
+              onClose={() => setThreadOpen(false)}
+              requestedQueryId={threadQuery}
             />
           </MountOnce>
           <MountOnce when={storeTarget !== null}>

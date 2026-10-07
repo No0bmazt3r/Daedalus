@@ -39,6 +39,7 @@ export interface ShortcutHandlers {
   open_theme: () => void;
   open_forge: () => void;
   open_blueprints: () => void;
+  open_thread: () => void;
   close_window: () => void;
 }
 

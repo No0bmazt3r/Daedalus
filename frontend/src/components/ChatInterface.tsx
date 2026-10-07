@@ -22,6 +22,8 @@ import { useUiPrefs } from '../contexts/UiPrefsContext'
 import { FOCUS_COMPOSER_EVENT } from '../lib/keybinds'
 import { useSessions } from '../contexts/SessionsContext'
 import { Sources, withCitations } from './Citations'
+import { TraceStrip } from './thread/TraceStrip'
+import { useSessionTraces } from '../hooks/useSessionTraces'
 
 function TypewriterText({ text }: { text: string }) {
   // How much of `text` is typed. Keyed by the text it counts, so a new text
@@ -358,7 +360,13 @@ export function ChatInterface() {
   // here, to mark which transcript turns came from off the machine.
   const { isIncognito, setIsIncognito, referenceModels, noModel, showNoModelPrompt } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
-  const { messages, sendMessage, sending, error, modelNotice, ratings, rate } = useSessions()
+  const { messages, sendMessage, sending, error, modelNotice, ratings, rate, activeSessionId } = useSessions()
+  // Ariadne's Thread, one line per answer. Re-read when a stored answer arrives:
+  // its audit rows are written before the turn is, so they are there to read.
+  const traces = useSessionTraces(
+    activeSessionId,
+    messages.filter((m) => m.role === 'assistant' && m.persisted).length,
+  )
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { show } = useUiPrefs()
@@ -528,6 +536,10 @@ export function ChatInterface() {
 
                     {msg.role === 'assistant' && msg.persisted && (
                       <Sources text={msg.content} evidence={msg.evidence} />
+                    )}
+
+                    {msg.role === 'assistant' && msg.queryId && traces[msg.queryId] && (
+                      <TraceStrip trace={traces[msg.queryId]} />
                     )}
 
                     {msg.role === 'assistant' && msg.persisted && msg.content !== '' && (

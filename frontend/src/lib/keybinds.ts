@@ -32,6 +32,7 @@ export type KeybindAction =
   | 'open_theme'
   | 'open_forge'
   | 'open_blueprints'
+  | 'open_thread'
   | 'close_window';
 
 export type KeybindMap = Record<KeybindAction, string>;
@@ -55,6 +56,7 @@ export const KEYBIND_DEFAULTS: KeybindMap = {
   open_theme: 'ctrl+alt+t',
   open_forge: 'ctrl+alt+g',
   open_blueprints: 'ctrl+alt+p',
+  open_thread: 'ctrl+alt+a',
   close_window: 'escape',
 };
 
@@ -77,6 +79,7 @@ export const KEYBIND_LABELS: Record<KeybindAction, { label: string; hint: string
   open_theme: { label: 'Open Theme & Appearance', hint: 'Colours, font, background effect' },
   open_forge: { label: 'Open The Forge', hint: 'Hardware, model fit, benchmarks' },
   open_blueprints: { label: 'Open Labyrinth Blueprints', hint: 'The architecture map' },
+  open_thread: { label: "Open Ariadne's Thread", hint: 'How each answer was produced, and its numbers checked' },
   close_window: { label: 'Close the open window', hint: 'Whichever floating window is in front' },
 };
 
@@ -86,7 +89,7 @@ export const KEYBIND_CATEGORIES: readonly { name: string; actions: readonly Keyb
   { name: 'Conversations', actions: ['new_chat', 'delete_chat', 'toggle_incognito'] },
   {
     name: 'Windows',
-    actions: ['open_settings', 'open_theme', 'open_forge', 'open_blueprints', 'close_window'],
+    actions: ['open_settings', 'open_theme', 'open_forge', 'open_blueprints', 'open_thread', 'close_window'],
   },
 ];
 

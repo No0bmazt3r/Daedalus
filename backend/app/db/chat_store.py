@@ -520,6 +520,22 @@ def get_recent_messages(session_id: str, *, count: int) -> list[dict[str, Any]]:
     return [_message_row(row) for row in reversed(rows)]
 
 
+def message_for_query(query_id: str) -> dict[str, Any] | None:
+    """The assistant turn a chat query produced, with its stored evidence pack.
+
+    None when the chat was deleted (or was incognito and purged): the audit row
+    outlives the transcript by design, so a reader must cope with that.
+    """
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT * FROM chat_messages WHERE query_id = ? AND role = 'assistant' "
+            "ORDER BY id DESC LIMIT 1",
+            (query_id,),
+        ).fetchone()
+    return _message_row(row) if row else None
+
+
 def stats() -> dict[str, Any]:
     """Row counts for the Settings → System → Storage health panel."""
     init_db()

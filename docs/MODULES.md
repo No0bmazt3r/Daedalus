@@ -1,10 +1,9 @@
 # The Three Core Modules — Design Specification
 
-**Status: design. One step of one module is built** — the Forge's hardware
-detection (§2, step 1). Everything else here is still specification. The three
-names have been sitting in `frontend/src/components/Sidebar.tsx` as dead
-buttons with no handler since the shell was built; this is the document that
-says what they are for.
+**Status: all three are built.** The Forge (§2) and Labyrinth Blueprints (§3)
+first; Ariadne's Thread (§1) on 2026-10-07 — §1.7 records where the build
+departs from this design and why. The rest of this document is the design as
+written, kept so the departures stay visible.
 
 They are not new scope. Each one is a thing `PROJECT.md` §10.2 already promises
 under **"the glass box experience"**, given a home and a name:
@@ -204,6 +203,43 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 | **Unblocks** | §9.2 hallucination-rate metric; the "glass box" demo; Method A evaluation (§9.3) |
 | **Risk** | Ephemeral/incognito sessions must never appear here. TODO already carries "suppress `user_query`/`response_text` for ephemeral sessions" — the Thread is the surface that makes getting this wrong visible and embarrassing |
 | **Risk** | A trace can be large (retrieved chunk text especially). Page the steps; truncate cell content as `log_browser.py` already does at 4000 chars |
+
+### 1.7 As built (2026-10-07)
+
+`services/thread.py`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
+plus `q` (search the question or id) on the list. Both views of §1.3: the window
+from the sidebar (`Ctrl+Alt+A`, the palette), and the strip under every answer,
+which expands the thread in place and links to the window.
+
+Where it departs from the design above:
+
+- **The verdict mirrors the validator; it does not re-decide.** §1.4 imagined
+  the Thread extracting numbers and matching them itself. The validator
+  (`orchestration/validator.py`) already does that at answer time, against
+  everything the model was shown, unlabelled series samples included; the
+  transcript keeps only the labelled lines. Re-deciding against that smaller
+  set would mark red a number the validator rightly passed, and the Thread would
+  contradict the record it explains. So the stored verdict is the authority
+  (red = `unsupported_numbers`, amber = `stale_numbers`), and the Thread adds
+  what the validator does not keep: the line each green number came from.
+- **`grounded_flag` was already machine-computed** by the validator (passed,
+  had evidence, cited it). §1.4's last paragraph is therefore done by M5, not
+  here.
+- **Grey is the validator's "not a claim"**: a small bare count (0–10, no unit)
+  or the question's own number. A year or page number written as a bare number
+  above 10 is checked like any quantity, because that is what the validator
+  did.
+- **Bars are shares of the turn, not a waterfall.** Timestamps are to the
+  second, so start offsets cannot be drawn honestly; a bar per step sized to its
+  share of the whole turn answers "the model was 78% of this" from what was
+  recorded.
+- **Not shown:** the assembled prompt (never stored — the evidence step and the
+  context record are what was in it, minus the fixed rules), and the evidence
+  lines of a turn whose chat was deleted. That trace still reads; it says its
+  evidence is gone (`evidence_available: false`).
+- **Still open:** the incognito risk in §1.6. Turns from incognito chats are
+  listed like any other until `conversation_logs` stops recording their text
+  (TODO, M10).
 
 ---
 
@@ -900,7 +936,7 @@ would have been a data-loss problem later: traces written before the column
 existed could never have been replayed.
 
 ~~**And one small thing now:** the three buttons should stop lying.~~ **Done** —
-and now two of the three open. Only Ariadne's Thread still carries the dot.
+and now all three open; the dot and the disabled state are gone from the sidebar.
 
 ---
 
