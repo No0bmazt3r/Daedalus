@@ -1,0 +1,59 @@
+# SearXNG settings — the template, not the live file.
+#
+# Compose mounts this read-only at /tmp/searxng-settings.yml.template, and the
+# service's entrypoint copies it into the `searxng-data` volume on first boot
+# with a generated secret substituted in. Editing this file therefore changes
+# what a *fresh* instance gets; an existing one keeps what is in its volume.
+
+use_default_settings: true
+
+server:
+  # Replaced at first boot with a generated value (or $SEARXNG_SECRET when one
+  # is set in .env), so two installs never share a signing key.
+  secret_key: "__SEARXNG_SECRET__"
+
+  # The limiter's job is to keep bots off a *public* instance, and one of the
+  # things it blocks is exactly what Daedalus does: a non-browser asking for
+  # `format=json`. This instance is published on 127.0.0.1 only and serves one
+  # process on the same machine, so there is no public to protect it from.
+  limiter: false
+
+search:
+  # `json` is the one that matters — `services/web_search.py` reads the JSON
+  # API and only falls back to explaining itself if the format is missing.
+  formats:
+    - html
+    - json
+
+# Enabled and pulled into the `general` category, not restricting anything:
+# SearXNG's own defaults still run alongside these, so a general web engine
+# that works on your network keeps working.
+#
+# The reason they are here is measured, not decorative. On a fresh instance the
+# default general engines are Brave, DuckDuckGo and Startpage, and from a
+# container behind NAT all three answered with `Suspended: too many requests`
+# or `CAPTCHA` — every query returned zero results. Bing responds from the same
+# address and returns *nonsense* (a query for "pressurised water reactor
+# operating manual" came back with Gmail help pages), which is worse than
+# nothing, because nothing is honest.
+#
+# The engines below answer over real APIs rather than by scraping a SERP, so
+# they do not block a datacentre address — and they are a better fit for what
+# this surface is for anyway. Sourcing a corpus of reactor manuals, standards
+# and papers is a literature search, not a web search. Measured on the same
+# machine and query: Crossref 20 results, OpenAlex 10, Semantic Scholar 10,
+# all of them on topic.
+#
+# `categories` is what makes them participate in an ordinary search —
+# `services/web_search.py` asks for the `general` category, and these live in
+# `science` by default.
+engines:
+  - name: crossref
+    categories: [general, science]
+    disabled: false
+  - name: openalex
+    categories: [general, science]
+    disabled: false
+  - name: semantic scholar
+    categories: [general, science]
+    disabled: false

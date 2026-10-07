@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, X, EyeOff, ArrowDownUp, Table2 } from 'lucide-react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
+import { ChevronLeft, ChevronRight, RefreshCw, X, ArrowDownUp, Table2 } from 'lucide-react'
 import { Skeleton } from '../ui/skeleton'
 import { readLogTable, type LogPage } from '../../lib/systemClient'
 
@@ -37,33 +39,55 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
   const [page, setPage] = useState<LogPage | null>(null)
   const [offset, setOffset] = useState(0)
   const [newestFirst, setNewestFirst] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const [expanded, setExpanded] = useState<Record<string, unknown> | null>(null)
 
   // Landing on a different table must not keep the previous one's page offset,
-  // or a small table opens on an empty page.
-  useEffect(() => {
+  // or a small table opens on an empty page. Reset during render, on the change.
+  const [shownTable, setShownTable] = useState(`${store}/${table}`)
+  if (shownTable !== `${store}/${table}`) {
+    setShownTable(`${store}/${table}`)
     setOffset(0)
     setExpanded(null)
-  }, [store, table])
+  }
 
-  const load = useCallback(async () => {
-    setBusy(true)
-    try {
-      setPage(await readLogTable(store, table, { limit: PAGE_SIZE, offset, newestFirst }))
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'could not read that table')
-      setPage(null)
-    } finally {
-      setBusy(false)
-    }
-  }, [store, table, offset, newestFirst])
+  // Busy while the page on screen is not the one asked for — derived, so a
+  // first load and a page turn show it without an effect setting a flag.
+  const wanted = `${store}/${table}/${offset}/${newestFirst}`
+  const [loaded, setLoaded] = useState<string | null>(null)
+  const busy = loaded !== wanted || refreshing
+
+  // State is set only in the promise's callbacks, never before the request.
+  const load = useCallback(
+    () => readLogTable(store, table, { limit: PAGE_SIZE, offset, newestFirst })
+      .then((next) => {
+        setPage(next)
+        setError(null)
+      })
+      .catch((e: unknown) => {
+        setError(toFailure(e))
+        setPage(null)
+      })
+      .finally(() => setLoaded(wanted)),
+    [store, table, offset, newestFirst, wanted],
+  )
 
   useEffect(() => {
     void load()
   }, [load])
+
+  const refresh = () => {
+    setRefreshing(true)
+    void load().finally(() => setRefreshing(false))
+  }
+
+  // Auto-refresh the first page so it feels live.
+  useEffect(() => {
+    if (offset !== 0) return
+    const timer = setInterval(() => void load(), 2000)
+    return () => clearInterval(timer)
+  }, [offset, load])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -97,9 +121,13 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
               ? `${offset + 1}–${offset + shown} of ${total.toLocaleString()}`
               : 'no rows'}
           </span>
+
           {page?.redacted_columns?.length ? (
-            <span className="flex items-center gap-1 theme-text-muted shrink-0">
-              <EyeOff size={11} /> {page.redacted_columns.length} redacted
+            <span 
+              className="text-[10px] px-1.5 py-0.5 rounded border theme-border status-warn uppercase tracking-wide shrink-0"
+              title={`Secret values hidden in: ${page.redacted_columns.join(', ')}`}
+            >
+              Masked
             </span>
           ) : null}
         </div>
@@ -113,7 +141,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
             {newestFirst ? 'Newest' : 'Oldest'}
           </button>
           <button
-            onClick={() => void load()}
+            onClick={refresh}
             disabled={busy}
             aria-label="Refresh"
             className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40"
@@ -141,7 +169,15 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
 
       {/* Rows */}
       <div className="flex-1 overflow-auto min-h-0">
-        {error && <div className="p-4 text-sm status-warn">{error}</div>}
+        {/* The table cannot be read: the window's body is the error page. */}
+        {error && (
+          <TabError
+            code={error.status}
+            detail={error.message}
+            what={`The ${store} / ${table} table could not be read.`}
+            onRetry={() => void load()}
+          />
+        )}
 
         {/* A null page rendered nothing, so opening a table looked like an
             empty table until the rows arrived. */}

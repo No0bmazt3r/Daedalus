@@ -1,6 +1,6 @@
 """System/diagnostics endpoints.
 
-Backs the Settings → Databases panel: one call reports the health of all five
+Backs Settings → System → Storage health: one call reports the health of all five
 stores, so a broken deployment is visible in the UI instead of surfacing later
 as a confusing query failure.
 """
@@ -22,6 +22,7 @@ from ..db import (
     sqlite_util,
     vector_store,
 )
+from ..services import graph_seed, model_endpoints, ollama_client
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -94,7 +95,6 @@ def databases() -> dict[str, Any]:
                 "available": sensor["exists"],
                 "metrics": {
                     "rows": sensor["rows"],
-                    "anomalies": sensor["anomalies"],
                     "earliest": sensor["earliest"],
                     "latest": sensor["latest"],
                 },
@@ -121,7 +121,7 @@ def databases() -> dict[str, Any]:
                 # Separate from the audit log on purpose: a user owns their
                 # transcript and may delete it; audit rows are the evidence a
                 # response was grounded. See db/paths.py.
-                "purpose": "Conversation sessions and messages — the assistant's memory across sessions.",
+                "purpose": "Chats and their messages. This is how the assistant remembers past conversations.",
                 "path": str(paths.CHAT_DB),
                 "size_bytes": _file_size(paths.CHAT_DB),
                 "available": True,
@@ -135,13 +135,21 @@ def databases() -> dict[str, Any]:
                 # The only store that runs as a server, hence the one container.
                 "deployment": "service" if vector["mode"] == "server" else "embedded file",
                 "access": "read-write",
-                "purpose": "Embedded SOP, manual, anomaly and UAUC chunks for RAG retrieval.",
+                "purpose": "Embedded manual, SOP, troubleshooting and safety chunks for RAG retrieval.",
                 "path": vector["target"],
                 "size_bytes": None,
                 "available": vector["available"],
                 "metrics": {
                     "documents": vector["documents"],
                     "collection": vector["collection"],
+                    # Which embedding model produced these vectors, read off the
+                    # collection itself. A store of vectors whose model is
+                    # unknown is not a store anything may retrieve from, so the
+                    # figure belongs next to the document count rather than
+                    # somewhere a reader has to go looking for it.
+                    "embedding_model": vector["embedding_model"],
+                    "dimensions": vector["dimensions"],
+                    "indexed_at": vector["indexed_at"],
                     "mode": vector["mode"],
                     "error": vector["error"],
                 },
@@ -176,54 +184,118 @@ def seed_demo() -> dict[str, Any]:
     return {
         "ok": True,
         "rows_inserted": inserted,
-        "note": "already populated — nothing written" if inserted == 0 else "demo run generated",
+        "note": "already filled in, nothing written" if inserted == 0 else "demo run generated",
     }
+
+
+@router.post("/seed-graph-traces")
+def seed_graph_traces(force: bool = False) -> dict[str, Any]:
+    """Record real graph traversals into `rag_logs` — development only.
+
+    `MODULES.md` §1.2's seeder pattern, for Blueprints' traversal replay. The
+    walks are genuine — put through the real graph tools against the authored
+    graph — so the viewer is developed against the shape the orchestrator will
+    actually write. Rows are marked `vector_db_used = 'seed'` and must be
+    excluded from every reported metric.
+    """
+    try:
+        return {"ok": True, **graph_seed.seed(force=force)}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/seed-graph-traces")
+def clear_graph_traces() -> dict[str, Any]:
+    """Remove seeded traversals, leaving any real ones untouched."""
+    return {"ok": True, "deleted": graph_seed.clear()}
 
 
 @router.get("/models")
 def list_models() -> dict[str, Any]:
-    """Dynamically discover models on hand.
-    
-    Queries the local Ollama instance (fast fail if absent) and lists configured
-    cloud benchmark endpoints.
+    """Every model that can answer a chat question, and whether it may.
+
+    Embedding models are left out — they are chosen in Settings → Vector RAG,
+    never in the composer (`ollama_client.answers_questions`).
+
+    Two kinds, and the difference is Rule 1:
+
+    - **local** — installed Ollama weights on this machine. These may serve a
+      live query.
+    - **cloud** — Ollama's own cloud-hosted tags (a `*-cloud` entry is a
+      384-byte pointer at ollama.com, not weights), and the configured
+      benchmark endpoints. These are evaluation baselines and may never answer.
+
+    Both are selectable. A cloud model answering a live query is an explicitly
+    marked evaluation override, not the production path: the turn is logged as
+    `chat_cloud` and the transcript says so. `note` carries that warning and the
+    picker shows it on the row.
+
+    `capabilities` comes from Ollama's `/api/show` — `thinking`, `tools`,
+    `vision` and friends. It is worth having in the picker because the choice
+    is not only about speed: a reasoning model answers a troubleshooting
+    question differently, and structurally slower, than one that cannot.
+
+    The local half goes through `ollama_client.list_models()` rather than
+    calling `/api/tags` here. That client owns the base-URL fallback and the
+    `remote` detection, and a second copy of either would eventually disagree
+    with `choose_model` about which tags are real — which is precisely the
+    disagreement Rule 1 is enforced against.
     """
-    import os
-    import httpx
-    from ..services import model_endpoints
-    
-    models = []
-    
-    # 1. Fetch from Ollama
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    models: list[dict[str, Any]] = []
+
     try:
-        # short timeout so the UI doesn't hang if Ollama is off
-        with httpx.Client(timeout=1.5) as client:
-            resp = client.get(f"{ollama_url}/api/tags")
-            if resp.status_code == 200:
-                data = resp.json()
-                for m in data.get("models", []):
-                    models.append({
-                        "id": f"ollama:{m['name']}",
-                        "name": m["name"],
-                        "provider": "ollama",
-                        "type": "local",
-                        "details": m.get("details", {})
-                    })
+        for m in ollama_client.list_models():
+            remote = bool(m.get("remote"))
+            # One `/api/show` per model, served from the Forge's cache after the
+            # first call. Failing soft: a model with unknown capabilities shows
+            # no badges, which is better than no model.
+            try:
+                capabilities = ollama_client.show(m["name"]).get("capabilities") or []
+            except Exception:
+                capabilities = []
+            # Only models that can write an answer. An embedding model is on this
+            # machine to embed the corpus and the question — it cannot answer
+            # one, and offering it in the composer invited a chat turn that fails.
+            # Unknown capabilities (a failed `/api/show`) keep the model listed:
+            # that says nothing about what it is.
+            if capabilities and not ollama_client.answers_questions(capabilities):
+                continue
+            models.append({
+                "id": f"ollama:{m['name']}",
+                "name": m["name"],
+                "provider": "ollama",
+                "type": "cloud" if remote else "local",
+                "capabilities": capabilities,
+                # Tooltip text: one line, not a paragraph.
+                "note": (
+                    "Runs on Ollama's cloud, so it is logged separately and is not the "
+                    "production path"
+                    if remote
+                    else None
+                ),
+                "details": {
+                    "family": m.get("family"),
+                    "parameter_size": m.get("parameter_size"),
+                    "quantization_level": m.get("quantization_level"),
+                },
+            })
     except Exception:
+        # A dead Ollama is a normal state, not an error: the dashboard works
+        # without it. The picker says "no local models" on an empty list.
         pass
-        
-    # 2. Fetch configured cloud endpoints
+
     try:
-        endpoints = model_endpoints.list_endpoints()
-        for ep in endpoints:
+        for ep in model_endpoints.list_endpoints():
             models.append({
                 "id": f"cloud:{ep['id']}",
                 "name": ep["label"],
                 "provider": ep["provider"],
                 "type": "cloud",
-                "details": {"base_url": ep["base_url"]}
+                "capabilities": [],
+                "note": "Benchmark endpoint, for evaluation baselines only",
+                "details": {"base_url": ep["base_url"]},
             })
     except Exception:
         pass
-        
+
     return {"models": models}

@@ -1,7 +1,6 @@
-import { useCallback, useRef, useState } from 'react'
-import { Ghost, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react'
 import { FloatingWindow } from './ui/floating-window'
-import { Switch } from './ui/switch'
 import {
   useResizableSidebar,
   SIDEBAR_MIN_WIDTH,
@@ -9,27 +8,90 @@ import {
   SIDEBAR_DESKTOP_MIN_CONTAINER,
 } from '../hooks/useResizableSidebar'
 import { useElementWidth } from '../hooks/useElementWidth'
-import { useSettings } from '../contexts/SettingsContext'
 import {
   DEFAULT_SETTINGS_PANEL_ID,
   getSettingsPanel,
   panelsForGroup,
+  trackVisible,
   visibleGroups,
   type SettingsPanel,
 } from '../lib/settingsRegistry'
+import { fetchRagConfig, RAG_TRACK_CHANGED_EVENT, type RagTrack } from '../lib/blueprintsClient'
+import { subscribe } from '../lib/liveEvents'
 import { SettingsSearch } from './settings/SettingsSearch'
+import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/KnowledgeBasePanel'
+import { SearchPanel } from './settings/SearchPanel'
+import { AgentToolsPanel } from './settings/AgentToolsPanel'
+import { IntegrationsPanel } from './settings/IntegrationsPanel'
+import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
 import { DatabasesPanel } from './settings/DatabasesPanel'
-import { HardwarePanel } from './settings/HardwarePanel'
-import { ModelEndpointsPanel } from './settings/ModelEndpointsPanel'
+import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
+import { DateTimePanel, SafetyPanel, SystemPromptPanel } from './settings/AssistantPanel'
+import { ThreadPanel } from './settings/ThreadPanel'
+import { AppearancePanel } from './settings/AppearancePanel'
+import { ShortcutsPanel } from './settings/ShortcutsPanel'
+import type { ForgeTab } from './forge/ForgeWindow'
 
 interface SettingsModalProps {
   open: boolean
   onClose: () => void
+  /** Appearance hands colours and fonts to the Theme window rather than copying them. */
+  onOpenTheme?: () => void
+  /** Opens The Forge on a tab — where Vector RAG sends you to pull a model. */
+  onOpenForge?: (tab: ForgeTab) => void
+  /**
+   * A panel to jump to, from the command palette. Not the *current* panel —
+   * the window owns that, and lifting it would mean every click on the rail
+   * round-tripped through the root to come back as a prop.
+   */
+  panel?: string | null
 }
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { isIncognito, setIsIncognito } = useSettings()
-  const [activeTab, setActiveTab] = useState(DEFAULT_SETTINGS_PANEL_ID)
+export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel = null }: SettingsModalProps) {
+  // A panel requested at mount opens directly; later requests are applied
+  // during render below, on change.
+  const [activeTab, setActiveTab] = useState(
+    panel && getSettingsPanel(panel) ? panel : DEFAULT_SETTINGS_PANEL_ID,
+  )
+
+  // The selected retrieval track decides which track's settings panel is
+  // listed. Re-read whenever the track changes, from here or from anywhere
+  // else (`setRagTrack` broadcasts it).
+  const [track, setTrack] = useState<RagTrack | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetchRagConfig().then((c) => { if (!cancelled) setTrack(c.track) }).catch(() => undefined)
+    const onChanged = (e: Event) => {
+      const next = (e as CustomEvent<{ track?: RagTrack }>).detail?.track
+      if (next) setTrack(next)
+    }
+    window.addEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+    // Another tab or window changing the track arrives as a live event instead.
+    const unsubscribe = subscribe(['rag'], () => {
+      fetchRagConfig().then((c) => { if (!cancelled) setTrack(c.track) }).catch(() => undefined)
+    })
+    return () => {
+      unsubscribe()
+      cancelled = true
+      window.removeEventListener(RAG_TRACK_CHANGED_EVENT, onChanged)
+    }
+  }, [])
+
+  // Sitting on the other track's panel when the track changes (or asking for
+  // it from the palette) lands on the track switch instead of a hidden page.
+  const shown = getSettingsPanel(activeTab)
+  // `getSettingsPanel` follows redirects, so a removed panel's id (saved, or
+  // from an old link) renders the panel it moved to.
+  const resolved = shown?.id ?? DEFAULT_SETTINGS_PANEL_ID
+  const effectiveTab = shown && track && !trackVisible(shown, track) ? 'knowledge' : resolved
+
+  // Asking for the panel already open is a no-op, which is what makes it safe
+  // for the caller to leave the request set rather than having to clear it.
+  const [seenPanel, setSeenPanel] = useState(panel)
+  if (panel !== seenPanel) {
+    setSeenPanel(panel)
+    if (panel && getSettingsPanel(panel)) setActiveTab(panel)
+  }
 
   // The window is draggable and resizable, so its content can be narrow on a
   // wide screen — a viewport media query would be measuring the wrong thing.
@@ -61,13 +123,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   if (!open) return null
 
-  const groups = visibleGroups(isAdmin)
-  const activePanel = getSettingsPanel(activeTab)
-  // Peek now comes from the window shell, so the card treatment is derived
-  // inside the render prop rather than from component state.
-  const cardFor = (isPeek: boolean) =>
-    `p-6 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
-
+  const groups = visibleGroups(isAdmin, track)
+  const activePanel = getSettingsPanel(effectiveTab)
   return (
     <FloatingWindow
       id="settings"
@@ -114,6 +171,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
             {!isCompact && (
               <SettingsSearch
+                track={track}
                 isAdmin={isAdmin}
                 onOpenPanel={openPanel}
                 collapsed={sidebar.collapsed}
@@ -138,11 +196,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   {/* Groups keep their identity in the strip as a divider —
                       a flat run of 15 buttons is unreadable. */}
                   {isCompact && <div className="h-5 w-px shrink-0 theme-border border-l mx-1 first:hidden" />}
-                  {panelsForGroup(group.id, isAdmin).map((panel) => (
+                  {panelsForGroup(group.id, isAdmin, track).map((panel) => (
                     <NavButton
                       key={panel.id}
                       panel={panel}
-                      active={activeTab === panel.id}
+                      active={effectiveTab === panel.id}
                       collapsed={sidebar.collapsed && !isCompact}
                       horizontal={isCompact}
                       onSelect={() => setActiveTab(panel.id)}
@@ -176,7 +234,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           {/* Panel area. Keyed on the active panel so switching replays the
               entry animation rather than swapping contents in place. */}
           <div
-            key={activeTab}
+            key={effectiveTab}
             className={`@container flex-1 overflow-y-auto no-scrollbar bg-transparent min-w-0 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out ${isCompact ? 'p-5' : 'p-8'}`}
           >
             {/* One measure for every panel. It grows with the window up to a
@@ -184,75 +242,34 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 full width would just make a 1300px-wide select, which is
                 harder to scan, not easier. Panels that genuinely benefit from
                 width (Databases) add columns via their own container queries. */}
-            <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl">
+            {/* Same ladder as the Forge: the column keeps growing with the
+                window rather than stopping, and the last step cannot exceed
+                the pane it is centred in. */}
+            <div className="mx-auto w-full @2xl:max-w-2xl @4xl:max-w-3xl @6xl:max-w-4xl @7xl:max-w-[min(100%,1400px)]">
 
-            {activeTab === 'services' && <ModelEndpointsPanel isPeek={isPeek} />}
+            {/* Models (add, installed, hardware) are the Forge's, and store
+                health is part of System — see `settingsRegistry.ts`. */}
+            {effectiveTab === 'assistant-time' && <DateTimePanel isPeek={isPeek} />}
+            {effectiveTab === 'assistant-prompt' && <SystemPromptPanel isPeek={isPeek} />}
+            {effectiveTab === 'assistant-safety' && <SafetyPanel isPeek={isPeek} />}
+            {effectiveTab === 'thread' && <ThreadPanel isPeek={isPeek} />}
+            {effectiveTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
+            {effectiveTab === 'knowledge' && <KnowledgeBasePanel />}
+            {effectiveTab === 'vector-rag' && <VectorRagPanel onOpenForge={onOpenForge} />}
+            {effectiveTab === 'graph-rag' && <GraphRagPanel />}
+            {effectiveTab === 'search' && <SearchPanel isPeek={isPeek} />}
+            {effectiveTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
+            {effectiveTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
+            {effectiveTab === 'storage' && <DatabasesPanel isPeek={isPeek} />}
+            {effectiveTab === 'logs' && <LogsPanel />}
+            {effectiveTab === 'backup' && <BackupPanel />}
+            {effectiveTab === 'danger' && <DangerPanel />}
 
-            {activeTab === 'databases' && <DatabasesPanel isPeek={isPeek} />}
-
-            {activeTab === 'hardware' && <HardwarePanel isPeek={isPeek} />}
-
-            {activeTab === 'appearance' && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div>
-                  <h3 className="text-xl font-medium mb-1">Appearance</h3>
-                  <p className="text-sm theme-text-muted mb-6">
-                    Themes, colours, typography and background effects.
-                  </p>
-                </div>
-                <div className={cardFor(isPeek)}>
-                  <p className="text-sm theme-text-muted">
-                    Appearance lives in its own window so you can see changes against
-                    the live app. Open it from the sidebar menu → <strong>Theme &amp; Appearance</strong>.
-                  </p>
-                </div>
-              </div>
+            {effectiveTab === 'appearance' && (
+              <AppearancePanel isPeek={isPeek} onOpenTheme={onOpenTheme} />
             )}
 
-            {activeTab === 'shortcuts' && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div>
-                  <h3 className="text-xl font-medium mb-1">Shortcuts &amp; Toggles</h3>
-                  <p className="text-sm theme-text-muted mb-6">
-                    Configure keyboard shortcuts and quick toggles.
-                  </p>
-                </div>
-                <div className="space-y-4">
-                  <div
-                    className={`flex items-center justify-between p-5 rounded-xl border theme-border transition-colors ${
-                      isPeek ? 'bg-transparent' : 'theme-surface'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`p-3 rounded-lg ${
-                          isIncognito
-                            ? 'incognito-bg-soft incognito-text incognito-glow'
-                            : 'theme-surface-strong theme-text-muted'
-                        }`}
-                      >
-                        <Ghost size={22} />
-                      </div>
-                      <div>
-                        <div className="font-medium text-base">Incognito Mode</div>
-                        <div className="text-sm theme-text-muted mt-0.5">
-                          Pause history recording for this session. Your prompts will not be saved.
-                        </div>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={isIncognito}
-                      onChange={setIsIncognito}
-                      label="Incognito mode"
-                      // Incognito keeps its own accent rather than the theme's,
-                      // because the whole point of the mode is that it looks
-                      // different from every other state in the app.
-                      className={isIncognito ? 'incognito-bg' : ''}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+            {effectiveTab === 'shortcuts' && <ShortcutsPanel isPeek={isPeek} />}
 
             {activePanel && !activePanel.implemented && (
               <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-in fade-in duration-200">

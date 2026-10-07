@@ -1,4 +1,4 @@
-"""Raw store browser — Settings → Databases → View rows.
+"""Raw store browser — the sidebar's Data stores.
 
 Answers "what is actually in the database right now", which is the other half
 of the observability story: `audit_store.trace(query_id)` proves one response

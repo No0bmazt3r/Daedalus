@@ -1,0 +1,31 @@
+-- Record the path a graph traversal actually took, not just how long it was.
+--
+-- `rag_logs` already carries `track` ('vector' | 'graph') and `hop_count`, but a
+-- count is not a path: it says a walk was three hops without saying which nodes
+-- and edges those hops crossed. Traversal replay (`MODULES.md` §3.2) is the one
+-- view that makes the dual-track comparison visible rather than statistical, and
+-- it cannot be reconstructed from a number.
+--
+-- This runs before the orchestrator writes its first row on purpose. A path is
+-- not derivable after the fact — traces written without this column can never be
+-- replayed, so adding it later is a data-loss problem rather than a migration.
+--
+-- Shape: JSON array of hops, one object per hop, in traversal order.
+--
+--   [{"hop": 1,
+--     "from": ["Sensor:pressure_barg"],
+--     "edge": "HAS_THRESHOLD",
+--     "to": ["Threshold:pressure_high"],
+--     "sufficient": false,
+--     "reason": "no procedure found yet"}]
+--
+-- TEXT rather than a child table: it is written once, read whole, and never
+-- queried across rows. A `traversal_hops` table would buy a join nobody needs.
+ALTER TABLE rag_logs ADD COLUMN traversal_path TEXT;
+
+-- Which entry-point strategy found the starting nodes: 'alias' (authored alias
+-- table), 'fuzzy' (stdlib close-match fallback), or 'vector' (embedding search
+-- over node descriptions, if that fallback is ever enabled). Track 2 is
+-- deliberately embedding-free, and this column is what lets the report say so
+-- from the data instead of from the design doc.
+ALTER TABLE rag_logs ADD COLUMN entry_strategy TEXT;

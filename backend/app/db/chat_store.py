@@ -60,10 +60,12 @@ MAX_SUMMARY_CHARS: Final = 4_000
 # the sidebar, short enough not to wrap.
 TITLE_CHARS: Final = 60
 
-# Rough tokens-per-character for context budgeting. Deliberately crude — the
-# real figure comes from Ollama's `prompt_eval_count`, logged to
-# `model_logs.prompt_token_count`. Calibrate this constant from that data
-# rather than trusting it.
+# The uncalibrated ratio, used only for the `token_estimate` stored with each
+# message at write time. The history budget does not read that column any more:
+# `chat_service.build_context` recounts with the ratio `token_calibration`
+# measures from `model_logs` (prompt_chars / prompt_token_count), because this
+# layer cannot read the audit log and a figure frozen at write time could never
+# pick up a better measurement.
 CHARS_PER_TOKEN: Final = 4
 
 _init_lock = threading.Lock()
@@ -143,6 +145,8 @@ def _session_row(row: sqlite3.Row) -> dict[str, Any]:
         "summary_upto_seq": row["summary_upto_seq"],
         "ephemeral": bool(row["ephemeral"]),
         "archived_at": row["archived_at"],
+        "title_source": row["title_source"] if "title_source" in row.keys() else None,
+        "title_turns": row["title_turns"] if "title_turns" in row.keys() else 0,
         # Present only on list queries, which join the count in.
         "message_count": row["message_count"] if "message_count" in row.keys() else None,
     }
@@ -167,6 +171,10 @@ def _message_row(row: sqlite3.Row) -> dict[str, Any]:
         "evidence": evidence,
         "token_estimate": row["token_estimate"],
         "created_at": row["created_at"],
+        "model_tag": row["model_tag"] if "model_tag" in row.keys() else None,
+        "standalone_query": (
+            row["standalone_query"] if "standalone_query" in row.keys() else None
+        ),
     }
 
 
@@ -189,9 +197,10 @@ def create_session(
         with sqlite_util.transaction(DB_PATH) as conn:
             conn.execute(
                 "INSERT INTO chat_sessions "
-                "(session_id, created_at, updated_at, title, device_id, ephemeral) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, now, now, clean_title, device_id, int(ephemeral)),
+                "(session_id, created_at, updated_at, title, device_id, ephemeral, title_source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (session_id, now, now, clean_title, device_id, int(ephemeral),
+                 "user" if clean_title else None),
             )
 
     sqlite_util.with_retry(_write, what="create_session")
@@ -208,6 +217,19 @@ def get_session(session_id: str) -> dict[str, Any] | None:
             "SELECT * FROM chat_sessions WHERE session_id = ?", (session_id,)
         ).fetchone()
     return _session_row(row) if row else None
+
+
+def sessions_by_id(session_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """The sessions among `session_ids` that still exist, keyed by id. One query."""
+    ids = sorted({i for i in session_ids if i})
+    if not ids:
+        return {}
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM chat_sessions WHERE session_id IN ({','.join('?' for _ in ids)})", ids
+        ).fetchall()
+    return {row["session_id"]: _session_row(row) for row in rows}
 
 
 def list_sessions(
@@ -254,7 +276,12 @@ def update_session(
     title: str | None | _Unset = _UNSET,
     archived: bool | _Unset = _UNSET,
 ) -> dict[str, Any]:
-    """Rename and/or archive. Omitted fields are left untouched."""
+    """Rename and/or archive. Omitted fields are left untouched.
+
+    A title set here is the operator's (`title_source = 'user'`), and the title
+    job leaves it alone from then on. Clearing it (`None` or blank) hands the
+    chat back to the job.
+    """
     init_db()
     assignments: list[str] = []
     params: list[Any] = []
@@ -263,6 +290,8 @@ def update_session(
         cleaned = title.strip()[:MAX_TITLE_CHARS] if title and title.strip() else None
         assignments.append("title = ?")
         params.append(cleaned)
+        assignments.append("title_source = ?")
+        params.append("user" if cleaned else None)
     if not isinstance(archived, _Unset):
         assignments.append("archived_at = ?")
         params.append(_now() if archived else None)
@@ -306,6 +335,31 @@ def delete_session(session_id: str) -> bool:
             return cursor.rowcount > 0
 
     return sqlite_util.with_retry(_write, what="delete_session")
+
+
+def set_generated_title(session_id: str, title: str, turns: int) -> bool:
+    """Write a title from the title job, unless the operator has named the chat.
+
+    The check is in the UPDATE itself rather than read first, so a rename that
+    lands while the job's model call is running still wins. Returns whether the
+    title was written. Leaves `updated_at` alone: a background relabel is not
+    activity, and bumping it would reorder the sidebar under the operator.
+    """
+    init_db()
+    clean = " ".join(title.split())[:MAX_TITLE_CHARS]
+    if not clean:
+        return False
+
+    def _write() -> bool:
+        with sqlite_util.transaction(DB_PATH) as conn:
+            cursor = conn.execute(
+                "UPDATE chat_sessions SET title = ?, title_source = 'model', title_turns = ? "
+                " WHERE session_id = ? AND COALESCE(title_source, '') != 'user'",
+                (clean, max(0, turns), session_id),
+            )
+            return cursor.rowcount > 0
+
+    return sqlite_util.with_retry(_write, what="set_generated_title")
 
 
 def set_summary(session_id: str, summary: str, upto_seq: int) -> None:
@@ -359,6 +413,8 @@ def append_message(
     *,
     query_id: str | None = None,
     evidence: Any = None,
+    model_tag: str | None = None,
+    standalone_query: str | None = None,
 ) -> dict[str, Any]:
     """Append one message and return it, including its allocated `seq`.
 
@@ -396,12 +452,13 @@ def append_message(
                 """
                 INSERT INTO chat_messages
                     (session_id, seq, role, content, query_id,
-                     evidence_json, token_estimate, created_at)
+                     evidence_json, token_estimate, created_at, model_tag,
+                     standalone_query)
                 VALUES (
                     ?,
                     (SELECT COALESCE(MAX(seq), 0) + 1
                        FROM chat_messages WHERE session_id = ?),
-                    ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 (
@@ -413,13 +470,19 @@ def append_message(
                     evidence_json,
                     tokens,
                     now,
+                    model_tag,
+                    standalone_query,
                 ),
             )
+            # SQLite evaluates every SET expression against the row as it was,
+            # so `title IS NULL` below still sees the old title.
             conn.execute(
                 "UPDATE chat_sessions "
-                "   SET updated_at = ?, title = COALESCE(title, ?) "
+                "   SET updated_at = ?, title = COALESCE(title, ?), "
+                "       title_source = CASE WHEN title IS NULL AND ? IS NOT NULL "
+                "                           THEN 'first_message' ELSE title_source END "
                 " WHERE session_id = ?",
-                (now, candidate_title, session_id),
+                (now, candidate_title, candidate_title, session_id),
             )
             row = conn.execute(
                 "SELECT * FROM chat_messages WHERE id = ?", (cursor.lastrowid,)
@@ -470,8 +533,24 @@ def get_recent_messages(session_id: str, *, count: int) -> list[dict[str, Any]]:
     return [_message_row(row) for row in reversed(rows)]
 
 
+def message_for_query(query_id: str) -> dict[str, Any] | None:
+    """The assistant turn a chat query produced, with its stored evidence pack.
+
+    None when the chat was deleted (or was incognito and purged): the audit row
+    outlives the transcript by design, so a reader must cope with that.
+    """
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT * FROM chat_messages WHERE query_id = ? AND role = 'assistant' "
+            "ORDER BY id DESC LIMIT 1",
+            (query_id,),
+        ).fetchone()
+    return _message_row(row) if row else None
+
+
 def stats() -> dict[str, Any]:
-    """Row counts for the Settings → Databases panel."""
+    """Row counts for the Settings → System → Storage health panel."""
     init_db()
     with sqlite_util.connect(DB_PATH) as conn:
         return {

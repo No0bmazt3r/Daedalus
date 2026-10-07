@@ -53,3 +53,10 @@ backups/
 
 # Vite cache
 .vite
+
+# One-off scratch and codemod files. Four of these reached develop before this
+# rule existed: two stale copies of modules that had already been refactored,
+# and two throwaway scripts that rewrote a file in place.
+scratch*.py
+scratch*.sh
+fix_*.py

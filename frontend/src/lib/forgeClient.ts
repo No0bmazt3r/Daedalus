@@ -7,7 +7,7 @@
 // Rule 5: every one of these is a setup surface. Nothing in the chat path may
 // import this module.
 
-import { request } from './http';
+import { request, streamEvents, type EventStream } from './http';
 
 // ── the model table (steps 2 & 3) ────────────────────────────────────────────
 
@@ -72,17 +72,58 @@ export interface Measurement {
   prompt_token_count: number | null;
   completion_token_count: number | null;
   tokens_per_sec: number | null;
+  /**
+   * Where `tokens_per_sec` came from, and it decides whether the figure means
+   * anything. `engine` is Ollama's own `eval_duration` — a property of the
+   * model. `wall_clock` is `completion ÷ (total − TTFT)`, the fallback for a
+   * run that reported no counters, and it charges the model for every
+   * client-side and network delay in that window. On a short generation the
+   * window is small enough that the quotient is nonsense, so the UI has to say
+   * which one it is rather than print both the same way.
+   */
+  rate_source: 'engine' | 'wall_clock' | null;
+}
+
+/**
+ * The architecture the memory estimate was computed from — read from the pulled
+ * file, absent before that.
+ *
+ * `embedding_length` is the model's **hidden size**, not a retrieval vector
+ * width. It comes from the same GGUF key as an embedding model's output
+ * dimension and means something different, so it is never labelled
+ * "dimensions": comparing a chat model's 2048 against nomic-embed's 768 is
+ * comparing two unrelated quantities.
+ */
+export interface ModelArch {
+  layers?: number;
+  heads?: number;
+  kv_heads?: number;
+  head_dim?: number;
+  context_length?: number;
+  embedding_length?: number;
+  /** False when a field had to be inferred rather than read. */
+  measured?: boolean;
 }
 
 export interface ModelRow {
   id: string;
+  /** From Ollama's `/api/show`. Empty for a model that is not pulled. */
+  capabilities?: string[];
+  /** Null until the model is on disk. */
+  arch?: ModelArch | null;
   model_id: string;
   label: string;
   vendor: string | null;
   tag: string;
   /** False when nobody has confirmed this tag exists in Ollama's registry. */
   tag_verified: boolean;
-  tier: 'slm' | 'llm' | 'discovered';
+  /**
+   * `embedding` is assigned from Ollama's reported capabilities, not from
+   * parameter count — so it overrides the size tiers. It matters because the
+   * deployment picks from `slm`/`llm`, and an embedding model at 137M params
+   * would otherwise land in `slm` and be offered as something that can answer.
+   */
+  tier: 'slm' | 'llm' | 'discovered' | 'embedding';
   /** Rough capability, for filtering. */
   kind: 'general' | 'coding' | 'reasoning' | 'vision';
   /** One of PROJECT.md §8.1's six report candidates, as opposed to the wider library. */
@@ -114,6 +155,7 @@ export interface ModelRow {
   verdict: Verdict;
   speed: SpeedEstimate | null;
   quality: QualityScore | null;
+  /** The four *scoring* dimensions — not a vector width. See `arch` for shape. */
   dimensions: { fit: number; speed: number; quality: number; context: number } | null;
   weights: Record<string, number> | null;
   score: number | null;
@@ -293,19 +335,49 @@ export interface BenchmarkResult {
   sample: string;
 }
 
+/** One event from the benchmark stream. Exactly one `done` or `error` arrives. */
+export interface BenchmarkProgress {
+  phase: 'building_prompt' | 'warming_up' | 'generating' | 'done' | 'error';
+  tokens?: number;
+  piece?: string;
+  result?: BenchmarkResult;
+  error?: string;
+  /**
+   * Set when a cloud tag was refused for want of an account. Ollama returns a
+   * URL carrying this machine's public key; following it is the fix. It rides
+   * the event and nothing else — never the persisted error message.
+   */
+  signin_url?: string;
+}
+
 /**
  * Measure TTFT and tok/s on a RAG-context-sized prompt.
  *
  * Minutes, not seconds: a warm-up pass plus a ~2k-token prefill, and on a
- * CPU-bound machine that is genuinely slow. The default 15s abort would kill
- * every run, so this one gets its own timeout.
+ * CPU-bound machine that is genuinely slow. It streams so the UI can show what
+ * it is doing rather than sit on a spinner for several minutes, and `cancel`
+ * exists so leaving the panel does not leave the read hanging.
+ *
+ * The measurement arrives on the `done` event. `done` the promise only says the
+ * stream closed, and rejects if the run failed.
  */
-export function runBenchmark(tag: string): Promise<BenchmarkResult> {
-  return request<BenchmarkResult>('/api/forge/benchmark', {
-    method: 'POST',
-    body: JSON.stringify({ tag }),
-    timeoutMs: 10 * 60 * 1000,
+export function runBenchmark(
+  tag: string,
+  onProgress: (p: BenchmarkProgress) => void,
+): EventStream {
+  let failure: string | undefined;
+
+  const stream = streamEvents<BenchmarkProgress>('/api/forge/benchmark', { tag }, (event) => {
+    onProgress(event);
+    if (event.phase === 'error') failure = event.error ?? 'the benchmark failed';
   });
+
+  return {
+    cancel: stream.cancel,
+    done: stream.done.then(() => {
+      if (failure) throw new Error(failure);
+    }),
+  };
 }
 
 // ── inspect one arbitrary tag ────────────────────────────────────────────────

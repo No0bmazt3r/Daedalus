@@ -30,7 +30,6 @@ Show where the answer came from:
 [Trend Query]
 [SOP]
 [Manual]
-[Anomaly Record]
 ```
 
 ---
@@ -50,7 +49,6 @@ Chat History:
 User: Is the reactor running fine?
 Assistant: The reactor appears stable. Current temperature is 28.0°C,
 pressure is 1.50 barg, pH is 7.00, and CO₂ is 400.0 ppm.
-No anomaly flag is present in the latest reading.
 [Source: SQLite 10:00:05]
 
 User: What should I do if CO₂ rises sharply?

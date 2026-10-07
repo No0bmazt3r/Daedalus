@@ -1,16 +1,17 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 
-# Thin HTTP client for the ChromaDB service (Layer 5). This is deliberately
-# `chromadb-client` and not the full `chromadb`: the container talks to the
-# chromadb compose service over HTTP, and the full package drags in
-# onnxruntime/tokenizers for embedded mode — hundreds of MB the image never
-# uses. For embedded mode (no CHROMA_URL), install `chromadb` instead.
-# Either package satisfies the lazy import in app/db/vector_store.py.
-chromadb-client>=0.5
+# The vector store (Layer 5), embedded in the API process and writing to
+# $DAEDALUS_DATA_DIR/chroma — no separate server. The full package, not
+# `chromadb-client`, which only speaks HTTP to a Chroma server; the two install
+# the same `chromadb` module and must not both be present, which is why
+# `ensure_embedded_chroma` in scripts/common.sh removes the client from venvs
+# created before this changed. Setting CHROMA_URL still selects server mode
+# (app/db/vector_store.py), for anyone who runs Chroma separately.
+chromadb>=1.5,<2
 
 # HTTP client for the connection test in app/services/model_endpoints.py.
-# It arrives transitively via chromadb-client, but this module imports it
+# It arrives transitively via chromadb, but this module imports it
 # directly and a transitive dependency is not a contract — a Chroma release
 # that dropped it would break the Settings panel with a confusing error.
 httpx>=0.27
@@ -31,3 +32,39 @@ psutil>=5.9
 # succeeds and nvmlInit() fails — which `_gpus()` already treats as "no GPU"
 # and falls through. Safe to install unconditionally; nothing here requires it.
 nvidia-ml-py>=12.535
+
+# Graph storage and traversal for Track 2 (app/services/knowledge_graph.py).
+# MODULES.md §3.4 chose NetworkX over a git-tracked YAML file rather than a
+# sixth SQLite store: the graph is tens of nodes, hand-authored, and edited
+# rather than inserted into, so the file is the authoring surface and the store
+# count stays at five. Pure Python, no C extensions, no network — Rule 1 clean.
+networkx>=3.2
+
+# Parses that graph file. It arrives transitively via chromadb, but
+# knowledge_graph.py imports it directly and — as with httpx above — a
+# transitive dependency is not a contract.
+pyyaml>=6.0
+
+# PDF text extraction for the ingestion pipeline (app/services/extraction.py).
+#
+# **Optional at runtime, by design.** `extraction.pdf_available()` probes for it
+# and a machine without it still boots, still ingests .txt/.md/.csv/.json, and
+# refuses a PDF with a message naming this package — the same optional-import
+# discipline `vector_store` uses for Chroma and `hardware` for pynvml. Listed
+# here so a container rebuild picks it up; nothing breaks before one happens.
+#
+# Pure Python, no C extensions, no network at import or at call. Rule 1 clean.
+# There is deliberately no OCR dependency: a scanned PDF has no text layer, and
+# the pipeline says so rather than storing a document whose chunks are blank.
+pypdf>=4.0
+
+# Track 1 re-ranking (app/services/reranker.py): a cross-encoder re-scores the
+# candidates Chroma returns before the best top_k go into the evidence pack.
+# ONNX runtime + the Rust tokenizer rather than sentence-transformers, which
+# would bring PyTorch — over a gigabyte — for the same model. ~80 MB, CPU only.
+# The weights are not a dependency: they are downloaded on request from
+# Settings → Knowledge Base, pinned to a commit, into DATA_DIR/models/rerankers.
+# Without these two packages re-ranking reports itself unavailable and Track 1
+# keeps Chroma's order.
+onnxruntime>=1.18
+tokenizers>=0.19

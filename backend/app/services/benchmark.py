@@ -41,6 +41,7 @@ import json
 import sqlite3
 import time
 from datetime import datetime, timezone
+from collections.abc import Iterator
 from typing import Any
 
 from ..db import audit_store, sqlite_util
@@ -71,13 +72,13 @@ _QUESTION = (
 
 # Synthetic, and labelled as such everywhere it is used. Written to look like
 # what the real corpus contains — numbered SOP clauses, setpoints with units,
-# an anomaly note — because prefill cost depends on the token distribution, and
+# an incident note — because prefill cost depends on the token distribution, and
 # lorem ipsum tokenises differently from technical prose with figures in it.
 _FIXTURE_CHUNKS = [
     "SOP-412 §3.1 Coolant loop A shall be maintained between 288 °C and 295 °C at "
     "the core outlet. A sustained excursion above 297 °C for more than 120 seconds "
     "requires the operator to initiate a controlled power reduction to 80% and log "
-    "the event under UAUC-7.",
+    "the event under LOG-7.",
     "SOP-412 §3.4 Primary loop pressure is nominally 15.5 MPa. Deviations beyond "
     "±0.4 MPa are reportable. The pressuriser heater bank shall not be cycled more "
     "than four times per hour; excessive cycling indicates level instrumentation "
@@ -86,7 +87,7 @@ _FIXTURE_CHUNKS = [
     "A single detector reading more than 8% from the channel mean is treated as "
     "instrument fault, not a reactivity event, provided the remaining three agree "
     "within 2%.",
-    "ANOMALY-2024-118 At 03:14 the CO2 concentration in the containment sampling "
+    "MAINT-2024-118 At 03:14 the CO2 concentration in the containment sampling "
     "line rose from 412 ppm to 470.2 ppm over nine minutes. Loop A outlet "
     "temperature was 291.4 °C and stable. Root cause was traced to a calibration "
     "gas bottle left open in the instrument room; no reactor parameter was affected.",
@@ -152,6 +153,10 @@ def _rag_pack(target_tokens: int) -> tuple[str, dict[str, Any]] | None:
     try:
         from ..db import vector_store
 
+        # Guarded, which is the default: if the index was not built by the
+        # selected embedding model, `get_collection` raises and this falls back
+        # to the synthetic prompt. A benchmark is a measurement, and measuring
+        # against chunks from a different vector space measures nothing.
         collection = vector_store.get_collection()
         fetched = collection.get(ids=list(chunk_ids)[:20])
         documents = [d for d in (fetched.get("documents") or []) if d]
@@ -179,9 +184,21 @@ def _rag_pack(target_tokens: int) -> tuple[str, dict[str, Any]] | None:
     }
 
 
-def build_prompt(target_tokens: int = DEFAULT_PROMPT_TOKENS) -> tuple[str, dict[str, Any]]:
-    """A RAG-context-sized prompt, and provenance for it."""
-    real = _rag_pack(target_tokens)
+def build_prompt(
+    target_tokens: int = DEFAULT_PROMPT_TOKENS,
+    *,
+    allow_real: bool = True,
+) -> tuple[str, dict[str, Any]]:
+    """A RAG-context-sized prompt, and provenance for it.
+
+    `allow_real=False` forces the synthetic fixture even when a real retrieval
+    is available. That is not a quality setting — it is what keeps a cloud
+    benchmark from posting genuine plant documents to someone else's server.
+    The real pack is chunks fetched back out of the vector store: actual SOP
+    and manual text. Fine for a model running on this machine, an export off
+    it otherwise. `run_stream` sets this from the tag, not the caller.
+    """
+    real = _rag_pack(target_tokens) if allow_real else None
     if real:
         pack, meta = real
     else:
@@ -240,14 +257,32 @@ def _warm_up(tag: str) -> bool:
         return False
 
 
-def run(
+def _is_remote(tag: str) -> bool:
+    """Whether Ollama serves this tag from its cloud rather than this disk.
+
+    Asked of Ollama rather than matched against the `-cloud` suffix: the suffix
+    is a naming convention and `remote_host` is the fact. A tag that cannot be
+    found is treated as local, which is the conservative answer — it keeps a
+    real retrieval out of a prompt only when the destination is known remote,
+    and mislabels nothing as measured-on-this-machine that was not.
+    """
+    try:
+        for model in ollama_client.list_models():
+            if model.get("name") == tag:
+                return bool(model.get("remote"))
+    except Exception:
+        pass
+    return False
+
+
+def run_stream(
     tag: str,
     *,
     prompt_tokens: int = DEFAULT_PROMPT_TOKENS,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     warmup: bool = True,
-) -> dict[str, Any]:
-    """Benchmark one model. Writes `model_logs` and returns the measurement.
+) -> Iterator[dict[str, Any]]:
+    """Benchmark one model. Writes `model_logs` and yields progress events.
 
     Records two different things and does not mix them. Time-to-first-token and
     total are wall clock, because that is what an operator waits through and
@@ -259,20 +294,50 @@ def run(
     TTFT)`. The subtraction looks equivalent and is not: it silently charges the
     model for any client-side delay, which is how the first version of this
     benchmark reported a model at less than half its real speed.
+
+    ## A cloud tag is measured, and logged, as a different thing
+
+    Ollama lists its cloud-hosted tags beside local ones and will happily serve
+    one. Benchmarking it is legitimate — Rule 1 allows cloud models as
+    evaluation baselines — but the number means something else: it measures
+    ollama.com's hardware, not this machine. Two things follow, and both are
+    set here from the tag rather than trusted to the caller:
+
+    - the row is written with `source='benchmark_cloud'`, so every query that
+      asks what *this* machine can do keeps filtering on `'benchmark'` and
+      stays correct without being rewritten;
+    - the prompt is forced to the synthetic fixture, because the real pack is
+      plant documents and this one leaves the building.
+
+    Warm-up is skipped too. It exists to take the weight-load off the clock,
+    and there are no weights here to load.
     """
     if ollama_client.httpx is None:
-        raise ollama_client.OllamaUnavailable("httpx is not installed")
+        yield {"phase": "error", "error": "httpx is not installed"}
+        return
 
-    prompt, provenance = build_prompt(prompt_tokens)
+    remote = _is_remote(tag)
+
+    yield {"phase": "building_prompt"}
+    prompt, provenance = build_prompt(prompt_tokens, allow_real=not remote)
     query_id = "bench_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S%f")
 
-    warmed_up = _warm_up(tag) if warmup else False
+    if warmup and not remote:
+        yield {"phase": "warming_up"}
+    warmed_up = _warm_up(tag) if (warmup and not remote) else False
+
+    yield {"phase": "generating", "tokens": 0, "piece": ""}
 
     started = time.perf_counter()
     first_token_at: float | None = None
     pieces: list[str] = []
+    # Counted but not kept: thinking is generation the caller waits through, so
+    # it belongs in the token count and in TTFT. It is not part of the answer,
+    # so it stays out of `sample`.
+    thinking_tokens = 0
     final: dict[str, Any] = {}
     error: str | None = None
+    signin_url: str | None = None
 
     payload = {
         "model": tag,
@@ -297,7 +362,7 @@ def run(
                 ) as response:
                     if response.status_code >= 400:
                         response.read()
-                        raise ollama_client.OllamaError(ollama_client._error_detail(response))
+                        raise ollama_client.error_from(response)
                     for line in response.iter_lines():
                         if not line.strip():
                             continue
@@ -307,11 +372,29 @@ def run(
                             continue
                         if event.get("error"):
                             raise ollama_client.OllamaError(str(event["error"]))
+                        # A reasoning model emits its chain of thought in
+                        # `thinking` and leaves `response` empty until it is
+                        # done deliberating. Watching only `response` recorded
+                        # no first token at all for qwen3 and gpt-oss — both
+                        # reasoning models — so TTFT, the one figure Objective 3
+                        # turns on, came back NULL on the very models this
+                        # project runs. The clock starts at the first generated
+                        # token of either kind, because that is the moment the
+                        # engine stopped prefilling and started producing.
                         piece = event.get("response") or ""
-                        if piece and first_token_at is None:
+                        thought = event.get("thinking") or ""
+                        if (piece or thought) and first_token_at is None:
                             first_token_at = time.perf_counter()
+                        if thought:
+                            thinking_tokens += 1
                         if piece:
                             pieces.append(piece)
+                        if piece or thought:
+                            yield {
+                                "phase": "generating",
+                                "tokens": len(pieces) + thinking_tokens,
+                                "piece": piece,
+                            }
                         if event.get("done"):
                             final = event
                 break
@@ -323,6 +406,9 @@ def run(
             raise ollama_client.OllamaUnavailable("no Ollama daemon answered")
     except Exception as exc:  # noqa: BLE001
         error = f"{exc.__class__.__name__}: {exc}"
+        # Held separately from `error`, which is what gets logged. See
+        # `OllamaError` for why the URL must not reach `model_logs`.
+        signin_url = getattr(exc, "signin_url", None)
 
     ended = time.perf_counter()
     total_ms = int((ended - started) * 1000)
@@ -346,7 +432,7 @@ def run(
     # model, and only the second answers Objective 3.
     ns = 1_000_000
     prompt_tokens_actual = final.get("prompt_eval_count")
-    completion_tokens = final.get("eval_count") or (len(pieces) or None)
+    completion_tokens = final.get("eval_count") or ((len(pieces) + thinking_tokens) or None)
     prefill_ms = int(final.get("prompt_eval_duration", 0) // ns) or None
     generation_ms = int(final.get("eval_duration", 0) // ns) or None
     load_ms = int(final.get("load_duration", 0) // ns) or None
@@ -368,31 +454,46 @@ def run(
         prefill_ms=prefill_ms,
         generation_ms=generation_ms,
         load_ms=load_ms,
-        source="benchmark",
+        source="benchmark_cloud" if remote else "benchmark",
+        # Which machine produced these milliseconds. NULL for local runs; see
+        # migration 004 for why that is not 'localhost'.
+        host=ollama_client.serving_host(tag),
         status=status,
         error_message=error,
     )
 
-    return {
-        "tag": tag,
-        "query_id": query_id,
-        "at": _now(),
-        "status": status,
-        "error": error,
-        "time_to_first_token_ms": ttft_ms,
-        "total_inference_ms": total_ms,
-        # Engine-side. `prefill_ms` is the honest cost of the evidence pack and
-        # is most of what TTFT consists of on a RAG prompt.
-        "prefill_ms": prefill_ms,
-        "generation_ms": generation_ms,
-        "load_ms": load_ms,
-        "tokens_per_sec": tokens_per_sec,
-        "prompt_token_count": prompt_tokens_actual,
-        "completion_token_count": completion_tokens,
-        # False means the figures include loading the weights from disk, which
-        # is a different measurement and a much worse-looking one.
-        "warmed_up": warmed_up,
-        # So a reader can tell a production-trace number from a fixture one.
-        "prompt": provenance,
-        "sample": "".join(pieces)[:400],
-    }
+    if error:
+        event: dict[str, Any] = {"phase": "error", "error": error}
+        if signin_url:
+            event["signin_url"] = signin_url
+        yield event
+    else:
+        yield {
+            "phase": "done",
+            "result": {
+                "tag": tag,
+                "query_id": query_id,
+                "at": _now(),
+                "status": status,
+                # Where it ran. A reader comparing two rows needs this before
+                # the milliseconds mean anything.
+                "remote": remote,
+                "error": error,
+                "time_to_first_token_ms": ttft_ms,
+                "total_inference_ms": total_ms,
+                # Engine-side. `prefill_ms` is the honest cost of the evidence
+                # pack and is most of what TTFT consists of on a RAG prompt.
+                "prefill_ms": prefill_ms,
+                "generation_ms": generation_ms,
+                "load_ms": load_ms,
+                "tokens_per_sec": tokens_per_sec,
+                "prompt_token_count": prompt_tokens_actual,
+                "completion_token_count": completion_tokens,
+                # False means the figures include loading the weights from disk,
+                # which is a different measurement and a much worse-looking one.
+                "warmed_up": warmed_up,
+                # So a reader can tell a production-trace number from a fixture one.
+                "prompt": provenance,
+                "sample": "".join(pieces)[:400],
+            }
+        }

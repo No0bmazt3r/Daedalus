@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..db import chat_store
+from . import token_calibration
 
 # How much of the context window history may occupy.
 #
@@ -45,9 +46,9 @@ from ..db import chat_store
 # and the evidence pack plus retrieved SOP chunks already claim 1–2k of that.
 # ~1200 tokens leaves room for both and still holds four to six turns.
 #
-# This is a *character-derived estimate* — see chat_store.CHARS_PER_TOKEN.
-# Calibrate against the real prompt_eval_count in model_logs before trusting
-# it at the edge of a context window.
+# Counted in characters divided by a ratio measured from `model_logs` — see
+# `token_calibration`. The per-message `token_estimate` stored by chat_store is
+# the uncalibrated figure from write time and is not what this budget uses.
 DEFAULT_HISTORY_TOKEN_BUDGET = 1_200
 
 # Prepended to replayed history. Short on purpose: a small model follows one
@@ -71,6 +72,9 @@ class ContextWindow:
     dropped: int = 0
     estimated_tokens: int = 0
     summary_upto_seq: int = 0
+    #: The ratio the budget was counted in, and where it came from.
+    chars_per_token: float = token_calibration.DEFAULT
+    calibration_source: str = "default"
 
     @property
     def needs_summary(self) -> bool:
@@ -157,9 +161,17 @@ def delete_session(session_id: str) -> bool:
     return chat_store.delete_session(session_id)
 
 
-def add_user_message(session_id: str, content: str) -> dict[str, Any]:
-    """Record what the user asked. Safe to expose over HTTP."""
-    return chat_store.append_message(session_id, "user", content)
+def add_user_message(
+    session_id: str, content: str, *, standalone_query: str | None = None
+) -> dict[str, Any]:
+    """Record what the user asked. Safe to expose over HTTP.
+
+    `standalone_query` is the orchestrator's rewrite of a follow-up (§7.4); the
+    next follow-up is condensed against it. The HTTP route never sets it.
+    """
+    return chat_store.append_message(
+        session_id, "user", content, standalone_query=standalone_query
+    )
 
 
 def add_assistant_message(
@@ -168,6 +180,7 @@ def add_assistant_message(
     *,
     query_id: str | None = None,
     evidence: Any = None,
+    model_tag: str | None = None,
 ) -> dict[str, Any]:
     """Record what the assistant answered — **orchestrator only**.
 
@@ -175,7 +188,7 @@ def add_assistant_message(
     messages could seed the model's own context with fabricated readings.
     """
     return chat_store.append_message(
-        session_id, "assistant", content, query_id=query_id, evidence=evidence
+        session_id, "assistant", content, query_id=query_id, evidence=evidence, model_tag=model_tag
     )
 
 
@@ -210,11 +223,15 @@ def build_context(
         session_id, after_seq=session["summary_upto_seq"]
     )
 
+    calibration = token_calibration.calibration()
+    ratio = float(calibration["chars_per_token"])
+    cost_of = {m["seq"]: token_calibration.estimate(m["content"], ratio) for m in history}
+
     kept: list[dict[str, Any]] = []
     used = 0
     dropped = 0
     for message in reversed(history):
-        cost = message["token_estimate"]
+        cost = cost_of[message["seq"]]
         # Always keep at least one message, even if a single turn is somehow
         # larger than the whole budget — an empty window loses the thread
         # entirely, which is worse than a slightly oversized prompt.
@@ -230,7 +247,7 @@ def build_context(
     # referent the next question depends on ("is that still high?"), and an
     # empty window loses the thread completely.
     if len(kept) > 1 and kept[0]["role"] == "assistant":
-        used -= kept[0]["token_estimate"]
+        used -= cost_of[kept[0]["seq"]]
         kept = kept[1:]
         dropped += 1
 
@@ -241,6 +258,8 @@ def build_context(
         dropped=dropped,
         estimated_tokens=used,
         summary_upto_seq=session["summary_upto_seq"],
+        chars_per_token=ratio,
+        calibration_source=calibration["source"],
     )
 
 

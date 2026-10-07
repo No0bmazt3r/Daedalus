@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, CircleDashed, Minus } from 'lucide-react'
 import { useDraggable } from '../../hooks/useDraggable'
@@ -116,6 +116,34 @@ function useRestoreRegistration(id: string | undefined, minimized: boolean, rest
   }, [id, minimized, restore])
 }
 
+/**
+ * Windows snapped to a full-height half of the screen.
+ *
+ * A half-snapped window is tiled, not modal: the app shell reads this through
+ * `useTiledInset()` and leaves that side free, so the chat stays usable in the
+ * other half. Corner snaps and maximize stay modal.
+ */
+type TileSide = 'left' | 'right'
+const tiles = new Map<string, { side: TileSide; width: number }>()
+const tileListeners = new Set<() => void>()
+let tileInset = { left: 0, right: 0 }
+
+function publishTiles() {
+  const next = { left: 0, right: 0 }
+  for (const { side, width } of tiles.values()) next[side] = Math.max(next[side], width)
+  if (next.left === tileInset.left && next.right === tileInset.right) return
+  tileInset = next
+  tileListeners.forEach((l) => l())
+}
+
+/** How many pixels on each side are taken by a tiled window. */
+export function useTiledInset() {
+  return useSyncExternalStore(
+    (l) => { tileListeners.add(l); return () => { tileListeners.delete(l) } },
+    () => tileInset,
+  )
+}
+
 let fallbackDock: HTMLDivElement | null = null
 
 function getDock(): HTMLElement | null {
@@ -191,9 +219,13 @@ export function useMinimizeToDock({
   const [minimized, setMinimized] = useState(false)
   const [dock, setDock] = useState<HTMLElement | null>(null)
 
-  useEffect(() => {
+  // Adjusted during render rather than in an effect, so a reopened window never
+  // paints one frame as a chip.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (!open) setMinimized(false)
-  }, [open])
+  }
 
   // The dock node is created here rather than in an effect: this is the first
   // moment it is needed, a click handler is where a DOM side effect belongs,
@@ -238,11 +270,11 @@ function renderChip({
   // Square, matching `Switch` and the pixel skeletons rather than the round
   // buttons it sits beside. Height still 36px so it lines up with them.
   return (
-    <span className="pointer-events-auto inline-flex items-center h-9 rounded-[3px] border theme-border theme-text text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] animate-in fade-in slide-in-from-top-1 duration-200">
+    <span className="pointer-events-auto inline-flex min-w-0 items-center h-9 rounded-[3px] border theme-border theme-text text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] animate-in fade-in slide-in-from-top-1 duration-200">
       <button
         onClick={onRestore}
         title={`Restore ${name}`}
-        className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-full rounded-l-[2px]"
+        className="flex min-w-0 items-center gap-1.5 pl-2.5 pr-1.5 h-full rounded-l-[2px] [&>svg]:shrink-0"
       >
         {icon}
         <span className="truncate max-w-[140px]">{title}</span>
@@ -251,7 +283,7 @@ function renderChip({
         onClick={onClose}
         aria-label={`Close ${name}`}
         title="Close without restoring"
-        className="flex items-center h-full pr-2 pl-0.5 rounded-r-[2px] theme-text-muted hover:text-[var(--status-bad)]"
+        className="flex shrink-0 items-center h-full pr-2 pl-0.5 rounded-r-[2px] theme-text-muted hover:text-[var(--status-bad)]"
       >
         <X size={13} />
       </button>
@@ -284,18 +316,30 @@ export function FloatingWindow({
   width?: number
   height?: number
   className?: string
-  children: ReactNode | ((ctx: { isPeek: boolean }) => ReactNode)
+  /**
+   * `minimized` is passed because minimize hides with `display: none` rather
+   * than unmounting — deliberately, so tab, scroll and filter state survive.
+   * The cost is that a window can sit invisible for minutes while the state it
+   * renders changes underneath it, and nothing tells it to look again. A window
+   * whose content can go stale watches this and re-reads when it comes back.
+   */
+  children: ReactNode | ((ctx: { isPeek: boolean; minimized: boolean }) => ReactNode)
 }) {
   const [isPeek, setIsPeek] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const [dock, setDock] = useState<HTMLElement | null>(null)
-  const { position, onMouseDown, handleRef, windowRef } = useDraggable()
+  const { position, onMouseDown, handleRef, windowRef, preview, snapRect, settling, toggleMaximize } =
+    useDraggable()
 
   // Closing and reopening should give a normal window, not a chip. Minimize is
   // a view state, not a preference worth remembering.
-  useEffect(() => {
+  // Adjusted during render rather than in an effect, so a reopened window never
+  // paints one frame as a chip.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (!open) setMinimized(false)
-  }, [open])
+  }
 
   // Declared here, above the Escape handler that uses `restore`.
   const minimize = useCallback(() => {
@@ -306,6 +350,24 @@ export function FloatingWindow({
   const restore = useCallback(() => setMinimized(false), [])
 
   useRestoreRegistration(id, minimized, restore)
+
+  // Snapped to a full-height half: tile beside the app instead of covering it.
+  const tileSide: TileSide | null =
+    snapRect && snapRect.top === 0 && typeof window !== 'undefined'
+      && snapRect.height >= window.innerHeight - 1 && snapRect.width < window.innerWidth
+      ? (snapRect.left === 0 ? 'left' : 'right')
+      : null
+  const tileKey = useId()
+  const tileWidth = snapRect?.width ?? 0
+  useEffect(() => {
+    if (!open || minimized || !tileSide) return
+    tiles.set(tileKey, { side: tileSide, width: tileWidth })
+    publishTiles()
+    return () => {
+      tiles.delete(tileKey)
+      publishTiles()
+    }
+  }, [open, minimized, tileSide, tileWidth, tileKey])
 
   // Recomputed each time the window opens, so it lands centred even if the
   // browser has been resized since. Dragging takes over from `position` after.
@@ -352,32 +414,56 @@ export function FloatingWindow({
           work — a filtered model table, a half-written API key, an open store
           row — and a stray click outside it should set that aside, not throw
           it away. Closing stays deliberate: the ✕, or Escape. */}
-      <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"
-        style={{ opacity: isPeek ? 0 : 1 }}
-        onClick={minimize}
-        title="Click to set this aside"
-      />
+      {/* No backdrop while tiled: the other half is the app, still usable. */}
+      {!tileSide && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"
+          style={{ opacity: isPeek ? 0 : 1 }}
+          onClick={minimize}
+          title="Click to set this aside"
+        />
+      )}
+
+      {/* The dashed target, drawn under the window and over the page, while a
+          drag is over an edge. Portalled to <body> so it is not clipped by the
+          window's own `overflow: hidden`. */}
+      {preview &&
+        createPortal(
+          <div className="snap-preview" style={preview} aria-hidden />,
+          document.body,
+        )}
 
       <div
         ref={windowRef}
         style={{
-          left: position.x || anchor.left,
-          top: position.y || anchor.top,
-          width,
-          height,
+          left: snapRect ? snapRect.left : position.x || anchor.left,
+          top: snapRect ? snapRect.top : position.y || anchor.top,
+          width: snapRect ? snapRect.width : width,
+          height: snapRect ? snapRect.height : height,
+          // A snapped window is the size of the region it was dropped in, so
+          // the class-level clamps have to stand down: `max-w-[95vw]` would
+          // leave a maximized window 5% short, and `min-w-[560px]` would push a
+          // half-screen snap off a narrow display.
+          ...(snapRect
+            ? { maxWidth: 'none', maxHeight: 'none', minWidth: 0, minHeight: 0 }
+            : null),
           backgroundColor: isPeek
             ? 'color-mix(in srgb, var(--bg, #000) 55%, transparent)'
             : 'var(--bg)',
           backdropFilter: isPeek ? 'none' : undefined,
         }}
-        className={`pointer-events-auto absolute resize overflow-hidden min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh] flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${
-          isPeek ? 'theme-hairline shadow-none' : ''
-        } ${className}`}
+        className={`pointer-events-auto absolute overflow-hidden flex flex-col theme-text theme-border border rounded-xl shadow-2xl transition-colors duration-300 ${
+          // Native resize is withdrawn while snapped: the handle writes inline
+          // width/height that React overwrites on the next render, so it looks
+          // broken rather than unavailable.
+          snapRect ? '' : 'resize min-w-[560px] min-h-[400px] max-w-[95vw] max-h-[90vh]'
+        } ${settling ? 'snap-settling' : ''} ${isPeek ? 'theme-hairline shadow-none' : ''} ${className}`}
       >
         <div
           ref={handleRef}
           onMouseDown={onMouseDown}
+          onDoubleClick={toggleMaximize}
+          title={snapRect ? 'Double-click to restore' : 'Drag to move · drag to an edge to snap · double-click to maximize'}
           className="flex items-center justify-between px-4 py-3 border-b theme-border cursor-move theme-surface select-none shrink-0"
           style={{ backgroundColor: isPeek ? 'transparent' : undefined }}
         >
@@ -394,7 +480,7 @@ export function FloatingWindow({
               onMouseDown={(e) => e.stopPropagation()}
               onClick={minimize}
               aria-label="Minimize"
-              title="Collapse to the bar at the bottom. Nothing is lost — the window reopens exactly as you left it."
+              title="Collapse to the bar at the bottom. Nothing is lost, and the window reopens just as you left it."
               className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]"
             >
               <Minus size={16} />
@@ -424,7 +510,7 @@ export function FloatingWindow({
         </div>
 
         <div className={`flex-1 min-h-0 flex flex-col ${isPeek ? 'bg-transparent' : 'theme-surface'}`}>
-          {typeof children === 'function' ? children({ isPeek }) : children}
+          {typeof children === 'function' ? children({ isPeek, minimized }) : children}
         </div>
         </div>
       </div>

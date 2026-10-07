@@ -41,7 +41,7 @@ lab-scale CO₂ sorption reactor, logging temperature, pressure, pH, level and
 NDIR CO₂ concentration to a local SQLite database every 5 seconds. To
 understand reactor state today, a person must read raw sensor graphs, know
 SCADA/mode jargon (Manual/Absorption/Desorption), and manually cross-reference
-separate SOP documents and anomaly logs. That is slow, error-prone, and shuts
+separate SOP documents and logs. That is slow, error-prone, and shuts
 out non-specialists.
 
 ### The solution
@@ -53,7 +53,6 @@ letting anyone ask plain-language questions:
 - "Why did the CO₂ reading spike at 10:00?"
 - "What's the average temperature over the past hour?"
 - "What do I do if the NDIR reading drifts?"
-- "Was there an anomaly this morning?"
 
 …and get a grounded, cited, natural-language answer — **without the model ever
 inventing a sensor value**, because it never generates numbers. It only narrates
@@ -90,11 +89,11 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 4 | SOP/troubleshooting answers must be retrieval-grounded, and must refuse when nothing relevant is retrieved |
 | 5 | FastAPI is the orchestration backend; Ollama is the local model runtime |
 | 6 | SQLite holds sensor data (WAL mode, opened read-only by the AI); AI logs live in a **separate** database |
-| 7 | The same four core tools: `get_live_reading`, `get_trend`, `get_anomaly_summary`, `rag_retrieve` |
+| 7 | The same three core tools: `get_live_reading`, `get_trend`, `rag_retrieve` |
 | 8 | Same candidate models and quantization strategy (Q4_K_M-first) |
 | 9 | Same success targets: **<3s** end-to-end latency, **>80%** retrieval precision, **<10%** hallucination rate |
 | 10 | Setup/admin utilities are not runtime components and must not sit in the query path |
-| 11 | Corpus is manuals, SOPs, anomaly records and UAUC records; chunked 300–500 tokens with overlap; embedded locally |
+| 11 | Corpus is manuals, SOPs, troubleshooting/incident documents (`anomaly_record`), safety documents (`uauc_record`) and background references; chunked 300–500 tokens with overlap; embedded locally |
 
 ### 2.2 Where they conflict — and the resolution
 
@@ -108,11 +107,10 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 6 | **Model-fit tooling** | `05-model-hardware-fit-tool.md` — llmfit-inspired CLI | `11-admin-utility-layer.md` — Model Selector Console (Streamlit) | **Same deliverable, two names.** Merge into one "Hardware & Model Console": CLI-first (the safe MVP), optional web UI later |
 | 7 | **Evaluation method** | Local manual labelling | Hybrid: local Streamlit + n8n/Google Sheets + LLM-as-a-judge | **Adopt the hybrid**, with the cloud half explicitly fenced as an *offline, post-hoc* workflow over exported logs. It never touches the live runtime |
 | 8 | **Sensor table PK** | `timestamp DATETIME PRIMARY KEY` | `id INTEGER PRIMARY KEY AUTOINCREMENT` + `timestamp TEXT` | **ISO-8601 `timestamp TEXT` as PK.** `architecture/03` itself recommends collapsing to a single ISO timestamp. Simpler joins, natural ordering |
-| 9 | **Column naming** | `temp_c`, `pressure_barg`, `ph`, `co2_ppm`, `anomaly_status` | `temperature`, `pressure`, `ph`, `co2_ppm`, `mode`, `anomaly_flag` | **Unit-suffixed physical columns** (`temp_c`, `pressure_barg`) — self-documenting. The tool layer exposes *friendly* names (`temperature`) and maps them to columns via a whitelist |
-| 10 | **Anomaly storage** | `anomaly_status` column on the readings row | Either the column *or* a separate `anomaly_records` table | **Support both.** `get_anomaly_summary` reads the richer table when present and falls back to the column |
-| 11 | **Graph store** | NetworkX primary, Kùzu as a stretch comparison | "KuzuDB or NetworkX" | **NetworkX first** (zero setup, fast iteration); Kùzu only if time allows |
-| 12 | **Model list drift** | Qwen3, Phi-3, Gemma 3, Llama 3.1, Mistral | `architecture-overview` says Qwen2.5/Llama 3.2; `06` says Qwen3/Phi-3/Gemma 3 | **Use the `06`/`docs` list** (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B for SLM tier). The overview's list is stale |
-| 13 | **Naming** | "CO2SorptionDT Conversational Agentic AI" | "Project Daedalus" | **Daedalus** is the system/product name; the FYP title stays the formal academic one |
+| 9 | **Column naming** | `temp_c`, `pressure_barg`, `ph`, `co2_ppm` | `temperature`, `pressure`, `ph`, `co2_ppm`, `mode` | **Unit-suffixed physical columns** (`temp_c`, `pressure_barg`) — self-documenting. The tool layer exposes *friendly* names (`temperature`) and maps them to columns via a whitelist |
+| 10 | **Graph store** | NetworkX primary, Kùzu as a stretch comparison | "KuzuDB or NetworkX" | **NetworkX first** (zero setup, fast iteration); Kùzu only if time allows |
+| 11 | **Model list drift** | Qwen3, Phi-3, Gemma 3, Llama 3.1, Mistral | `architecture-overview` says Qwen2.5/Llama 3.2; `06` says Qwen3/Phi-3/Gemma 3 | **Use the `06`/`docs` list** (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B for SLM tier). The overview's list is stale |
+| 12 | **Naming** | "CO2SorptionDT Conversational Agentic AI" | "Project Daedalus" | **Daedalus** is the system/product name; the FYP title stays the formal academic one |
 
 ### 2.3 Open questions still needing your decision
 
@@ -120,7 +118,6 @@ These are genuinely undecided — flagged rather than silently resolved:
 
 - [ ] **Is the PyQt5 tab still a deliverable at all**, or fully replaced by the web dashboard? Affects whether Zone 4 needs two clients.
 - [ ] **Is the vector-DB bake-off (6 candidates) still in scope for FYP2**, on top of the dual-track RAG comparison? Two benchmark studies may be more than the timeline allows.
-- [ ] **Does Anson's anomaly subsystem write a column or a table?** Determines which `get_anomaly_summary` path is primary.
 - [ ] **Confirm the lab machine's actual specs** (RAM/GPU) — this gates the entire model-tier decision.
 
 ---
@@ -143,9 +140,31 @@ so a row describing a cloud model for runtime use cannot be stored, and no
 module on the chat path imports the service that reads them. The rule is
 structural rather than remembered, exactly like Rule 2's `mode=ro`.
 
+**One narrowing, added deliberately: *recorded* rather than *prevented*.** The
+console lets an operator point a single chat turn at an Ollama cloud tag. The
+production configuration is unaffected — `model_config.resolve()` only ever
+names a local tag, and `auto` ranks installed models on this disk — but the
+override exists because comparing the local answer against a hosted one is the
+comparison §5 is built to make, and refusing outright pushed that comparison
+outside the system, where nothing logged it.
+
+What keeps it defensible is that the choice is never silent, at three layers:
+
+| layer | what it does |
+|---|---|
+| picker | cloud models sit under **"Evaluation only · not Rule 1 safe"**, and the composer shows a cloud icon before you send |
+| transcript | the turn is badged with the tag that answered it |
+| `model_logs` | written as `source='chat_cloud'`, never `'chat'`, with `host` recording which machine served it |
+
+So every query that asks about the production path filters `source = 'chat'`
+and keeps excluding cloud turns without being rewritten. The claim the report
+can make is therefore **"no cloud model serves the production configuration,
+and any deviation is recorded and separable"** — which is a stronger, checkable
+claim than an unenforced absolute. See [`BENCHMARK.md`](BENCHMARK.md) §8.
+
 ### Rule 2 — The AI layer is read-only toward the plant
 It may read the sensor SQLite DB and its own knowledge stores. It may **never**
-write to SCADA, actuators, ABVs, sensor hardware, or a teammate's subsystem.
+write to SCADA, actuators, ABVs, sensor hardware, or the SCADA ingestion subsystem.
 
 *It may and must write to its own audit/evaluation logs* — those belong to the
 AI layer, not the control layer, and do not breach the boundary.
@@ -159,7 +178,7 @@ guardrails.
 **Enforcement:**
 - SQLite opened `file:...?mode=ro` via URI — the driver refuses writes.
 - No tool in the registry has a write signature. `set_reading()`,
-  `write_valve()`, `update_anomaly()` **do not exist**.
+  `write_valve()`, `delete_reading()` **do not exist**.
 - No raw-SQL tool is exposed, so the model cannot compose its own statement.
 - A safety guard blocks control-intent queries before any tool runs.
 
@@ -187,7 +206,7 @@ evaluation harness are administrative. They never sit in the live query path.
 └────────────────────────────┬────────────────────────────────────────┘
                              │ sensor readings
 ┌─ Zone 2 ─ SCADA / Data Acquisition ────────────────── pre-existing ─┐
-│  CO2SorptionDT · polling · ingestion (Jason) · anomaly flags (Anson)│
+│  CO2SorptionDT · polling · ingestion                                │
 │  → writes a row every 5s                                            │
 └────────────────────────────┬────────────────────────────────────────┘
                              │ read-only SQL  ◄── THE SAFETY BOUNDARY
@@ -206,16 +225,16 @@ evaluation harness are administrative. They never sit in the live query path.
 | # | Layer | Zone | Status |
 |---|---|---|---|
 | 1 | Physical reactor & sensors | 1 | Pre-existing, untouched |
-| 2 | SCADA acquisition | 2 | Pre-existing (teammates) |
+| 2 | SCADA acquisition | 2 | Pre-existing |
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
-| 4 | Knowledge ingestion (offline) | Setup | **Not started** |
-| 5 | Retrieval — vector + graph | 3 | **Store running** (Chroma); retrieval not started |
+| 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); waiting on the real corpus |
+| 5 | Retrieval — vector + graph | 3 | **Wired into chat**, one track at a time — Track 1 top-k over the current index with metadata filtering and cross-encoder re-ranking; Track 2 the agent loop (`graph_agent`) or the fixed walk it is measured against (`graph_walk`). Every result marked this rig or reference. Track 1's hybrid search, query expansion, compression and multi-hop not built |
 | 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
-| 7 | FastAPI orchestration | 3 | **Answering, not orchestrating** — history replay and a model call; no retrieval or tool-calling yet |
-| 8 | Deterministic tool layer | 3 | **Not started** |
+| 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback, background summariser; citations shown in the chat |
+| 8 | Deterministic tool layer | 3 | **Built** — the two sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
 | 9A | PyQt5 chat tab | 4 | Deferred / optional |
 | 9B | React web dashboard | 4 | **Partially built** — see §11 |
-| 10 | Observability & evaluation | Support | **Store built** — 7 log tables + query_id tracing |
+| 10 | Observability & evaluation | Support | **Logging wired** — every chat turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags; evaluation harness not built |
 | 11 | Admin utilities | Setup | **Built** — The Forge: all six §8.2 steps, plus model discovery and per-model usage |
 
 ---
@@ -230,14 +249,14 @@ Both tracks share Zones 1/2/4 and all deterministic sensor tools. They diverge
 ChromaDB, local embeddings, top-k cosine retrieval. Advanced techniques layered
 on top (all from `architecture/05`):
 
-| Technique | Purpose |
-|---|---|
-| Metadata-filtered retrieval | Narrow by `source_type`, `reactor_mode`, `document_version` |
-| Query expansion | LLM rewrites the query with lab synonyms before searching |
-| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology |
-| Cross-encoder re-ranking | Re-score top-N locally before synthesis |
-| Contextual compression | Strip irrelevant sentences to save context window |
-| Multi-hop | Loop back and re-retrieve if evidence is insufficient |
+| Technique | Purpose | Status |
+|---|---|---|
+| Metadata-filtered retrieval | Narrow by `source_type`, `reactor_mode`, `document_version` | **Built** (`source_type`) |
+| Query expansion | LLM rewrites the query with lab synonyms before searching | Not built |
+| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | Not built |
+| Cross-encoder re-ranking | Re-score top-N locally before synthesis | **Built** — on by default, frozen with the track |
+| Contextual compression | Strip irrelevant sentences to save context window | Not built |
+| Multi-hop | Loop back and re-retrieve if evidence is insufficient | Not built |
 
 ### Track 2 — Agentic GraphRAG (comparison arm)
 
@@ -245,26 +264,151 @@ A hand-authored knowledge graph plus a ReAct-style agent loop that traverses it
 over multiple hops, self-assessing sufficiency between steps.
 
 **Nodes:** `Sensor`, `OperatingMode`, `Threshold`, `SOPDocument`, `SOPStep`,
-`AnomalyRecord`, `AnomalyType`
+`AnomalyType`
 **Edges:** `MONITORED_IN`, `HAS_THRESHOLD`, `TRIGGERS`, `RESOLVED_BY`,
-`CONTAINS`, `INSTANCE_OF`, `INVOLVES`
+`CONTAINS`
 
 **Why it should win on multi-hop.** For *"pressure and temperature both spiked —
-what do I do, and has this happened before?"*, flat retrieval embeds the whole
-sentence and hopes one chunk covers it. The graph instead walks:
-both `Sensor` nodes → their `Threshold`s → the `AnomalyType` triggered by both →
-the `SOPDocument` that `RESOLVED_BY` it → and separately every `AnomalyRecord`
-that is an `INSTANCE_OF` that type, answering the historical half structurally.
+what do I do?"*, flat retrieval embeds the whole sentence and hopes one chunk
+covers it. The graph instead walks: both `Sensor` nodes → their `Threshold`s →
+the `AnomalyType` triggered by both → the `SOPDocument` that `RESOLVED_BY` it →
+its `SOPStep`s, answering each half structurally.
 
 **Honest risks to report:** higher latency (works against the <3s target), silent
 failure when a relationship was never authored, and meta-reasoning steps
 ("is this enough?") that sub-2B SLMs may simply be too small to do well. That
-last one is itself a legitimate finding.
+last one is itself a legitimate finding — and an observed one: on the
+development machine qwen3:1.7b takes 1–7 s per step and often walks to
+operating modes when the question needs a procedure.
+
+**Track 2 is embedding-free.** Entry points come from aliases authored on each
+node, with a fuzzy fallback — never from vector similarity. If both tracks used
+embeddings, the result could not separate "the graph helped" from "the
+embeddings helped". Track 1 is pinned to an embedding model; Track 2 to none.
+
+### Track 2's two modes — the within-track comparison
+
+Track 2 retrieves in one of two modes (`rag_config.graph.mode`, Settings →
+Graph RAG → *Agent loop*), frozen with the track:
+
+| Mode | Tool | Who decides the walk |
+|---|---|---|
+| `agent` (default) | `graph_agent` | The committed **local** model, one hop at a time: shown the question, what it has gathered, and a numbered list of schema-legal moves, it picks a move or stops, and judges after every hop whether it has enough |
+| `walk` | `graph_walk` | Nobody — the schema's fixed causal chain: sensor → threshold → anomaly type → SOP → steps |
+
+Both enter the graph the same way, so the only difference is who decides where
+to walk. That isolates the *agentic* claim: running the query set once in each
+mode says whether the model's choices beat a fixed path, separately from
+whether a graph beats vectors at all.
+
+The agent is bounded by a step limit (≤ 4, the schema's longest chain) and a
+**hard wall-clock budget** (default 6 s, 1–30 s): each model call runs on a
+worker thread and is abandoned at the deadline, so a cold model load cannot hold
+the turn. Replies are validated before they are acted on; unusable ones are
+rejected and recorded. With no local model the fixed walk runs, recorded as a
+fallback. Each walk logs `mode`, `stop_reason`, `model_calls`, `rejected` and a
+per-hop sufficiency verdict in `rag_logs.traversal_path`.
+
+### How each arm gets its knowledge
+
+The two tracks are filled by two different pipelines, and both are **setup
+surfaces** under Rule 5 — they write, so neither is ever exposed to the model.
+
+| | Track 1 | Track 2 |
+|---|---|---|
+| Knowledge arrives by | ingesting documents | somebody authoring nodes |
+| Surface | Blueprints → Corpus → **Build** | Blueprints → **Build** |
+| Source of truth | ChromaDB + `corpus.db` manifest | `config/knowledge_graph.yaml` |
+| Log | `ingest_events`, per stage | `graph_edits`, including refusals |
+
+### Knowledge provenance — this rig vs reference
+
+The corpus mixes the lab's own documents with public literature: other
+analysers' manuals, other universities' SOPs, other pilot plants' incident
+reports. Their **concepts** transfer — foaming, heat-stable salts and NDIR drift
+are the same chemistry and physics on any amine rig. Their **specifics** do not —
+another plant's setpoints, valve tags and step order can be wrong here.
+
+So every document is `rig` (this lab's own) or `reference` (another
+installation's), chosen at upload and defaulting to `reference`: nothing counts
+as this rig's unless somebody said so. Graph nodes carry the same `origin`;
+`Sensor` and `OperatingMode` are the rig's by definition, every other node is a
+reference unless marked. Evidence lines say `[THIS RIG]` or `[REFERENCE: another
+installation]`, and prompt rule 9 requires a rig-specific fact supported only by
+references to be called general guidance, to be confirmed against the lab's own
+procedure. `rag_logs.retrieved_origins` records the split per retrieval, so the
+evaluation can report how often answers rested on this rig's documents.
+
+**Evaluation implication:** ground-truth answers for rig-specific questions must
+come from `rig` documents. A reference document answering a setpoint question
+"correctly" for another plant is not a correct answer here.
+
+### Corpus categories
+
+| `source_type` | Holds |
+|---|---|
+| `manual` | Instrument and equipment manuals — principles, calibration, maintenance, troubleshooting tables |
+| `sop` | Step-by-step procedures — start-up, shutdown, sampling, calibration, cylinder handling |
+| `anomaly_record` | Troubleshooting and incident literature — what goes wrong (foaming, degradation, heat-stable salts, corrosion), why, and the fix |
+| `uauc_record` | Unsafe Act / Unsafe Condition — SDSs, hazard guidance, PPE, lab safety rules |
+| `other` | Background — handbooks, review papers, measurement theory, typical operating ranges |
+
+Category and origin are independent: an SDS can be the lab's own copy (`rig`)
+or a supplier's generic one (`reference`).
+
+### Assisted authoring
+
+Track 2's authoring has an **assisted** first step, and its shape matters for the
+comparison's validity. A local model reads the *ingested corpus* and proposes
+nodes and edges constrained to the schema above; every proposal is canonicalised
+against what already exists, dry-run through the real validator, and queued.
+Nothing reaches the graph without a person accepting it, and an accept goes
+through the same authoring path a hand edit does.
+
+That boundary is load-bearing. `search_graph` claims a stronger provenance than
+an ingested PDF precisely because every node was authored and reviews in a diff;
+a proposer that wrote directly would retire that claim, and the comparison would
+stop being between two retrieval strategies and start being between two guesses.
+The web is deliberately not a source — Rule 5 makes web search a surface for
+*finding documents to ingest*, and unreviewed external text in the graph breaks
+the same claim.
+
+### Auditing each arm
+
+Both arms are inspectable the same way, which is what keeps the comparison about
+the strategies rather than about how well each half happened to get instrumented:
+
+| | Track 1 | Track 2 |
+|---|---|---|
+| inventory | Corpus | Graph |
+| gaps | — | Coverage |
+| trace | Replay | Replay |
+
+**The missing cell is a finding, not an omission.** A hand-authored graph fails
+by *omission*, and omission over a fixed schema is enumerable: an `AnomalyType`
+with no `RESOLVED_BY` edge is a question the graph provably cannot answer. A
+vector corpus has no such list — it returns its nearest chunks for every query,
+including ones it knows nothing about, so its failure is a *bad match* rather
+than a missing edge and the passages nobody wrote cannot be enumerated. Worth
+stating in the report: the two arms are not equally auditable *in principle*,
+and that asymmetry is a property of the approaches.
+
+Both Replays read `rag_logs` and neither re-runs anything. Re-querying to
+"replay" would show what the index returns today rather than what produced that
+answer, which after any re-ingest is a quietly different claim.
 
 ### Comparison protocol
 
 Hold constant: same model, quantization, temperature; same corpus; same query
-set; same machine, run sequentially; same hand-labelled ground truth.
+set; same machine, run sequentially; same hand-labelled ground truth. **Also
+held constant by construction:** each arm sees only its own retrieval tools
+(§7.2), and both are recorded by one writer at the dispatch boundary.
+
+**Three runs of the same query set:** Track 1; Track 2 in `walk` mode; Track 2 in
+`agent` mode. Track 1 vs Track 2 asks whether graph structure beats vector
+similarity; `walk` vs `agent` asks whether the model's hop choices beat a fixed
+path. Only the selected track's tools run in any answer — the comparison is made
+between runs, never inside one.
 
 Stratify the query set (~30–50 queries, 6–10 per category):
 
@@ -277,7 +421,9 @@ Stratify the query set (~30–50 queries, 6–10 per category):
 | Out-of-corpus (must refuse) | Tests groundedness discipline |
 
 Metrics: groundedness/hallucination rate, retrieval precision & recall, mean and
-p95 latency, multi-hop success rate, refusal correctness, hop count.
+p95 latency, multi-hop success rate, refusal correctness, hop count — and, for
+the agent, its stop reasons and rejected replies, plus for every run the share
+of retrieved items that were this rig's documents.
 
 **Sequencing discipline:** build Track 1 → build Track 2 → **freeze both** → run
 the evaluation once without further tuning. Tweaking a track after seeing its
@@ -302,25 +448,9 @@ CREATE TABLE sensor_readings (
     pressure_barg  REAL,   -- P-101
     ph             REAL,   -- pH-101
     level_pct      REAL,   -- LV-101/102
-    co2_ppm        REAL,   -- NDIR
-    anomaly_status TEXT CHECK(anomaly_status IN ('Normal','Anomaly'))
+    co2_ppm        REAL    -- NDIR
 );
 CREATE INDEX idx_readings_timestamp ON sensor_readings(timestamp);
-CREATE INDEX idx_readings_anomaly   ON sensor_readings(anomaly_status);
-```
-
-Optional richer table, if Anson's subsystem provides it:
-
-```sql
-CREATE TABLE anomaly_records (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    start_time   TEXT,
-    end_time     TEXT,
-    anomaly_type TEXT,
-    severity     TEXT,
-    description  TEXT,
-    resolution   TEXT
-);
 ```
 
 **Volume:** ~17,000 rows/day at 5s sampling — comfortably within SQLite's range
@@ -351,8 +481,31 @@ the report.
 | **Sensor** | SQLite | `/data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
 | **Audit** | SQLite | `/logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
 | **Chat** | SQLite | `/data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
-| **Vector** | ChromaDB | `chromadb` service (or `data/chroma`) | read/write | embedded SOP/manual/anomaly/UAUC chunks |
+| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded manual/SOP/troubleshooting/safety chunks, and the manifest of what was ingested |
 | **Prefs** | SQLite | `/app/data/prefs.db` | read/write | UI state, kept out of the browser |
+
+**The Vector store has two halves and is still one store.** Chroma holds the
+vectors; `corpus.db` holds the record of what was ingested — documents, chunk
+text with its offsets, every pipeline run with the recipe it used, and a
+level-tagged event log. It is the same store's own metadata, sitting beside the
+Chroma directory the way Chroma's own catalogue sits beside its vectors, and
+§6.4's argument is untouched: Daedalus still writes only to its own files and
+still cannot reach `sensor_readings`.
+
+Splitting it out of Chroma rather than into it is what makes it migratable,
+joinable and browsable. Keeping it out of `audit` is deliberate in the other
+direction: deleting a document should take its ingestion history with it, and
+that DELETE must never be able to reach the one store whose whole value is that
+nothing ever deletes from it. `corpus.db` also carries Track 2's authoring
+history (`graph_edits`) and its proposal queue, for the same reason — both are
+operational records *about* the knowledge layer rather than the knowledge
+itself, which stays in Chroma and in the authored YAML.
+
+In the raw store browser the two halves appear as **Corpus & Authoring**
+(`corpus.db` — the record: documents with their category and origin, chunk
+text, runs, graph edit history) and **Knowledge Vector Store** (Chroma — the
+search index built from that record). Chroma can be rebuilt from `corpus.db` by
+re-embedding; the reverse is not true.
 
 Verified: the read-only connection rejects INSERT, UPDATE, DELETE and DROP at
 the driver, while reads continue to work.
@@ -373,10 +526,10 @@ database we do not own would breach Rule 2 as surely as an INSERT would.
 ### 6.4 Store separation (state this explicitly in the report)
 
 ```
-Jason's subsystem  → writes sensor_readings
-Anson's subsystem  → writes anomaly flags/records
-Daedalus           → READS both; writes ONLY to its own separate stores:
-                     ChromaDB dir, graph file, ai_logs.db, chat.db, prefs.db
+SCADA ingestion    → writes sensor_readings
+Daedalus           → READS it; writes ONLY to its own separate stores:
+                     ChromaDB dir, corpus.db, graph file, ai_logs.db,
+                     chat.db, prefs.db
 ```
 
 A bug in our indexing code physically **cannot** corrupt the sensor data of
@@ -391,7 +544,7 @@ record, because they are different files.
 1. Receive query
 2. Normalise (trim, length-check, detect control keywords)
 3. **Classify intent** — `live_status` · `historical_query` · `trend_query` ·
-   `anomaly_query` · `sop_query` · `mixed_query` · `unsafe_control` · `out_of_scope`
+   `sop_query` · `mixed_query` · `unsafe_control` · `out_of_scope`
 4. **Safety guard** — control intent returns
    *"I cannot control the reactor. I only provide read-only monitoring information."*
    with **no tool execution and no LLM call**
@@ -407,15 +560,44 @@ record, because they are different files.
 
 | Tool | Input | Returns |
 |---|---|---|
-| `get_live_reading` | `sensor`, optional `timestamp` | value, unit, timestamp, mode, anomaly flag |
+| `get_live_reading` | `sensor`, optional `timestamp` | value, unit, timestamp, mode |
 | `get_trend` | `sensor`, `start_time`, `end_time`, `aggregation`, optional `mode_filter` | aggregated value, unit, sample count, optional series (≤100 points) |
-| `get_anomaly_summary` | `start_time`, `end_time`, `limit` | anomaly count + records |
-| `rag_retrieve` | `query`, `top_k`, `source_types`, optional `reactor_mode` | chunks with text, score, source file, section, page |
+| `search_corpus` (Track 1's `rag_retrieve`) | `query`, `top_k`, `source_type` (`manual` · `sop` · `anomaly_record` · `uauc_record` · `other` · `any`) | chunks with text, distance, re-rank score, source file, section, page, **origin** |
+| `graph_agent` (Track 2, `agent` mode) | `query`, `limit` | gathered nodes and edges, entry points, and the whole recorded walk — budget and step limit come from `rag_config`, not the caller |
+| `graph_walk` (Track 2, `walk` mode) | `query`, `limit` | the same shape, from the fixed path |
 
-Track 2 adds `graph_lookup`, `graph_traverse`, `graph_query_natural`.
+Underneath, Track 2 is built from `graph_lookup`, `graph_traverse` and
+`graph_query_natural`; the planner calls exactly one retrieval tool per
+question — whichever the selected track and mode name.
+
+**The two arms' retrieval tools are mutually exclusive at runtime.** §5 is a
+controlled comparison, and an arm that can reach the other arm's retrieval is
+not that arm — with Track 1 selected and `search_graph` still on the tool list, a
+model that walked the graph would produce an answer filed under
+`rag_logs.track='vector'` that a vector-only system could not have produced, and
+nothing in the logs would say so. The registry gates on the selected track and
+withholds the other set, so the tool list the model receives flips with the
+setting.
+
+This is **not** the same kind of rule as the effect gate below. That one is
+safety and an operator may unlock an effect with a recorded reason; this one is
+experimental validity and has no unlock, because "let this arm use the other
+arm's retrieval" is not a permission anybody can grant — it only makes the
+measurement mean something else. Tools that belong to neither arm, including
+`knowledge_status`, are unaffected: it *reports on* both tracks without
+retrieving through either, and it is the check that makes "I don't have that" a
+statement rather than a guess.
+
+Every retrieval writes one `rag_logs` row, and it is written at the **dispatch
+boundary** rather than inside each tool. The two search tools stay separate
+implementations — that is what makes "which track answered this" recoverable —
+but recording them separately would let the comparison measure two
+instrumentation methods as much as two retrieval strategies. A call with no
+`query_id` writes nothing: a tool trialled in Settings is not a query, and a row
+for one would land in the evaluation set as though it were.
 
 **Security rules:** whitelisted sensor names (`temperature`, `pressure`, `ph`,
-`co2_ppm`, `mode`, `anomaly_flag`) and aggregations (`average`, `min`, `max`,
+`co2_ppm`, `mode`) and aggregations (`average`, `min`, `max`,
 `count`, `latest`, `first`); parameterized SQL only; no write queries; query
 timeout and result-size caps; errors that never leak internals.
 
@@ -425,12 +607,11 @@ timeout and result-size caps; errors that never leak internals.
 
 ```
 intent: mixed_query
-tools:  get_trend(co2_ppm, ~10:00) + get_anomaly_summary(~10:00) + rag_retrieve("CO₂ spike troubleshooting")
-evidence: CO₂ rose 420 → 980 ppm · anomaly flag present · SOP says check NDIR calibration and gas flow
+tools:  get_trend(co2_ppm, ~10:00) + rag_retrieve("CO₂ spike troubleshooting")
+evidence: CO₂ rose 420 → 980 ppm · SOP says check NDIR calibration and gas flow
 answer: "At around 10:00 the CO₂ reading increased sharply from 420 ppm to 980 ppm.
-         The database records an anomaly flag during this period. The SOP suggests
-         checking NDIR calibration and gas flow."
-         [SQLite trend] [SQLite anomaly] [SOP_NDIR_Calibration.pdf p.4]
+         The SOP suggests checking NDIR calibration and gas flow."
+         [SQLite trend] [SOP_NDIR_Calibration.pdf p.4]
 ```
 
 It must **not** say "the valve failed" — that causal claim has no supporting
@@ -593,8 +774,8 @@ Trust comes from visible reasoning, not a black box:
 
 - **Streaming chat** — token-by-token via SSE
 - **Tool-call trace** — collapsible Thought → Action → Observation steps
-- **Graph visualiser** — mini node-graph showing how GraphRAG connected an
-  anomaly to an SOP
+- **Graph visualiser** — mini node-graph showing how GraphRAG connected a
+  sensor to an SOP
 - **Source badges** — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]`
 - **Hardware/model console** — CPU/RAM/VRAM stats, swap active SLM
 
@@ -602,39 +783,41 @@ Trust comes from visible reasoning, not a black box:
 
 ## 11. Current implementation status
 
+*As of 2026-10-01. `TODO.md` is the item-level record; this is the summary.*
+
 ### Built and working
 
 | Area | Detail |
 |---|---|
-| **React frontend shell** | Vite 8 · React 19 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat UI (mock)** | Message list, auto-growing composer, model selector, incognito mode, typewriter greeting — **no backend wired yet** |
-| **Theme system** | 16 themes; live customisation of 7 base + 14 per-zone colours; derived syntax ramps; complementary-harmony generator; font/density/text-scale; frosted glass; import/export; up to 8 saved custom themes |
-| **Typography** | Monocraft (the Minecraft typeface) as the default face, bundled and self-hosted so the UI never reaches a font CDN; every font path in the app resolves through one CSS variable |
-| **Background effects** | 13 options (11 canvas-animated) with colour/intensity/size, and pointer-reactive behaviour |
-| **Settings modal** | Sectioned nav, incognito toggle, model defaults |
-| **Settings** | Registry-driven nav, keyword search with keyboard navigation, drag-resizable + collapsible rail with full ARIA, layout persisted server-side |
-| **FastAPI backend** | App skeleton, health endpoint, preference store, CORS, `theme.css` endpoint for flash-free first paint, `GET /api/system/databases`, chat session API |
-| **Data stores** | All five wired: read-only sensor accessor + dev seeder, 7-table audit log store with `query_id` tracing, chat transcript store, Chroma client (server + embedded), prefs |
-| **Conversation memory** | Sessions and transcripts with `seq`-ordered messages, auto-titling, archive, incognito; token-budgeted context assembly with a rolling summary (§7.4) |
-| **Schema migrations** | Numbered SQL files per store, applied once in a transaction at startup; checksum-drift, gap-numbering, missing-file and bad-SQL rollback all refuse or roll back |
-| **Persistence** | All UI preferences live server-side in SQLite — deliberately **nothing in browser storage** |
+| **Chat** | `POST /api/chat` runs the whole §7.1 flow and streams tokens over SSE; both turns persist, and the answer carries citation chips and a *Sources* list from the stored evidence pack |
+| **Orchestration** | All 11 steps: normalise, rewrite follow-ups, classify (7 intents), safety guard, deterministic planning, tool execution, labelled evidence pack, prompt, stream, validate (numbers, times, causes, control claims → fallback), log |
+| **Sensor data** | Read-only store (`mode=ro`) with a demo seeder; `get_live_reading` and `get_trend` with enum-checked columns, timeouts and downsampling |
+| **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); per-document category and rig/reference origin. **No real documents ingested yet** |
+| **Track 1** | Chroma top-k with `source_type` filtering and cross-encoder re-ranking; refuses an index built by a different embedding model |
+| **Track 2** | Hand-authored 34-node graph (placeholder data until the real corpus), editable in Blueprints with an assisted proposal queue; the agent loop and the fixed walk, switchable; replay of every walk |
+| **Tool layer** | 33 tools in six categories behind effect, track and argument gates; Simple/Advanced mode enforced at dispatch |
+| **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins |
+| **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit |
+| **Frontend** | React dashboard: theming, settings, store browser, Blueprints (corpus, graph, coverage, authoring, replay) |
+| **Tests** | 143 backend `unittest` cases; the frontend has none |
 
-### Not started
+### Not built
 
-Knowledge ingestion, both retrieval tracks, the deterministic tool layer, and
-the evaluation harness.
+- **Real knowledge.** The corpus is empty and the graph is placeholder data —
+  this blocks meaningful answers from either track and the whole evaluation.
+- **Track 1 extras:** hybrid BM25 search, query expansion, contextual
+  compression, multi-hop re-retrieval.
+- **Evaluation (§9):** golden query set, ground truth, scoring and latency
+  harness, the three comparison runs.
+- **Model choice (§8):** the SLM tier is not smoke-tested and the lab machine's
+  specs are unconfirmed; qwen3:1.7b drives Track 2's agent poorly.
+- **Ariadne's Thread** — the provenance viewer (`MODULES.md`).
+- A validator check for prompt rule 9 (reference-only rig specifics).
 
-Chat answers now. The serving path resolves the committed model, replays
-conversation history and returns a real local completion, logging what the call
-cost. What is missing is everything that makes the answer *grounded*: there is
-no evidence pack, no tool-calling, and therefore nothing yet to be grounded
-against. The §9.2 targets that depend on retrieval — precision@5, hallucination
-rate — have nothing to measure.
-
-> **Honest framing:** what exists today is a polished Zone 4 client, a Zone 3
-> shell that can now hold a conversation with a local model, and the admin
-> console that chose it. The retrieval layer — the actual FYP contribution — is
-> still ahead.
+> **Honest framing:** the pipeline is built end to end and runs on demo
+> telemetry and a placeholder graph. What is missing is the lab's real
+> documents, the evaluation that measures the two tracks, and the model choice
+> the lab machine allows.
 
 ---
 
@@ -743,7 +926,7 @@ Kùzu graph backend · LAN/multi-lab deployment
 > The proposed system is a fully local, read-only conversational agentic AI layer
 > for an existing CO₂ sorption reactor monitoring stack. Sensor telemetry is
 > acquired by the existing SCADA layer into a local SQLite database. Domain
-> knowledge from manuals, SOPs, anomaly records and UAUC logs is chunked,
+> knowledge from manuals and SOPs is chunked,
 > embedded locally, and stored in local vector and graph knowledge bases. When a
 > user asks a question, the FastAPI orchestration backend classifies intent,
 > applies safety guards, and calls deterministic tools to retrieve evidence. That
@@ -763,7 +946,7 @@ Kùzu graph backend · LAN/multi-lab deployment
 | **ABV** | Automated Ball Valve — write-only from SCADA, hence untrustworthy state |
 | **Daedalus** | This system's product name |
 | **CO2SorptionDT** | The pre-existing PyQt5 SCADA app this layer attaches to |
-| **UAUC** | User Anomaly and Usage Context records |
+| **UAUC** | Unsafe Act / Unsafe Condition — the safety category of the corpus (SDSs, hazard guidance, lab safety rules) |
 | **Evidence pack** | Structured tool output handed to the LLM — the *only* thing it may draw facts from |
 | **Grounded** | Every factual claim traces to retrieved evidence |
 | **Track 1 / Track 2** | Traditional vector RAG / Agentic GraphRAG |

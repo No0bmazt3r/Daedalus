@@ -140,3 +140,9 @@ Cloud benchmark only (dashed/grey box)
 ```
 
 > **Boundary Statement:** "All production inference is local via Ollama. Cloud LLMs are only external benchmark references."
+
+> **Refined since.** The console permits a per-turn override to a cloud model
+> for comparison. The production configuration is unchanged — `model_config`
+> only ever names a local tag — and the override is recorded rather than
+> silent: `source='chat_cloud'`, labelled in the transcript, excluded from every
+> production figure. See [`../PROJECT.md`](../PROJECT.md) §3 Rule 1.

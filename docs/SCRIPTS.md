@@ -5,7 +5,8 @@ Every command Daedalus ships, what it does, and when to reach for it.
 Three entry points at the repo root, sharing one helper library:
 
 ```
-daedalus.sh    run it            setup · start · dev · stop · logs · rebuild · status · migrate
+daedalus.sh    run it            setup · dev · start · stop · status · migrate
+               flags             --with-search
 sync.sh        fix it            after a git pull — safe, re-runnable, destroys nothing
 reset.sh       start over        wipe and rebuild the databases — destructive
 scripts/
@@ -20,7 +21,8 @@ scripts/
 | Just pulled / switched branch | `./sync.sh` |
 | Want to see what a pull broke, without changing anything | `./sync.sh --check` |
 | Day-to-day development | `./daedalus.sh dev` |
-| Running it like production | `./daedalus.sh start` |
+| Sourcing documents for the corpus | `./daedalus.sh dev --with-search` (needs Docker) |
+| Using it rather than changing it | `./daedalus.sh start` |
 | Added a migration | `./daedalus.sh migrate` |
 | Database is a mess | `./reset.sh` |
 | Nothing works and you want a clean slate | `./daedalus.sh setup` then `./reset.sh` |
@@ -29,65 +31,96 @@ scripts/
 
 ## `daedalus.sh`
 
-The entry point. Every command loads `.env` (anything already exported wins),
-so `DAEDALUS_PORT=9000 ./daedalus.sh dev` works.
+The entry point. Every command loads `.env`, and anything already exported
+wins — so `DAEDALUS_PORT=9000 ./daedalus.sh start` publishes on 9000.
+
+> That override is newer than the sentence describing it. `load_env` used to run
+> `set -a; . ./.env`, and a plain assignment in a sourced file beats the
+> environment, so the variable you set on the command line was silently replaced
+> by the file's. It now records the pre-set values and restores them afterwards.
 
 ### `setup`
 
 One-time preparation of a fresh clone. Idempotent — safe to re-run.
 
-1. **Verifies prerequisites** — `docker`, `node`, `python3`, `pnpm`. Enables
-   pnpm via `corepack` if it is missing but corepack exists. Stops with a list
-   if anything is absent, rather than failing halfway through.
+1. **Verifies prerequisites** — `node`, `python3`, `pnpm`. Enables pnpm via
+   `corepack` if it is missing but corepack exists. Stops with a list if
+   anything is absent, rather than failing halfway through. Docker is not
+   checked: nothing but the optional SearXNG uses it.
 2. **Creates `.env`** from `.env.example`, or tops up an existing one with any
    keys it is missing.
 3. **Installs frontend dependencies** — `pnpm install`.
-4. **Creates `backend/.venv`** and installs `requirements.txt`, then writes
-   `.venv/.requirements-stamp` so `sync.sh` can later tell whether the
-   installed packages have drifted.
+4. **Creates `backend/.venv`** and installs `requirements.txt`, runs
+   `ensure_embedded_chroma`, then writes `.venv/.requirements-stamp` so
+   `sync.sh` can later tell whether the installed packages have drifted.
 5. **Creates runtime directories** — `data/sqlite`, `data/documents`, `logs`,
-   `backend/data`. Made on the host so Docker does not create them as
-   root-owned bind-mount sources.
+   `backend/data`.
 6. **Applies migrations**, so a fresh clone has its schema before first run.
 7. **Checks for Ollama** — a warning, never fatal. The dashboard works without
-   it; only model inference needs it.
+   it; only model inference needs it. If Ollama is installed but not running it
+   tries to start it (systemd, or `brew services` / the app on macOS); if it is
+   not installed at all, it offers to install it, but only on an interactive
+   terminal. Neither path ever blocks a non-interactive run.
+
+### `dev` (alias `local`) — the default
+
+Everything on the host: `uvicorn --reload` on `BACKEND_PORT` (8000) and Vite
+on `FRONTEND_PORT` (5173), proxying `/api` across. ChromaDB is embedded in the
+API process (`data/chroma`), and Ollama is the host's own install.
+
+Refuses to start if `backend/.venv` or `frontend/node_modules` is missing, makes
+sure the venv has the full `chromadb` package, and runs migrations first so a
+schema failure is reported before two servers start writing to the terminal.
+Ctrl-C stops both — the backend is killed by an `EXIT INT TERM` trap, so it
+cannot be orphaned.
+
+uvicorn watches `backend/app` only (`--reload-dir`). Its default is the whole
+working directory, `frontend/node_modules` included, which is CPU spent on
+nothing.
+
+**Why not containers any more.** Daedalus used to run as a container stack
+(app + ChromaDB, with a dev overlay and a GPU overlay). On a single-user
+localhost install that bought nothing the host lacks, and the Docker VM under
+WSL held gigabytes of memory for it. It also needed a translation layer —
+`.env` held container addresses (`http://chromadb:8000`,
+`host.docker.internal`) that had to be rewritten for anything run on the host.
+Without containers the addresses are simply the addresses.
+
+#### Starting SearXNG
+
+`dev` and `start` both call `ensure_searxng` once the API is healthy. It asks
+`/api/search/config` which provider is selected and whether it is reachable, and
+starts the container only when the answer is *SearXNG, and no*.
+`--with-search` starts it regardless. Without Docker it warns and carries on —
+web search is a setup surface, not the answer path.
+
+This was deliberately absent at first, on the reasoning that a project whose
+first rule is "the runtime is offline" should not quietly start a search engine.
+That still holds for *quietly* — and stops holding once somebody has gone into
+Settings and chosen SearXNG. At that point not starting it ignores a stated
+choice, and the symptom is a Search panel that looks configured and fails on
+every query. Nothing starts for a provider nobody picked.
+
+The check is only trustworthy because `ready` now means **reachable** rather
+than **configured** — see the note in `services/web_search.py`.
 
 ### `start` (alias `up`)
 
-Builds if needed and starts the container stack, then polls `/api/health` for
-up to 60 seconds. On success it prints the dashboard and API-docs URLs; on
-failure it dumps the last 40 lines of container logs and exits non-zero, so a
-broken start is diagnosable without a second command.
+The same preparation as `dev`, then builds the dashboard once into
+`frontend/dist` and runs a single uvicorn process on `DAEDALUS_PORT` (8000)
+serving both the API and the bundle (`DAEDALUS_STATIC_DIR`). No file watchers,
+no Vite — the lighter way to run while using the app rather than changing it.
+Polls `/api/health` for up to 60 seconds and exits non-zero if it never
+answers. Runs in the foreground; Ctrl-C stops it.
 
-Extra arguments pass through to `docker compose up`, which is how `rebuild`
-reuses it.
+### `stop` (alias `down`)
 
-### `dev`
-
-Hot-reload development, no Docker. Two processes: `uvicorn --reload` on
-`BACKEND_PORT` (8000) and Vite on `FRONTEND_PORT` (5173), with Vite proxying
-`/api` to uvicorn. Ctrl-C stops both — the backend is killed by an `EXIT INT
-TERM` trap, so it cannot be orphaned.
-
-Refuses to start if `backend/.venv` or `frontend/node_modules` is missing, and
-runs migrations first so a schema failure is reported before two dev servers
-start writing to the terminal.
-
-> **Host paths.** This is where the container/host mapping matters — see
-> [Host and container paths](#host-and-container-paths) below.
-
-### `stop` (alias `down`) · `logs` · `rebuild`
-
-- `stop` — `docker compose down`.
-- `logs` — `docker compose logs -f`.
-- `rebuild` — forces a clean image rebuild, then starts. This is what picks up
-  pulled code in the container: the image bakes in the built frontend and the
-  backend source, so a running stack serves the code it was built with until
-  it is rebuilt.
+Stops the SearXNG container, the only thing Daedalus ever leaves running in
+the background. The servers stop with Ctrl-C in their own terminal.
 
 ### `status`
 
-Container status, then the health of all five stores, read from
+The health of all five stores, read from
 `/api/system/databases`. Fetches first and parses second, deliberately: piping
 `curl` straight into a parser hides which half failed, and under `pipefail` a
 mere parse error reports as an unreachable API.
@@ -104,7 +137,7 @@ runs `up`. `./daedalus.sh migrate --help` reaches the CLI's own help.
 
 | Flag | Applies to | Effect |
 |---|---|---|
-| `--with-ollama` | `start`, `stop`, `logs`, `rebuild` | Run Ollama as a container instead of using the host |
+| `--with-search` | `dev`, `start` | Also start the SearXNG container (needs Docker) |
 | `-h`, `--help` | any | Usage |
 
 `migrate` is exempt from flag parsing — its arguments belong to the Python CLI.
@@ -123,18 +156,25 @@ or a merge. **Everything is safe and re-runnable; nothing is destroyed.**
 ./sync.sh --help
 ```
 
-It runs eight checks in order:
+It runs seven checks in order:
 
 | # | Section | What it catches |
 |---|---|---|
-| 1 | **Prerequisites** | Missing `python3` (fatal), `pnpm` (skips frontend), Docker (skips container checks) |
+| 1 | **Prerequisites** | Missing `python3` (fatal), `pnpm` (skips frontend) |
 | 2 | **Configuration** | A teammate added a key to `.env.example`; your git-ignored `.env` never got it |
-| 3 | **Backend dependencies** | `requirements.txt` changed since you last installed |
+| 3 | **Backend dependencies** | `requirements.txt` changed since you last installed. Also swaps an old venv's `chromadb-client` for the full `chromadb` |
 | 4 | **Frontend dependencies** | `pnpm-lock.yaml` is newer than `node_modules` |
 | 5 | **Database schema** | A pulled migration has not been applied |
 | 6 | **Database integrity** | `PRAGMA quick_check` on every store |
-| 7 | **Orphaned databases** | Stale copies under `backend/data/` from before the host-path fix |
-| 8 | **Containers** | The built image is older than your source |
+| 7 | **Orphaned databases** | Stale stores and directories under `backend/data/`, whether from before the host-path fix or recreated since |
+
+**Section 7 catches a trap that is still live.** The original stale copies came
+from before `scripts/common.sh` mapped host paths, and those are a one-off. But
+`paths.py` *creates* its directories on import, so running any backend script by
+hand from `backend/` — without the env vars `host_py` sets — recreates the same
+tree and writes to it. A measurement can land in a store nothing reads, and the
+only sign is this section. Use `host_py` (see below) rather than calling
+`.venv/bin/python` directly.
 
 **Section 2 is the one that earns its keep.** `.env` is git-ignored, so a pull
 never updates it. When someone adds a setting, your app silently falls back to
@@ -146,15 +186,6 @@ machine.
 **Section 5 is the one that matters most after a pull.** A teammate's
 migration arrives as a file, and until it runs, the code and the database
 disagree about the shape of the data.
-
-**Section 8** compares source mtimes under `backend/app`, `frontend/src` and
-the dependency manifests against the *later* of the image's creation date and
-`.daedalus-build-stamp`. The stamp is what makes it correct: Docker keys its
-COPY layers on file **content**, so rebuilding after a whitespace-only edit is
-a full cache hit that returns the existing image with its original date — an
-mtime comparison alone would then say "stale" forever. `daedalus.sh start` and
-`rebuild` touch the stamp on success. A check that cannot tell (no image, no
-Docker) stays quiet rather than guessing.
 
 **Section 7** is a one-off: before `scripts/common.sh` mapped host paths,
 `daedalus.sh dev` inherited the container paths from `.env` and `paths.py`
@@ -185,9 +216,9 @@ Wipe the local databases and rebuild them from the migrations. **Destructive.**
 
 Sequence:
 
-1. **Refuses if the stack is running.** Deleting a SQLite file while a process
+1. **Refuses if Daedalus is running (/api/health answers).** Deleting a SQLite file while a process
    holds it open leaves that process writing to a deleted inode: the app looks
-   fine, then loses everything on restart. Stop the stack first.
+   fine, then loses everything on restart. Stop it first (Ctrl-C).
 2. **Reports what will be destroyed** — each file with its live row counts
    (`3 preferences`, `142 sessions · 891 messages`), read from the app's own
    path resolution so it names the files that will actually be deleted.
@@ -286,11 +317,12 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 |---|---|
 | `say` · `ok` · `warn` · `err` · `info` · `head_` · `fail` | Output. Colour only when attached to a terminal, so piping to a file or CI log stays readable |
 | `have <cmd>` | Is this on `PATH`? |
+| `have_compose` | Is a usable `docker compose` (daemon reachable) or `docker-compose` present? Optional — only SearXNG needs it |
 | `compose …` | `docker compose` (v2) or legacy `docker-compose`, whichever exists |
 | `env_missing_keys` | Keys in `.env.example` absent from `.env` |
 | `env_backfill` | Appends those keys with their example values; prints what it added |
 | `ensure_env` | Create `.env` on first run, top it up afterwards |
-| `load_env` | Export `.env` into the shell; already-exported values win |
+| `load_env` | Export `.env` into the shell; already-exported values win. Drops a leftover `CHROMA_URL=http://chromadb:8000`, with a warning |
 | `ensure_dirs` | Create the runtime directories |
 | `backend_deps_stale` · `frontend_deps_stale` | Lockfile newer than the installed tree |
 | `host_py …` | The venv interpreter, with **host** data paths, run from `backend/` |
@@ -298,33 +330,39 @@ host_py -c "from app.db import chat_store; print(chat_store.stats())"
 | `migrate_cli …` | `host_py -m app.db.migrate` |
 | `require_venv` | Fail with a useful message if `backend/.venv` is missing |
 | `wait_for_api [port]` | Poll `/api/health` for 60s |
-| `check_ollama` | Warn, never fail — only inference needs it |
-| `stack_running` | Is the app container up? |
-| `image_is_stale` | Is any source file newer than the last successful build? |
-| `mark_build` | Touch `.daedalus-build-stamp` after a successful build |
+| `check_ollama` | Warn, never fail — only inference needs it. Tries to start it, and offers to install it when interactive |
+| `host_ollama_url` | `OLLAMA_BASE_URL` for the host: rewrites a container-era `host.docker.internal`, leaves a real remote alone, and stays unset rather than becoming `""` |
+| `ensure_embedded_chroma` | Make sure the venv has the full `chromadb` package (embedded store), removing the HTTP-only `chromadb-client` an older venv has |
+| `host_searxng_url` | `SEARXNG_URL` for the host: rewrites a container-era `http://searxng:8080` to the published port |
+| `ensure_searxng` | Start the search container — **only** when SearXNG is the selected provider and is not answering. Called after `wait_for_api`, because the selection lives in `prefs.db` and the API is what reads it |
+| `start_searxng` · `stop_searxng` | Start or stop the SearXNG container; warn and carry on without Docker |
 
 ---
 
-## Host and container paths
+## Data paths
 
-The paths in `.env` are as seen **inside the container**:
+All five stores live in the repo:
 
 ```
-./data          →  /data        sensor DB, chat DB, documents, chroma
-./logs          →  /logs        audit logs
-./backend/data  →  /app/data    UI preferences
+data/sqlite/sensor_readings.db   sensor telemetry
+logs/ai_logs.db                  audit logs
+data/chroma/                     vector store (embedded)
+data/sqlite/chat.db              chat transcripts
+backend/data/prefs.db            UI preferences
 ```
 
-Sourcing `.env` and then running the backend **on the host** points it at
-`/data` and `/logs`, which do not exist there — so `paths.py` fell back to
-`backend/data/…` and the dev servers quietly used a different set of databases
-from the container. That was a real bug; `host_py` and `host_uvicorn` fix it
-by mapping the paths back, so `dev` and `start` read and write the same files.
+`host_py` and `host_uvicorn` set `DAEDALUS_DATA_DIR`, `DAEDALUS_LOG_DIR`,
+`DAEDALUS_CHAT_DB` and `DAEDALUS_PREFS_DB` to those locations — absolute, per
+command — so every entry point resolves the same files whatever its working
+directory. Without them `paths.py` falls back to `backend/data/…`, which is how
+the stale copies `sync.sh` reports were made. An old `.env` still holding the
+container-era paths (`/data`, `/logs`, `/app/data`) is harmless for the same
+reason: the scripts' values win.
 
-The mapping is applied **per command, never exported**, because
-`docker compose` reads the shell environment in preference to `.env`:
-exporting host paths globally would hand them to the container, which is
-precisely backwards.
+`OLLAMA_BASE_URL` gets similar treatment, via `host_ollama_url`: a container-era
+`host.docker.internal` is rewritten to localhost. A URL pointing at a *real*
+remote is left alone — quietly answering from a daemon on this machine instead
+would attribute a benchmark to the wrong hardware.
 
 Anything you run against the backend by hand needs the same treatment. Use
 `host_py`:

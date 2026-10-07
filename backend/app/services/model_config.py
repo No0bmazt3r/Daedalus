@@ -131,6 +131,13 @@ def write(
         raise ValueError(f"mode must be 'auto' or 'pinned', not {mode!r}")
     if mode == "pinned" and not tag:
         raise ValueError("pinned mode needs a tag")
+    if mode == "pinned" and tag:
+        from . import ollama_client  # noqa: PLC0415
+
+        # Refused only when Ollama says so: pinning a model before it is pulled
+        # stays allowed (`resolve` reports it as not installed).
+        if ollama_client.can_answer(tag) is False:
+            raise ValueError(f"{tag} is an embedding model. It can't answer questions, so it can't be the chat model")
 
     config = {
         "schema_version": SCHEMA_VERSION,
@@ -165,6 +172,13 @@ def write(
     return config
 
 
+def ollama_client_answers(row: dict[str, Any]) -> bool:
+    """`ollama_client.answers_questions` for an installed-models row."""
+    from . import ollama_client  # noqa: PLC0415
+
+    return ollama_client.answers_questions(row.get("capabilities"))
+
+
 def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
     """What to actually run right now, and why.
 
@@ -197,6 +211,18 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         pinned = config.get("pinned") or {}
         tag = pinned.get("tag")
         match = next((row for row in installed if row["tag"] == tag), None)
+        # A pin written by hand can name an embedding model. Reported, like a
+        # missing one, rather than handed to the chat path to fail on.
+        if match and "capabilities" in match and not ollama_client_answers(match):
+            return {
+                "mode": "pinned",
+                "tag": None,
+                "resolved": False,
+                "reason": f"pinned to {tag}, which is an embedding model and can't answer. Pin a chat model, or switch to auto.",
+                "row": match,
+                "candidates_considered": len(installed),
+                "config": config,
+            }
         return {
             "mode": "pinned",
             "tag": tag,
@@ -215,21 +241,43 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
         }
 
     # auto — rank what is installed and take the best that actually fits.
+    #
+    # The capability filter is not decoration. `installed_rows()` returns every
+    # Ollama model on the machine, and since the Knowledge Base can pull
+    # embedding models, that now includes things that cannot complete a prompt at
+    # all. An embedder is small, so it scores "safe" and enters the ranking; on a
+    # machine where it is the only model pulled it would win, and the chat path
+    # would ask `nomic-embed-text` for a completion.
+    #
+    # Filtered on the presence of `completion` rather than the absence of
+    # `embedding`, so a model reporting neither — a capability Ollama adds later,
+    # or a tag whose `/api/show` failed — is excluded rather than assumed usable.
     runnable = [
         row
         for row in installed
-        if row["verdict"]["fit"] in {"safe", "marginal"} and not row.get("remote")
+        if row["verdict"]["fit"] in {"safe", "marginal"}
+        and not row.get("remote")
+        and ollama_client_answers(row)
     ]
     if not runnable:
+        # Three different problems, and saying "nothing fits" for all of them
+        # sends the reader to the wrong fix. A machine holding only an embedding
+        # model has plenty of room; what it lacks is anything that can answer.
+        fits = [r for r in installed if r["verdict"]["fit"] in {"safe", "marginal"}]
+        if not installed:
+            reason = "no models are installed. Pull one from the Models tab."
+        elif not fits:
+            reason = "no installed model fits this machine"
+        else:
+            reason = (
+                f"{len(fits)} installed model(s) fit this machine, but none can generate text "
+                "(embedding models can't answer questions). Pull a chat model in the Forge."
+            )
         return {
             "mode": "auto",
             "tag": None,
             "resolved": False,
-            "reason": (
-                "no installed model fits this machine"
-                if installed
-                else "no models are installed. Pull one from the Models tab."
-            ),
+            "reason": reason,
             "row": None,
             "candidates_considered": len(installed),
             "config": config,

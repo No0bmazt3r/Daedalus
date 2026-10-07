@@ -19,12 +19,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, forge, health, logs, prefs, providers, sessions, system
+from .api import (
+    assistant, background_jobs, chat, corpus, embeddings, events, forge, graph, health, logs, maintenance,
+    mcp, prefs, providers, search, sessions, system, thread, tools,
+)
 from .db import migrations, paths, sqlite_util
+from .services import app_logs
 # Aliased: `api.forge` is already imported above under that name, and the two
 # shadowing each other broke router registration at import time.
 from .services import forge as forge_service
-from .services import chat_service, hardware
+from .services import chat_service, hardware, live_events
+
+# The same records that go to stdout also go to a rotating file, so Settings →
+# System can read them back without a second terminal and a container name.
+app_logs.install()
 
 log = logging.getLogger("daedalus.startup")
 
@@ -74,12 +82,17 @@ async def lifespan(_app: FastAPI):
     # A thread, not the event loop: these are blocking HTTP reads.
     registry_task = asyncio.create_task(asyncio.to_thread(forge_service.warm_registry))
 
+    # Notices model changes made outside the app — `ollama rm` in a terminal —
+    # and tells every open view. Polls only while a browser is listening; see
+    # `services/live_events.py`.
+    watch_task = asyncio.create_task(live_events.watch_ollama())
+
     try:
         yield
     finally:
         # Ordinary shutdown. Without this the task is garbage-collected
         # mid-sleep and asyncio complains about it on the way out.
-        for task in (hardware_task, registry_task):
+        for task in (hardware_task, registry_task, watch_task):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
@@ -109,21 +122,49 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+# Any successful write under these prefixes tells every open view to re-read,
+# so a change made in one window shows in all the others straight away.
+_WRITE_TOPICS = (("/api/corpus", "corpus"), ("/api/rag", "rag"))
+
+
+@app.middleware("http")
+async def publish_writes(request, call_next):
+    response = await call_next(request)
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and response.status_code < 400:
+        for prefix, topic in _WRITE_TOPICS:
+            # Preview is a POST only because it takes a body; it changes nothing.
+            if request.url.path.startswith(prefix) and request.url.path != "/api/corpus/preview":
+                live_events.publish(topic)
+    return response
+
+
 app.include_router(health.router)
 app.include_router(prefs.router)
 app.include_router(sessions.router)
 app.include_router(logs.router)
+app.include_router(thread.router)
 app.include_router(providers.router)
 app.include_router(system.router)
 app.include_router(forge.router)
+app.include_router(graph.router)
+app.include_router(corpus.router)
+app.include_router(embeddings.router)
+app.include_router(search.router)
+app.include_router(tools.router)
+app.include_router(mcp.router)
+app.include_router(maintenance.router)
 app.include_router(chat.router)
+app.include_router(events.router)
+app.include_router(background_jobs.router)
+app.include_router(assistant.router)
 
 
 # ── Serve the built dashboard ────────────────────────────────────────────────
-# In the container the Vite bundle is copied to DAEDALUS_STATIC_DIR, and this
-# one process serves both the API and the UI — same origin, one port, no CORS.
-# In development the directory doesn't exist and this block is skipped, because
-# the Vite dev server owns the UI and proxies /api back here.
+# `./daedalus.sh start` builds the Vite bundle into frontend/dist and points
+# DAEDALUS_STATIC_DIR at it, and this one process serves both the API and the
+# UI — same origin, one port, no CORS. Under `dev` the directory doesn't exist
+# and this block is skipped, because the Vite dev server owns the UI and
+# proxies /api back here.
 _static_dir = Path(os.environ.get("DAEDALUS_STATIC_DIR", "static"))
 
 if _static_dir.is_dir():

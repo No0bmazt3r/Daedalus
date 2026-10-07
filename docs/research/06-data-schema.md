@@ -1,6 +1,6 @@
 # Data Schema & Query Patterns
 
-## 1. Sensor time-series table (existing, owned by Jason's ingestion subsystem)
+## 1. Sensor time-series table (existing, owned by the SCADA ingestion subsystem)
 
 ```sql
 CREATE TABLE sensor_readings (
@@ -9,8 +9,7 @@ CREATE TABLE sensor_readings (
     temp_c      REAL,      -- T-101
     pressure_barg REAL,    -- P-101
     ph          REAL,      -- pH-101
-    co2_ppm     REAL,      -- NDIR
-    anomaly_status TEXT CHECK(anomaly_status IN ('Normal', 'Anomaly'))
+    co2_ppm     REAL       -- NDIR
 );
 CREATE INDEX idx_timestamp ON sensor_readings(timestamp);
 ```
@@ -50,13 +49,6 @@ WHERE timestamp BETWEEN :start_time AND :end_time;
 ```
 (Parameterized per requested sensor column — never string-concatenated, to avoid injection even though this is a read-only local tool.)
 
-### `get_anomaly_status(start_time, end_time)`
-```sql
-SELECT timestamp, temp_c, pressure_barg, ph, co2_ppm, anomaly_status
-FROM sensor_readings
-WHERE anomaly_status = 'Anomaly' AND timestamp BETWEEN :start_time AND :end_time;
-```
-
 ## 4. Concurrency configuration
 
 ```sql
@@ -70,14 +62,12 @@ PRAGMA synchronous=NORMAL;  -- reasonable durability/perf tradeoff given the wri
 |---|---|---|---|
 | Machine manuals | PDF | A handful of documents | Reactor rig operation, sensor specs |
 | SOPs | PDF/DOCX | ~5–10 documents | Absorption/desorption startup, shutdown, safety procedures |
-| Anomaly / UAUC records | Structured + free text | Grows over time as anomalies are logged | Feeds both the traditional RAG chunk store and the GraphRAG `AnomalyRecord` nodes |
 
 ## 6. Data flow ownership boundary (important for your report's clarity)
 
 ```
-Jason's subsystem  →  writes sensor_readings table
-Anson's subsystem  →  writes anomaly_status column (or a related anomaly detail table)
-This project       →  READS both, writes only to its own vector store / graph store
+SCADA ingestion    →  writes sensor_readings table
+This project       →  READS it, writes only to its own vector store / graph store
                        (which are separate files/databases entirely from reactor.db)
 ```
 

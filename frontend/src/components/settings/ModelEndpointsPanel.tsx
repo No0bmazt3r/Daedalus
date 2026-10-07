@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   Plus, Trash2, Check, X, Loader2, ExternalLink, KeyRound, AlertTriangle, CloudOff,
 } from 'lucide-react'
@@ -15,7 +17,8 @@ import {
 } from '../../lib/systemClient'
 
 /**
- * Settings → Add Models.
+ * The Forge → Installed → Chat models → Cloud baselines. (It was also Settings → Add Models;
+ * that duplicate was removed — model management is the Forge's.)
  *
  * Configures cloud providers for the **offline evaluation baseline**, not for
  * the live runtime. PROJECT.md Rule 1 forbids cloud APIs in the query path and
@@ -51,18 +54,17 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   const [testing, setTesting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      const [cat, eps] = await Promise.all([providerCatalogue(), listEndpoints()])
+  // State set in the promise's callbacks only.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
+  const load = useCallback(() => Promise.all([providerCatalogue(), listEndpoints()])
+    .then(([cat, eps]) => {
       setProviders(cat)
       setEndpoints(eps)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'could not load endpoints')
-    } finally {
-      setLoaded(true)
-    }
-  }, [])
+      setLoadError(null)
+    })
+    // The endpoints cannot be read: the panel is the error page. `error` is a failed action.
+    .catch((e: unknown) => setLoadError(toFailure(e)))
+    .finally(() => setLoaded(true)), [])
 
   useEffect(() => {
     void load()
@@ -126,6 +128,17 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
   const field =
     'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-40'
+
+  if (loadError) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The cloud model endpoints could not be read from the backend."
+        onRetry={() => void load()}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">

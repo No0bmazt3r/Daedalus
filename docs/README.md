@@ -13,9 +13,14 @@ over anything else here.
 | Understand the whole project | [`PROJECT.md`](PROJECT.md) |
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
-| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — design only, none built |
+| Report progress (advisor, examiner) | [`STATUS.md`](STATUS.md) — plain-language status with screenshot placeholders |
+| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — all three built: Ariadne's Thread, The Forge, Labyrinth Blueprints |
+| Know how a model is judged against this machine, or add one | [`MODEL_FIT.md`](MODEL_FIT.md) — the fit contract for chat, embedding and re-ranker models |
+| Run the dual-track evaluation | [`EVALUATION.md`](EVALUATION.md) — query set, freeze-then-run, metrics, what a run writes |
+| Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
 | Run it | [`../README.md`](../README.md) |
 | Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |
+| See every error page, or tweak a picture or its animation | [`ERROR_PAGES.md`](ERROR_PAGES.md) |
 | Know what this project borrowed, and from whom | [`../ACKNOWLEDGMENTS.md`](../ACKNOWLEDGMENTS.md) |
 
 ## Precedence — read this before trusting any file
@@ -30,8 +35,16 @@ two disagree, resolve in this order:
    Describes what exists; `PROJECT.md` describes what is intended.
 3. **[`MODULES.md`](MODULES.md)** — design for Ariadne's Thread, The Forge and
    Labyrinth Blueprints. Subordinate to `PROJECT.md`: it elaborates §10.2 and
-   never overrides it. **Nothing in it is built.**
-4. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
+   never overrides it. The Forge is built; Labyrinth Blueprints is built in
+   full — both halves, and both of the pipelines that fill them (§3.9: corpus
+   ingestion for Track 1, assisted graph authoring for Track 2). §3.4's storage
+   decision is settled (NetworkX over git-tracked YAML), with the *authored*
+   copy in `config/` so it stays writable in the container and still reviews in
+   a diff. Ariadne's Thread is built too; §1.7 records where it departs from the design.
+4. **[`BENCHMARK.md`](BENCHMARK.md)** — canonical for *how latency is measured
+   and what may be concluded from it*. Elaborates `MODULES.md` §2.3. Written to
+   be defended: §9 names the limitations rather than hiding them.
+5. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
    historical. Still useful for depth, but **superseded wherever they conflict
    with `PROJECT.md`**.
 

@@ -8,12 +8,21 @@ export const PREF_THEME = 'theme';
 export const PREF_CUSTOM_THEMES = 'custom-themes';
 export const PREF_UI_SCALE = 'ui-scale';
 export const PREF_SETTINGS_UI = 'settings-ui';
+/** The shortcut map — see `lib/keybinds.ts`. Stores only what was rebound. */
+export const PREF_KEYBINDS = 'keybinds';
+/** Which chrome is drawn — see `lib/uiChrome.ts`. Stores only what was hidden. */
+export const PREF_UI_CHROME = 'ui-chrome';
+/** The Forge's starred models — see `components/forge/ModelsView.tsx`. */
+export const PREF_FORGE_SHORTLIST = 'forge-shortlist';
 
 export type PrefKey =
   | typeof PREF_THEME
   | typeof PREF_CUSTOM_THEMES
   | typeof PREF_UI_SCALE
-  | typeof PREF_SETTINGS_UI;
+  | typeof PREF_SETTINGS_UI
+  | typeof PREF_KEYBINDS
+  | typeof PREF_UI_CHROME
+  | typeof PREF_FORGE_SHORTLIST;
 
 export type SyncStatus = 'loading' | 'ready' | 'offline';
 

@@ -126,6 +126,7 @@ def search(query: str = "", *, limit: int = 24) -> dict[str, Any]:
 
     params = [
         ("filter", "gguf"),
+        ("filter", "text-generation"),
         ("sort", "downloads"),
         ("direction", "-1"),
         # Over-fetch: rows without a parameter count are dropped below, and

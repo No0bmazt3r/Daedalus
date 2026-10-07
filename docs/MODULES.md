@@ -1,10 +1,9 @@
 # The Three Core Modules — Design Specification
 
-**Status: design. One step of one module is built** — the Forge's hardware
-detection (§2, step 1). Everything else here is still specification. The three
-names have been sitting in `frontend/src/components/Sidebar.tsx` as dead
-buttons with no handler since the shell was built; this is the document that
-says what they are for.
+**Status: all three are built.** The Forge (§2) and Labyrinth Blueprints (§3)
+first; Ariadne's Thread (§1) on 2026-10-07 — §1.7 records where the build
+departs from this design and why. The rest of this document is the design as
+written, kept so the departures stay visible.
 
 They are not new scope. Each one is a thing `PROJECT.md` §10.2 already promises
 under **"the glass box experience"**, given a home and a name:
@@ -13,7 +12,7 @@ under **"the glass box experience"**, given a home and a name:
 |---|---|---|
 | **Ariadne's Thread** | Tool-call trace — collapsible Thought → Action → Observation | 10 — Observability |
 | **The Forge** | Hardware/model console — CPU/RAM/VRAM stats, swap active SLM | 11 — Admin utilities |
-| **Labyrinth Blueprints** | Graph visualiser — how GraphRAG connected an anomaly to an SOP | 4 + 5 — Ingestion & retrieval |
+| **Labyrinth Blueprints** | Graph visualiser — how GraphRAG connected a sensor to an SOP | 4 + 5 — Ingestion & retrieval |
 
 The mythology is not decoration. Daedalus built the Labyrinth and kept its
 plans; Ariadne's thread is what let Theseus retrace his path out of it; the
@@ -119,10 +118,11 @@ returns every row across all seven:
 | `feedback_logs` | user rating | the evaluation signal (Method A, §9.3) |
 | `memory_logs` | context assembly | what history was replayed into the prompt |
 
-Nothing writes to these yet — that is M5. **The UI can be built now against a
-seeder** that produces realistic traces, the same way `POST /api/system/seed-demo`
-already seeds sensor telemetry. Build the viewer first and the orchestrator
-lands into a surface that can already inspect it.
+**M5 writes these now** — every chat turn lands `conversation_logs`,
+`tool_logs`, `rag_logs` and `model_logs` rows on one `query_id` (`error_logs`,
+`feedback_logs` and `memory_logs` still have no writer on the chat path). The
+seeder remains useful for building the viewer against scenarios a live session
+would take a while to produce.
 
 ### 1.3 The two views
 
@@ -139,10 +139,9 @@ traces properly:
 │ q_20260914_0042       │  ▸ QUERY      "Why did CO₂ spike at 10:00?" │
 │   ✓ grounded  1.8s    │  ▸ INTENT     mixed_query        (2ms)      │
 │ q_20260914_0041       │  ▸ TOOL       get_trend          (34ms) ✓   │
-│   ⚠ ungrounded 2.4s   │  ▸ TOOL       get_anomaly_summary(12ms) ✓   │
-│ q_20260914_0040       │  ▸ RETRIEVAL  rag_retrieve k=5   (180ms)    │
-│   ✓ grounded  0.9s    │  ▸ MODEL      qwen3:1.7b  412 tok (1.4s)    │
-│ …                     │  ▸ ANSWER     + groundedness check          │
+│   ⚠ ungrounded 2.4s   │  ▸ RETRIEVAL  rag_retrieve k=5   (180ms)    │
+│ q_20260914_0040       │  ▸ MODEL      qwen3:1.7b  412 tok (1.4s)    │
+│   ✓ grounded  0.9s    │  ▸ ANSWER     + groundedness check          │
 └───────────────────────┴─────────────────────────────────────────────┘
 ```
 
@@ -167,8 +166,7 @@ the answer with each number marked:
 ```
 "At around 10:00 the CO₂ reading increased sharply from 420 ppm to 980 ppm.
                                                        ^^^green      ^^^green
- The database records an anomaly flag during this period. The SOP suggests
- checking NDIR calibration and gas flow."
+ The SOP suggests checking NDIR calibration and gas flow."
                                                     [SOP_NDIR_Calibration.pdf p.4]
 ```
 
@@ -201,10 +199,65 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 
 | | |
 |---|---|
-| **Blocked by** | M5 (orchestrator writing rows). Viewer buildable now against a seeder |
+| **Blocked by** | ~~M5 (orchestrator writing rows)~~ — **unblocked**: the chat path writes the trace. Only the viewer itself remains |
 | **Unblocks** | §9.2 hallucination-rate metric; the "glass box" demo; Method A evaluation (§9.3) |
-| **Risk** | Ephemeral/incognito sessions must never appear here. TODO already carries "suppress `user_query`/`response_text` for ephemeral sessions" — the Thread is the surface that makes getting this wrong visible and embarrassing |
+| **Risk** | ~~Ephemeral/incognito sessions must never appear here.~~ **Closed 2026-10-07:** an incognito turn's audit rows keep no text (`audit_store.REDACTED`); the Thread lists it as incognito with nothing to read |
 | **Risk** | A trace can be large (retrieved chunk text especially). Page the steps; truncate cell content as `log_browser.py` already does at 4000 chars |
+
+### 1.7 As built (2026-10-07)
+
+`services/thread.py`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
+plus `q` (search the question or id) on the list. Both views of §1.3: the window
+from the sidebar (`Ctrl+Alt+A`, the palette), and the strip under every answer,
+which opens the thread in a panel beside the chat (with the evidence pack on
+a second tab) and links to the window. The list is grouped by the chat each
+question came from (foldable, filterable to one chat), every trace names its
+chat with a way back to it, and a failed load turns the window (or the trace's
+pane) into the error page for its status (`TabError`). `FEATURES.md` has the details.
+
+Added after the first build, the same day: **human labels** (Correct /
+Hallucinated + note on every trace, stored in `feedback_logs` — this is where
+the ground truth for M8 is entered), incognito redaction, a **summary strip**
+(per-bucket counts, p50/p95, labelled) over every match, **compare** two
+threads side by side, **export** as Markdown or JSON, track/model/label/date
+filters, ↑/↓ navigation, live refresh, links to the raw tables, the prompt's
+SHA-256, and **Settings → Ariadne's Thread**, which decides what grounded
+requires and how the six statuses are filed and named — the view only, never
+the record.
+
+Where it departs from the design above:
+
+- **The verdict mirrors the validator; it does not re-decide.** §1.4 imagined
+  the Thread extracting numbers and matching them itself. The validator
+  (`orchestration/validator.py`) already does that at answer time, against
+  everything the model was shown, unlabelled series samples included; the
+  transcript keeps only the labelled lines. Re-deciding against that smaller
+  set would mark red a number the validator rightly passed, and the Thread would
+  contradict the record it explains. So the stored verdict is the authority
+  (red = `unsupported_numbers`, amber = `stale_numbers`), and the Thread adds
+  what the validator does not keep: the line each green number came from.
+- **`grounded_flag` was already machine-computed** by the validator (passed,
+  had evidence, cited it). §1.4's last paragraph is therefore done by M5, not
+  here.
+- **Grey is the validator's "not a claim"**: a small bare count (0–10, no unit)
+  or the question's own number. A year or page number written as a bare number
+  above 10 is checked like any quantity, because that is what the validator
+  did.
+- **Bars are shares of the turn, not a waterfall.** Timestamps are to the
+  second, so start offsets cannot be drawn honestly; a bar per step sized to its
+  share of the whole turn answers "the model was 78% of this" from what was
+  recorded.
+- **Not shown:** the assembled prompt (never stored — the evidence step and the
+  context record are what was in it, minus the fixed rules), and the evidence
+  lines of a turn whose chat was deleted. That trace still reads; it says its
+  evidence is gone (`evidence_available: false`).
+- **Retrieval, for the comparison.** Each trace has a *Retrieval* section
+  (`GET /api/trace/{id}/retrieval`): for Track 1 every chunk with its document,
+  page, section, distance, re-rank score, rig/reference origin, the chunking its
+  ingest run used and whether the answer cited it; for Track 2 the entry, each
+  hop and the nodes touched, cited ones marked. *Compare* puts two of them side
+  by side, and the Markdown export carries them as tables.
+- ~~**Still open:** the incognito risk in §1.6.~~ Closed the same day (§1.6).
 
 ---
 
@@ -267,8 +320,26 @@ fixture if not, and record which was used alongside the result.
 
 Every benchmark run writes to `model_logs` with a synthetic `query_id` prefixed
 `bench_`, so the latency chapter of the report draws from the same table as live
-traffic and the two are comparable. `source` (`'benchmark'` or `'chat'`) is what
-lets an analysis separate them again.
+traffic and the two are comparable. `source` is what lets an analysis separate
+them again, and it has three values, not two:
+
+| `source` | meaning |
+|---|---|
+| `chat` | a live query on a local model. **The production path.** |
+| `chat_cloud` | a live query the operator pointed at a cloud model — a marked override. |
+| `benchmark` | a Forge run on this machine's hardware. |
+| `benchmark_cloud` | a Forge run against an Ollama cloud tag. Measures *their* hardware. |
+
+`host` (migration `004`) records which service served the run, so cloud rows can
+be grouped and a comparison can require the same host.
+
+`benchmark_cloud` is a separate value rather than a flag on `benchmark` so that
+any query asking what this machine can do keeps filtering `source = 'benchmark'`
+and stays correct unchanged. A cloud run also forces the fixture prompt — the
+real pack is genuine plant documents and a cloud call leaves the building — and
+its `tokens_per_sec` is **not quotable**: Ollama's cloud returns no engine
+counters, so the wall-clock fallback divides by a tiny window and reported a
+120B model at 836 tok/s. See [`BENCHMARK.md`](BENCHMARK.md) §7.
 
 **Two clocks, and they must not be mixed.** The first version of this benchmark
 derived the generation rate as `completion ÷ (total − TTFT)`, which looks
@@ -287,14 +358,23 @@ A warm-up pass runs before the timed one. Without it the first benchmark of a
 model measures disk: cold, llama3.2 reported 22.0s TTFT against 1.2s warm, and
 nearly all of that gap was reading 1.9GB of weights off an SSD rather than the
 model being slow. `warmed_up` travels with the result so nobody has to guess
-which was measured.
+which was measured. It is skipped for cloud tags, which have no local weights.
+
+**Reasoning models need the clock started differently.** Ollama streams a chain
+of thought in a separate `thinking` field and leaves `response` empty until it
+finishes deliberating. Watching only `response` recorded **no TTFT at all** for
+qwen3 and gpt-oss — both reasoning models, and both of this project's actual
+candidates. The clock now starts on the first generated token of either kind.
+
+The full methodology, including the threats to validity this measurement does
+*not* survive, is in [`BENCHMARK.md`](BENCHMARK.md).
 
 ### 2.4 Detection, and the three decisions worth keeping
 
 `backend/app/services/hardware.py` detects CPU model and
 core counts, total/available RAM, swap, GPU and VRAM, free disk where models
 land, and the Ollama version. It is rendered by `HardwareView`, which is shared
-between Settings → Hardware and the Forge window — one component, so the two
+between the Forge's Hardware tab and anything else that reads the machine — one component, so the two
 can never quote different numbers, which matters when one of them ends up in
 the report.
 
@@ -417,6 +497,16 @@ resolved to.
 
 > *"What does this system actually know, and how is it connected?"*
 
+> **Status: both halves are built.** Track 1 has an ingestion pipeline (upload →
+> extract → chunk → embed → Chroma, with a preview that writes nothing and a
+> per-stage log) and Track 2 has an authoring one (add and delete nodes and
+> edges, validated before the file is written, with refused edits kept). §3.9 has
+> both. The window
+> shows **one** retrieval track — the one answering queries, read from Settings →
+> Retrieval Track — and only that track's tabs: Track 1 · Vector holds Corpus,
+> Track 2 · Graph holds Graph, Coverage and Replay. The other track is a
+> fallback, not a peer. §3.8 has the reasoning and the failure cases.
+
 ### 3.1 What it is
 
 Daedalus's plans for the maze. Two halves, both answering "what is in the
@@ -428,23 +518,29 @@ a document to see its chunks with their metadata (`source_type`,
 `reactor_mode`, `document_version`) and the text as the retriever sees it.
 
 **B. The graph (Layer 5, Track 2).** The hand-authored knowledge graph from
-§5 — 7 node types and 7 edge types:
+§5 — 6 node types and 5 edge types:
 
 | Nodes | Edges |
 |---|---|
-| `Sensor` · `OperatingMode` · `Threshold` · `SOPDocument` · `SOPStep` · `AnomalyRecord` · `AnomalyType` | `MONITORED_IN` · `HAS_THRESHOLD` · `TRIGGERS` · `RESOLVED_BY` · `CONTAINS` · `INSTANCE_OF` · `INVOLVES` |
+| `Sensor` · `OperatingMode` · `Threshold` · `SOPDocument` · `SOPStep` · `AnomalyType` | `MONITORED_IN` · `HAS_THRESHOLD` · `TRIGGERS` · `RESOLVED_BY` · `CONTAINS` |
 
-Browse it as a list, search it, and see any node with its neighbours.
+Browse it as a list, search it, and see any node with its neighbours. Each
+node shows whether it is **this rig's** knowledge or a **reference** from
+another installation (`origin`; sensors and operating modes are the rig's by
+definition), and each corpus document carries the same badge, set at upload and
+flippable without a re-ingest.
 
 ### 3.2 The feature that earns the module: traversal replay
 
 A static graph browser is mildly useful. **Replaying a traversal is the
 deliverable.**
 
-Take any `query_id` whose `rag_logs.track = 'graph'`. That row already records
-`retrieved_chunk_ids` and `hop_count`. Replay the walk the agent actually took —
-highlighting each node and edge in sequence, hop by hop, with the agent's
-sufficiency check between steps:
+Take any `query_id` whose `rag_logs.track = 'graph'`. That row records
+`retrieved_chunk_ids`, `hop_count` and the whole `traversal_path` — including
+which mode walked it (`agent` or the fixed `walk`), why it stopped, and any
+replies the agent gave that could not be acted on. Replay the walk actually
+taken — highlighting each node and edge in sequence, hop by hop, with the
+agent's sufficiency check between steps:
 
 ```
 hop 1   Sensor(pressure) ──HAS_THRESHOLD──▶ Threshold(P > 2.5 barg)
@@ -452,10 +548,12 @@ hop 1   Sensor(pressure) ──HAS_THRESHOLD──▶ Threshold(P > 2.5 barg)
         ▸ sufficient? no — no procedure found yet
 
 hop 2   both Thresholds ──TRIGGERS──▶ AnomalyType(thermal_runaway_risk)
-        ▸ sufficient? no — need the procedure and the history
+        ▸ sufficient? no — need the procedure
 
 hop 3   AnomalyType ──RESOLVED_BY──▶ SOPDocument(Emergency_Cooldown.pdf)
-        AnomalyType ◀──INSTANCE_OF── AnomalyRecord ×3  (Aug 14, Sep 02, Sep 11)
+        ▸ sufficient? no — need its steps
+
+hop 4   SOPDocument ──CONTAINS──▶ SOPStep ×4
         ▸ sufficient? yes
 ```
 
@@ -483,11 +581,32 @@ That is worth a paragraph in the report on its own: the comparison is only fair
 if Track 2's corpus is as complete as Track 1's, and this is how that gets
 checked rather than assumed.
 
-### 3.4 Open decision — where the graph lives
+### 3.4 Decided — where the graph lives
 
-`research/03-agentic-graphrag-spec.md` discusses storage options and this is
-**not yet decided**. It gates the module's API, so it needs deciding before
-building:
+**NetworkX over a git-tracked YAML source of truth**, as recommended below —
+37 nodes and 48 edges across all 7 node and 7 edge types, loaded by
+`services/knowledge_graph.py`, which validates against the declared schema and
+**refuses a graph that does not validate** rather than serving a subtly broken
+one. A typo'd edge type is not a crash; it is a silent retrieval failure, which
+is the failure mode §3.3 is about.
+
+**Two paths, one file.** `backend/app/data/graph/knowledge_graph.yaml` is the
+packaged **seed**; `config/knowledge_graph.yaml` is the **authored** copy, and
+the loader serves whichever exists. The split is not tidiness — `docker-compose`
+mounts `app/` read-only, correctly, since the application source is not
+something the application should rewrite. Authoring into the source tree worked
+under a bare `uvicorn` and failed in the container, which is the worse of the two
+ways round. `config/` is writable *and* git-tracked, so this section's argument
+is untouched: the file is still the authoring surface and still reviews in a pull
+request, beside `model_config.json` and `rag_config.json`.
+
+The first edit copies the seed across, so a fresh checkout has the full graph
+with nothing to set up, and `authoring/status` reports which file is live.
+
+`python -m app.services.knowledge_graph` prints the same schema and coverage
+report in the terminal, so the graph can be authored without the UI open.
+
+The options as they were weighed:
 
 | Option | For | Against |
 |---|---|---|
@@ -495,11 +614,25 @@ building:
 | NetworkX in memory, authored from JSON/YAML on disk | Traversal is a library call; the authored file is diffable in git | Another representation to keep in sync; rebuilt at every boot |
 | An embedded graph DB | Purpose-built traversal | A sixth engine to justify against §6.4's store-separation argument, and a dependency Rule 1 must vet |
 
-My recommendation is **NetworkX over a git-tracked YAML source of truth.** The
-graph is small (tens of nodes), hand-authored, and changes by editing rather
-than by insert — so the file *is* the authoring surface, it reviews in a pull
-request, and Blueprints renders it. It also keeps the store count at five,
-which §6.4 spends real effort defending.
+The reasoning that decided it: the graph is small (tens of nodes),
+hand-authored, and changes by editing rather than by insert — so the file *is*
+the authoring surface, it reviews in a pull request, and Blueprints renders it.
+It also keeps the store count at five, which §6.4 spends real effort defending.
+
+**Track 2 is deliberately embedding-free.** `research/03` §7 specified
+`graph_query_natural` as a vector search over node descriptions; it is authored
+aliases plus a stdlib fuzzy fallback instead. If both tracks depend on an
+embedding model, the comparison cannot separate "the graph structure helped"
+from "the embeddings helped", and a reviewer is entitled to ask which one moved
+the number. `rag_logs.entry_strategy` records which strategy found the entry
+nodes per query, so the report can state this from the data rather than from
+this paragraph.
+
+The honest framing is *not* "the graph track needs no model" — it needs a more
+capable one, since the model drives traversal (`research/03` §10). It is that
+**Track 1 is pinned to an embedding model and Track 2 is pinned to none**:
+swapping the embedding model invalidates Track 1's whole index and costs Track 2
+nothing, because there is no index.
 
 ### 3.5 API
 
@@ -508,32 +641,300 @@ which §6.4 spends real effort defending.
 | `GET` | `/api/graph/schema` | Node and edge types with counts — drives the legend |
 | `GET` | `/api/graph/nodes` | Search and filter by type |
 | `GET` | `/api/graph/nodes/{id}` | One node with its neighbours |
+| `GET` | `/api/graph/traversals` | Recent graph-track retrievals — the replay picker |
 | `GET` | `/api/graph/traversal/{query_id}` | The walk taken for that query, hop by hop |
 | `GET` | `/api/graph/coverage` | Orphans and unresolved types |
 | `GET` | `/api/corpus/documents` | Ingested documents with chunk and embedding counts |
 | `GET` | `/api/corpus/documents/{id}/chunks` | Chunks with metadata and text |
 
+All read-only, and the audit store is opened `read_only=True` so the contract is
+enforced rather than merely intended. There is deliberately **no "run a
+traversal" endpoint**: replay renders a walk that was *recorded*, and performing
+one on demand would make this module a second retrieval path with none of Layer
+10's logging.
+
+`/api/graph/nodes` returns the edges among the returned nodes alongside them, so
+the diagram draws the same set the table lists and the filtering is not done
+twice in two places.
+
+The corpus endpoints are wired now against the honest empty state rather than
+left unrouted: a 404 reads as a frontend bug, and the point of §0 rule 4 is that
+the panel can name *which milestone* it is waiting on.
+
 ### 3.6 Rendering, under Rule 1
 
-A force-directed graph needs a layout library. **It must be bundled, not loaded
-from a CDN** — Rule 1, and the same reasoning that put Monocraft in
-`src/assets/fonts/` rather than on `fonts.googleapis.com`. `d3-force` or
-`cytoscape` from npm is fine; Vite bundles it into `/assets` and it works
-air-gapped.
+`d3-force` from npm, **bundled by Vite, never loaded from a CDN** — Rule 1, and
+the same reasoning that put Monocraft in `src/assets/fonts/` rather than on
+`fonts.googleapis.com`. Drawn as SVG rather than canvas: at tens of nodes the
+render cost is irrelevant and SVG gives hover, focus and text selection for
+free.
 
-Provide a **table view alongside the canvas.** A node-link diagram of 60 nodes
-is a hairball, and for "show me every `AnomalyType` with no resolving SOP" a
-table is simply the better answer. The graph is for the traversal replay; the
-table is for everything else.
+**Table alongside the canvas**, as specified — a toggle, not a preference. They
+answer different questions: the diagram shows structure (two Thresholds
+converging on one AnomalyType is a shape you see in one glance), the table shows
+inventory ("every AnomalyType with no resolving SOP" is a list). Both filter the
+same query, so narrowing to one node type narrows the diagram to that type's
+subgraph, which is also the cure for the hairball.
+
+Three behaviours worth recording, each fixing something that was wrong:
+
+- **The viewport is fitted to the graph, not fixed to a frame.** A force layout
+  spreads to whatever the forces imply and has no idea a frame exists; measured
+  on the real graph shape, **16 of 37 nodes fell outside a hard-coded 720x460
+  viewBox** and were silently clipped. The viewBox is now computed from the
+  nodes' own bounding box, padded for labels and corrected to the drawing area's
+  aspect ratio. Wheel zooms about the cursor, the background pans, and Fit
+  returns to the whole graph; zoom is clamped to 0.2x-3x of the fitted width so
+  a scroll gesture cannot end on an empty screen.
+- **The simulation stops.** A force layout that never settles is a screensaver.
+  The initial layout runs 300 ticks synchronously, paints once and stops;
+  interaction reheats it and a `requestAnimationFrame` loop drives ticks until
+  alpha decays. d3's own timer is never used — it would advance the simulation
+  without telling React, so neighbours would move in the data and not on screen.
+- **Released nodes return home.** Each node's settled position is captured and
+  weak `forceX`/`forceY` pull it back, at strength 0.6 — measured against the
+  alternatives: 0.3 leaves the layout 20px off, 1.0 makes it rigid enough that
+  neighbours stop yielding during a drag. Twelve successive 360px drags left the
+  maximum drift at 12.4px after every one, so it does not creep. Pinning a
+  released node where it was dropped is the common d3 idiom and wrong here: this
+  is a reference figure, not a workspace, so a dropped node is permanent damage
+  to a layout somebody is reading.
+
+**The diagram fills the window.** It was a fixed 460px box, so maximizing added
+a screen of empty space under it rather than more graph. The canvas now measures
+its own frame and takes the leftover height — `min-h-full` on the window body
+plus a `flex-1` diagram row, which other tabs simply do not opt into. `vh` would
+have been the wrong tool: every panel here lives in a window that is draggable,
+resizable and maximizable, so the viewport's height says nothing about how much
+room the content has.
+
+A resize adjusts the viewBox's *aspect* rather than re-fitting. Refitting would
+discard whatever the reader had zoomed and panned to, and a resize is not a
+request to go back to the whole graph — it is a request for more room, so the
+horizontal extent and centre are held and the new pixels are spent on more graph.
+
+**Selecting a node answers beside the diagram, not below it.** The detail used
+to render in the grid row under a 460px canvas, so clicking a node updated
+something entirely off-screen and the click read as doing nothing. It docks to
+the right instead — beside rather than floating over, because an overlay
+occludes the structure you are reading, which is the whole reason the diagram
+exists. The canvas keeps its own `viewBox`, so narrowing it scales the drawing
+rather than re-running the layout; there is no jitter on every click. Below the
+container breakpoint the two stack again and the panel scrolls itself into view:
+a narrow window cannot afford 340px of side panel, but it can afford not to hide
+the result.
 
 ### 3.7 Dependencies and risks
 
 | | |
 |---|---|
-| **Blocked by** | M2 (ingestion) for the corpus half; M6 Track 2 for the graph half. **The most blocked of the three** |
+| ~~**Blocked by**~~ | ~~M2 for the corpus half; M6 Track 2 for the graph half~~ — **neither, now.** Both halves are built, including the two pipelines that fill them (§3.9). What is outstanding is the *corpus itself* — real manuals and SOPs — which is a document-collection task rather than a milestone this module waits on |
 | **Unblocks** | The comparison chapter's qualitative figure; graph-authoring coverage checks |
 | **Risk** | Depends on a track that may be descoped. If Track 2 slips, the corpus half still stands alone and is still worth having |
-| **Risk** | Traversal replay needs the agent to *record* its path. `rag_logs.hop_count` exists but the path itself does not have a column — **add one to the `rag_logs` schema now**, while it is a migration nobody has to coordinate, rather than after rows exist |
+| **Risk — assisted authoring** | The proposer runs a local model over the corpus, and a small model proposes confidently wrong triples. Guarded three ways — ontology-constrained prompting, canonicalisation against existing nodes, and a dry run through the real validator — but the residual risk is a *plausible* proposal that passes all three and is wrong. That is what the verbatim evidence quote is for: the review is checking a sentence, not trusting a model |
+| ~~**Risk**~~ | ~~Traversal replay needs the agent to record its path~~ — **done.** Migration `005` adds `traversal_path` and `entry_strategy`, landed before the orchestrator wrote its first row, which was the point: a path is not derivable after the fact. `graph_tools.TraversalPath` records every hop regardless of caller, so the viewer had real replay data before any agent existed |
+| **Note** | A hop stores its `from`/`to` node *sets* **and** the pairs actually joined. The sets do not imply the pairings — a hop spanning two Sensors and two Thresholds has four possible pairs and two real ones — so a renderer given only the sets draws edges the graph does not contain. Fixed in the recorder, not guessed at in the renderer |
+
+### 3.9 The two pipelines
+
+Each track gets knowledge a different way, and each now has a surface for it.
+
+**Track 1's panel is a stepper, not a page.** Import → Chunk → Embedding → Run.
+The four stages are sequential and dependent — chunk settings mean nothing
+without a document, an embedding model cannot be checked against an index that
+does not exist, and a run is the consequence of the three decisions above it — so
+showing all four at once showed three things you could not act on and gave no
+clue which to touch first. Going *back* is always allowed, because adjusting
+chunk settings against the preview is inherently repetitive; going *forward* is
+gated, and the rail says why rather than just disabling itself.
+
+Step 3 **reports** the embedding model and hands management off to the Forge.
+It also has a dropdown of every installed embedder, so choosing or switching is
+not a trip to Settings. Choosing stays an explicit act: nothing is defaulted, and
+switching builds a separate index while the old one is kept.
+It
+is a step rather than a footnote because it is the only choice in the flow that
+is irreversible with respect to the work — the model is stamped onto the index it
+builds, and changing it afterwards invalidates every vector — so the run should
+not be reachable without passing it. But pulling, switching and hardware fit
+belong to the Forge, which is the model console; a second one inside this panel
+would drift until one of them was wrong about what is installed.
+
+**The two tracks mirror each other, tab for tab.** Track 1's single *Corpus* tab
+used to be inventory, chunk settings, embedding model and the run all at once —
+which made its name wrong: the corpus is the artefact, and most of that screen
+was the machinery producing it. Split three ways, each tab has one job and the
+name means what it says:
+
+| | Track 1 | Track 2 |
+|---|---|---|
+| **inventory** — what this arm knows | Corpus | Graph |
+| **gaps** — what it cannot answer | — | Coverage |
+| **trace** — what one query actually did | Replay | Replay |
+| **authoring** — how knowledge gets in | Build | Build |
+
+**Track 1 has no Coverage, and that is a finding rather than a gap.** A
+hand-authored graph fails by *omission*, and omission over a fixed schema is
+enumerable: an `AnomalyType` with no `RESOLVED_BY` edge is a question the graph
+provably cannot answer, and §3.3's report lists exactly those. A vector corpus
+has no such list — it returns the top-k nearest chunks for every query, including
+ones it knows nothing about, so its failure is a *bad match* rather than a
+missing edge and the passages nobody wrote cannot be enumerated. What Track 1 can
+report is mechanical (failed extractions, chunks with no vector, documents never
+ingested) and those are counts on the Corpus tab, because they are properties of
+the corpus rather than a separate question about it. A fourth tab for symmetry
+would assert an equivalence that does not hold — and that non-equivalence is one
+of the more interesting things the comparison has to say.
+
+Track 1 had no trace at all until now, and that asymmetry *was* a hole in the
+project's own claim: a comparison of two retrieval strategies where only one of
+them is auditable is not a comparison of two retrieval strategies, and *grounded*
+is not a property that can be asserted about an arm nobody can inspect. Replay
+shows the query, the passages it returned, the cosine distance each came back at,
+and the document each belongs to — enough to check a citation by reading it.
+
+Both replays read `rag_logs` and neither re-runs anything. Re-querying would show
+what the index returns *today* rather than what produced that answer, which after
+any re-ingest is a quietly different claim.
+
+**One writer, both tracks.** The `rag_logs` row is written at the tool dispatch
+boundary rather than inside `search_corpus` and `search_graph`. The two tools are
+deliberately separate implementations — that is what makes "which track answered
+this" recoverable — but recording them separately would have let the comparison
+measure two instrumentation methods as much as two retrieval strategies. Dispatch
+already owns `query_id`, the surface and the elapsed time, and a tool cannot
+forget to call it. A call with no `query_id` writes nothing: a tool trialled in
+Settings is not a query, and a row for one would land in the evaluation set as
+though it were.
+
+| | Track 1 · Build | Track 2 · Build |
+|---|---|---|
+| **Knowledge arrives by** | ingesting documents | somebody authoring nodes |
+| **Source of truth** | ChromaDB + `corpus.db` manifest | `config/knowledge_graph.yaml` |
+| **Stages** | store → extract → chunk → embed → stamp | validate → write → reload |
+| **Log** | `ingest_events`, per stage, level-tagged | `graph_edits`, including refusals |
+| **API** | `/api/corpus/*` | `/api/graph/authoring/*` |
+
+**Track 2's Build has an assisted first step.** The model proposes, a person
+disposes. `graph_proposals` reads the *ingested corpus*, extracts candidates
+under the graph's own fixed schema, canonicalises them against existing ids,
+labels and aliases, dry-runs them through the same validator the manual path
+uses, and queues what survives. Nothing reaches the YAML without an accept, and
+an accept goes through `graph_authoring` — so it is validated and logged to
+`graph_edits` identically to a hand edit. The write is the same event; what
+differs is who typed it, and that is what the proposal table records.
+
+The literature converges on why this shape works: accuracy is best when a fixed
+schema *constrains* extraction and regresses when the constraint is removed
+(Feng et al., ontology-grounded KG construction under Wikidata schema). Daedalus
+already had the ontology — `NODE_TYPES`, `EDGE_TYPES`, `EDGE_DOMAINS` — and
+already enforced it, so the prompt asks which of seven types the text describes
+rather than what entities are in it. The surveys' three named failure modes are
+each guarded: duplicate entities under different surface forms (canonicalised
+before queueing, and separately for edges, which are *not* caught by validation
+because re-adding one is a silent no-op), invalid triples (dry-run, queued with
+the refusal rather than dropped, so the error rate stays visible), and cost
+scaling with corpus size (bounded per run).
+
+The web is deliberately not a source. Rule 5 makes web search a surface for
+*finding documents to ingest*; unreviewed external text placed into the graph
+would break the provenance claim the queue exists to protect.
+
+**Both are setup surfaces, never runtime tools** (Rule 5). Ingesting writes, and
+authoring writes; a model that could add to its own knowledge base could add
+something nobody reviewed. That is also the provenance claim that makes
+`search_graph` `SYSTEM` integrity rather than `CORPUS` — every node in the graph
+was authored by a person and reviews in a diff.
+
+**Chunking is pure, which is what makes it adjustable.** `services/chunking` does
+no I/O, so the panel can run the real chunker over the real document at candidate
+settings and write nothing. Chunk size and overlap have a large effect on
+retrieval and are impossible to reason about as numbers; the preview makes the
+question cost a parse instead of an embedding run. Three strategies —
+`recursive` (default), `paragraph`, `fixed` — with `fixed` kept deliberately as
+the naive baseline, because a retrieval result that improves when you switch away
+from it is evidence that structure-aware chunking mattered.
+
+**Embeddings come from the selected model, never from Chroma.** Chroma will embed
+text for you with its own bundled MiniLM. Doing so would put MiniLM vectors in a
+collection stamped `nomic-embed-text` and make every similarity score meaningless
+with nothing on screen to say so. Ingestion passes explicit vectors, and
+`search_corpus` passes `query_embeddings` — the same failure on the query side,
+where no stamp can catch it.
+
+**Failure is partial and recorded as such.** Embedding runs in batches of 16 and
+records the outcome per chunk, so a run that dies at chunk 400 of 900 keeps the
+first 399 and `Resume` picks up exactly the rest. Rolling back would discard
+minutes of correct work over one bad row; not recording it would produce a corpus
+that claims to be complete.
+
+**The authored graph lives in `config/`, not `app/data/`.** `docker-compose`
+mounts `app/` read-only — correctly, since the application source is not
+something the application should rewrite — so authoring into it worked in a bare
+`uvicorn` and failed in the container. `config/` is writable *and* git-tracked, so
+§3.4's "the file is the authoring surface and it reviews in a pull request" still
+holds exactly. The packaged copy is a seed; the first edit copies it across.
+
+**Validate before write, always.** The candidate graph is built in memory first
+and the file is rewritten only if that build succeeded, so a rejected edit leaves
+the YAML byte-identical and Track 2 never goes down because of a bad edit. A
+typo'd edge type is not a crash — §3.4 — it is a silent retrieval failure, and
+catching it at edit time rather than at the next load is the whole point.
+
+---
+
+### 3.8 One track on screen, and what happens when it cannot be read
+
+The window reads `GET /api/rag/config` and renders the tabs of the live track
+only:
+
+| Live track | Tabs |
+|---|---|
+| Track 1 · Vector | Corpus |
+| Track 2 · Graph | Graph · Coverage · Replay |
+
+**Why one.** The first build put both tracks at the top as peer buttons, which
+asked the reader a question they had no way to answer: two systems on screen,
+equally prominent, only one of them responsible for any answer they had seen. A
+picker is the wrong shape for a setting that lives in Settings → Retrieval Track
+— it reads as *"pick one"* when the choice was already made, and made somewhere
+that records it (`config/rag_config.json`, §5's freeze) rather than here. So the
+window follows the setting. There is no badge naming the track either: with one
+track on screen it separates that track from nothing, and the window's subtitle
+already says which arm is live.
+
+**The other track is not reachable at all.** Strictly: no detour, no "inspect the
+other one", no off-track banner — there is no off-track state to be in, because
+the window renders the live track's tabs and nothing else exists to navigate to.
+The command palette filters its Blueprints rows the same way, and the window
+refuses a tab belonging to the other arm even if something asks for one by name.
+
+This is the UI half of the rule the tool registry enforces on the model (§7). A
+comparison whose arms are separated for the orchestrator and merged for the
+operator is separated in the half nobody reads and merged in the half everybody
+does.
+
+**The cost, stated.** You author the graph *before* switching to it, so with
+Track 1 live there is no way to reach Build or Coverage. That is deliberate, and
+the resolution is one setting rather than a second door: switch the track in
+Settings → Retrieval Track and Track 2's tabs are what this window is. The switch
+is written to a committed file and recorded per query, so "I was working on the
+graph" stays a recoverable fact about the run rather than something the window
+let you do invisibly.
+
+**Four failures, four answers.** Rule 4 forbids a shared blank page, so each
+step of "which track is live" fails distinctly:
+
+| Failure | What the window does |
+|---|---|
+| Track not read yet | A skeleton tab row at its final height. Guessing a track and correcting it a moment later would swap the whole tab row under the cursor, so nothing is asserted until it is known |
+| Config unreadable (backend down, bad JSON) | Names the error and offers Retry. A previously read track is kept and marked stale — a failed *re-read* is not evidence the track changed. If nothing was ever read it shows **neither** arm: guessing here would be the strict rule failing open in the one direction it must not, showing Track 2 *because* the setting that selects a track could not be read |
+| Live track not ready | Still what the window shows — readiness is *reported, never enforced*, the same rule `KnowledgeBasePanel` follows. The notice says what it is waiting on and points at the track switch. It does **not** offer the other track's views: that was the detour, and the detour is what made two arms feel like tabs of one thing |
+| Track known, view empty | Each view's own `Unavailable`, naming the milestone that owes the data |
+
+Row 3 is the common case while a corpus is still being built: Track 1 is the
+declared baseline, so selecting it before anything is ingested gives a Corpus tab
+that says what it is waiting on and where to change the track.
 
 ---
 
@@ -545,17 +946,15 @@ Build in value order, which is also dependency order:
 |---|---|---|---|
 | 1 | **Ariadne's Thread** | **Yes** — against a trace seeder | Schema exists and is correct. It is the demonstration of the project's central claim, and the orchestrator lands into a ready-made inspector |
 | 2 | **The Forge** | **Partly** — detect/estimate/score need no model | Self-contained, no dependency on retrieval, and produces the measured numbers Objective 3 needs. Good work to do while M5 is in flight |
-| 3 | **Labyrinth Blueprints** | **No** — needs M2, and Track 2 for the graph half | Most blocked, and most likely to change shape as Track 2 is built. Building it early means building it twice |
+| 3 | **Labyrinth Blueprints** | ~~**No**~~ — **built, both halves** | This ranking assumed the viewer would be built against a seeder. Building the graph layer *first* unblocked half of it, and the Coverage view turned out to be the tool you author the graph *with* — §3.3 calls a coverage table "a to-do list for graph authoring", which is exactly how it was used. The corpus half followed once M2's pipeline landed, and the module ended up owning both pipelines rather than only viewing their output — see §3.9 for why that is the right place for them |
 
-**One thing to do immediately, regardless of order:** add a traversal-path
-column to `rag_logs`. It costs one migration today and is a data-loss problem
-later — traces written before the column exists can never be replayed.
+~~**One thing to do immediately, regardless of order:** add a traversal-path
+column to `rag_logs`.~~ **Done** — migration `005`. It cost one migration and
+would have been a data-loss problem later: traces written before the column
+existed could never have been replayed.
 
-**And one small thing now:** the three buttons should stop lying. The settings
-registry already has an `implemented` flag that renders a dot and says "not
-built yet" rather than opening a dead page. Applying the same treatment to these
-three costs very little and means nobody — examiner included — clicks a button
-that does nothing.
+~~**And one small thing now:** the three buttons should stop lying.~~ **Done** —
+and now all three open; the dot and the disabled state are gone from the sidebar.
 
 ---
 

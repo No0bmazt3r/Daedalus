@@ -60,7 +60,6 @@ User query → PyQt sends POST /api/chat → FastAPI
 | `live_status` | "What is the current temperature?" |
 | `historical_query` | "What was CO₂ at 10:00?" |
 | `trend_query` | "Average temperature over the last hour?" |
-| `anomaly_query` | "Was there an anomaly this morning?" |
 | `sop_query` | "What should I do if NDIR drifts?" |
 | `mixed_query` | "Why did CO₂ spike at 10:00?" |
 | `unsafe_control` | "Open valve ABV-1" |
@@ -81,9 +80,8 @@ No tool execution. No LLM guessing.
 | `live_status` | `get_live_reading()` |
 | `historical_query` | `get_live_reading(timestamp)` |
 | `trend_query` | `get_trend()` |
-| `anomaly_query` | `get_anomaly_summary()` or `get_trend()` + anomaly filter |
 | `sop_query` | `rag_retrieve()` |
-| `mixed_query` | `get_trend()` + `get_anomaly_summary()` + `rag_retrieve()` |
+| `mixed_query` | `get_trend()` + `rag_retrieve()` |
 
 ### Step 6: Execute Tools
 Call deterministic tools with parameterized inputs.
@@ -95,8 +93,7 @@ Call deterministic tools with parameterized inputs.
     "sensor": "co2_ppm",
     "timestamp": "2026-01-07T10:00:05",
     "value": 470.2,
-    "mode": "Absorption",
-    "anomaly_flag": "Normal"
+    "mode": "Absorption"
   }],
   "rag_evidence": [{
     "chunk_id": "sop_ndir_drift_004",

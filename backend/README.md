@@ -2,8 +2,9 @@
 
 FastAPI service for the Daedalus UI. Exposes the user-preference store that
 replaces browser localStorage, and the chat session store that gives the
-assistant memory within and across conversations. The Layer 7 answering
-endpoint and tool routers mount into the same app as they land.
+assistant memory within and across conversations, and `POST /api/chat` — the
+Layer 7 orchestrator that answers from sensor tools and retrieval, checks the
+answer against its evidence, and logs every step.
 
 ## Run
 
@@ -23,6 +24,10 @@ Run it from this `backend/` directory. The Vite dev server proxies `/api` to
 app/
   api/        HTTP only — routing, status codes, validation errors
   services/   decisions: session policy, context-window assembly
+    query_pipeline/   §7.1 steps 1–4: normalise, rewrite, classify, guard
+    orchestration/    §7.1 steps 5–8, 10: plan, execute, evidence, prompt, validate
+    agent_tools/      Layer 8: every tool, and the gates it runs behind
+    inference.py      step 9 (the model call) and 11 (logging), tying it together
   models/     Pydantic wire contracts
   db/         persistence
     sqlite_util.py   connections, pragmas, transactions, retry, backup
@@ -30,6 +35,16 @@ app/
     migrate.py       its CLI
     migrations/      the .sql files, one directory per store
 ```
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+Stdlib `unittest`, no extra dependency. `tests/__init__.py` points every store
+and the config directory at a throwaway directory before anything is imported,
+so a run never touches `data/` or `config/`; the chat-path tests fake Ollama.
 
 The orchestrator calls `services/` directly. It never loops back through HTTP
 to reach conversation state — that would make an internal operation depend on

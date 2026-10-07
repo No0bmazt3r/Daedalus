@@ -23,7 +23,6 @@ fyp-conversational-agentic-ai/
 │   │   ├── tools/
 │   │   │   ├── live_reading.py
 │   │   │   ├── trend.py
-│   │   │   ├── anomaly.py
 │   │   │   └── rag.py
 │   │   ├── db/
 │   │   │   ├── sqlite_client.py
@@ -70,9 +69,7 @@ fyp-conversational-agentic-ai/
 │   ├── chroma/                # Vector DB persistent storage
 │   ├── documents/
 │   │   ├── manuals/
-│   │   ├── sops/
-│   │   ├── anomaly_records/
-│   │   └── uauc_records/
+│   │   └── sops/
 │   └── logs/                  # ai_logs.db, jsonl fallbacks
 │
 └── docker-compose.yml
@@ -154,7 +151,7 @@ But explain:
                            ▼
 ┌────────────────────────────────────────────────────────────┐
 │ Local SQLite Sensor DB (Read-Only for AI)                  │
-│ - sensor_readings, anomaly_records                         │
+│ - sensor_readings                                          │
 └──────────────────────────┬─────────────────────────────────┘
                            │ read-only SQL
                            ▼
@@ -173,7 +170,7 @@ But explain:
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ Deterministic Tool Layer                             │  │
 │  │ - get_live_reading()  - get_trend()                  │  │
-│  │ - get_anomaly_summary() - rag_retrieve()             │  │
+│  │ - rag_retrieve()                                     │  │
 │  └──────────────┬──────────────────────┬────────────────┘  │
 │                 │                      │                   │
 │                 ▼                      ▼                   │

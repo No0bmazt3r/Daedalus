@@ -14,12 +14,17 @@ import {
   getMessages,
   listSessions,
   renameSession as apiRenameSession,
+  regenerateTitle,
   SessionApiError,
   type ChatMessage,
   type ChatSession,
 } from '../lib/sessionsClient';
 import { useSettings } from './SettingsContext';
-import { sendChat } from '../lib/chatClient';
+import {
+  sendChat, checkChatStatus, asEvidence, fetchRatings, rateAnswer,
+  type Rating, type StoredEvidence,
+} from '../lib/chatClient';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 
 /**
  * Conversation state for the whole app.
@@ -43,6 +48,12 @@ export interface DisplayMessage {
   persisted: boolean;
   /** The send failed. The text is still yours; it just never reached the server. */
   failed?: boolean;
+  /** The tag of the model that generated this message, if known. */
+  modelTag?: string;
+  /** The evidence pack the orchestrator stored with an assistant turn — its citations. */
+  evidence?: StoredEvidence;
+  /** The turn's audit id — what a rating is recorded against. Assistant turns only. */
+  queryId?: string;
 }
 
 export type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -60,8 +71,13 @@ interface SessionsContextValue {
   /** Set when the server answered with a different model than was asked for. */
   modelNotice: string | null;
   rename: (id: string, title: string) => Promise<void>;
+  /** Have the background title job name this chat now. */
+  retitle: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
+  /** Thumbs on the open chat's answers, by query id. */
+  ratings: Record<string, number>;
+  rate: (queryId: string, rating: Rating) => Promise<void>;
 }
 
 const SessionsContext = createContext<SessionsContextValue | null>(null);
@@ -70,12 +86,20 @@ const SessionsContext = createContext<SessionsContextValue | null>(null);
 // array identity on every render and defeat the memo below.
 const NO_MESSAGES: DisplayMessage[] = [];
 
+// How often a reopened chat asks whether its in-flight answer has landed. Slow
+// enough not to hammer the API, fast enough that the answer does not feel stuck
+// after the generation has actually finished.
+const RECONNECT_POLL_MS = 2000;
+
 function toDisplay(message: ChatMessage): DisplayMessage {
   return {
     key: `m${message.id}`,
     role: message.role,
     content: message.content,
     persisted: true,
+    modelTag: message.model_tag,
+    evidence: asEvidence(message.evidence),
+    queryId: message.role === 'assistant' ? message.query_id ?? undefined : undefined,
   };
 }
 
@@ -93,33 +117,61 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [modelNotice, setModelNotice] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   // Guards against a slow transcript fetch landing after the user has already
   // clicked a different chat, which would show the wrong conversation.
   const loadToken = useRef(0);
 
-  const refresh = useCallback(async () => {
-    try {
-      setSessions(await listSessions());
-      setStatus('ready');
-      setError(null);
-    } catch (err) {
-      setStatus('offline');
-      setError(err instanceof Error ? err.message : 'could not load chats');
+  // The reconnect poll below. Held in a ref so switching chats or unmounting
+  // can stop it — an interval left running holds the composer disabled and
+  // keeps hitting the API for a session nobody is looking at any more.
+  const pollTimer = useRef<number | null>(null);
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current !== null) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
     }
   }, []);
+
+  useEffect(() => stopPolling, [stopPolling]);
+
+  // State is set in the promise's callbacks only, so the mount effect below
+  // starts a request rather than synchronously re-rendering.
+  const refresh = useCallback(
+    () =>
+      listSessions()
+        .then((next) => {
+          setSessions(next);
+          setStatus('ready');
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          setStatus('offline');
+          setError(err instanceof Error ? err.message : 'could not load chats');
+        }),
+    [],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  // Titles are written by a background job after the answer, so the refresh
+  // that follows a send usually lands before the new title does. The backend
+  // says when one changes.
+  useLiveRefresh(['sessions'], () => void refresh());
+
   const newChat = useCallback(() => {
     loadToken.current += 1;
+    stopPolling();
+    setSending(false);
     setActiveSessionId(null);
     setActiveEphemeral(null);
     setMessages([]);
+    setRatings({});
     setError(null);
-  }, []);
+  }, [stopPolling]);
 
   // Toggling incognito hides the open chat rather than resetting state in an
   // effect: continuing to append to a persisted session while the UI says
@@ -131,6 +183,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   const selectSession = useCallback((id: string) => {
     const token = ++loadToken.current;
+    stopPolling();
+    setSending(false);
     setActiveSessionId(id);
     // Only non-ephemeral sessions are listed, so anything clickable is one.
     setActiveEphemeral(false);
@@ -143,6 +197,60 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         if (loadToken.current !== token) return; // superseded by a newer click
         setMessages(loaded.map(toDisplay));
         setStatus('ready');
+        setRatings({});
+        // Not worth failing the load over: without them the thumbs start blank.
+        fetchRatings(id)
+          .then((r) => {
+            if (loadToken.current === token) setRatings(r);
+          })
+          .catch(() => undefined);
+
+        // The generation outlives the request that started it, so reopening a
+        // chat mid-answer has to pick it back up rather than show a transcript
+        // that stops short. A failed status check is not worth surfacing: the
+        // transcript above is already correct, and the answer will appear on
+        // the next load.
+        let generating = false;
+        try {
+          generating = (await checkChatStatus(id)).generating;
+        } catch {
+          return;
+        }
+        if (!generating || loadToken.current !== token) return;
+
+        setSending(true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            key: `reconnect-${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            persisted: false,
+          },
+        ]);
+
+        // Polling, not streaming: the tokens already produced went to the
+        // response this client never received, so there is nothing to resume —
+        // only a finished transcript to wait for.
+        stopPolling();
+        pollTimer.current = window.setInterval(() => {
+          void (async () => {
+            if (loadToken.current !== token) {
+              stopPolling();
+              return;
+            }
+            try {
+              if ((await checkChatStatus(id)).generating) return;
+              stopPolling();
+              if (loadToken.current !== token) return;
+              setMessages((await getMessages(id)).map(toDisplay));
+              setSending(false);
+            } catch {
+              // A blip between polls is not the end of the generation. Keep
+              // the timer running; the next tick tries again.
+            }
+          })();
+        }, RECONNECT_POLL_MS);
       } catch (err) {
         if (loadToken.current !== token) return;
         if (err instanceof SessionApiError && err.isNotFound) {
@@ -157,7 +265,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         setError(err instanceof Error ? err.message : 'could not open that chat');
       }
     })();
-  }, []);
+  }, [stopPolling]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -174,9 +282,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
       // Echo immediately; the composer should never feel like it stalled.
       const optimisticKey = `local-${Date.now()}`;
+      const assistantKey = `local-ai-${Date.now()}`;
       setMessages([
         ...history,
         { key: optimisticKey, role: 'user', content: trimmed, persisted: false },
+        { key: assistantKey, role: 'assistant', content: '', persisted: false },
       ]);
 
       try {
@@ -189,10 +299,21 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
         // One call. /api/chat records both turns server-side, so posting the
         // user message separately would store it twice.
-        const reply = await sendChat(sessionId, trimmed, selectedModel || null);
+        const reply = await sendChat(sessionId, trimmed, selectedModel || null, (p) => {
+          if (p.phase !== 'generating' || !p.piece) return;
+          const piece = p.piece;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.key === assistantKey ? { ...m, content: m.content + piece } : m,
+            ),
+          );
+        });
 
+        // Both placeholders go and the stored turns replace them, so the keys
+        // and timestamps are the server's rather than this client's guesses.
         setMessages((prev) => [
-          ...prev.map((m) => (m.key === optimisticKey ? toDisplay(reply.user_message) : m)),
+          ...prev.filter((m) => m.key !== optimisticKey && m.key !== assistantKey),
+          toDisplay(reply.user_message),
           toDisplay(reply.message),
         ]);
 
@@ -213,9 +334,12 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         // transcript back to empty, which switched the view back to the
         // greeting — so a failed send looked like nothing had happened at all.
         setMessages((prev) =>
-          prev.map((m) =>
-            m.key === optimisticKey ? { ...m, failed: true, persisted: false } : m,
-          ),
+          prev
+            // The half-streamed answer goes; it is not a turn that landed.
+            .filter((m) => m.key !== assistantKey)
+            .map((m) =>
+              m.key === optimisticKey ? { ...m, failed: true, persisted: false } : m,
+            ),
         );
         setError(err instanceof Error ? err.message : 'could not send that message');
         if (err instanceof SessionApiError && err.status === 0) setStatus('offline');
@@ -243,6 +367,41 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       }
     },
     [refresh],
+  );
+
+  const retitle = useCallback(
+    async (id: string) => {
+      try {
+        await regenerateTitle(id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'could not rename that chat');
+      }
+    },
+    [],
+  );
+
+  const rate = useCallback(
+    async (queryId: string, rating: Rating) => {
+      const previous = ratings[queryId];
+      setRatings((prev) => {
+        const next = { ...prev };
+        if (rating) next[queryId] = rating;
+        else delete next[queryId];
+        return next;
+      });
+      try {
+        await rateAnswer(queryId, rating, activeSessionId);
+      } catch (err) {
+        setRatings((prev) => {
+          const next = { ...prev };
+          if (previous) next[queryId] = previous;
+          else delete next[queryId];
+          return next;
+        });
+        setError(err instanceof Error ? err.message : 'could not record that rating');
+      }
+    },
+    [activeSessionId, ratings],
   );
 
   const remove = useCallback(
@@ -273,8 +432,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       sendMessage,
       modelNotice,
       rename,
+      retitle,
       remove,
       refresh,
+      ratings,
+      rate,
     }),
     [
       sessions,
@@ -289,8 +451,11 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       selectSession,
       sendMessage,
       rename,
+      retitle,
       remove,
       refresh,
+      ratings,
+      rate,
     ],
   );
 

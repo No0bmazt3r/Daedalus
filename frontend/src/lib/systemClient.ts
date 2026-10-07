@@ -37,7 +37,7 @@ export interface LogPage {
 }
 
 export async function logCatalogue(): Promise<LogStore[]> {
-  const data = await request<{ stores: LogStore[] }>('/api/logs/catalogue');
+  const data = await request<{ stores: LogStore[] }>('/api/logs/catalogue', { cache: 'no-store' });
   return data.stores;
 }
 
@@ -53,6 +53,7 @@ export function readLogTable(
   });
   return request<LogPage>(
     `/api/logs/${encodeURIComponent(store)}/${encodeURIComponent(table)}?${params}`,
+    { cache: 'no-store' }
   );
 }
 
@@ -119,7 +120,18 @@ export interface HostMachine {
 }
 
 export interface HardwareProfile {
-  host: { platform: string | null; release: string | null; python: string; wsl: boolean };
+  host: {
+    platform: string | null;
+    release: string | null;
+    python: string;
+    wsl: boolean;
+    /**
+     * True when the backend is in a container, which is what every figure below
+     * is describing: a cgroup's CPU allowance, and no GPU at all unless one was
+     * passed through. Named in the Platform stat for that reason.
+     */
+    container: boolean;
+  };
   cpu: {
     model: string | null;
     arch: string | null;
@@ -257,11 +269,24 @@ export async function deleteEndpoint(id: string): Promise<boolean> {
 
 // ── system models ────────────────────────────────────────────────────────────
 
+/** What Ollama says a model can do. Open-ended: unknown values are ignored. */
+export type ModelCapability =
+  | 'completion' | 'tools' | 'thinking' | 'vision' | 'insert' | 'embedding';
+
 export interface SystemModel {
   id: string;
   name: string;
   provider: string;
+  /**
+   * Where it runs. `cloud` is selectable, but it is an evaluation override
+   * rather than the production path — the turn is logged `chat_cloud` and the
+   * transcript marks it. See `note`.
+   */
   type: 'local' | 'cloud';
+  /** From Ollama's `/api/show`. Empty when it could not be asked. */
+  capabilities?: ModelCapability[];
+  /** The warning to show beside a cloud model. Null for local ones. */
+  note?: string | null;
   details?: Record<string, unknown>;
 }
 

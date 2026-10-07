@@ -3,7 +3,7 @@
 > **Local Vector Retrieval Layer**
 
 * **Zone Mapping:** Zone 3
-* **Purpose:** Stores and retrieves domain knowledge embeddings. Supports troubleshooting, SOP, manual, anomaly, and UAUC queries.
+* **Purpose:** Stores and retrieves domain knowledge embeddings. Supports troubleshooting, SOP and manual queries.
 
 ---
 
@@ -152,7 +152,7 @@ rag_retrieve(store="chroma", query="What should I do if the NDIR reading drifts?
 
 ### Metadata Filtering Examples
 ```text
-source_type = sop | manual | anomaly | uauc
+source_type = sop | manual
 reactor_mode = absorption | desorption | all
 document_version = latest
 ```

@@ -23,7 +23,7 @@ This file is the entry point for context. Companion files go deeper on each subs
 
 ## 1. The problem, in one paragraph
 
-CO2SorptionDT is an existing PyQt5 SCADA desktop application that monitors a lab-scale CO₂ sorption reactor — logging temperature, pressure, pH, level, and NDIR CO₂ concentration to a local SQLite database in real time. To understand what the reactor is doing, a person currently has to read raw sensor graphs, know SCADA/reactor-operating-mode jargon (Manual/Absorption/Desorption), and manually cross-reference separate SOP documents and anomaly logs. This is slow, error-prone, and excludes non-specialist stakeholders (CS students, business students, new safety engineers) from being able to reason about the reactor's state.
+CO2SorptionDT is an existing PyQt5 SCADA desktop application that monitors a lab-scale CO₂ sorption reactor — logging temperature, pressure, pH, level, and NDIR CO₂ concentration to a local SQLite database in real time. To understand what the reactor is doing, a person currently has to read raw sensor graphs, know SCADA/reactor-operating-mode jargon (Manual/Absorption/Desorption), and manually cross-reference separate SOP documents and logs. This is slow, error-prone, and excludes non-specialist stakeholders (CS students, business students, new safety engineers) from being able to reason about the reactor's state.
 
 ## 2. What this project builds
 
@@ -33,7 +33,6 @@ A **conversational AI layer** that sits on top of (not replacing) CO2SorptionDT,
 - "Why did the CO₂ reading spike at 10:00?"
 - "What's the average temperature over the past hour?"
 - "What do I do if the NDIR reading drifts?"
-- "Was there an anomaly this morning?"
 
 ...and get back a grounded, correct, natural-language answer — **without the AI ever hallucinating a sensor value**, because it never generates numbers itself. It only narrates numbers that were deterministically fetched from the database.
 
@@ -41,10 +40,10 @@ A **conversational AI layer** that sits on top of (not replacing) CO2SorptionDT,
 
 This project deliberately builds and compares **two different retrieval architectures** side by side, rather than committing to one:
 
-1. **Traditional RAG** — a straightforward embed-chunk-retrieve-generate pipeline over SOPs/manuals/anomaly logs, paired with deterministic SQL-style tools for live/historical sensor data. This is the baseline described in the interim report (ChromaDB + flat vector similarity search).
+1. **Traditional RAG** — a straightforward embed-chunk-retrieve-generate pipeline over SOPs/manuals, paired with deterministic SQL-style tools for live/historical sensor data. This is the baseline described in the interim report (ChromaDB + flat vector similarity search).
 2. **Agentic GraphRAG** — a knowledge-graph-based retrieval system where entities (sensors, thresholds, operating modes, anomaly types, SOP steps, causal relationships) are represented as nodes/edges, and an agent traverses/queries the graph plus performs multi-step reasoning (tool calls, self-critique, iterative retrieval) rather than a single-shot vector lookup.
 
-Both pipelines answer the same evaluation query set, and are benchmarked head-to-head on **groundedness, retrieval relevance, latency, and multi-hop question handling** (GraphRAG's theoretical advantage — e.g. "what SOP applies when both pressure AND temperature are anomalous, and what's the historical precedent?").
+Both pipelines answer the same evaluation query set, and are benchmarked head-to-head on **groundedness, retrieval relevance, latency, and multi-hop question handling** (GraphRAG's theoretical advantage — e.g. "what SOP applies when both pressure AND temperature are out of range?").
 
 This turns the FYP from "one chatbot" into a **comparative empirical study**, which is a stronger contribution for the final report and matches the SLR's identified research gap around unified local retrieval-stack evaluation.
 
@@ -65,7 +64,6 @@ This directly operationalizes Objective 3 (SLM suitability evaluation) and gives
 - [ ] Natural language chat panel embedded as a PyQt5 tab inside CO2SorptionDT
 - [ ] Live sensor query ("what's the current temperature?")
 - [ ] Historical/trend query ("average pressure over the last hour")
-- [ ] Anomaly query ("was there an anomaly this morning?")
 - [ ] Troubleshooting/SOP query ("what do I do if X drifts?")
 - [ ] Source/citation display in the chat UI (which tool or document backed this answer)
 - [ ] Conversation history (scrollable, session-based)
@@ -78,7 +76,6 @@ This directly operationalizes Objective 3 (SLM suitability evaluation) and gives
 ### Deterministic data-access layer (shared by both RAG tracks)
 - [ ] `get_live_reading()` — latest sensor row
 - [ ] `get_trend()` — aggregation/trend over a time window
-- [ ] `get_anomaly_status()` — anomaly flag lookup
 - [ ] `rag_retrieve()` (traditional) / `graph_query()` (agentic) — document/knowledge retrieval
 - [ ] Read-only enforcement at the database connection level (no write path from AI layer, ever)
 

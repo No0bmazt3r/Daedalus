@@ -11,7 +11,7 @@ A side-by-side claim like "GraphRAG performed better" is worthless to an examine
 | Variable | Value (fixed across both tracks) |
 |---|---|
 | SLM/LLM used for generation | Same model, same quantization, same temperature/sampling settings |
-| Document corpus | Identical source manuals/SOPs/anomaly logs (Track 2's graph is built *from* the same corpus Track 1 chunks) |
+| Document corpus | Identical source manuals/SOPs (Track 2's graph is built *from* the same corpus Track 1 chunks) |
 | Query set | Identical held-out evaluation queries |
 | Hardware | Same machine, same load conditions, sequential runs (not concurrent, to avoid resource contention skewing latency) |
 | Ground truth | Same manually-labelled reference answers |

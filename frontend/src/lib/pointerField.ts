@@ -1,10 +1,19 @@
-// Shared pointer state for the reactive background effects.
+// Shared pointer state for the background effects — **disabled**.
 //
-// The effect canvases are `pointer-events: none` so they never steal clicks
-// from the app; the pointer is tracked on the window instead and converted to
-// canvas-local coordinates on read. One listener serves every effect.
-
-import { THEME_CHANGE_EVENT } from './themes';
+// The effects used to follow the cursor: particles leaning toward it, a ripple
+// under it, motion that rose and fell with how fast it moved. It was removed
+// because a background that responds to the pointer is a background competing
+// with whatever the pointer is actually doing, and on a monitoring console the
+// answer on screen should be the only thing moving for a reason.
+//
+// The module is kept rather than deleted, and `pointerFor()` now always returns
+// `IDLE`. Every effect already handles an absent pointer — that is the path
+// taken before the cursor first moves, and on touch devices — so the animations
+// run exactly as they do at rest, with no per-effect change and nothing to
+// unpick if this is ever wanted back.
+//
+// The listener is never attached, so there is no `pointermove` handler running
+// at all: this is a removal, not a flag that leaves the cost behind.
 
 interface PointerState {
   /** Viewport coordinates of the pointer. */
@@ -31,53 +40,20 @@ const state: PointerState = {
 let listening = false;
 let lastMove = 0;
 
-function onMove(e: PointerEvent) {
-  const now = performance.now();
-  const dt = Math.max(1, now - lastMove);
-  lastMove = now;
-  if (state.present) {
-    // Light smoothing so a single jittery sample cannot slam the field.
-    state.vx = state.vx * 0.7 + ((e.clientX - state.clientX) / dt) * 16 * 0.3;
-    state.vy = state.vy * 0.7 + ((e.clientY - state.clientY) / dt) * 16 * 0.3;
-  }
-  state.clientX = e.clientX;
-  state.clientY = e.clientY;
-  state.present = true;
-  state.energy = 1;
-}
-
-function onLeave() {
-  state.present = false;
-  state.energy = 0;
-  state.vx = 0;
-  state.vy = 0;
-}
-
 function ensureListening() {
+  // Deliberately empty. Kept so the call sites read the same and the intent is
+  // visible here rather than inferred from four deleted lines.
   if (listening) return;
   listening = true;
-  window.addEventListener('pointermove', onMove, { passive: true });
-  window.addEventListener('pointerdown', onMove, { passive: true });
-  document.addEventListener('pointerleave', onLeave);
-  window.addEventListener('blur', onLeave);
 }
 
-// Both of these are read every frame by the draw loops, and both force a
-// style recalc or a layout if computed fresh. Cache them and invalidate on
-// the events that can actually change them.
-let reactiveCache: boolean | null = null;
-
-/** Is the reactive toggle on for the current theme? */
+/** Always false — pointer reactivity was removed. See the module note. */
 export function reactiveEnabled(): boolean {
-  if (reactiveCache === null) {
-    reactiveCache =
-      getComputedStyle(document.documentElement)
-        .getPropertyValue('--bg-effect-reactive')
-        .trim() === '1';
-  }
-  return reactiveCache;
+  return false;
 }
 
+// Read every frame by the draw loops, and a layout if computed fresh. Cached
+// and invalidated on the events that can actually change it.
 let rectCache: { el: HTMLCanvasElement; rect: DOMRect; at: number } | null = null;
 const RECT_TTL_MS = 250;
 
@@ -92,9 +68,6 @@ function canvasRect(canvas: HTMLCanvasElement): DOMRect {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener(THEME_CHANGE_EVENT, () => {
-    reactiveCache = null;
-  });
   // The sidebar sliding open moves the pane without a resize event, so the
   // rect cache is short-lived rather than invalidated only here.
   window.addEventListener('resize', () => {

@@ -1,0 +1,28 @@
+-- Which machine served the run.
+--
+-- `source` says whether a row is local or cloud, but not *whose* hardware a
+-- cloud row measured. Ollama may change what backs `gpt-oss:120b` at any time,
+-- so two `benchmark_cloud` rows months apart can differ by a factor and nothing
+-- in the data would reveal it. Recording the host makes that checkable instead
+-- of assumed: a comparison can require the same host, and a reader can see when
+-- two numbers are not comparable.
+--
+-- Host, deliberately, not a full URL. It is the fact needed to group runs, and
+-- a base URL can carry a key or a private hostname that should not reach an
+-- exported log. NULL on rows written before this migration, and on local runs
+-- where it would only ever say 'localhost'.
+ALTER TABLE model_logs ADD COLUMN host TEXT;
+
+-- The fourth `source` value. Live chat answered by a cloud model, which the
+-- console permits as an explicitly-marked evaluation override:
+--
+--   'chat'             a live query on a local model. The production path.
+--   'chat_cloud'       a live query the operator pointed at a cloud model.
+--   'benchmark'        a Forge run on this machine's hardware.
+--   'benchmark_cloud'  a Forge run against a cloud tag.
+--
+-- Separate values rather than a flag, for the same reason 003 split the
+-- benchmark pair: every Objective 3 query filters `source = 'chat'` and keeps
+-- describing the local production path without being rewritten. Pooling a
+-- datacentre's latency into the figure that argues a laptop is fast enough
+-- would invert the result.

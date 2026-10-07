@@ -1,0 +1,17 @@
+-- No schema change: `source` already exists (002). This migration records the
+-- vocabulary, because the column is free text and the analysis depends on
+-- knowing every value it can hold.
+--
+--   'chat'             a live query. Local model, Rule 1.
+--   'benchmark'        a Forge run on this machine's hardware.
+--   'benchmark_cloud'  a Forge run against an Ollama cloud tag. The timings
+--                      describe ollama.com, not this machine.
+--
+-- 'benchmark_cloud' is a separate value rather than a flag on 'benchmark' so
+-- that existing queries stay correct as written: anything asking what this
+-- machine can do already filters `source = 'benchmark'` and keeps excluding
+-- the cloud rows without being touched. A hardware comparison that mixed the
+-- two would be reporting a datacentre as a laptop.
+--
+-- Rows written before this split carry 'benchmark' and are all local: the
+-- cloud path had no way to run until now.

@@ -26,6 +26,11 @@ reported a model at less than half its real speed.
 `MODULES.md` §2.3 wants both in `model_logs` so the latency chapter can compare
 them. `source` is what tells them apart again, so it is reported per model
 rather than summed away.
+
+Three values, and the third is not a variant of the second: `'chat'` is a live
+query, `'benchmark'` is a Forge run on this machine, and `'benchmark_cloud'` is
+a Forge run against an Ollama cloud tag, which measures ollama.com's hardware.
+Averaging the last two together would describe a datacentre as a laptop.
 """
 
 from __future__ import annotations

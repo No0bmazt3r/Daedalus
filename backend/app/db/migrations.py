@@ -58,6 +58,9 @@ STORES: dict[str, Path] = {
     "prefs": paths.PREFS_DB,
     "audit": paths.AUDIT_DB,
     "chat": paths.CHAT_DB,
+    # The Vector store's manifest — see `paths.CORPUS_DB` for why it is filed
+    # under the Vector store rather than counted as a sixth one.
+    "corpus": paths.CORPUS_DB,
 }
 
 _FILENAME = re.compile(r"^(\d{3,})_([a-z0-9_]+)\.sql$")

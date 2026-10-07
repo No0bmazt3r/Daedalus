@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
-  Cpu, MemoryStick, HardDrive, MonitorCog, Server, RefreshCw, AlertTriangle,
+  Cpu, MemoryStick, HardDrive, MonitorCog, Server, RefreshCw,
 } from 'lucide-react'
 import {
   hardwareProfile, redetectHardware, type HardwareProfile,
@@ -10,13 +12,14 @@ import { Skeleton, SkeletonCard } from '../ui/skeleton'
 /**
  * What this machine is — step 1 of the six in PROJECT.md §8.2.
  *
- * Rendered in two places from this one component: Settings → Hardware, and the
- * Forge window in the sidebar. The same numbers in both, because two
- * implementations of "how much RAM is there" would eventually disagree and one
- * of them would be the one quoted in the report.
+ * The Forge's Hardware tab. It used to be rendered a second time as Settings →
+ * Hardware; that panel was removed (the Forge owns everything about the
+ * machine and its models), and the re-ranker fit verdicts read the same
+ * profile through the backend, so there is still one source for "how much RAM
+ * is there".
  *
  * Every field is nullable by design. A machine with no GPU, no `nvidia-smi` and
- * no Ollama is normal; each unknown shows as "—" with the reason, rather than
+ * no Ollama is normal; each unknown shows as "-" with the reason, rather than
  * the panel failing or — worse — inventing a plausible number.
  *
  * ## Where these numbers come from
@@ -35,7 +38,7 @@ import { Skeleton, SkeletonCard } from '../ui/skeleton'
  */
 
 function bytes(n: number | null | undefined, digits = 1): string {
-  if (n === null || n === undefined) return '—'
+  if (n === null || n === undefined) return '-'
   if (n < 1024) return `${n} B`
   const units = ['KB', 'MB', 'GB', 'TB']
   let v = n / 1024
@@ -174,7 +177,7 @@ const CLOCK_TICK_MS = 5_000
 
 export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   const [hw, setHw] = useState<HardwareProfile | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   /** True only during an explicit Re-detect — the poll must not spin the icon. */
   const [busy, setBusy] = useState(false)
   /**
@@ -204,7 +207,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       // waiting for rather than a hair before it and missing a whole cycle.
       return Math.max(5, next.refresh.next_refresh_in_seconds + 1) * 1000
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'request failed')
+      setError(toFailure(e))
       return POLL_FALLBACK_MS
     }
   }, [])
@@ -218,7 +221,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       setAgeSeconds(next.refresh.age_seconds)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'request failed')
+      setError(toFailure(e))
     } finally {
       setBusy(false)
     }
@@ -278,13 +281,12 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   // freshness line instead, next to the age it explains.
   if (error && !hw) {
     return (
-      <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
-        <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
-        <div>
-          <div className="font-medium">Couldn't reach the backend</div>
-          <div className="theme-text-muted text-xs mt-1">{error}</div>
-        </div>
-      </div>
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The hardware readout could not be fetched from the backend."
+        onRetry={() => void poll()}
+      />
     )
   }
 
@@ -313,7 +315,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   const shownAge = ageSeconds ?? meta.age_seconds
   const live = Math.round(meta.live_interval_seconds)
   const freshness = error
-    ? `Couldn't refresh (${error}). Showing the last reading, from ${ago(shownAge)}`
+    ? `Couldn't refresh (${error.message}). Showing the last reading, from ${ago(shownAge)}`
     : meta.stale
       ? `Cached. Last read ${ago(shownAge)}`
       : meta.background
@@ -363,6 +365,16 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         </button>
       </div>
 
+      {/* Five independent readings, so they tile rather than queue. One column
+          in a normal window, two once the pane can give each card a sensible
+          width, three when it is maximized — which is the case this exists for:
+          a full-screen window used to draw a single column of cards down the
+          middle and leave two thirds of the screen empty.
+
+          `items-start` because the cards are different heights and a stretched
+          Runtime card would be mostly padding. */}
+      <div className="grid gap-4 @4xl:grid-cols-2 @7xl:grid-cols-3 items-start">
+
       {/* ── CPU ── */}
       <div className={card}>
         <div className="flex items-center gap-2 mb-3">
@@ -371,13 +383,13 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
         </div>
         <div className="text-sm mb-3 break-words">{hw.cpu.model ?? 'Unknown CPU'}</div>
         <div className="grid grid-cols-2 @sm:grid-cols-4 gap-x-4 gap-y-2">
-          <Stat label="Physical cores" value={hw.cpu.cores_physical?.toString() ?? '—'} />
-          <Stat label="Logical cores" value={hw.cpu.cores_logical?.toString() ?? '—'} />
+          <Stat label="Physical cores" value={hw.cpu.cores_physical?.toString() ?? '-'} />
+          <Stat label="Logical cores" value={hw.cpu.cores_logical?.toString() ?? '-'} />
           <Stat
             label="Base clock"
-            value={hw.cpu.base_clock_mhz ? `${(hw.cpu.base_clock_mhz / 1000).toFixed(2)} GHz` : '—'}
+            value={hw.cpu.base_clock_mhz ? `${(hw.cpu.base_clock_mhz / 1000).toFixed(2)} GHz` : '-'}
           />
-          <Stat label="Architecture" value={hw.cpu.arch ?? '—'} />
+          <Stat label="Architecture" value={hw.cpu.arch ?? '-'} />
         </div>
       </div>
 
@@ -457,7 +469,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
                 <Meter percent={usedPct} tone={usedPct > 85 ? 'warn' : 'primary'} />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
                   <Stat label="VRAM" value={bytes(d.vram_total_bytes)} />
-                  <Stat label="Driver" value={d.driver_version ?? '—'} />
+                  <Stat label="Driver" value={d.driver_version ?? '-'} />
                 </div>
               </div>
             )
@@ -488,11 +500,23 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
           <Server size={16} className="theme-accent" />
           <span className="font-medium">Runtime</span>
         </div>
-        <div className="grid grid-cols-2 @sm:grid-cols-4 gap-x-4 gap-y-2">
+        {/* Five stats rather than four, because "container" was appended to
+            the platform and truncated to `Linux (WSL) · con…` — which hid
+            exactly the fact that changes how every other number here is read. */}
+        <div className="grid grid-cols-2 @sm:grid-cols-3 @lg:grid-cols-5 gap-x-4 gap-y-2">
           <Stat
             label="Platform"
-            value={`${hw.host.platform ?? '—'}${hw.host.wsl ? ' (WSL)' : ''}`}
+            value={`${hw.host.platform ?? '-'}${hw.host.wsl ? ' (WSL)' : ''}`}
             title={hw.host.release ?? undefined}
+          />
+          <Stat
+            label="Environment"
+            value={hw.host.container ? 'container' : 'host'}
+            title={
+              hw.host.container
+                ? "In a container: the cores and memory above are this container's allowance, not the machine's, and a GPU is only visible if it was passed through"
+                : 'Directly on this machine, so the figures above describe the machine itself'
+            }
           />
           <Stat label="Python" value={hw.host.python} />
           <Stat
@@ -509,6 +533,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
             backend runs on the host rather than in the container.
           </p>
         )}
+      </div>
       </div>
     </div>
   )

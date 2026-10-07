@@ -35,7 +35,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Final
 
 _psutil_error: str | None = None
 
@@ -233,6 +233,48 @@ def _disk() -> dict[str, Any]:
     return out
 
 
+_in_container_cache: bool | None = None
+
+
+def _in_container() -> bool:
+    """Whether this process is inside a container.
+
+    Worth knowing because it changes what every other figure in this module
+    *means*, in the same way `_wsl_host` does one level up: the CPU count is a
+    cgroup allowance rather than the machine's, and a GPU the host can see does
+    not exist in here unless somebody passed it through. Reporting "no GPU" on a
+    laptop with one sitting in it is a correct reading of the wrong machine.
+
+    `/.dockerenv` is what Docker itself writes. The cgroup line catches the
+    others, and being wrong costs a sentence of explanation, not a wrong number.
+    """
+    global _in_container_cache
+    if _in_container_cache is None:
+        if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+            _in_container_cache = True
+        else:
+            try:
+                with open("/proc/1/cgroup", encoding="utf-8") as fh:
+                    blob = fh.read()
+                _in_container_cache = any(
+                    marker in blob for marker in ("docker", "containerd", "kubepods", "lxc")
+                )
+            except OSError:
+                _in_container_cache = False
+    return _in_container_cache
+
+
+# Said when there is no driver to talk to and this is a container. Not an error
+# string for its own sake: "no GPU detected" and "this container was not given
+# the GPU" are different facts, and only one of them has something to do about
+# it. The panel renders `error` verbatim when the device list is empty.
+_NO_PASSTHROUGH: Final = (
+    "No NVIDIA driver is visible inside this container, so the host's GPU cannot be "
+    "read from here. It isn't passed through, so restart with `./daedalus.sh dev --gpu` "
+    "(or `--gpu` on `start`). Nothing is wrong with the machine or the card."
+)
+
+
 def _gpus() -> dict[str, Any]:
     """GPUs and their VRAM.
 
@@ -276,6 +318,8 @@ def _gpus() -> dict[str, Any]:
 
     smi = shutil.which("nvidia-smi")
     if not smi:
+        if _in_container():
+            result["error"] = _NO_PASSTHROUGH
         return result
     try:
         proc = subprocess.run(
@@ -413,12 +457,11 @@ def _ollama() -> dict[str, Any]:
     render promptly whether or not Ollama is running, and "not reachable" is a
     perfectly normal answer during development.
     """
-    base = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 
-    # `host.docker.internal` is how the container reaches the host's Ollama, and
-    # it does not resolve when `./daedalus.sh dev` runs the backend on the host
-    # itself. Rather than report a false "not reachable" in the mode most of the
-    # development happens in, fall back to localhost and say which one answered.
+    # A container-era .env says `host.docker.internal`, which does not resolve
+    # on the host. Rather than report a false "not reachable", fall back to
+    # localhost and say which one answered.
     candidates = [base]
     if "host.docker.internal" in base:
         candidates.append(base.replace("host.docker.internal", "localhost"))
@@ -455,6 +498,9 @@ def _host() -> dict[str, Any]:
         # WSL reports Linux, which is technically true and practically
         # misleading when reasoning about GPU passthrough.
         "wsl": "microsoft" in (platform.release() or "").lower(),
+        # Same warning, one layer in: every figure below describes this
+        # container's allowance, not the machine it is running on.
+        "container": _in_container(),
     }
 
 
@@ -475,7 +521,7 @@ def _ollama_section() -> dict[str, Any]:
 # ── snapshot cache and background refresh ────────────────────────────────────
 #
 # Detection used to run inside the request: every time the Forge window or
-# Settings → Hardware was opened, this module spawned nvidia-smi, waited out
+# the hardware view was opened, this module spawned nvidia-smi, waited out
 # Ollama's HTTP timeout and — under WSL — paid ~2.5s for a PowerShell interop
 # call, all before the panel could paint. The cost scaled with how often
 # somebody looked at the panel, which is the wrong thing for it to scale with.

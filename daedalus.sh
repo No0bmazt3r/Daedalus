@@ -1,35 +1,36 @@
 #!/usr/bin/env bash
 # Daedalus — single entry point for everything you'd want to run.
 #
-#   ./daedalus.sh setup      one-time: install dependencies for local development
-#   ./daedalus.sh start      build (if needed) and start the container stack
-#   ./daedalus.sh dev        run the hot-reload dev servers instead (no Docker)
-#   ./daedalus.sh stop       stop the stack
-#   ./daedalus.sh logs       follow the stack's logs
-#   ./daedalus.sh rebuild    force a clean image rebuild, then start
-#   ./daedalus.sh status     what's running, and the health of all five stores
+#   ./daedalus.sh setup      one-time: install dependencies
+#   ./daedalus.sh dev        hot-reload: uvicorn + vite on the host (default)
+#   ./daedalus.sh start      build the dashboard once, serve it and the API on one port
+#   ./daedalus.sh stop       stop the optional SearXNG container
+#   ./daedalus.sh status     the health of all five stores
 #   ./daedalus.sh migrate    apply pending schema migrations (see: migrate --help)
 #
 # Flags:
-#   --with-ollama            run Ollama as a container too (default: use the host)
+#   --with-search            also start SearXNG (corpus sourcing only — needs Docker)
 #
 # Related scripts:
 #   ./sync.sh                after a git pull: deps, .env, migrations  (safe)
 #   ./reset.sh               wipe and rebuild the local databases (destructive)
 #
-# The stack is one container serving both the API and the built dashboard,
-# plus ChromaDB for the vector store.
+# Everything runs on the host — no Docker. The API is one uvicorn process with
+# ChromaDB embedded in it (data/chroma); Ollama is the host's own install. The
+# only container left is SearXNG, which has no host install and is a setup
+# surface anyway: the runtime is offline (Rule 1), so a search engine is
+# something you start while sourcing the corpus and stop afterwards.
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# Output helpers, .env backfill, compose shim, migration CLI — see the file
+# Output helpers, .env backfill, host path mapping, migration CLI — see the file
 # for why each is shared rather than repeated in three scripts.
 # shellcheck source=scripts/common.sh
 . ./scripts/common.sh
 
-# docker compose reads .env by itself; the dev servers do not, so load it here
-# and let anything already exported win.
+# The servers do not read .env by themselves, so load it here and let anything
+# already exported win.
 load_env
 
 PORT="${DAEDALUS_PORT:-8000}"
@@ -39,11 +40,11 @@ FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ── argument parsing ─────────────────────────────────────────────────────────
-CMD="${1:-start}"
+CMD="${1:-dev}"
 [ $# -gt 0 ] && shift || true
 
-PROFILE_ARGS=()
 MIGRATE_ARGS=()
+WITH_SEARCH=0
 
 # `migrate` forwards its arguments to the Python CLI, which owns their meaning
 # (including its own --help). Every other command accepts only known flags.
@@ -52,7 +53,7 @@ if [ "$CMD" = "migrate" ]; then
 else
   for arg in "$@"; do
     case "$arg" in
-      --with-ollama) PROFILE_ARGS+=(--profile with-ollama) ;;
+      --with-search) WITH_SEARCH=1 ;;
       -h|--help)     usage; exit 0 ;;
       *) err "unknown option '$arg' (try --help)"; exit 1 ;;
     esac
@@ -64,10 +65,8 @@ fi
 cmd_setup() {
   head_ "Checking prerequisites"
   local missing=0
-  for tool in docker node; do
-    if have "$tool"; then ok "$tool $($tool --version 2>/dev/null | head -1)"
-    else err "$tool is not installed"; missing=1; fi
-  done
+  if have node; then ok "node $(node --version 2>/dev/null | head -1)"
+  else err "node is not installed"; missing=1; fi
   have python3 && ok "python3 $(python3 --version 2>&1 | cut -d' ' -f2)" \
                 || { err "python3 is not installed"; missing=1; }
   if have pnpm; then ok "pnpm $(pnpm --version)"
@@ -91,6 +90,7 @@ cmd_setup() {
   fi
   backend/.venv/bin/pip install --quiet --upgrade pip
   backend/.venv/bin/pip install --quiet -r backend/requirements.txt
+  ensure_embedded_chroma
   # Stamped so sync.sh can tell whether requirements.txt has changed since.
   touch "$BACKEND_STAMP"
   ok "python packages installed"
@@ -106,59 +106,90 @@ cmd_setup() {
   check_ollama
 
   head_ "Done"
-  say "  ${DIM}Containers:${RESET}  ./daedalus.sh start"
   say "  ${DIM}Hot reload:${RESET}  ./daedalus.sh dev"
+  say "  ${DIM}One port:${RESET}    ./daedalus.sh start"
   say "  ${DIM}After a pull:${RESET} ./sync.sh"
   say ""
 }
 
-cmd_start() {
-  ensure_env
-  ensure_dirs
-  [ ${#PROFILE_ARGS[@]} -gt 0 ] || check_ollama
-  head_ "Starting Daedalus"
-  compose "${PROFILE_ARGS[@]}" up -d "$@"
-  # Record that a build happened, so the staleness check in sync.sh knows the
-  # source has been through a build even when Docker served it from cache.
-  mark_build
-  if wait_for_api; then
-    ok "dashboard   http://localhost:${PORT}"
-    ok "API docs    http://localhost:${PORT}/docs"
-    say ""
-    say "  ${DIM}Logs:${RESET} ./daedalus.sh logs   ${DIM}Stop:${RESET} ./daedalus.sh stop"
-    say ""
-  else
-    err "the API did not become healthy in 60s. Recent logs:"
-    compose "${PROFILE_ARGS[@]}" logs --tail=40 daedalus >&2
-    exit 1
-  fi
-}
-
-cmd_dev() {
-  # Hot reload, no Docker. Two processes; Vite proxies /api to uvicorn.
+# The steps both run modes share before a server starts.
+prepare_host() {
   require_venv
-  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run './daedalus.sh setup' first"
   ensure_env
   ensure_dirs
+  ensure_embedded_chroma
   # Migrations normally run at app startup too; doing it here as well means a
-  # failure is reported before two dev servers start writing to the terminal.
+  # failure is reported before the servers start writing to the terminal.
   migrate_cli up >/dev/null || fail "migrations failed — run './daedalus.sh migrate status'"
   check_ollama
-
-  head_ "Starting dev servers"
-  host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend &
-  local api_pid=$!
-  # Stop the backend when this script exits, however it exits.
-  trap 'kill $api_pid 2>/dev/null || true' EXIT INT TERM
-  ok "backend   http://localhost:${BACKEND_PORT}  (pid $api_pid)"
-  ok "frontend  http://localhost:${FRONTEND_PORT}"
-  say ""
-  (cd frontend && pnpm dev --port "$FRONTEND_PORT")
 }
 
-cmd_stop()    { compose "${PROFILE_ARGS[@]}" down; }
-cmd_logs()    { compose "${PROFILE_ARGS[@]}" logs -f; }
-cmd_rebuild() { ensure_dirs; cmd_start --build --force-recreate; }
+# SearXNG after the API is up: the provider selection lives in prefs.db and the
+# API reads it. `--with-search` starts it regardless of the selection.
+after_api_up() {
+  local port="$1"
+  if [ "$WITH_SEARCH" = "1" ]; then start_searxng
+  else ensure_searxng "$port"; fi
+}
+
+# Hot reload: uvicorn and vite both reloading from disk. --reload-dir keeps
+# uvicorn's watcher on the backend source instead of the whole repo — watching
+# frontend/node_modules as well costs CPU for nothing.
+# --timeout-graceful-shutdown: every open tab holds GET /api/events, and without
+# it a reload waits for those streams to end — which they never do by themselves.
+cmd_dev() {
+  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run './daedalus.sh setup' first"
+  prepare_host
+
+  head_ "Starting Daedalus"
+  host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend \
+    --reload-dir backend/app --timeout-graceful-shutdown 3 &
+  # Global, not local: the trap runs after the function has returned.
+  api_pid=$!
+  # Stop the backend when this script exits, however it exits.
+  trap 'kill ${api_pid:-} 2>/dev/null || true' EXIT INT TERM
+  wait_for_api "$BACKEND_PORT" && after_api_up "$BACKEND_PORT" \
+    || warn "the API is not answering yet — its log is above"
+  ok "backend   http://localhost:${BACKEND_PORT}  (pid $api_pid)"
+  ok "frontend  http://localhost:${FRONTEND_PORT}"
+  say "  ${DIM}Stop:${RESET} Ctrl+C"
+  say ""
+  (cd frontend && DAEDALUS_API_URL="http://localhost:${BACKEND_PORT}" pnpm dev --port "$FRONTEND_PORT")
+}
+
+# One process on one port, no watchers: the dashboard is built once into
+# frontend/dist and the API serves it (DAEDALUS_STATIC_DIR, see app/main.py).
+# Lighter than `dev` while you are using the app rather than changing it.
+cmd_start() {
+  [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run './daedalus.sh setup' first"
+  prepare_host
+
+  head_ "Building the dashboard"
+  (cd frontend && pnpm build >/dev/null) || fail "the frontend build failed — run 'cd frontend && pnpm build' to see why"
+  ok "frontend/dist"
+
+  head_ "Starting Daedalus"
+  DAEDALUS_STATIC_DIR="$PWD/frontend/dist" \
+    host_uvicorn app.main:app --port "$PORT" --app-dir backend --timeout-graceful-shutdown 3 &
+  # Global, not local: the trap runs after the function has returned.
+  api_pid=$!
+  trap 'kill ${api_pid:-} 2>/dev/null || true' EXIT INT TERM
+  if wait_for_api "$PORT"; then
+    after_api_up "$PORT"
+    ok "dashboard   http://localhost:${PORT}"
+    ok "API docs    http://localhost:${PORT}/docs"
+    say "  ${DIM}Stop:${RESET} Ctrl+C"
+    say ""
+  else
+    err "the API did not become healthy in 60s — its log is above"
+    exit 1
+  fi
+  wait "$api_pid"
+}
+
+# The servers stop with Ctrl+C in their own terminal; the only thing left
+# running in the background is the SearXNG container, if it was started.
+cmd_stop() { stop_searxng; }
 
 # Migrations normally run at startup; this is for applying a schema change
 # without a restart, for inspecting state, and for CI. Every subcommand of
@@ -179,9 +210,6 @@ cmd_migrate() {
 }
 
 cmd_status() {
-  head_ "Containers"
-  compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || say "  none running"
-
   head_ "Stores"
   # Fetch first, then parse. Piping curl straight into python hides which half
   # failed — under pipefail a mere parse error reports as an unreachable API.
@@ -208,10 +236,8 @@ for d in rows:
 case "$CMD" in
   setup)        cmd_setup ;;
   start|up)     cmd_start ;;
-  dev)          cmd_dev ;;
+  dev|local)    cmd_dev ;;
   stop|down)    cmd_stop ;;
-  logs)         cmd_logs ;;
-  rebuild)      cmd_rebuild ;;
   status)       cmd_status ;;
   migrate)      cmd_migrate ;;
   -h|--help|help) usage ;;

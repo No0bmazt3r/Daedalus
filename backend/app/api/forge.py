@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from ..services import benchmark as benchmark_service
 from ..services import forge as forge_service
-from ..services import hardware, model_usage, ollama_client
+from ..services import embedding_models, hardware, live_events, model_usage, ollama_client
 
 router = APIRouter(prefix="/api/forge", tags=["forge"])
 
@@ -160,6 +160,9 @@ def pull_model(tag: str = Body(..., embed=True)) -> StreamingResponse:
         finally:
             # A new model changes what /api/show would answer for it.
             forge_service.invalidate_cache()
+            # Published even for a cancelled pull: Ollama may have finished,
+            # and a view that re-reads finds out either way.
+            live_events.publish("models", source="pull", tag=tag)
 
     return StreamingResponse(
         events(),
@@ -187,6 +190,12 @@ def delete_model(tag: str) -> dict[str, Any]:
     except ollama_client.OllamaUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     forge_service.invalidate_cache()
+    # An embedder's benchmark and verified width described the copy that was just
+    # removed; a later pull of the same tag may be a different build, so it is
+    # measured afresh.
+    embedding_models.forget_measurements(tag)
+    live_events.publish("models", source="delete", tag=tag)
+    live_events.publish("embeddings")
     return {"deleted": True, "tag": tag}
 
 
@@ -198,20 +207,29 @@ def run_benchmark(
     tag: str = Body(..., embed=True),
     prompt_tokens: int = Body(default=benchmark_service.DEFAULT_PROMPT_TOKENS, embed=True),
     max_tokens: int = Body(default=benchmark_service.DEFAULT_MAX_TOKENS, embed=True),
-) -> dict[str, Any]:
+) -> StreamingResponse:
     """Measure time-to-first-token and tok/s on a RAG-context-sized prompt.
 
     Writes `model_logs` under a `bench_` query id, so the latency chapter draws
     benchmark and production numbers from one table and can still tell them
-    apart. Slow by nature — a warm-up pass plus a 2k-token prefill — and
-    deliberately synchronous: it is one explicit click, not a background job,
-    and the result is worthless if nobody is waiting for it.
+    apart. Streams progress back to the UI.
     """
-    try:
-        return benchmark_service.run(
-            tag, prompt_tokens=prompt_tokens, max_tokens=max_tokens
-        )
-    except ollama_client.OllamaUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except ollama_client.OllamaError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    def events() -> Iterator[str]:
+        try:
+            for event in benchmark_service.run_stream(
+                tag, prompt_tokens=prompt_tokens, max_tokens=max_tokens
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except (ollama_client.OllamaError, ollama_client.OllamaUnavailable) as exc:
+            yield f"data: {json.dumps({'phase': 'error', 'error': str(exc)})}\n\n"
+        except Exception as exc:  # noqa: BLE001
+            yield f"data: {json.dumps({'phase': 'error', 'error': f'{exc.__class__.__name__}: {exc}'})}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

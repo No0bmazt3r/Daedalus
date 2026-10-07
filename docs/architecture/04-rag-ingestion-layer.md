@@ -11,18 +11,16 @@
 
 1. Machine manuals
 2. Standard Operating Procedures (SOPs)
-3. Historical anomaly records
-4. User Anomaly and Usage Context records (UAUC)
-5. Reactor operating mode descriptions
-6. Troubleshooting guides
-7. Safety procedure documents
+3. Reactor operating mode descriptions
+4. Troubleshooting guides
+5. Safety procedure documents
 
 ---
 
 ## Supported File Types
 
 ```text
-PDF, Markdown, TXT, DOCX, CSV/JSON (for structured anomaly records)
+PDF, Markdown, TXT, DOCX
 ```
 
 ---
@@ -35,8 +33,6 @@ Documents placed in a local folder structure (no cloud upload):
 /data/documents/
     manuals/
     sops/
-    anomaly_records/
-    uauc_records/
 ```
 
 ---
@@ -99,7 +95,7 @@ Each chunk gets rich metadata:
 | Field | Purpose |
 |---|---|
 | source_file | Traceability |
-| source_type | manual/sop/anomaly/uauc |
+| source_type | manual/sop/other |
 | section_title | Better retrieval context |
 | page_number | Citation |
 | document_version | Avoid outdated SOPs |
@@ -168,8 +164,6 @@ corpus_chunks.json
 |---|---|
 | Machine manual | Reactor overview, sensor descriptions, operating modes |
 | SOP | Startup, shutdown, absorption, desorption, emergency procedures |
-| Anomaly records | Past high CO₂ events, pressure spikes, NDIR drift |
-| UAUC records | User Anomaly and Usage Context notes |
 | Troubleshooting guide | Sensor calibration, valve behaviour, drift handling |
 
 ---
@@ -177,7 +171,7 @@ corpus_chunks.json
 ## Diagram Elements
 
 ```text
-Manuals / SOPs / Anomaly Records
+Manuals / SOPs
         ↓
 Text Extraction
         ↓

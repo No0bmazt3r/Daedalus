@@ -1,31 +1,31 @@
 import { useState } from 'react'
-import { Hammer, Cpu, Layers, Boxes } from 'lucide-react'
+import { Hammer, Cpu, MessageSquare, Binary, Boxes, ListOrdered } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
 import { HardwareView } from './HardwareView'
 import { ModelsView } from './ModelsView'
-import { AddedModelsView } from './AddedModelsView'
+import { EmbeddingModelsPane } from './EmbeddingModelsPane'
+import { InstalledModelsView, type PaneId } from './InstalledModelsView'
+import { RerankersPane } from './RerankersPane'
+import { MarqueeText } from '../ui/marquee-text'
 
 /**
  * The Forge — hardware and model console (Layer 11, PROJECT.md §8.2).
  *
- * All six steps, in the order you work through them:
+ * | tab | what it answers |
+ * |---|---|
+ * | Hardware         | step 1: what is this machine? |
+ * | Chat models      | steps 2–4 for answering models: browse, estimate, score, pull |
+ * | Embedding models | browse and pull the models that turn chunks into vectors |
+ * | Re-rankers       | browse Track 1's cross-encoders: fit verdicts against this machine, download |
+ * | Installed        | what is on it, by kind — chat (local + cloud baselines), embedding, re-rankers: benchmark, verify, delete |
  *
- * | tab | steps | what it answers |
- * |---|---|---|
- * | Hardware     | 1 detect                    | what is this machine? |
- * | Models       | 2 estimate · 3 score · 4 pull · 5 benchmark | what *could* run here, ranked |
- * | Added Models | 4 manage                    | what is here now, grouped and managed |
+ * Installed is for managing; the two model tabs are for browsing. Every control
+ * has one home: a browse card for a model you already have shows Manage, which
+ * switches here, rather than repeating Benchmark and Delete.
  *
- * The split between the last two is by question rather than by kind. Models is
- * a discovery surface: forty-odd candidates with filters, estimates and a
- * ranking, which is the right shape for "what should I pull?" and the wrong one
- * for "I have three models, one is stale, remove it". Added Models is the
- * inventory, grouped by §8.1's own tiers so the console and the report describe
- * the deployment the same way.
- *
- * Grouped this way rather than one tab per step because steps 2-5 are one
- * table: the estimate, the verdict and the measurement are columns on the same
- * row, and separating them would hide the comparison the module exists to make.
+ * The browse tabs are split by kind because the kinds are judged differently: a
+ * chat model gets a fit verdict and a rank, an embedder has neither, because
+ * both measure something that generates text.
  *
  * ## Step 6 has no tab, on purpose
  *
@@ -40,11 +40,10 @@ import { AddedModelsView } from './AddedModelsView'
  * when no browser is choosing (a scripted run, the M8 evaluation harness), and
  * is still hand-editable to pin a model for a reproducible experiment.
  *
- * `MODULES.md` §2.4: the Forge absorbs the Added Models panel rather than
- * duplicating it, so the cloud section renders the same `ModelEndpointsPanel`
- * that Settings does. It sits below the local tiers and behind its own warning,
- * because under Rule 1 a cloud endpoint is an evaluation baseline and never a
- * deployment target. One flat list of "models" would blur exactly the
+ * `MODULES.md` §2.4: Installed's cloud pane renders the same `ModelEndpointsPanel`
+ * that Settings does rather than a second copy of it. It is a pane apart from
+ * local models because under Rule 1 a cloud endpoint is an evaluation baseline
+ * and never a deployment target. One flat list of "models" would blur exactly the
  * distinction that separation exists to make.
  *
  * Rule 5 — this is a setup surface. It writes model configuration and pulls
@@ -54,14 +53,37 @@ import { AddedModelsView } from './AddedModelsView'
 
 const TABS = [
   { id: 'hardware', label: 'Hardware', icon: Cpu, hint: 'Step 1: what this machine is' },
-  { id: 'models', label: 'Models', icon: Layers, hint: 'Steps 2 to 5: what could run here, estimated, scored and ranked' },
-  { id: 'added', label: 'Added Models', icon: Boxes, hint: 'What this machine has: local SLM and LLM tiers, plus the cloud reference endpoints' },
+  { id: 'chat', label: 'Chat models', icon: MessageSquare, hint: 'Browse the models that answer: estimated, scored and ranked against this machine' },
+  { id: 'embedding', label: 'Embedding models', icon: Binary, hint: 'Browse the models that turn document chunks into vectors for Track 1' },
+  { id: 'rerankers', label: 'Re-rankers', icon: ListOrdered, hint: "Download Track 1's cross-encoders, which re-score the nearest chunks" },
+  { id: 'installed', label: 'Installed', icon: Boxes, hint: 'What this machine has: benchmark, delete, verify embedders, cloud baselines' },
 ] as const
 
-type TabId = (typeof TABS)[number]['id']
+export type ForgeTab = (typeof TABS)[number]['id']
+type TabId = ForgeTab
 
-export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<TabId>('hardware')
+export function ForgeWindow({
+  open, onClose, requestedTab = null, onOpenSettings,
+}: {
+  open: boolean
+  onClose: () => void
+  /** Opens a Settings panel — where an embedding model is chosen for the index. */
+  onOpenSettings?: (panel: string) => void
+  /** A tab to land on — Settings → Vector RAG asks for Re-rankers. Sticky, like Blueprints'. */
+  requestedTab?: ForgeTab | null
+}) {
+  const [tab, setTab] = useState<TabId>(requestedTab ?? 'hardware')
+  const [installedPane, setInstalledPane] = useState<PaneId>('chat')
+  const manage = (pane: PaneId) => () => { setInstalledPane(pane); setTab('installed') }
+  // A new request (or the same one after the window was closed) moves the tab.
+  // Adjusted during render rather than in an effect, so the window never paints
+  // one frame on the old tab first.
+  const request = open && requestedTab ? requestedTab : null
+  const [seen, setSeen] = useState<ForgeTab | null>(request)
+  if (request !== seen) {
+    setSeen(request)
+    if (request) setTab(request)
+  }
 
   return (
     <FloatingWindow
@@ -90,7 +112,7 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
                     onClick={() => setTab(entry.id)}
                     title={entry.hint}
                     style={{ flexBasis: `${100 / TABS.length}%` }}
-                    className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-t-lg transition-colors duration-200 ${
+                    className={`flex min-w-0 items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-t-lg transition-colors duration-200 ${
                       selected ? 'theme-accent' : 'theme-text-muted hover:theme-text'
                     }`}
                   >
@@ -100,9 +122,12 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
                     <entry.icon
                       key={selected ? 'on' : 'off'}
                       size={13}
-                      className={`tab-icon ${selected ? 'tab-icon-active' : ''}`}
+                      className={`tab-icon shrink-0 ${selected ? 'tab-icon-active' : ''}`}
                     />
-                    {entry.label}
+                    {/* One line always. A label too long for its share of the
+                        bar scrolls rather than wrapping to two lines and
+                        making that one tab taller than the rest. */}
+                    <MarqueeText text={entry.label} />
                   </button>
                 )
               })}
@@ -121,13 +146,33 @@ export function ForgeWindow({ open, onClose }: { open: boolean; onClose: () => v
             {/* Keyed on the tab so React remounts and the entry animation runs
                 again. Without the key the pane swaps its contents in place and
                 the transition never fires. */}
+            {/* The measure grows in steps rather than stopping at one width.
+                A clamp is right — 1900px of prose is unreadable — but a single
+                `max-w-3xl` meant a maximized window drew a 768px column down
+                the middle of a 1900px pane and called it a layout. The last
+                step is `min(100%, …)` so the cap can never exceed the pane it
+                is centred in. The panes themselves reflow into columns; see
+                `HardwareView`. */}
             <div
               key={tab}
-              className="mx-auto w-full @3xl:max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
+              className="mx-auto w-full @3xl:max-w-3xl @5xl:max-w-5xl @7xl:max-w-[min(100%,1500px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
             >
               {tab === 'hardware' && <HardwareView isPeek={isPeek} />}
-              {tab === 'models' && <ModelsView />}
-              {tab === 'added' && <AddedModelsView isPeek={isPeek} />}
+              {tab === 'installed' && (
+                <InstalledModelsView
+                  isPeek={isPeek}
+                  initialPane={installedPane}
+                  onBrowseChat={() => setTab('chat')}
+                  onBrowseEmbeddings={() => setTab('embedding')}
+                  onBrowseRerankers={() => setTab('rerankers')}
+                  onChooseEmbedding={onOpenSettings ? () => onOpenSettings('vector-rag') : undefined}
+                />
+              )}
+              {tab === 'chat' && <ModelsView onManage={manage('chat')} />}
+              {tab === 'rerankers' && <RerankersPane mode="browse" onManage={manage('rerankers')} />}
+              {tab === 'embedding' && (
+                <EmbeddingModelsPane mode="browse" onManage={manage('embedding')} />
+              )}
             </div>
           </div>
         </div>

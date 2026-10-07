@@ -20,10 +20,10 @@ and quantization here, so anything pulled can be scored and recommended.
 
 ## Where Ollama is
 
-`OLLAMA_BASE_URL` is `host.docker.internal` so the container can reach the
-host's daemon, and that name does not resolve when `./daedalus.sh dev` runs the
-backend on the host itself. Every call therefore tries the configured URL and
-then localhost, and reports which one answered — the same fallback
+`OLLAMA_BASE_URL` defaults to localhost. A .env from when the backend ran in a
+container still says `host.docker.internal`, which does not resolve on the
+host, so every call tries the configured URL and then localhost, and reports
+which one answered — the same fallback
 `services/hardware.py` uses, and it lives here so the two can never disagree
 about where Ollama is.
 """
@@ -35,6 +35,7 @@ import os
 import threading
 from collections.abc import Iterator
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     import httpx
@@ -51,7 +52,22 @@ PULL_READ_TIMEOUT = 60.0
 
 
 class OllamaError(RuntimeError):
-    """Ollama answered, and said no. Carries the daemon's own message."""
+    """Ollama answered, and said no. Carries the daemon's own message.
+
+    `signin_url` is set when the refusal was `unauthorized` on a cloud tag.
+    Ollama hands back a URL with this machine's public key in it, and following
+    it is the whole fix — so it is worth carrying rather than discarding.
+
+    It is deliberately *not* part of `str(exc)`. The message string is what gets
+    written to `model_logs.error_message`, and those rows are exported for the
+    evaluation chapter; a URL that binds this machine's key to whoever opens it
+    does not belong in an exported log. Callers that want it read the attribute
+    and put it somewhere transient.
+    """
+
+    def __init__(self, message: str, *, signin_url: str | None = None) -> None:
+        super().__init__(message)
+        self.signin_url = signin_url
 
 
 class OllamaUnavailable(RuntimeError):
@@ -60,9 +76,9 @@ class OllamaUnavailable(RuntimeError):
 
 # How long to wait on *connecting*, as opposed to waiting for an answer.
 #
-# These are separate for a measured reason. `OLLAMA_BASE_URL` defaults to
+# These are separate for a measured reason. `OLLAMA_BASE_URL` used to default to
 # `host.docker.internal`, which does not resolve when the backend runs on the
-# host in dev mode — so every call paid a full DNS timeout before falling back
+# host — so every call paid a full DNS timeout before falling back
 # to localhost. With one model installed that made `GET /api/forge/models` take
 # 15.2 seconds: five for the tag list, ten for the /api/show behind it, all of
 # it spent failing to resolve a name. A connect attempt that is going to fail
@@ -81,18 +97,16 @@ def candidate_base_urls() -> list[str]:
 
     Three fallbacks, each for a failure that actually happens:
 
-    - **localhost**, because `host.docker.internal` does not resolve when
-      `./daedalus.sh dev` runs the backend on the host rather than in a
-      container, which is how most development happens.
+    - **localhost**, because a configured `host.docker.internal` (an old,
+      container-era .env) does not resolve on the host.
     - **127.0.0.1**, because `localhost` resolves to `::1` first on a dual-stack
       machine and Ollama binds IPv4 only by default. The connection is refused
       on a machine where the daemon is running perfectly well, which is a
       genuinely confusing way to be told nothing is there.
     - **`host.docker.internal` last** when it is not the configured value, so a
-      containerised backend still finds a host daemon if the configuration is
-      pointed somewhere else.
+      backend someone does run in a container still finds a host daemon.
     """
-    base = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+    base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     candidates = [base]
 
     def add(url: str) -> None:
@@ -158,7 +172,7 @@ def _request(method: str, path: str, *, timeout: float, **kwargs: Any) -> Any:
         # It answered, even to say no — this is where Ollama lives.
         _remember(base)
         if response.status_code >= 400:
-            raise OllamaError(_error_detail(response))
+            raise error_from(response)
         return response.json() if response.content else {}
 
     raise OllamaUnavailable(_unavailable_message(last_error))
@@ -196,6 +210,55 @@ def _unavailable_message(last_error: Exception | None) -> str:
         )
 
     return f"no Ollama daemon answered on {tried} ({kind}). {hint}"
+
+
+def _signin_url(response: Any) -> str | None:
+    """The signin URL Ollama returns alongside `unauthorized` on a cloud tag."""
+    try:
+        body = response.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    url = body.get("signin_url")
+    # Only ollama.com, and only https. The URL is acted on by a human clicking
+    # it, so a daemon answering on this port must not be able to aim that click
+    # wherever it likes.
+    if isinstance(url, str) and url.startswith("https://ollama.com/"):
+        return url
+    return None
+
+
+def error_from(response: Any) -> OllamaError:
+    """The exception for a refusal, with the signin URL kept off the message."""
+    return OllamaError(_error_detail(response), signin_url=_signin_url(response))
+
+
+def _host_only(url: str | None) -> str | None:
+    """`https://ollama.com:443/x` -> `ollama.com`. None for anything unparseable."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url if "//" in url else f"//{url}")
+    except ValueError:
+        return None
+    return parsed.hostname or None
+
+
+def serving_host(tag: str) -> str | None:
+    """Where `tag` runs, as a bare hostname. None when it is this machine.
+
+    Local runs are left NULL rather than written as 'localhost': the column
+    exists to tell two *remote* measurements apart, and a column that is the
+    same string on every local row carries no information.
+    """
+    try:
+        for model in list_models():
+            if model.get("name") == tag:
+                return model.get("remote_host")
+    except Exception:
+        pass
+    return None
 
 
 def _error_detail(response: Any) -> str:
@@ -246,6 +309,10 @@ def list_models() -> list[dict[str, Any]]:
             # they are not on this disk and must never be scored as if they
             # were, nor offered as a local deployment target.
             "remote": bool(model.get("remote_host") or model.get("remote_model")),
+            # Which machine actually serves it, for `model_logs.host`. Host
+            # only, never the full URL: a base URL can carry a key or a private
+            # hostname, and these rows are exported.
+            "remote_host": _host_only(model.get("remote_host")),
         })
     return out
 
@@ -283,6 +350,34 @@ def _extract_arch(model_info: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
+# Ollama's capability for "can complete a prompt". An embedding model reports
+# `embedding` instead, and asking it for an answer fails.
+COMPLETION_CAPABILITY = "completion"
+
+
+def answers_questions(capabilities: list[str] | None) -> bool:
+    """Whether a model with these capabilities can write an answer.
+
+    The one rule for "is this a chat model", used by the composer's list,
+    `inference.choose_model` and `model_config`, so the three cannot disagree.
+    On the *presence* of `completion`, not the absence of `embedding`: a model
+    reporting neither is not assumed usable.
+    """
+    return COMPLETION_CAPABILITY in (capabilities or [])
+
+
+def can_answer(name: str) -> bool | None:
+    """`answers_questions` for an installed tag — None if Ollama cannot be asked.
+
+    None is not False: an unreachable Ollama says nothing about the model, and
+    callers that only guard against a known embedder treat it as "not refused".
+    """
+    try:
+        return answers_questions(show(name).get("capabilities"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def show(name: str) -> dict[str, Any]:
     """A pulled model's real architecture and parameters.
 
@@ -302,6 +397,91 @@ def show(name: str) -> dict[str, Any]:
         "family": details.get("family"),
         "capabilities": data.get("capabilities") or [],
     }
+
+
+def embed(name: str, text: str, *, timeout: float = 30.0) -> list[float]:
+    """Embed one string and return the vector.
+
+    The only call in this client that runs a model rather than reading metadata
+    about one. It exists for a single purpose: `/api/show` reports the
+    architecture's declared `embedding_length`, and what a vector store actually
+    holds is whatever this returns. They normally agree, and a model with
+    Matryoshka truncation or an unusual pooling config is exactly the case where
+    they do not — so the width that matters is measured here, not read there.
+
+    One short string, so the cost is a model load and a single forward pass.
+    """
+    data = _request("POST", "/api/embed", timeout=timeout, json={"model": name, "input": text})
+    embeddings = data.get("embeddings")
+    if isinstance(embeddings, list) and embeddings and isinstance(embeddings[0], list):
+        return [float(x) for x in embeddings[0]]
+    # Older Ollama answered `/api/embeddings` with a flat `embedding` key. Kept
+    # because the failure is otherwise an empty vector reported as 0 dimensions.
+    flat = data.get("embedding")
+    if isinstance(flat, list):
+        return [float(x) for x in flat]
+    raise OllamaError(f"{name} returned no embedding")
+
+
+def generate(
+    name: str,
+    prompt: str,
+    *,
+    system: str | None = None,
+    json_format: bool = False,
+    temperature: float = 0.0,
+    timeout: float = 180.0,
+    think: bool | None = None,
+    max_tokens: int | None = None,
+) -> str:
+    """One blocking completion, for callers that want the whole answer at once.
+
+    Setup jobs use it, and so does the query pipeline's two short model steps
+    (follow-up rewriting and the intent tiebreaker) — neither has anyone
+    watching tokens appear, and both need the answer before anything else runs.
+
+    `think=False` turns off a reasoning model's chain of thought (qwen3,
+    gpt-oss). Pass it only for a model that reports the `thinking` capability:
+    Ollama rejects the field on one that does not. `max_tokens` caps the reply,
+    so a model that ignores "answer in one line" cannot hold the caller for a
+    page of output.
+
+    The orchestrator streams (`inference.answer_stream`) because a person is
+    watching tokens appear. A setup job is the opposite: nobody is reading it
+    token by token, it runs on a worker thread, and the caller wants the whole
+    answer or an error. Streaming that would mean reassembling it at every call
+    site for no benefit.
+
+    `json_format` sets Ollama's `format: json`, which constrains decoding to
+    valid JSON rather than asking for it in the prompt and hoping. It does not
+    constrain the *shape* — that is still the caller's to validate — but it does
+    remove the most common failure, which is a model wrapping its object in prose
+    or a markdown fence.
+
+    `temperature: 0` by default. An extraction job wants the same answer twice
+    from the same input; sampling would make a re-run disagree with itself and
+    make the proposer's error rate unmeasurable.
+    """
+    payload: dict[str, Any] = {
+        "model": name,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": temperature},
+    }
+    if system:
+        payload["system"] = system
+    if json_format:
+        payload["format"] = "json"
+    if think is not None:
+        payload["think"] = think
+    if max_tokens:
+        payload["options"]["num_predict"] = max_tokens
+
+    data = _request("POST", "/api/generate", timeout=timeout, json=payload)
+    response = data.get("response")
+    if not isinstance(response, str):
+        raise OllamaError(f"{name} returned no completion")
+    return response
 
 
 def delete(name: str) -> bool:
@@ -338,7 +518,7 @@ def pull(name: str) -> Iterator[dict[str, Any]]:
                 _remember(base)
                 if response.status_code >= 400:
                     response.read()
-                    raise OllamaError(_error_detail(response))
+                    raise error_from(response)
                 for line in response.iter_lines():
                     if not line.strip():
                         continue

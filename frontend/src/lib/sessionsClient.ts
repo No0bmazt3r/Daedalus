@@ -17,6 +17,8 @@ export interface ChatSession {
   ephemeral: boolean;
   archived_at: string | null;
   message_count?: number | null;
+  /** Who named it — 'first_message' placeholder, 'model' (the title job), or 'user'. */
+  title_source?: 'first_message' | 'model' | 'user' | null;
 }
 
 export interface ChatSessionDetail extends ChatSession {
@@ -34,6 +36,7 @@ export interface ChatMessage {
   evidence: unknown;
   token_estimate: number;
   created_at: string;
+  model_tag?: string;
 }
 
 const BASE = '/api/sessions';
@@ -156,6 +159,14 @@ export function renameSession(id: string, title: string): Promise<ChatSessionDet
     method: 'PATCH',
     body: JSON.stringify({ title }),
   });
+}
+
+/**
+ * Ask the background title job to name this chat now. Returns once it is
+ * queued; the new title arrives through the `sessions` live event.
+ */
+export function regenerateTitle(id: string): Promise<{ ok: boolean; scheduled: boolean }> {
+  return request(`${BASE}/${encodeURIComponent(id)}/title`, { method: 'POST' });
 }
 
 export function archiveSession(id: string, archived = true): Promise<ChatSessionDetail> {

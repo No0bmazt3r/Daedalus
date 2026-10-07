@@ -1,0 +1,16 @@
+-- The standalone form of a user turn, as the orchestrator understood it.
+--
+-- PROJECT.md §7.4: a follow-up like "and the pressure?" is rewritten into a
+-- question that stands on its own before intent classification. The next
+-- follow-up needs that rewritten form, not the raw text — "and pH?" after "and
+-- the pressure?" only makes sense against "What is the current pressure?". So
+-- it is stored on the turn it belongs to.
+--
+-- Here, not in ai_logs.db, because an incognito session lives only in this
+-- store (§7.4) and its follow-ups must work the same way. NULL on assistant
+-- turns and on user turns written before the pipeline existed; readers fall
+-- back to `content`.
+--
+-- Natural language, like `content`, and never replayed into a prompt: history
+-- replay reads `content`, which is what the operator actually typed.
+ALTER TABLE chat_messages ADD COLUMN standalone_query TEXT;
