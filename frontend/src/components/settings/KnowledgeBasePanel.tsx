@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, ArrowUpRight,
@@ -115,20 +117,28 @@ function TrackCard({
  */
 function useRagConfig() {
   const [config, setConfig] = useState<RagConfig | null>(null)
+  // `loadError`: the config cannot be read, so the panel is the error page.
+  // `error`: a save was refused, shown in the panel.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const load = () => { fetchRagConfig().then(setConfig).catch((e: Error) => setError(e.message)) }
+  const load = () => {
+    fetchRagConfig().then((c) => { setConfig(c); setLoadError(null) }).catch((e: unknown) => setLoadError(toFailure(e)))
+  }
   useEffect(load, [])
   // Readiness depends on the corpus and the embedding model too, not just this config.
   useLiveRefresh(['rag', 'corpus', 'embeddings'], load)
-  return { config, setConfig, error, setError }
+  return { config, setConfig, error, setError, loadError, load }
 }
 
-function LoadState({ error }: { error: string | null }) {
-  if (error) {
+function LoadState({ failure, onRetry }: { failure: LoadFailure | null; onRetry: () => void }) {
+  if (failure) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">
-        <AlertCircle size={14} className="shrink-0 text-rose-400" /> {error}
-      </div>
+      <TabError
+        code={failure.status}
+        detail={failure.message}
+        what="The retrieval settings could not be read from the backend."
+        onRetry={onRetry}
+      />
     )
   }
   return <Skeleton className="h-52 w-full" />
@@ -149,8 +159,8 @@ function FrozenNotice() {
 
 /** Settings → Vector RAG: Track 1's re-ranking, and whether its index can answer. */
 export function VectorRagPanel({ onOpenForge }: { onOpenForge?: (tab: ForgeTab) => void }) {
-  const { config, setConfig, error } = useRagConfig()
-  if (!config) return <LoadState error={error} />
+  const { config, setConfig, loadError, load } = useRagConfig()
+  if (!config) return <LoadState failure={loadError} onRetry={load} />
   return (
     <div className="space-y-4">
       <header>
@@ -184,8 +194,8 @@ export function VectorRagPanel({ onOpenForge }: { onOpenForge?: (tab: ForgeTab) 
 
 /** Settings → Graph RAG: Track 2's retrieval mode — the agent loop or the fixed walk. */
 export function GraphRagPanel() {
-  const { config, setConfig, error } = useRagConfig()
-  if (!config) return <LoadState error={error} />
+  const { config, setConfig, loadError, load } = useRagConfig()
+  if (!config) return <LoadState failure={loadError} onRetry={load} />
   return (
     <div className="space-y-4">
       <header>
@@ -205,7 +215,7 @@ export function GraphRagPanel() {
 
 /** Settings → Retrieval Track: which track answers. Each track's own settings have their own panel. */
 export function KnowledgeBasePanel() {
-  const { config, setConfig, error, setError } = useRagConfig()
+  const { config, setConfig, error, setError, loadError, load } = useRagConfig()
   const [saving, setSaving] = useState(false)
 
   const choose = async (track: RagTrack) => {
@@ -221,7 +231,7 @@ export function KnowledgeBasePanel() {
     }
   }
 
-  if (!config) return <LoadState error={error} />
+  if (!config) return <LoadState failure={loadError} onRetry={load} />
 
   return (
     <div className="space-y-4">

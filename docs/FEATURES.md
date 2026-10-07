@@ -63,7 +63,9 @@ to it.
 | `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
 | `GET` | `/api/logs/catalogue` | Browsable tables with live row counts — backs the sidebar's Data stores section. Five stores: chat, audit, sensor, corpus (the ingestion manifest and authoring history) and the Chroma collections. `prefs` is absent on purpose, and `model_endpoints` for the stronger reason that it holds API keys |
 | `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
-| `GET` | `/api/trace` | Ariadne's Thread: chat turns, newest first, each with a status word and its tool, retrieval and error counts. Filters `session_id`, `intent`, `grounded` (`yes`·`no`·`unchecked`), `q`; paged |
+| `GET` | `/api/trace` | Ariadne's Thread: chat turns, newest first, each with its status, its bucket (as Settings files it), counts, tracks, chat and human label. Filters `session_id`, `intent`, `model`, `track`, `since`/`until`, `bucket` (`grounded`·`ungrounded`·`unchecked`), `labelled`, `q`; paged. Also returns `stats` over *every* match (counts per status and bucket, p50/p95 latency, labelled and hallucinated) and the buckets' names and mapping |
+| `GET` · `PUT` | `/api/trace/settings` | Settings → Ariadne's Thread: what grounded requires, which bucket each status is filed in, the buckets' names. `PUT` merges a partial body; `{"reset": true}` restores the defaults. Relabels the view only |
+| `PUT` | `/api/trace/{query_id}/label` | A person's verdict, `{"hallucinated": true\|false\|null, "note"}` — appended to `feedback_logs` (`evaluator_role = 'label'`), newest wins, `null` withdraws. 404 for an unknown id |
 | `GET` | `/api/trace/{query_id}` | One turn as ordered steps: question → intent → tools and retrieval → evidence → context → model → validation → answer, plus errors and the rating |
 | `GET` | `/api/trace/{query_id}/groundedness` | Every number in the answer the model wrote, marked `supported`·`unsupported`·`stale`·`not_a_claim`·`unchecked`, with the evidence line each supported one came from |
 | `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
@@ -461,6 +463,58 @@ keeps beside the answer. Read-only, never on the chat path.
 In the UI: the sidebar window (`Ctrl+Alt+A`), and a collapsed strip under every
 chat answer (`2 tools · 1.8s · grounded`) that opens it in a panel beside the chat; the evidence summary
 opens the same panel on its Evidence tab, so neither stretches the transcript.
+
+**The window** (`components/thread/ThreadWindow.tsx`):
+
+| Part | Behaviour |
+|---|---|
+| Filters | All · Grounded · Not grounded · Not checked, each an icon in its verdict's colour with its name and a tooltip. "Not checked" means no answer check ran: refused, answered without a model, or failed |
+| Chat groups | Questions are grouped under the chat they came from (title; deleted chats as "Deleted chat · <id tail>"; incognito marked). Each header folds its group and shows its count; folds are remembered per chat, and *Collapse all* folds every one. The filter icon on a header narrows the list to that chat, shown as a removable chip |
+| Status icons | Grounded (green shield ✓), Not grounded (amber shield !), Blocked (red shield ✗), Refused, No model, Error — the same icons on the rows, the trace header and the chat strip (`components/thread/status.ts`) |
+| Trace header | The question, its status, latency, model, intent, id, and *From <chat>* with **Open chat** while that chat still exists |
+| Layout | No visible scrollbars; a short trace or an empty state sits in the middle of the pane |
+| Failures | The list failing turns the whole window into the error page (`TabError`); a trace failing turns its pane into one — 404 says the audit log has no record of that answer. *Try again* re-runs the load; *Close* closes the window or trace |
+
+**The answer panel** (`components/thread/AnswerPanel.tsx`): one panel beside the
+chat, tabs *Thread* and *Evidence*, opened from either line under an answer.
+The chat narrows to make room (it floats over the chat below `lg`); clicking the
+same line, `Esc`, the ×, or switching chats closes it.
+
+**Labelling, comparing, exporting.** Every trace ends with *Your label*:
+Correct / Hallucinated plus a note, the evaluation's ground truth (the colours
+are only the detector). The columns icon on a row puts its thread beside the
+open one; *Markdown* and *JSON* in a trace's header download it as shown. Each
+step links to its audit table in Data stores, and the model step carries the
+prompt's SHA-256 (migration `010`: the prompt is never stored, only proven).
+
+**List extras.** The summary strip above the list counts every turn the filters
+match — per bucket, p50/p95 time, labelled and hallucinated. The sliders icon
+opens track, model, label and date filters. `↑`/`↓` move through the list
+(skipping folded chats). The window re-reads by itself on the `trace` live
+event: a finished chat turn, a saved label, new settings.
+
+**Incognito.** A turn in an incognito chat writes its audit rows with every
+text field — question, answer, standalone question, retrieval query, tool
+input and output, and the validator's quoted sentences — replaced by
+`[not recorded: incognito]` (`audit_store.redact_this_context`, set per turn
+in the chat worker). Counts, timings and verdicts are kept. The Thread lists it
+as *incognito* and says nothing was recorded.
+
+**Settings → Ariadne's Thread** (`components/settings/ThreadPanel.tsx`,
+`services/thread_settings.py`, preference row `thread`): whether grounded
+requires a citation and/or evidence (both on is the validator's definition),
+which of Grounded · Not grounded · Not checked each of the six statuses is filed
+under, and the three names. It relabels the view only — the stored record, the
+validator and evaluation runs are untouched — so it stays editable while frozen.
+
+**Highlighting.** In the Thread's answer, every number wears its verdict colour
+with its unit included (`980 ppm`), and the rest — dates, times, names with a
+digit (CO₂, ABV-1), °C / % / ± — gets a neutral accent. In chat replies only
+readings (a number with a validator unit, or pH) are picked out, accent and
+weight with no verdict colour, since every number in a delivered answer already
+passed. Evidence lines pick out the sensor name, the reading (or the bare value
+after `=`), STALE and the age beside it, timestamps, and a tool name opening a
+note (`withEvidenceHighlights`, `components/Citations.tsx`).
 
 ### Dynamic Model Discovery — `/api/system/models`
 
@@ -1847,7 +1901,8 @@ user had set.
 | `codes/<code>.ts` | Everything about one code: name, title, myth and block lines, *what happened*, *what to try*, the picture, and its animation CSS (`css`) |
 | `catalogue.ts` | Finds every file in `codes/` by name (`import.meta.glob`), so adding `codes/<code>.ts` is all a new page needs |
 | `types.ts` | `ErrorInfo`, the shape each code file follows |
-| `ErrorPage.tsx` | The full-screen layout, and `statusOf()` |
+| `ErrorPage.tsx` | The full-screen layout (the app itself failing), `statusOf()`, and `toFailure()` → `LoadFailure` |
+| `TabError.tsx` | The same page filling one tab, window or panel that failed to load, with *Try again* and wording for what failed. Used by every view's load path: the Forge's panes, every Blueprints tab, every Settings panel, Data stores and Ariadne's Thread |
 | `PixelArt.tsx` | Draws a picture; the colour letters (`COLOURS`) |
 | `animations.css` | The shared keyframes, and the reduced-motion rule |
 
@@ -2034,7 +2089,7 @@ therefore tracked with `.gitkeep`.
 | Read-only boundary | INSERT/UPDATE/DELETE/DROP all verified to raise |
 | `theme.css` injection | Hostile `bg`, `font`, `density` payloads verified dropped |
 | Container | Built and run; all five stores healthy; SPA, assets, deep links and path-traversal guard checked |
-| Frontend | **No component tests.** Verified by headless-browser screenshots |
+| Frontend | **4 logic tests** (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation over folded chats, and the Markdown export (`src/lib/threadLogic.test.ts`). No component tests; the rest is verified by headless-browser screenshots |
 | Chat store | Seq allocation, cascade delete, auto-titling, incognito sweep, budget trimming and every error path exercised by direct calls |
 | Migrations | Edited-file, gap-numbering, missing-file and bad-SQL rollback all verified to refuse or roll back |
 | Session API | Every endpoint exercised, including 404/413/422 paths and a rejected forged `assistant` role |
@@ -2045,7 +2100,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **204 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters). Everything else is still verified by direct API calls |
+| Backend | **210 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters, labels, incognito redaction, the prompt hash, and the settings moving turns between buckets). Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.db import audit_store
 from app.main import app
-from app.services import chat_service, inference, ollama_client, orchestration, thread
+from app.services import chat_service, inference, ollama_client, orchestration, thread, thread_settings
 
 from . import fixtures
 from .test_chat_path import _FakeHttpx
@@ -27,9 +27,12 @@ class ThreadTest(unittest.TestCase):
         fixtures.set_track("vector")
         cls.client = TestClient(app)
 
-    def turn(self, question: str, answer: str) -> tuple[str, str]:
+    def tearDown(self) -> None:
+        thread_settings.write({"reset": True})
+
+    def turn(self, question: str, answer: str, *, incognito: bool = False) -> tuple[str, str]:
         """Run one chat turn; returns (query_id, session_id)."""
-        session = chat_service.create_session()
+        session = chat_service.create_session(ephemeral=incognito)
         choice = {"tag": "fake:1b", "source": "pinned", "remote": False, "reason": "test"}
         with mock.patch.object(ollama_client, "httpx", _FakeHttpx(answer)), \
              mock.patch.object(ollama_client, "candidate_base_urls", return_value=["http://fake"]), \
@@ -109,12 +112,12 @@ class ThreadTest(unittest.TestCase):
         self.assertEqual(mine["items"][0]["tool_count"], 1)
         chat = mine["items"][0]["chat"]
         self.assertEqual((chat["session_id"], chat["exists"]), (session_id, True))
-        grounded = {i["query_id"] for i in self.client.get("/api/trace", params={"grounded": "yes", "limit": 500}).json()["items"]}
+        grounded = {i["query_id"] for i in self.client.get("/api/trace", params={"bucket": "grounded", "limit": 500}).json()["items"]}
         self.assertIn(good, grounded)
         self.assertNotIn(bad, grounded)
         found = self.client.get("/api/trace", params={"q": bad}).json()["items"]
         self.assertEqual([i["query_id"] for i in found], [bad])
-        self.assertEqual(self.client.get("/api/trace", params={"grounded": "maybe"}).status_code, 422)
+        self.assertEqual(self.client.get("/api/trace", params={"bucket": "maybe"}).status_code, 422)
 
     def test_unknown_query_is_404(self) -> None:
         self.assertEqual(self.client.get("/api/trace/q_nope").status_code, 404)
@@ -132,6 +135,73 @@ class ThreadTest(unittest.TestCase):
         retrieval = steps[4]
         self.assertEqual(retrieval["ms"], 38)
         self.assertEqual(retrieval["detail"]["chunk_ids"], ["c1", "c2"])
+
+
+    def test_label_is_appended_and_the_newest_wins(self) -> None:
+        qid, _ = self.turn("What is the CO2 level now?", f"CO2 is {fixtures.co2(119)} ppm [S1].")
+        put = lambda body: self.client.put(f"/api/trace/{qid}/label", json=body)  # noqa: E731
+        self.assertTrue(put({"hallucinated": True, "note": "wrong sensor"}).json()["label"]["hallucinated"])
+        second = put({"hallucinated": False}).json()["label"]
+        self.assertEqual((second["hallucinated"], second["note"]), (False, None))
+        self.assertEqual(thread.trace(qid)["summary"]["label"]["hallucinated"], False)
+        self.assertEqual(thread.trace(qid)["steps"][-1]["kind"], "label")
+        self.assertIsNone(put({"hallucinated": None}).json()["label"])
+        self.assertIsNone(thread.trace(qid)["summary"]["label"])
+        self.assertEqual(self.client.put("/api/trace/q_nope/label", json={"hallucinated": True}).status_code, 404)
+        # A label is human judgement, not a thumbs rating.
+        self.assertEqual(audit_store.latest_ratings(thread.trace(qid)["summary"]["session_id"]), {})
+
+    def test_incognito_turn_keeps_no_text(self) -> None:
+        reading = fixtures.co2(119)
+        qid, _ = self.turn("What is the CO2 level now?", f"CO2 is {reading} ppm [S1].", incognito=True)
+        rows = audit_store.trace(qid)
+        convo = rows["conversation_logs"][0]
+        self.assertEqual(convo["user_query"], audit_store.REDACTED)
+        self.assertEqual(convo["response_text"], audit_store.REDACTED)
+        self.assertEqual(convo["standalone_query"], audit_store.REDACTED)
+        self.assertEqual(convo["grounded_flag"], 1)  # the verdict is still evidence
+        self.assertTrue(all(t["tool_input_json"] == audit_store.REDACTED for t in rows["tool_logs"]))
+        self.assertTrue(thread.trace(qid)["summary"]["chat"]["incognito"])
+        check = thread.groundedness(qid)
+        self.assertTrue(check["redacted"])
+        self.assertEqual(check["numbers"], [])
+        # An ordinary chat after it is recorded as usual: the flag was this turn's only.
+        other, _ = self.turn("What is the CO2 level now?", f"CO2 is {reading} ppm [S1].")
+        self.assertEqual(audit_store.trace(other)["conversation_logs"][0]["user_query"], "What is the CO2 level now?")
+
+    def test_prompt_hash_is_logged(self) -> None:
+        qid, _ = self.turn("What is the CO2 level now?", f"CO2 is {fixtures.co2(119)} ppm [S1].")
+        model = next(s for s in thread.trace(qid)["steps"] if s["kind"] == "model")
+        self.assertRegex(model["detail"]["prompt_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(model["table"], "model_logs")
+
+    def test_settings_move_turns_between_buckets(self) -> None:
+        qid, session_id = self.turn("What is the CO2 level now?", "CO2 is 777.7 ppm [S1].")
+        bucket = lambda: self.client.get("/api/trace", params={"session_id": session_id}).json()["items"][0]["bucket"]  # noqa: E731
+        self.assertEqual(bucket(), "ungrounded")  # blocked files under Not grounded by default
+        r = self.client.put("/api/trace/settings", json={"buckets": {"blocked": "unchecked"}, "labels": {"unchecked": "No verdict"}})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(bucket(), "unchecked")
+        self.assertEqual(self.client.get("/api/trace").json()["labels"]["unchecked"], "No verdict")
+        self.assertEqual(self.client.put("/api/trace/settings", json={"buckets": {"blocked": "maybe"}}).status_code, 422)
+        self.assertEqual(self.client.put("/api/trace/settings", json={"labels": {"grounded": " "}}).status_code, 422)
+
+    def test_grounded_without_citation_when_not_required(self) -> None:
+        qid, session_id = self.turn("What is the CO2 level now?", "There is a reading available.")
+        first = lambda: self.client.get("/api/trace", params={"session_id": session_id}).json()["items"][0]  # noqa: E731
+        self.assertEqual(first()["status"], "ungrounded")
+        thread_settings.write({"require_citation": False})
+        self.assertEqual(first()["status"], "grounded")
+        self.assertFalse(first()["grounded"])  # the stored verdict is unchanged
+
+    def test_stats_cover_every_match_not_just_the_page(self) -> None:
+        good, session_id = self.turn("What is the CO2 level now?", f"CO2 is {fixtures.co2(119)} ppm [S1].")
+        body = self.client.get("/api/trace", params={"limit": 1}).json()
+        self.assertEqual(len(body["items"]), 1)
+        self.assertEqual(body["stats"]["total"], body["total"])
+        self.assertGreater(body["stats"]["total"], 1)
+        self.assertIsNotNone(body["stats"]["latency_p95_ms"])
+        self.assertEqual(sum(body["stats"]["by_bucket"].values()), body["total"])
 
 
 if __name__ == "__main__":

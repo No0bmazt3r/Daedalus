@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Database, HardDrive, Lock, RefreshCw, Sprout, AlertTriangle, Check, ExternalLink, Activity } from 'lucide-react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
+import { Database, HardDrive, Lock, RefreshCw, Sprout, Check, ExternalLink, Activity } from 'lucide-react'
 import { observability, type Observability } from '../../lib/systemClient'
 import { SkeletonCard } from '../ui/skeleton'
 
@@ -54,7 +56,7 @@ function humanizeKey(key: string): string {
 
 export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   const [databases, setDatabases] = useState<DatabaseInfo[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   // True from mount: the first load starts in an effect, and setting the flag
   // there would be a synchronous re-render. Later reloads set it themselves.
   const [busy, setBusy] = useState(true)
@@ -63,12 +65,12 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
 
   const load = useCallback(() => fetch('/api/system/databases')
     .then(async (res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status })
       const data = (await res.json()) as { databases: DatabaseInfo[] }
       setDatabases(data.databases)
       setError(null)
     })
-    .catch((e: unknown) => setError(e instanceof Error ? e.message : 'request failed'))
+    .catch((e: unknown) => setError(toFailure(e)))
     .finally(() => setBusy(false)), [])
 
   const reload = () => {
@@ -115,6 +117,18 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
 
   const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
+  // The stores cannot be read: the panel is the error page.
+  if (error) {
+    return (
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The storage health of the five stores could not be read from the backend."
+        onRetry={reload}
+      />
+    )
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       <div className="flex items-start justify-between gap-4">
@@ -145,16 +159,6 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
           </button>
         </div>
       </div>
-
-      {error && (
-        <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
-          <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
-          <div>
-            <div className="font-medium">Couldn't reach the backend</div>
-            <div className="theme-text-muted text-xs mt-1">{error}</div>
-          </div>
-        </div>
-      )}
 
       {/* Five independent store cards, so they tile once the pane is wide
           enough to give each one a sensible width — the same reasoning as the

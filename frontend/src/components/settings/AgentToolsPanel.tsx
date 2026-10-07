@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   AlertTriangle, Check, ChevronDown, Loader2, Play, ShieldCheck, Wand2, X,
 } from 'lucide-react'
@@ -428,11 +430,15 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
     }
   }, [])
 
-  useEffect(() => {
+  // The catalogue cannot be read: the panel is the error page. `error` is a
+  // failed mode switch, which stays a line in the panel.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
+  const loadCatalogue = useCallback(() => {
     fetchToolCatalogue()
-      .then(setCatalogue)
-      .catch((e: Error) => setError(e.message))
+      .then((c) => { setCatalogue(c); setLoadError(null) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
+  useEffect(loadCatalogue, [loadCatalogue])
 
   const byCategory = useMemo(() => {
     const map = new Map<string, AgentTool[]>()
@@ -465,13 +471,21 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
 
   const card = `p-4 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
 
-  if (error) {
+  if (loadError) {
     return (
-      <p className="flex items-center gap-2 text-xs status-warn">
-        <AlertTriangle size={13} /> {error}
-      </p>
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The agent tool catalogue could not be read from the backend."
+        onRetry={loadCatalogue}
+      />
     )
   }
+  const modeError = error && (
+    <p className="flex items-center gap-2 text-xs status-warn">
+      <AlertTriangle size={13} /> {error}
+    </p>
+  )
   if (!catalogue) {
     return (
       <div className="space-y-4">
@@ -484,6 +498,7 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
   if (mode === 'simple') {
     return (
       <div className="space-y-4 animate-in fade-in duration-200">
+        {modeError}
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-medium mb-1">Agent Tools</h3>
@@ -500,6 +515,7 @@ export function AgentToolsPanel({ isPeek }: { isPeek: boolean }) {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
+      {modeError}
       <div>
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-xl font-medium mb-1">Agent Tools</h3>

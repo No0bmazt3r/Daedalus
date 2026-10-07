@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { AlertTriangle, FileText, Timer, Layers } from 'lucide-react'
 import {
   fetchRetrievals, fetchRetrieval,
@@ -91,8 +93,9 @@ function Detail({ queryId }: { queryId: string | null }) {
   // not need a synchronous setState inside the effect, which is a render
   // published only to be corrected on the next one.
   const [result, setResult] = useState<
-    { queryId: string; data: Retrieval | null; reason: string | null } | null
+    { queryId: string; data: Retrieval | null; reason: string | null; failure?: LoadFailure } | null
   >(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!queryId) return
@@ -104,11 +107,22 @@ function Detail({ queryId }: { queryId: string | null }) {
             : { queryId, data: null, reason: r.reason },
         ),
       )
-      .catch((e: Error) => setResult({ queryId, data: null, reason: e.message }))
-  }, [queryId])
+      .catch((e: unknown) => setResult({ queryId, data: null, reason: null, failure: toFailure(e) }))
+  }, [queryId, attempt])
 
   if (!queryId) return null
   const shown = result?.queryId === queryId ? result : null
+  // Could not be read: the error page. Recorded but not replayable: the honest empty state.
+  if (shown?.failure) {
+    return (
+      <TabError
+        code={shown.failure.status}
+        detail={shown.failure.message}
+        what="This retrieval could not be read from the audit log."
+        onRetry={() => { setResult(null); setAttempt((n) => n + 1) }}
+      />
+    )
+  }
   if (shown?.reason) return <Unavailable reason={shown.reason} />
   const data = shown?.data
   if (!data) return <Skeleton className="h-64 w-full" />
@@ -190,6 +204,7 @@ function Detail({ queryId }: { queryId: string | null }) {
 
 export function RetrievalView() {
   const [items, setItems] = useState<RetrievalSummary[] | null>(null)
+  const [listError, setListError] = useState<LoadFailure | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -202,11 +217,23 @@ export function RetrievalView() {
             : r.retrievals.find((x) => x.replayable)?.query_id ?? null,
         )
       })
-      .catch(() => setItems([]))
+      .catch((e: unknown) => setListError(toFailure(e)))
   }, [])
 
   useEffect(() => { load() }, [load])
 
+  // A failed read used to look like "nothing recorded yet", which is a claim
+  // about the data the window could not check. It is the error page instead.
+  if (listError) {
+    return (
+      <TabError
+        code={listError.status}
+        detail={listError.message}
+        what="The recorded retrievals could not be read from the audit log."
+        onRetry={() => { setListError(null); load() }}
+      />
+    )
+  }
   if (!items) return <Skeleton className="h-64 w-full" />
 
   if (items.length === 0) {

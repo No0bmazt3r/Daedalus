@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   Plus, Trash2, AlertCircle, Check, X, Link2, Boxes, History, ChevronRight, ListChecks,
   Sparkles,
@@ -347,17 +349,20 @@ export function AuthoringView() {
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState(1)
 
+  // The authoring state cannot be read: the tab is the error page. `error` is a failed edit.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const refresh = useCallback(() => {
-    void fetchAuthoringStatus().then(setStatus).catch((e: Error) => setError(e.message))
+    void fetchAuthoringStatus().then((s) => { setStatus(s); setLoadError(null) }).catch((e: unknown) => setLoadError(toFailure(e)))
     void fetchNodes()
       .then((r) => { setNodes(r.nodes); setEdges(r.edges) })
-      .catch(() => { setNodes([]); setEdges([]) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
   useEffect(() => {
-    void fetchAuthoringHistory(failuresOnly).then((r) => setHistory(r.edits)).catch(() => setHistory([]))
+    // An empty history on failure would claim nothing was ever authored.
+    void fetchAuthoringHistory(failuresOnly).then((r) => setHistory(r.edits)).catch((e: unknown) => setLoadError(toFailure(e)))
   }, [failuresOnly, status?.totals.nodes, status?.totals.edges])
 
   const remove = async (fn: () => Promise<unknown>) => {
@@ -370,11 +375,17 @@ export function AuthoringView() {
     refresh()
   }
 
-  if (!status) {
-    return error
-      ? <div className="rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">{error}</div>
-      : <Skeleton className="h-96 w-full" />
+  if (loadError) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The graph authoring state could not be read from the backend."
+        onRetry={() => { setLoadError(null); refresh() }}
+      />
+    )
   }
+  if (!status) return <Skeleton className="h-96 w-full" />
 
   const connectable = status.schema.edge_types.some(
     (e) => nodes.some((n) => n.type === e.from) && nodes.some((n) => n.type === e.to),

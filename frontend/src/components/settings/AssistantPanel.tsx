@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { AlertCircle, Clock, Lock, MessageSquareText, Plus, ShieldAlert, X } from 'lucide-react'
 import {
   browserTimezone,
@@ -80,10 +82,12 @@ function AssistantShell({ render }: { render: (props: SectionProps) => ReactNode
   const [saving, setSaving] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
+  // The settings cannot be read: the panel is the error page. `error` is a failed save.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const load = useCallback(() => {
     fetchAssistant()
-      .then((s) => { setStatus(s); setError(null) })
-      .catch((e: Error) => setError(e.message))
+      .then((s) => { setStatus(s); setLoadError(null) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
   useEffect(load, [load])
 
@@ -101,9 +105,17 @@ function AssistantShell({ render }: { render: (props: SectionProps) => ReactNode
     }
   }
 
-  if (!status) {
-    return error ? <ErrorNote message={error} /> : <Skeleton className="h-64 w-full" />
+  if (loadError) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The assistant settings could not be read from the backend."
+        onRetry={load}
+      />
+    )
   }
+  if (!status) return <Skeleton className="h-64 w-full" />
 
   return (
     <div className="space-y-4">

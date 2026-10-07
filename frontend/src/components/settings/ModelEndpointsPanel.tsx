@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   Plus, Trash2, Check, X, Loader2, ExternalLink, KeyRound, AlertTriangle, CloudOff,
 } from 'lucide-react'
@@ -53,13 +55,15 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   const [error, setError] = useState<string | null>(null)
 
   // State set in the promise's callbacks only.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const load = useCallback(() => Promise.all([providerCatalogue(), listEndpoints()])
     .then(([cat, eps]) => {
       setProviders(cat)
       setEndpoints(eps)
-      setError(null)
+      setLoadError(null)
     })
-    .catch((e: unknown) => setError(e instanceof Error ? e.message : 'could not load endpoints'))
+    // The endpoints cannot be read: the panel is the error page. `error` is a failed action.
+    .catch((e: unknown) => setLoadError(toFailure(e)))
     .finally(() => setLoaded(true)), [])
 
   useEffect(() => {
@@ -124,6 +128,17 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   const card = `p-5 rounded-xl border theme-border transition-colors ${isPeek ? 'bg-transparent' : 'theme-surface'}`
   const field =
     'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-40'
+
+  if (loadError) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The cloud model endpoints could not be read from the backend."
+        onRetry={() => void load()}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">

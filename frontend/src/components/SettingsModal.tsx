@@ -27,6 +27,7 @@ import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
 import { DateTimePanel, SafetyPanel, SystemPromptPanel } from './settings/AssistantPanel'
+import { ThreadPanel } from './settings/ThreadPanel'
 import { AppearancePanel } from './settings/AppearancePanel'
 import { ShortcutsPanel } from './settings/ShortcutsPanel'
 import type { ForgeTab } from './forge/ForgeWindow'
@@ -251,6 +252,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
             {effectiveTab === 'assistant-time' && <DateTimePanel isPeek={isPeek} />}
             {effectiveTab === 'assistant-prompt' && <SystemPromptPanel isPeek={isPeek} />}
             {effectiveTab === 'assistant-safety' && <SafetyPanel isPeek={isPeek} />}
+            {effectiveTab === 'thread' && <ThreadPanel isPeek={isPeek} />}
             {effectiveTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
             {effectiveTab === 'knowledge' && <KnowledgeBasePanel />}
             {effectiveTab === 'vector-rag' && <VectorRagPanel onOpenForge={onOpenForge} />}

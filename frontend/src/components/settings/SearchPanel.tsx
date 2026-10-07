@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   AlertTriangle, Check, ExternalLink, Globe, Loader2, Play, Plus, Power, Search,
   Trash2, X,
@@ -149,6 +151,7 @@ function ContainerControl({ onChanged }: { onChanged: () => void }) {
 
 export function SearchPanel({ isPeek }: { isPeek: boolean }) {
   const [config, setConfig] = useState<SearchConfig | null>(null)
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Draft state. Separate from `config` because a panel that wrote on every
@@ -189,9 +192,10 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
       setSafesearch(next.safesearch)
       setChain(next.fallback_chain)
       adoptProvider(next, next.provider)
-      setError(null)
+      setLoadError(null)
     })
-    .catch((e: unknown) => setError(e instanceof Error ? e.message : 'could not load search settings')),
+    // Not a skeleton forever: settings that cannot be read are the error page.
+    .catch((e: unknown) => setLoadError(toFailure(e))),
   [adoptProvider])
 
   useEffect(() => {
@@ -297,7 +301,14 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
     'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-40'
 
   if (!config) {
-    return (
+    return loadError ? (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The search settings could not be read from the backend."
+        onRetry={() => void load()}
+      />
+    ) : (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-40 w-full" />

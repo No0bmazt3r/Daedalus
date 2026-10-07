@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   AlertTriangle, Check, Link as LinkIcon, Loader2, Pin, Play, Plus, Trash2, X,
 } from 'lucide-react'
@@ -205,9 +207,12 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
   const [args, setArgs] = useState('')
   const [url, setUrl] = useState('')
 
-  useEffect(() => {
-    fetchMcpServers().then(setStatus).catch((e: Error) => setError(e.message))
+  // The servers cannot be read: the panel is the error page. `error` is a failed add.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
+  const loadServers = useCallback(() => {
+    fetchMcpServers().then((s) => { setStatus(s); setLoadError(null) }).catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
+  useEffect(loadServers, [loadServers])
 
   const submit = useCallback(async () => {
     setSaving(true)
@@ -238,10 +243,13 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
     'w-full px-3 py-2 rounded-lg border theme-border theme-surface-strong theme-text text-sm outline-none focus:ring-1 focus:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] placeholder:opacity-40'
 
   if (!status) {
-    return error ? (
-      <p className="flex items-center gap-2 text-xs status-warn">
-        <AlertTriangle size={13} /> {error}
-      </p>
+    return loadError ? (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The MCP servers could not be read from the backend."
+        onRetry={loadServers}
+      />
     ) : (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />

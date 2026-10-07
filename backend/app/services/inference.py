@@ -53,6 +53,7 @@ model by whatever else the machine was doing.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import json
 import queue
 import re
@@ -65,6 +66,7 @@ from typing import Any
 from ..db import audit_store
 from . import (
     chat_service,
+    live_events,
     model_config,
     ollama_client,
     orchestration,
@@ -374,6 +376,10 @@ def answer_stream(
     # question twice. Read here rather than in the worker because an unknown
     # session raises, and that has to reach the caller as an error event.
     window = chat_service.build_context(session_id)
+    # An incognito chat keeps no text in the audit log (see `audit_store.REDACTED`).
+    # Read before anything is registered, beside the read that already rejects
+    # an unknown session.
+    incognito = bool(chat_service.get_session(session_id).get("ephemeral"))
 
     # `None` is the sentinel that closes the stream. Unbounded on purpose: the
     # worker must never block on a consumer that has gone away.
@@ -389,6 +395,8 @@ def answer_stream(
 
     def _worker() -> None:
         try:
+            if incognito:
+                audit_store.redact_this_context()
             turn_started = time.perf_counter()
 
             # Steps 1–4. Before the question is recorded, because the record
@@ -477,6 +485,10 @@ def answer_stream(
             # Beside Ollama's token count, this is what calibrates the history
             # budget's characters-per-token (`token_calibration`).
             prompt_chars = sum(len(m["content"]) for m in messages)
+            # Which prompt this was, without keeping it (migration 010).
+            prompt_sha256 = hashlib.sha256(
+                json.dumps(messages, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
             _log_context(query_id, session_id, window)
 
             started = time.perf_counter()
@@ -544,6 +556,7 @@ def answer_stream(
                 temperature=None,
                 prompt_token_count=final.get("prompt_eval_count"),
                 prompt_chars=prompt_chars,
+                prompt_sha256=prompt_sha256,
                 completion_token_count=final.get("eval_count") or (len(pieces) or None),
                 time_to_first_token_ms=ttft_ms,
                 total_inference_ms=total_ms,
@@ -671,6 +684,8 @@ def answer_stream(
             audit_store.log_error("orchestrator", exc, query_id=query_id)
         finally:
             ACTIVE_GENERATIONS.pop(session_id, None)
+            # An open Ariadne's Thread window lists the new turn without a refresh.
+            live_events.publish("trace", query_id=query_id)
             # Always last, and always exactly once: this is what ends the stream.
             events.put(None)
 

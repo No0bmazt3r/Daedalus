@@ -21,6 +21,7 @@ owns. `query_id` links the two.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import sqlite3
 import threading
@@ -43,6 +44,41 @@ LOG_TABLES = (
     "feedback_logs",
     "memory_logs",
 )
+
+# ── incognito ────────────────────────────────────────────────────────────────
+#
+# An incognito chat promises its text is not kept. The audit rows of its turns
+# are still written — the counts, timings and verdicts are evidence the
+# evaluation needs, and they reveal nothing said — but every field that would
+# hold what was asked or answered is replaced by `REDACTED`. Set per turn with
+# `redact_this_context()`: the chat worker runs in its own context, so the flag
+# reaches every row that turn writes (tools and retrieval run on the same
+# thread) and nothing else.
+REDACTED = "[not recorded: incognito]"
+_TEXT_FIELDS = frozenset({
+    "user_query", "response_text", "model_response_text", "standalone_query",
+    "query_text", "tool_input_json", "tool_output_summary",
+})
+# Parts of the validator's verdict that quote the answer.
+_VALIDATION_TEXT = ("control_claim", "uncited_causes")
+_redact: contextvars.ContextVar[bool] = contextvars.ContextVar("audit_redact", default=False)
+
+
+def redact_this_context() -> None:
+    """From here on, rows written in this context keep no question or answer text."""
+    _redact.set(True)
+
+
+def _redacted(fields: dict[str, Any]) -> dict[str, Any]:
+    out = {k: (REDACTED if k in _TEXT_FIELDS and v is not None else v) for k, v in fields.items()}
+    validation = out.get("validation_json")
+    if isinstance(validation, dict):
+        out["validation_json"] = {
+            k: (None if k == "control_claim" else []) if k in _VALIDATION_TEXT and v else v
+            for k, v in validation.items()
+        }
+    return out
+
 
 _init_lock = threading.Lock()
 _initialised = False
@@ -79,6 +115,8 @@ def log(table: str, **fields: Any) -> None:
     if table not in LOG_TABLES:
         raise ValueError(f"unknown log table '{table}'")
     fields.setdefault("timestamp", _now())
+    if _redact.get():
+        fields = _redacted(fields)
     # Dicts/lists are stored as JSON text so callers can pass structures.
     payload = {
         k: (json.dumps(v, separators=(",", ":")) if isinstance(v, (dict, list)) else v)
@@ -184,20 +222,21 @@ def trace(query_id: str) -> dict[str, list[dict[str, Any]]]:
 
 def recent_queries(
     *,
-    limit: int = 50,
-    offset: int = 0,
     session_id: str | None = None,
     intent: str | None = None,
-    grounded: str | None = None,
+    model: str | None = None,
+    track: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
     search: str | None = None,
-) -> tuple[list[dict[str, Any]], int]:
-    """Chat turns, newest first, with how many tools, retrievals and errors each had.
+) -> list[dict[str, Any]]:
+    """Every chat turn the filters match, newest first, with its tool, retrieval and error counts.
 
     One row per `query_id` — the latest `conversation_logs` row for it, which is
-    the one that records how the turn ended. `grounded` filters on that row:
-    `yes`, `no` (checked and not grounded), or `unchecked` (no model ran, or it
-    failed before there was an answer to check). Returns the page and the total
-    the filters match.
+    the one that records how the turn ended. Unpaged: how a turn is *classified*
+    (grounded or not) depends on Settings → Ariadne's Thread, so the caller
+    classifies, filters and pages (`services/thread.py`). `since`/`until` are
+    ISO timestamps, `until` exclusive; `track` is a `rag_logs.track`.
     """
     init_db()
     where = ["c.id IN (SELECT MAX(id) FROM conversation_logs GROUP BY query_id)"]
@@ -208,35 +247,94 @@ def recent_queries(
     if intent:
         where.append("c.intent = ?")
         params.append(intent)
-    if grounded == "yes":
-        where.append("c.grounded_flag = 1")
-    elif grounded == "no":
-        where.append("c.grounded_flag = 0")
-    elif grounded == "unchecked":
-        where.append("c.grounded_flag IS NULL")
+    if model:
+        where.append("c.model_used = ?")
+        params.append(model)
+    if track:
+        where.append("EXISTS (SELECT 1 FROM rag_logs r WHERE r.query_id = c.query_id AND r.track = ?)")
+        params.append(track)
+    if since:
+        where.append("c.timestamp >= ?")
+        params.append(since)
+    if until:
+        where.append("c.timestamp < ?")
+        params.append(until)
     if search:
         where.append("(c.user_query LIKE ? ESCAPE '\\' OR c.query_id LIKE ? ESCAPE '\\')")
         like = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         params += [like, like]
     clause = " AND ".join(where)
     with sqlite_util.connect(AUDIT_DB) as conn:
-        total = conn.execute(
-            f"SELECT COUNT(*) AS n FROM conversation_logs c WHERE {clause}", params
-        ).fetchone()["n"]
         rows = conn.execute(
             f"""
             SELECT c.*,
                    (SELECT COUNT(*) FROM tool_logs t WHERE t.query_id = c.query_id) AS tool_count,
+                   (SELECT COUNT(*) FROM tool_logs t
+                     WHERE t.query_id = c.query_id AND t.status = 'ok') AS ok_tool_count,
                    (SELECT COUNT(*) FROM rag_logs r WHERE r.query_id = c.query_id) AS retrieval_count,
-                   (SELECT COUNT(*) FROM error_logs e WHERE e.query_id = c.query_id) AS error_count
+                   (SELECT COUNT(*) FROM error_logs e WHERE e.query_id = c.query_id) AS error_count,
+                   (SELECT GROUP_CONCAT(DISTINCT r.track) FROM rag_logs r
+                     WHERE r.query_id = c.query_id) AS tracks
               FROM conversation_logs c
              WHERE {clause}
              ORDER BY c.timestamp DESC, c.id DESC
-             LIMIT ? OFFSET ?
             """,
-            [*params, limit, offset],
+            params,
         ).fetchall()
-    return [dict(r) for r in rows], total
+    return [dict(r) for r in rows]
+
+
+# ── human labels ─────────────────────────────────────────────────────────────
+#
+# The validator's verdict is a detector; whether an answer actually
+# hallucinated is a person's call (MODULES.md §1.4), and the evaluation needs
+# that call as ground truth. Stored in `feedback_logs` — the table for human
+# judgement — with `evaluator_role = 'label'`: `correctness_score` 1 for a
+# correct answer, 0 for a hallucinated one, NULL for a withdrawn label, and the
+# note in `comment`. Appended, never updated, like the ratings: the newest wins.
+LABEL_ROLE = "label"
+
+
+def add_label(query_id: str, hallucinated: bool | None, note: str | None, session_id: str | None) -> None:
+    log(
+        "feedback_logs",
+        query_id=query_id,
+        evaluator_role=LABEL_ROLE,
+        correctness_score=None if hallucinated is None else (0 if hallucinated else 1),
+        comment=(note or "").strip() or None,
+        session_id=session_id,
+    )
+
+
+def latest_labels(query_ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+    """The newest label per answer, `{query_id: {hallucinated, note, timestamp}}`.
+
+    Withdrawn labels are left out. `None` reads every label.
+    """
+    init_db()
+    sql = """
+        SELECT f.query_id, f.correctness_score, f.comment, f.timestamp
+          FROM feedback_logs f
+         WHERE f.evaluator_role = ?
+           AND f.id = (SELECT MAX(id) FROM feedback_logs g
+                        WHERE g.query_id = f.query_id AND g.evaluator_role = ?)
+    """
+    params: list[Any] = [LABEL_ROLE, LABEL_ROLE]
+    if query_ids is not None:
+        if not query_ids:
+            return {}
+        sql += f" AND f.query_id IN ({','.join('?' for _ in query_ids)})"
+        params += query_ids
+    with sqlite_util.connect(AUDIT_DB) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return {
+        r["query_id"]: {
+            "hallucinated": r["correctness_score"] == 0,
+            "note": r["comment"],
+            "timestamp": r["timestamp"],
+        }
+        for r in rows if r["correctness_score"] is not None
+    }
 
 
 def stats() -> dict[str, int]:

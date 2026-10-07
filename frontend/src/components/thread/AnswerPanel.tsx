@@ -77,7 +77,7 @@ export function AnswerPanel({
       </header>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden no-scrollbar p-3">
         {tab === 'thread' && queryId ? (
-          <TraceView key={queryId} queryId={queryId} compact />
+          <TraceView key={queryId} queryId={queryId} compact onDismiss={onClose} />
         ) : tab === 'evidence' && evidence ? (
           <EvidenceList text={text} evidence={evidence} />
         ) : (

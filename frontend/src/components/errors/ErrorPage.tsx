@@ -25,6 +25,16 @@ export function statusOf(error: unknown): number | null {
   return typeof status === 'number' ? status : null
 }
 
+/** A failed load, as `TabError` shows it: the status (500 when there is none) and the message. */
+export type LoadFailure = { status: number; message: string }
+
+export function toFailure(error: unknown): LoadFailure {
+  return {
+    status: statusOf(error) ?? 500,
+    message: error instanceof Error ? error.message : String(error ?? 'request failed'),
+  }
+}
+
 export function ErrorPage({ code, detail, preview = false }: {
   code: number
   detail?: string
@@ -41,9 +51,10 @@ export function ErrorPage({ code, detail, preview = false }: {
 
   // Portalled to <body>: the whole window, sidebar included, and clear of the
   // layout's attention dimming. Under the floating windows (z-100), so anything
-  // open there still works.
+  // open there still works. One part failing is `TabError`, not this.
   return createPortal(
     <div
+      role="alert"
       className="fixed inset-0 z-[95] overflow-y-auto theme-bg theme-text"
       style={{
         // A faint block grid, so the page reads as built from blocks.

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   AlertTriangle, ChevronDown, Download, Loader2, RefreshCw,
   CircleCheck, CircleAlert, CircleSlash, Cloud, HelpCircle, X, Search, Cpu, ExternalLink,
@@ -647,7 +649,7 @@ type Scope = 'shortlist' | 'all' | 'huggingface'
 export function ModelsView({ onManage }: { onManage?: () => void }) {
   const [table, setTable] = useState<ModelTable | null>(null)
   const [usage, setUsage] = useState<Record<string, ModelUsage>>({})
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [progress, setProgress] = useState<PullProgress | null>(null)
   const [cancelPull, setCancelPull] = useState<(() => void) | null>(null)
@@ -679,7 +681,7 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
       setTable(t.value)
       setError(null)
     } else {
-      setError(t.reason instanceof Error ? t.reason.message : 'request failed')
+      setError(toFailure(t.reason))
     }
   }), [])
 
@@ -820,13 +822,12 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
 
   if (error) {
     return (
-      <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
-        <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
-        <div>
-          <div className="font-medium">Couldn't load the model table</div>
-          <div className="theme-text-muted text-xs mt-1">{error}</div>
-        </div>
-      </div>
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The model table could not be loaded from the backend."
+        onRetry={() => void load()}
+      />
     )
   }
 

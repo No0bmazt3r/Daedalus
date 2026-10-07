@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, X, CornerDownRight, AlertCircle, Sparkles, Play, SkipBack } from 'lucide-react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
+import { Check, X, CornerDownRight, Sparkles, Play, SkipBack } from 'lucide-react'
 import {
   fetchTraversal, seedTraversals,
   type Traversal, type Unavailable as UnavailableShape, type Hop,
@@ -97,7 +99,7 @@ function HopRow({ hop, nodes }: { hop: Hop; nodes: Traversal['nodes'] }) {
 
 export function TraversalView({ queryId }: { queryId: string | null }) {
   const [data, setData] = useState<Traversal | UnavailableShape | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const [seeding, setSeeding] = useState(false)
   /** 0 = entry only; n = through hop n. Reset whenever the trace changes. */
   const [step, setStep] = useState(0)
@@ -113,7 +115,7 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
 
   const load = useCallback(() => {
     if (!queryId) return
-    fetchTraversal(queryId).then(setData).catch((e: Error) => setError(e.message))
+    fetchTraversal(queryId).then((d) => { setData(d); setError(null) }).catch((e: unknown) => setError(toFailure(e)))
   }, [queryId])
 
   useEffect(load, [load])
@@ -126,7 +128,7 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
       setStep(0)
       load()
     } catch (e) {
-      setError((e as Error).message)
+      setError(toFailure(e))
     } finally {
       setSeeding(false)
     }
@@ -192,9 +194,12 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">
-        <AlertCircle size={14} className="shrink-0 text-rose-400" /> {error}
-      </div>
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="This graph walk could not be read from the audit log."
+        onRetry={() => { setError(null); load() }}
+      />
     )
   }
   if (!data) return <Skeleton className="h-64 w-full" />

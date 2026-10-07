@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Upload, FileText, Trash2, Play, RotateCcw, AlertCircle, AlertTriangle, Check,
@@ -346,7 +348,11 @@ function ChunkStep({
   // was a setState inside an effect, i.e. a render published purely to be
   // corrected on the next one.
   const [preview, setPreview] = useState<{ subject: string; data: ChunkPreview } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // The preview cannot be produced: the preview area is the error page.
+  const [error, setError] = useState<LoadFailure | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  // Saving the settings failed: a line by the button, not an error page.
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const dirty =
@@ -361,10 +367,10 @@ function ChunkStep({
     const timer = window.setTimeout(() => {
       previewChunks(subject, draft)
         .then((p) => { setPreview({ subject, data: p }); setError(null) })
-        .catch((e: Error) => setError(e.message))
+        .catch((e: unknown) => setError(toFailure(e)))
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [subject, draft])
+  }, [subject, draft, attempt])
 
   const shown = preview?.subject === subject ? preview.data : null
 
@@ -372,10 +378,10 @@ function ChunkStep({
     setSaving(true)
     try {
       await saveCorpusConfig(draft)
-      setError(null)
+      setSaveError(null)
       onSaved()
     } catch (e) {
-      setError((e as Error).message)
+      setSaveError((e as Error).message)
     } finally {
       setSaving(false)
     }
@@ -440,6 +446,7 @@ function ChunkStep({
           >
             {saving ? 'Saving…' : dirty ? 'Save these settings' : 'Saved'}
           </button>
+          {saveError && <p className="text-[10px] leading-relaxed status-bad">Could not save: {saveError}</p>}
           <p className="text-[10px] leading-relaxed theme-text-muted">
             Saving does not re-chunk. Anything already ingested keeps the boundaries it was
             ingested with. Running step 4 is what applies the change.
@@ -458,12 +465,15 @@ function ChunkStep({
           )}
 
           {error && (
-            <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-rose-400">
-              <AlertCircle size={11} className="mt-0.5 shrink-0" /> {error}
-            </p>
+            <TabError
+              code={error.status}
+              detail={error.message}
+              what="The chunk preview for this document could not be produced."
+              onRetry={() => { setError(null); setAttempt((n) => n + 1) }}
+            />
           )}
 
-          {shown && (
+          {shown && !error && (
             <>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[10px] theme-text-muted">
                 <span className="text-xs tabular-nums theme-text">{shown.total_chunks} chunks</span>
@@ -518,19 +528,26 @@ function ChunkStep({
  */
 function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
   const [config, setConfig] = useState<EmbeddingConfig | null>(null)
+  // `loadError`: this step cannot be shown at all. `error`: choosing a model failed.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    fetchEmbeddingConfig().then(setConfig).catch((e: Error) => setError(e.message))
+    fetchEmbeddingConfig()
+      .then((c) => { setConfig(c); setLoadError(null) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
   useEffect(() => { load() }, [load])
   useLiveRefresh(['models', 'embeddings'], load)
 
-  if (error && !config) {
+  if (loadError && !config) {
     return (
-      <p className="flex items-start gap-1.5 text-[11px] text-rose-400">
-        <AlertCircle size={12} className="mt-0.5 shrink-0" /> {error}
-      </p>
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The embedding model settings could not be read from the backend."
+        onRetry={load}
+      />
     )
   }
   if (!config) return <Skeleton className="h-48 w-full" />
@@ -874,10 +891,13 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [activeRun, setActiveRun] = useState<IngestRun | null>(null)
 
+  // The pipeline's state cannot be read: the tab is the error page, not a
+  // skeleton that never resolves. `error` is a failed action.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const refresh = useCallback(() => {
-    void fetchCorpusStatus().then(setStatus).catch(() => setStatus(null))
-    void fetchCorpusDocuments().then((r) => setDocuments(r.documents)).catch(() => setDocuments([]))
-    void fetchCorpusConfig().then(setConfig).catch(() => setConfig(null))
+    void Promise.all([fetchCorpusStatus(), fetchCorpusDocuments(), fetchCorpusConfig()])
+      .then(([st, docs, cfg]) => { setStatus(st); setDocuments(docs.documents); setConfig(cfg); setLoadError(null) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
@@ -910,6 +930,16 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
     [refresh],
   )
 
+  if (loadError && (!status || !config)) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The ingestion pipeline's state could not be read from the backend."
+        onRetry={refresh}
+      />
+    )
+  }
   if (!status || !config) return <Skeleton className="h-96 w-full" />
 
   const readable = documents.filter((d) => d.extract_status === 'ok').length

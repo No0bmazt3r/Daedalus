@@ -17,6 +17,16 @@ export interface TraceChat {
   incognito: boolean;
 }
 
+/** The three buckets the list files every turn into (Settings → Ariadne's Thread). */
+export type TraceBucket = 'grounded' | 'ungrounded' | 'unchecked';
+
+/** A person's verdict on an answer — the evaluation's ground truth. */
+export interface TraceLabel {
+  hallucinated: boolean;
+  note: string | null;
+  timestamp: string;
+}
+
 export interface TraceSummary {
   query_id: string;
   timestamp: string;
@@ -26,16 +36,42 @@ export interface TraceSummary {
   intent: string | null;
   model: string | null;
   status: TraceStatus;
+  /** Where Settings files this status. */
+  bucket: TraceBucket;
+  /** What the validator recorded, whatever the settings say. */
   grounded: boolean | null;
   latency_ms: number | null;
   tool_count: number;
   retrieval_count: number;
   error_count: number;
+  tracks: string[];
+  label: TraceLabel | null;
+}
+
+/** Figures over every turn the filters match, not just the page. */
+export interface TraceStats {
+  total: number;
+  by_status: Partial<Record<TraceStatus, number>>;
+  by_bucket: Partial<Record<TraceBucket, number>>;
+  latency_p50_ms: number | null;
+  latency_p95_ms: number | null;
+  labelled: number;
+  hallucinated: number;
+}
+
+export interface TracePage {
+  items: TraceSummary[];
+  total: number;
+  stats: TraceStats;
+  /** The buckets' names, as Settings has them. */
+  labels: Record<TraceBucket, string>;
+  /** Which bucket each status is filed in, as Settings has it. */
+  buckets: Record<TraceStatus, TraceBucket>;
 }
 
 export type StepKind =
   | 'query' | 'understanding' | 'tool' | 'retrieval' | 'evidence'
-  | 'context' | 'model' | 'validation' | 'answer' | 'error' | 'feedback';
+  | 'context' | 'model' | 'validation' | 'answer' | 'error' | 'feedback' | 'label';
 
 export interface TraceStep {
   kind: StepKind;
@@ -45,6 +81,8 @@ export interface TraceStep {
   ms: number | null;
   status: string;
   detail: Record<string, unknown>;
+  /** The audit table this step's row is in, or null (the evidence lives with the chat). */
+  table: string | null;
 }
 
 export interface Trace {
@@ -83,6 +121,8 @@ export interface Groundedness {
   counts: Partial<Record<NumberVerdict, number>>;
   citations: { label: string; line: string | null }[];
   evidence_available: boolean;
+  /** An incognito turn: no text was kept, so nothing is marked. */
+  redacted: boolean;
 }
 
 export interface TraceFilters {
@@ -90,11 +130,18 @@ export interface TraceFilters {
   offset?: number;
   session_id?: string;
   intent?: string;
-  grounded?: 'yes' | 'no' | 'unchecked';
+  model?: string;
+  track?: 'vector' | 'graph';
+  /** ISO timestamp, inclusive. */
+  since?: string;
+  /** ISO timestamp, exclusive. */
+  until?: string;
+  bucket?: TraceBucket;
+  labelled?: 'yes' | 'no';
   q?: string;
 }
 
-export function fetchTraces(filters: TraceFilters = {}): Promise<{ items: TraceSummary[]; total: number }> {
+export function fetchTraces(filters: TraceFilters = {}): Promise<TracePage> {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value !== undefined && value !== '') params.set(key, String(value));
@@ -111,12 +158,52 @@ export function fetchGroundedness(queryId: string): Promise<Groundedness> {
   return request(`/api/trace/${encodeURIComponent(queryId)}/groundedness`);
 }
 
+/** Label an answer; `hallucinated: null` withdraws the label. Returns the label in force. */
+export async function saveLabel(queryId: string, hallucinated: boolean | null, note: string | null): Promise<TraceLabel | null> {
+  const body = await request<{ label: TraceLabel | null }>(`/api/trace/${encodeURIComponent(queryId)}/label`, {
+    method: 'PUT',
+    body: JSON.stringify({ hallucinated, note }),
+  });
+  return body.label;
+}
+
+/** Settings → Ariadne's Thread. Relabels the view only; never the record. */
+export interface ThreadSettings {
+  require_citation: boolean;
+  require_evidence: boolean;
+  buckets: Record<TraceStatus, TraceBucket>;
+  labels: Record<TraceBucket, string>;
+}
+
+export interface ThreadSettingsPatch {
+  require_citation?: boolean | null;
+  require_evidence?: boolean | null;
+  buckets?: Partial<Record<TraceStatus, TraceBucket>> | null;
+  labels?: Partial<Record<TraceBucket, string | null>> | null;
+  reset?: true;
+}
+
+export function fetchThreadSettings(): Promise<{ settings: ThreadSettings; defaults: ThreadSettings }> {
+  return request('/api/trace/settings');
+}
+
+export function saveThreadSettings(patch: ThreadSettingsPatch): Promise<{ settings: ThreadSettings; defaults: ThreadSettings }> {
+  return request('/api/trace/settings', { method: 'PUT', body: JSON.stringify(patch) });
+}
+
 /**
  * Ask the shell to open the Thread on one answer. An event rather than a prop
  * because the chat sits under the router's `Outlet`, which the shell does not
  * pass callbacks through — the same reason `focusComposer` is an event.
  */
 export const OPEN_THREAD_EVENT = 'daedalus:open-thread';
+
+/** Ask the shell to open Data stores on one table — a trace step's raw rows. */
+export const OPEN_STORE_EVENT = 'daedalus:open-store';
+
+export function openStore(store: string, table: string) {
+  window.dispatchEvent(new CustomEvent(OPEN_STORE_EVENT, { detail: { store, table } }));
+}
 
 export function openThread(queryId?: string) {
   window.dispatchEvent(new CustomEvent(OPEN_THREAD_EVENT, { detail: { queryId } }));

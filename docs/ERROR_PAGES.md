@@ -29,6 +29,28 @@ is down (it lifts on its own), 500 or the error's own code when a page crashes,
 and any page at `/error/<code>`. Everyday failures (a 409 on one save) stay as
 an inline message where you did the action.
 
+**When one part fails, that part becomes the error page: `TabError`.** A tab,
+window or panel that cannot load — a Forge pane, a Blueprints tab, a Settings
+panel, Data stores, Ariadne's Thread — is replaced by the same error page,
+sized to fill it: the code's picture and animation, title, myth and block lines,
+*what happened* / *what to try*, the error's own message, and **Try again**
+(not on a 404). Side by side when the space is wide, stacked when it is narrow.
+The rest of the app keeps working. The full-screen `ErrorPage` is only for the
+app itself failing (an unknown address, the backend down).
+
+```tsx
+const [loadError, setLoadError] = useState<LoadFailure | null>(null)
+// …fetch().catch((e) => setLoadError(toFailure(e)))
+if (loadError) return <TabError code={loadError.status} detail={loadError.message}
+                                what="The model table could not be loaded." onRetry={load} />
+if (!data) return <Skeleton />   // the error check comes first, or a failure loads forever
+```
+
+There is no small error box for a load failure, and no silent fallback — an
+empty list or a skeleton that never resolves would hide the failure, and an
+empty list also claims something false ("nothing recorded"). A failed *action*
+(a save, a pull, a 422 on an input) stays a short line next to the control.
+
 ## Tweaking an animation
 
 Each code's animation is the `css` field at the bottom of its file. For example,

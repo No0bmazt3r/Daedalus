@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   AlertTriangle, Download, Loader2, RefreshCw, Terminal, Trash2, Upload,
 } from 'lucide-react'
@@ -78,7 +80,7 @@ function LogsCard({ card }: { card: string }) {
   const [limit, setLimit] = useState(200)
   const [refreshing, setRefreshing] = useState(false)
   const [auto, setAuto] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
 
   // Loading while the log on screen is not the one these filters ask for —
@@ -106,7 +108,7 @@ function LogsCard({ card }: { card: string }) {
           })
         }
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'could not read the log'))
+      .catch((e: unknown) => setError(toFailure(e)))
       .finally(() => setLoaded(wanted))
   }, [level, limit, query, wanted])
 
@@ -172,6 +174,15 @@ function LogsCard({ card }: { card: string }) {
         </label>
       </div>
 
+      {/* The log cannot be read: the console's place is the error page. */}
+      {error ? (
+        <TabError
+          code={error.status}
+          detail={error.message}
+          what="The process log could not be read from the backend."
+          onRetry={() => void load()}
+        />
+      ) : (
       <div
         ref={consoleRef}
         className="h-72 overflow-auto rounded-lg border border-black/40 p-2.5 text-[11px] leading-[1.55]"
@@ -185,9 +196,7 @@ function LogsCard({ card }: { card: string }) {
           tabSize: 4,
         }}
       >
-        {error ? (
-          <p style={{ color: LEVEL_COLOUR.ERROR }}>{error}</p>
-        ) : !tail || tail.lines.length === 0 ? (
+        {!tail || tail.lines.length === 0 ? (
           <p style={{ color: '#6b7a90' }}>
             {tail && !tail.exists
               ? 'No log file yet. It shows up once the backend writes something.'
@@ -216,7 +225,8 @@ function LogsCard({ card }: { card: string }) {
           ))
         )}
       </div>
-      {tail && (
+      )}
+      {tail && !error && (
         <p className="text-[10px] theme-text-muted mt-1.5">
           {tail.returned} lines · <code>{tail.path}</code>
         </p>
@@ -324,9 +334,14 @@ function DangerCard({ card }: { card: string }) {
   const [pending, setPending] = useState<WipeCategory | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
-  useEffect(() => {
-    fetchWipeCategories().then((d) => setCategories(d.categories)).catch(() => setCategories([]))
+  // Not an empty list on failure: that would look like there is nothing to wipe.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
+  const loadCategories = useCallback(() => {
+    fetchWipeCategories()
+      .then((d) => { setCategories(d.categories); setLoadError(null) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
+  useEffect(loadCategories, [loadCategories])
 
   const run = useCallback(async (kind: string) => {
     setBusy(kind)
@@ -394,6 +409,14 @@ function DangerCard({ card }: { card: string }) {
         <code>./reset.sh</code>, which snapshots first.
       </p>
 
+      {loadError && (
+        <TabError
+          code={loadError.status}
+          detail={loadError.message}
+          what="The list of things that can be wiped could not be read from the backend."
+          onRetry={loadCategories}
+        />
+      )}
       <div>
         {categories.map(row)}
         {categories.length > 0 && row({

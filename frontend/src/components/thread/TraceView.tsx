@@ -1,11 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlertTriangle, ArrowUpRight, ChevronRight, MessageSquare } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, ChevronRight, Download, EyeOff, MessageSquare, Table2, Tag } from 'lucide-react'
+import { traceMarkdown } from '../../lib/threadLogic'
 import {
-  fetchGroundedness, fetchTrace,
+  fetchGroundedness, fetchTrace, openStore, saveLabel, type TraceLabel,
   type Groundedness, type NumberMark, type Trace, type TraceStep, type TraceSummary,
 } from '../../lib/threadClient'
 import { Skeleton } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
+import { statusOf } from '../errors/ErrorPage'
+import { TabError } from '../errors/TabError'
 import { withEvidenceHighlights } from '../Citations'
 import { STATUS, VERDICT, chatLabel, formatMs } from './status'
 import { useSessions } from '../../contexts/SessionsContext'
@@ -33,7 +36,7 @@ import { StatusIcon } from './StatusIcon'
 const KIND_LABEL: Record<TraceStep['kind'], string> = {
   query: 'QUERY', understanding: 'INTENT', tool: 'TOOL', retrieval: 'RETRIEVAL',
   evidence: 'EVIDENCE', context: 'CONTEXT', model: 'MODEL', validation: 'CHECK',
-  answer: 'ANSWER', error: 'ERROR', feedback: 'FEEDBACK',
+  answer: 'ANSWER', error: 'ERROR', feedback: 'FEEDBACK', label: 'LABEL',
 }
 
 // Step statuses as logged: `ok`, `error`, `refused` (a tool policy or the
@@ -125,8 +128,18 @@ function StepRow({ step, totalMs }: { step: TraceStep; totalMs: number | null })
         </span>
       </button>
       <Collapse open={open}>
-        <div className="border-t theme-border px-3 py-2.5">
+        <div className="space-y-2 border-t theme-border px-3 py-2.5">
           <Details step={step} />
+          {/* Not a row viewer: the Thread's job is the join (§0.2). This only
+              opens the table the row came from, newest first, in Data stores. */}
+          {step.table && (
+            <button
+              onClick={() => openStore('audit', step.table!)}
+              className="flex items-center gap-1 text-[10px] theme-text-muted hover:theme-text"
+            >
+              <Table2 size={10} /> Open <code>{step.table}</code> in Data stores
+            </button>
+          )}
         </div>
       </Collapse>
     </li>
@@ -204,6 +217,14 @@ function GroundednessPanel({ check }: { check: Groundedness }) {
         {!check.numbers.length && <span className="text-[10px] theme-text-muted">No numbers in this answer.</span>}
       </header>
 
+      {check.redacted && (
+        <p className="flex items-start gap-1.5 rounded-md theme-surface p-2 text-[11px] leading-relaxed theme-text-muted">
+          <EyeOff size={12} className="mt-0.5 shrink-0" />
+          Asked in an incognito chat, so the question and answer were not recorded. The verdict and the
+          timings were, because they say nothing about what was asked.
+        </p>
+      )}
+
       {check.replaced && (
         <p className="flex items-start gap-1.5 rounded-md status-bad-bg p-2 text-[11px] leading-relaxed theme-text">
           <AlertTriangle size={12} className="mt-0.5 shrink-0 status-bad" />
@@ -267,28 +288,130 @@ function ChatLine({ chat }: { chat: TraceSummary['chat'] }) {
   )
 }
 
-export function TraceView({ queryId, compact = false }: {
+/**
+ * A person's verdict on the answer — the ground truth the evaluation needs
+ * (MODULES.md §1.4: the validator is a detector, `hallucination_flag` is a
+ * person's call). Stored as a new `feedback_logs` row each time; the newest wins.
+ */
+function LabelPanel({ queryId, initial }: { queryId: string; initial: TraceLabel | null }) {
+  const [label, setLabel] = useState(initial)
+  const [note, setNote] = useState(initial?.note ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = (hallucinated: boolean | null) => {
+    setSaving(true)
+    setError(null)
+    void saveLabel(queryId, hallucinated, hallucinated === null ? null : note.trim() || null)
+      .then((l) => { setLabel(l); if (!l) setNote('') })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setSaving(false))
+  }
+
+  const choice = label ? (label.hallucinated ? 'bad' : 'ok') : null
+  const optionClass = (on: boolean, tone: string) =>
+    `flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-colors disabled:opacity-50 ${
+      on ? `${tone} theme-surface-strong theme-accent-border` : 'theme-border theme-text-muted hover:theme-text'
+    }`
+
+  return (
+    <section className="space-y-2 rounded-lg border theme-border theme-card p-3">
+      <header className="flex items-center gap-2">
+        <Tag size={12} className="theme-accent" />
+        <h3 className="text-xs font-medium theme-text">Your label</h3>
+        <span className="text-[10px] theme-text-muted">
+          {label ? `saved ${new Date(label.timestamp).toLocaleString()}` : 'not labelled yet'}
+        </span>
+      </header>
+      <p className="text-[10px] leading-relaxed theme-text-muted">
+        Did this answer state anything the evidence does not support? This is the evaluation's ground
+        truth; the colours above are only the detector's guess.
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button disabled={saving} onClick={() => save(false)} className={optionClass(choice === 'ok', 'status-ok')}>
+          Correct
+        </button>
+        <button disabled={saving} onClick={() => save(true)} className={optionClass(choice === 'bad', 'status-bad')}>
+          Hallucinated
+        </button>
+        {label && (
+          <button disabled={saving} onClick={() => save(null)} className="ml-auto text-[10px] theme-text-muted hover:theme-text">
+            Clear label
+          </button>
+        )}
+      </div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        maxLength={2000}
+        rows={2}
+        placeholder="Note (optional): what was wrong, or why it is right"
+        className="w-full resize-y rounded-md border theme-border bg-transparent px-2 py-1.5 text-[11px] theme-text outline-none placeholder:opacity-50 focus:ring-1 focus:ring-[var(--primary)]"
+      />
+      {label && note.trim() !== (label.note ?? '') && (
+        <button
+          disabled={saving}
+          onClick={() => save(label.hallucinated)}
+          className="text-[10px] theme-accent hover:underline disabled:opacity-50"
+        >
+          Save the note with this label
+        </button>
+      )}
+      {error && <p className="text-[11px] status-bad">Could not save: {error}</p>}
+    </section>
+  )
+}
+
+/** Save `text` as a file named `name` — the export buttons. */
+function download(name: string, text: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }))
+  const a = Object.assign(document.createElement('a'), { href: url, download: name })
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function TraceView({ queryId, compact = false, onDismiss }: {
   queryId: string
   /** Under a chat answer: the question and status are already on screen. */
   compact?: boolean
+  /** Close whatever shows this trace — offered on the error page. */
+  onDismiss?: () => void
 }) {
   // Tagged with the id it belongs to, so a slow response for the previous
   // selection can never render against the current one.
   const [state, setState] = useState<{
-    queryId: string; trace: Trace | null; check: Groundedness | null; error: string | null
+    queryId: string; trace: Trace | null; check: Groundedness | null
+    error: { message: string; status: number } | null
   } | null>(null)
+  // Bumped by Retry, to fetch the same id again.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let live = true
     void Promise.all([fetchTrace(queryId), fetchGroundedness(queryId)])
       .then(([trace, check]) => { if (live) setState({ queryId, trace, check, error: null }) })
-      .catch((e: Error) => { if (live) setState({ queryId, trace: null, check: null, error: e.message }) })
+      .catch((e: Error) => {
+        if (live) setState({ queryId, trace: null, check: null, error: { message: e.message, status: statusOf(e) ?? 500 } })
+      })
     return () => { live = false }
-  }, [queryId])
+  }, [queryId, attempt])
 
   const shown = state?.queryId === queryId ? state : null
+  // A trace that cannot be read turns its pane into the error page.
   if (shown?.error) {
-    return <p className="rounded-lg border theme-border p-3 text-xs status-bad">Could not load this trace: {shown.error}</p>
+    const { status, message } = shown.error
+    return (
+      <TabError
+        code={status}
+        detail={message}
+        // A 404 here is not a missing page: the audit log has no record of this answer.
+        what={status === 404 ? 'The audit log has no record of this answer.' : 'This trace could not be read from the audit log.'}
+        fix={status === 404 ? 'It may come from another database, or from before logging began.' : undefined}
+        onRetry={() => { setState(null); setAttempt((n) => n + 1) }}
+        onClose={onDismiss}
+        closeLabel="Close this trace"
+      />
+    )
   }
   if (!shown?.trace || !shown.check) return <Skeleton className="h-72 w-full" />
   const { trace, check } = shown
@@ -309,6 +432,23 @@ export function TraceView({ queryId, compact = false }: {
             {s.model && <code>{s.model}</code>}
             {s.intent && <span>{s.intent}</span>}
             <code className="select-all">{trace.query_id}</code>
+            {/* For a report appendix, or an examiner: the thread as it is on screen. */}
+            <span className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => download(`${trace.query_id}.md`, traceMarkdown(trace, check), 'text/markdown')}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 hover:theme-text hover:theme-surface"
+                title="Download this thread as Markdown"
+              >
+                <Download size={11} /> Markdown
+              </button>
+              <button
+                onClick={() => download(`${trace.query_id}.json`, JSON.stringify({ trace, groundedness: check }, null, 2), 'application/json')}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 hover:theme-text hover:theme-surface"
+                title="Download this thread as JSON"
+              >
+                <Download size={11} /> JSON
+              </button>
+            </span>
           </div>
         </section>
       )}
@@ -320,6 +460,7 @@ export function TraceView({ queryId, compact = false }: {
       </ol>
 
       <GroundednessPanel check={check} />
+      {s && <LabelPanel key={trace.query_id} queryId={trace.query_id} initial={s.label} />}
     </div>
   )
 }

@@ -201,7 +201,7 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 |---|---|
 | **Blocked by** | ~~M5 (orchestrator writing rows)~~ — **unblocked**: the chat path writes the trace. Only the viewer itself remains |
 | **Unblocks** | §9.2 hallucination-rate metric; the "glass box" demo; Method A evaluation (§9.3) |
-| **Risk** | Ephemeral/incognito sessions must never appear here. TODO already carries "suppress `user_query`/`response_text` for ephemeral sessions" — the Thread is the surface that makes getting this wrong visible and embarrassing |
+| **Risk** | ~~Ephemeral/incognito sessions must never appear here.~~ **Closed 2026-10-07:** an incognito turn's audit rows keep no text (`audit_store.REDACTED`); the Thread lists it as incognito with nothing to read |
 | **Risk** | A trace can be large (retrieved chunk text especially). Page the steps; truncate cell content as `log_browser.py` already does at 4000 chars |
 
 ### 1.7 As built (2026-10-07)
@@ -210,7 +210,20 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 plus `q` (search the question or id) on the list. Both views of §1.3: the window
 from the sidebar (`Ctrl+Alt+A`, the palette), and the strip under every answer,
 which opens the thread in a panel beside the chat (with the evidence pack on
-a second tab) and links to the window.
+a second tab) and links to the window. The list is grouped by the chat each
+question came from (foldable, filterable to one chat), every trace names its
+chat with a way back to it, and a failed load turns the window (or the trace's
+pane) into the error page for its status (`TabError`). `FEATURES.md` has the details.
+
+Added after the first build, the same day: **human labels** (Correct /
+Hallucinated + note on every trace, stored in `feedback_logs` — this is where
+the ground truth for M8 is entered), incognito redaction, a **summary strip**
+(per-bucket counts, p50/p95, labelled) over every match, **compare** two
+threads side by side, **export** as Markdown or JSON, track/model/label/date
+filters, ↑/↓ navigation, live refresh, links to the raw tables, the prompt's
+SHA-256, and **Settings → Ariadne's Thread**, which decides what grounded
+requires and how the six statuses are filed and named — the view only, never
+the record.
 
 Where it departs from the design above:
 

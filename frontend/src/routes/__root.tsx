@@ -23,7 +23,7 @@ import { TitleTooltips } from '../components/ui/title-tooltips'
 import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
-import { OPEN_THREAD_EVENT } from '../lib/threadClient'
+import { OPEN_STORE_EVENT, OPEN_THREAD_EVENT } from '../lib/threadClient'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -180,7 +180,16 @@ function AppShell() {
   useEffect(() => {
     const onOpen = (e: Event) => openThread((e as CustomEvent<{ queryId?: string }>).detail?.queryId ?? null)
     window.addEventListener(OPEN_THREAD_EVENT, onOpen)
-    return () => window.removeEventListener(OPEN_THREAD_EVENT, onOpen)
+    // A trace step's "open in Data stores" link, from inside the Thread.
+    const onStore = (e: Event) => {
+      const { store, table } = (e as CustomEvent<{ store: string; table: string }>).detail
+      openWindow('stores', () => setStoreTarget({ store, table }))
+    }
+    window.addEventListener(OPEN_STORE_EVENT, onStore)
+    return () => {
+      window.removeEventListener(OPEN_THREAD_EVENT, onOpen)
+      window.removeEventListener(OPEN_STORE_EVENT, onStore)
+    }
   }, [openThread])
 
   const openBlueprints = useCallback((tab: BlueprintsTab | null = null) => {

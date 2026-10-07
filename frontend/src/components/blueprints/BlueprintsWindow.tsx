@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
-  Map, Network, ListChecks, Route, Library, Boxes, RefreshCw, AlertCircle,
+  Map, Network, ListChecks, Route, Library, Boxes, AlertCircle,
   PenLine, Upload,
 } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
@@ -17,7 +19,6 @@ import { CorpusView } from './CorpusView'
 import { IngestView } from './IngestView'
 import { RetrievalView } from './RetrievalView'
 import { AuthoringView } from './AuthoringView'
-import { Unavailable } from './Unavailable'
 
 /**
  * Labyrinth Blueprints — the knowledge map (MODULES.md §3).
@@ -245,14 +246,16 @@ export function BlueprintsWindow({
   onOpenForge?: () => void
 }) {
   const [config, setConfig] = useState<RagConfig | null>(null)
-  const [configError, setConfigError] = useState<string | null>(null)
+  const [configError, setConfigError] = useState<LoadFailure | null>(null)
   const [tab, setTab] = useState<TabId>('graph')
   const [traces, setTraces] = useState<TraversalSummary[]>([])
+  const [tracesError, setTracesError] = useState<LoadFailure | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
 
   const loadTraces = useCallback(() => {
     fetchTraversals()
       .then((r) => {
+        setTracesError(null)
         setTraces(r.traversals)
         setSelected((current) =>
           current && r.traversals.some((t) => t.query_id === current)
@@ -260,7 +263,8 @@ export function BlueprintsWindow({
             : r.traversals.find((t) => t.replayable)?.query_id ?? null,
         )
       })
-      .catch(() => setTraces([]))
+      // Not an empty list: an empty list would claim nothing was recorded.
+      .catch((e: unknown) => setTracesError(toFailure(e)))
   }, [])
 
   const show = useCallback((track: RagTrack) => {
@@ -302,7 +306,7 @@ export function BlueprintsWindow({
         // The previous answer is kept: a failed re-read is not evidence the
         // track changed, and blanking a window that was correct a second ago
         // loses more than the stale badge costs. The strip below says so.
-        setConfigError(e.message || 'the backend is not answering')
+        setConfigError(toFailure(e))
         // The request is *not* honoured here. Which track owns a tab is only
         // half the question; the other half is which track is live, and that is
         // exactly what could not be read. Applying it anyway would show the
@@ -449,48 +453,22 @@ export function BlueprintsWindow({
             key={`${activeTrack ?? 'unknown'}-${tab}`}
             className="mx-auto flex min-h-full w-full flex-col @4xl:max-w-4xl @7xl:max-w-[min(100%,1400px)] animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out"
           >
-            {/* Fallback 2. Shown above whatever is on screen rather than instead
-                of it, so a failed *re-read* does not throw away a working view. */}
-            {configError && (
-              <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2.5">
-                <AlertCircle size={13} className="shrink-0 text-amber-400" />
-                <p className="min-w-0 flex-1 text-[11px] leading-relaxed theme-text">
-                  Couldn't tell which retrieval track is active:{' '}
-                  <span className="theme-text-muted">{configError}</span>
-                  {config && <span className="theme-text-muted"> · showing the last known track</span>}
-                </p>
-                <button
-                  // Wrapped, not passed: `loadConfig` now takes a tab, and
-                  // handing it the click event would ask for a tab named
-                  // `[object MouseEvent]`.
-                  onClick={() => loadConfig()}
-                  className="flex shrink-0 items-center gap-1.5 rounded-md border theme-border px-2 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text"
-                >
-                  <RefreshCw size={11} />
-                  Retry
-                </button>
-              </div>
-            )}
 
             {notReady && <NotReady live={notReady} />}
 
-            {!group ? (
-              // Nothing is known yet. With no error that is the read in flight;
-              // with one it is a dead end, and it stays one. Offering the graph
-              // here would be the strict rule failing open in the only direction
-              // it must not: showing Track 2 *because* the setting that selects a
-              // track could not be read.
-              configError ? (
-                <Unavailable
-                  reason={
-                    "Couldn't tell which retrieval track is active. This window only shows the " +
-                    "active track, so rather than guess, it shows nothing. Try again above, or " +
-                    "check that the backend is running."
-                  }
-                />
-              ) : (
-                <Skeleton className="h-64 w-full" />
-              )
+            {configError ? (
+              // The live track could not be read: the window is the error page.
+              // Showing a track anyway would be the strict rule failing open in
+              // the only direction it must not — Track 2 *because* the setting
+              // that selects a track could not be read.
+              <TabError
+                code={configError.status}
+                detail={configError.message}
+                what="Blueprints couldn't tell which retrieval track is active. It only shows the active track, so rather than guess, it shows nothing."
+                onRetry={() => loadConfig()}
+              />
+            ) : !group ? (
+              <Skeleton className="h-64 w-full" />
             ) : (
               <>
                     {tab === 'corpus' && <CorpusView />}
@@ -500,7 +478,14 @@ export function BlueprintsWindow({
                 {tab === 'graph' && <GraphView />}
                 {tab === 'coverage' && <CoverageView />}
                 {tab === 'replay' && (
-                  traces.length === 0 ? (
+                  tracesError ? (
+                    <TabError
+                      code={tracesError.status}
+                      detail={tracesError.message}
+                      what="The recorded graph walks could not be read from the audit log."
+                      onRetry={loadTraces}
+                    />
+                  ) : traces.length === 0 ? (
                     <TraversalView queryId={null} />
                   ) : (
                     <div className="grid gap-4 @2xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">

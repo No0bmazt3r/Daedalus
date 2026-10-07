@@ -1,4 +1,6 @@
 import { useCallback, useState, useEffect } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { AlertCircle, FileText, Tag, Info } from 'lucide-react'
 import {
   fetchBackgroundJobs,
@@ -53,13 +55,15 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // The jobs cannot be read: the panel is the error page. `error` is a failed save.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const load = useCallback(() => {
     fetchBackgroundJobs()
       .then((s) => {
         setStatus(s)
-        setError(null)
+        setLoadError(null)
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
 
   useEffect(load, [load])
@@ -78,9 +82,17 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
     }
   }
 
-  if (!status) {
-    return error ? <ErrorNote message={error} /> : <Skeleton className="h-64 w-full" />
+  if (loadError) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The background job settings could not be read from the backend."
+        onRetry={load}
+      />
+    )
   }
+  if (!status) return <Skeleton className="h-64 w-full" />
 
   const { config, models, resolved } = status
   const modelOptions = [

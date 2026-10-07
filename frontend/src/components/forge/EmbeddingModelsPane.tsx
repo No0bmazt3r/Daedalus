@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useConfirm } from '../ui/confirm-dialog'
 import {
   Check, AlertTriangle, CloudOff, Cloud, HelpCircle, X, Download, Loader2, Search, Database, Binary,
@@ -294,7 +296,11 @@ export function EmbeddingModelsPane({
   const [typedTag, setTypedTag] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
 
-  const load = () => fetchEmbeddingConfig().then(setConfig).catch((e: Error) => setError(e.message))
+  // `loadError`: the pane cannot be shown at all. `error`: an action failed.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
+  const load = () => fetchEmbeddingConfig()
+    .then((c) => { setConfig(c); setLoadError(null) })
+    .catch((e: unknown) => setLoadError(toFailure(e)))
   useEffect(() => { load() }, [])
   // The Browse and Installed instances of this pane, and Settings → Vector RAG,
   // all show the same selection; a change in one reaches the others.
@@ -405,7 +411,16 @@ export function EmbeddingModelsPane({
       .finally(() => setBenchmarking(null))
   }
 
-  if (!config) return <Skeleton className="h-64 w-full" />
+  if (!config) {
+    return loadError ? (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The embedding models could not be loaded from the backend."
+        onRetry={() => void load()}
+      />
+    ) : <Skeleton className="h-64 w-full" />
+  }
 
   return (
     <div className="space-y-4">

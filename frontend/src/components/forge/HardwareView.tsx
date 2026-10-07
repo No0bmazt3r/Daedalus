@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
-  Cpu, MemoryStick, HardDrive, MonitorCog, Server, RefreshCw, AlertTriangle,
+  Cpu, MemoryStick, HardDrive, MonitorCog, Server, RefreshCw,
 } from 'lucide-react'
 import {
   hardwareProfile, redetectHardware, type HardwareProfile,
@@ -175,7 +177,7 @@ const CLOCK_TICK_MS = 5_000
 
 export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   const [hw, setHw] = useState<HardwareProfile | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   /** True only during an explicit Re-detect — the poll must not spin the icon. */
   const [busy, setBusy] = useState(false)
   /**
@@ -205,7 +207,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       // waiting for rather than a hair before it and missing a whole cycle.
       return Math.max(5, next.refresh.next_refresh_in_seconds + 1) * 1000
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'request failed')
+      setError(toFailure(e))
       return POLL_FALLBACK_MS
     }
   }, [])
@@ -219,7 +221,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
       setAgeSeconds(next.refresh.age_seconds)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'request failed')
+      setError(toFailure(e))
     } finally {
       setBusy(false)
     }
@@ -279,13 +281,12 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   // freshness line instead, next to the age it explains.
   if (error && !hw) {
     return (
-      <div className="flex items-start gap-3 p-4 rounded-xl border status-bad-border status-bad-bg text-sm">
-        <AlertTriangle size={16} className="status-bad shrink-0 mt-0.5" />
-        <div>
-          <div className="font-medium">Couldn't reach the backend</div>
-          <div className="theme-text-muted text-xs mt-1">{error}</div>
-        </div>
-      </div>
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The hardware readout could not be fetched from the backend."
+        onRetry={() => void poll()}
+      />
     )
   }
 
@@ -314,7 +315,7 @@ export function HardwareView({ isPeek = false }: { isPeek?: boolean }) {
   const shownAge = ageSeconds ?? meta.age_seconds
   const live = Math.round(meta.live_interval_seconds)
   const freshness = error
-    ? `Couldn't refresh (${error}). Showing the last reading, from ${ago(shownAge)}`
+    ? `Couldn't refresh (${error.message}). Showing the last reading, from ${ago(shownAge)}`
     : meta.stale
       ? `Cached. Last read ${ago(shownAge)}`
       : meta.background

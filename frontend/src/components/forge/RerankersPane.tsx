@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useConfirm } from '../ui/confirm-dialog'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
@@ -58,12 +60,14 @@ export function RerankersPane({
   onBrowse?: () => void
 }) {
   const [config, setConfig] = useState<RagConfig | null>(null)
+  // `loadError`: the pane cannot be shown at all. `error`: an action failed.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [benching, setBenching] = useState<string | null>(null)
   const [confirm, confirmDialog] = useConfirm()
 
   const load = useCallback(
-    () => fetchRagConfig().then(setConfig).catch((e: Error) => setError(e.message)),
+    () => fetchRagConfig().then((c) => { setConfig(c); setLoadError(null) }).catch((e: unknown) => setLoadError(toFailure(e))),
     [],
   )
 
@@ -100,7 +104,14 @@ export function RerankersPane({
   }
 
   if (!config) {
-    return error ? <p className="text-xs text-rose-400">{error}</p> : <Skeleton className="h-40 w-full" />
+    return loadError ? (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The re-ranker settings could not be loaded from the backend."
+        onRetry={() => void load()}
+      />
+    ) : <Skeleton className="h-40 w-full" />
   }
 
   const fit = config.rerank_fit

@@ -124,6 +124,14 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   }),
 
   panel({
+    id: 'thread', label: "Ariadne's Thread", group: 'assistant', icon: Network, implemented: true,
+    keywords: [
+      'thread', 'ariadne', 'trace', 'grounded', 'not grounded', 'not checked', 'unchecked', 'label',
+      'labels', 'bucket', 'filter', 'citation', 'evidence', 'hallucination', 'provenance', 'groundedness',
+    ],
+  }),
+
+  panel({
     id: 'background', label: 'Background Jobs', group: 'assistant', icon: Clock, implemented: true,
     keywords: [
       'background', 'jobs', 'title', 'titles', 'rename', 'naming', 'chat', 'session', 'history',

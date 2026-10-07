@@ -671,7 +671,11 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
         Ctrl-C saves the run as `aborted` with its reason and every answer so far
 - [ ] Golden query set — 30–50 queries, stratified across the 5 categories in §5.
       The 5 `EX…` entries are placeholders against the placeholder graph
-- [ ] Hand-label ground-truth answers and relevant-evidence sets
+- [ ] Hand-label ground-truth answers and relevant-evidence sets — **the answer
+      labels have a tool now** (2026-10-07): *Your label* on every trace in
+      Ariadne's Thread, stored in `feedback_logs`; the list filters labelled /
+      not labelled and counts hallucinated. Relevant-evidence sets still go in
+      the query set file
 - [x] Groundedness / hallucination scoring — the validator's flags, per arm
 - [x] Retrieval precision@3 and @5, recall, MRR (Track 1); node precision and
       recall, hops and stop reasons (Track 2)
@@ -850,8 +854,11 @@ Layer 9 below for the per-step detail.
         palette) and a collapsed `2 tools · 1.8s · grounded` strip under every
         chat answer that opens the thread in a side panel. The verdict *mirrors* the
         stored validator result rather than re-deciding it, and adds the
-        evidence line each green number came from. 8 tests
-        (`tests/test_thread.py`). Not shown: the assembled prompt (never
+        evidence line each green number came from. Then: human labels,
+        summary strip, compare, export, extra filters, ↑/↓, live refresh,
+        incognito redaction, the prompt hash and Settings → Ariadne's Thread
+        (`docs/FEATURES.md`). 14 tests (`tests/test_thread.py`) + 4 frontend
+        logic tests. Not shown: the assembled prompt (never
         stored), and the evidence lines of a deleted chat
   - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
         steps built,** as three tabs: Hardware · Models · Added Models.
@@ -1381,7 +1388,7 @@ Layer 9 below for the per-step detail.
 - [x] Reopen a chat via `GET /api/sessions/{id}/messages`
 - [x] User messages persisted through `POST /api/sessions/{id}/messages`
 - [x] Incognito passes `ephemeral: true`; those sessions are never listed and are swept on restart
-- [ ] Suppress `user_query`/`response_text` in `conversation_logs` for ephemeral sessions *(unblocked — the orchestrator writes these rows now, including for incognito sessions)*
+- [x] Suppress `user_query`/`response_text` in `conversation_logs` for ephemeral sessions *(2026-10-07)* — every text field of every audit row an incognito turn writes is `[not recorded: incognito]` (`audit_store.redact_this_context`); counts, timings and verdicts are kept
 - [x] **Settings / Forge split.** Settings = how the assistant behaves; the
       Forge = models and the machine. Removed the three duplicate panels (Add
       Models, Added Models, Hardware), folded Databases into System as Storage
@@ -1574,9 +1581,10 @@ CLI that works the same on Windows, macOS and Linux.
       Fixing `TypewriterText` also fixed a leak — its interval was never
       cleared on unmount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
-- [ ] Tests are backend-only and not in CI. The backend has 204 `unittest` cases
+- [ ] Tests are backend-only and not in CI. The backend has 210 `unittest` cases
       (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,
-      background jobs, model fit, embedding prefixes, evaluation harness); the frontend has none, and the **migration runner** still
+      background jobs, model fit, embedding prefixes, evaluation harness, Ariadne's Thread); the frontend has 4 logic tests
+      (`pnpm test`, Node's runner) and no component tests, and the **migration runner** still
       has no test — it is the piece that can quietly break every other store
 - [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container
 - [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**

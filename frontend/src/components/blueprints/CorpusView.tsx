@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
-import { FileText, AlertCircle, Search, ChevronRight, Database } from 'lucide-react'
+import { FileText, Search, ChevronRight, Database } from 'lucide-react'
 import {
   fetchCorpusStatus, fetchCorpusDocuments, fetchDocumentChunks,
   type CorpusStatus, type CorpusDocument, type CorpusChunk,
@@ -109,13 +111,13 @@ export function CorpusView() {
   const [selected, setSelected] = useState<string | null>(null)
   const [chunks, setChunks] = useState<CorpusChunk[]>([])
   const [filter, setFilter] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
 
   const reload = useCallback(() => {
-    void fetchCorpusStatus().then(setStatus).catch(() => setStatus(null))
+    void fetchCorpusStatus().then(setStatus).catch((e: unknown) => setError(toFailure(e)))
     void fetchCorpusDocuments()
-      .then((r) => setDocuments(r.documents))
-      .catch((e: Error) => { setDocuments([]); setError(e.message) })
+      .then((r) => { setDocuments(r.documents); setError(null) })
+      .catch((e: unknown) => setError(toFailure(e)))
   }, [])
   useEffect(reload, [reload])
   useLiveRefresh(['corpus'], reload)
@@ -123,9 +125,21 @@ export function CorpusView() {
   const load = useCallback((id: string) => {
     setSelected(id)
     setChunks([])
-    void fetchDocumentChunks(id, 500).then((r) => setChunks(r.chunks)).catch(() => setChunks([]))
+    // No chunks on failure would claim the document has none.
+    void fetchDocumentChunks(id, 500).then((r) => setChunks(r.chunks)).catch((e: unknown) => setError(toFailure(e)))
   }, [])
 
+  // The documents cannot be read: this tab is the error page.
+  if (error) {
+    return (
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The corpus documents could not be read from the backend."
+        onRetry={reload}
+      />
+    )
+  }
   if (!documents || !status) return <Skeleton className="h-80 w-full" />
 
   const { corpus } = status
@@ -151,6 +165,8 @@ export function CorpusView() {
     )
   }
 
+
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
@@ -168,12 +184,6 @@ export function CorpusView() {
           </div>
         ))}
       </div>
-
-      {error && (
-        <p className="flex items-start gap-1.5 text-[11px] text-rose-400">
-          <AlertCircle size={12} className="mt-0.5 shrink-0" /> {error}
-        </p>
-      )}
 
       {/* Stated rather than left as a missing tab. The asymmetry with Track 2 is
           a finding about the two approaches, and §5's comparison has to say it

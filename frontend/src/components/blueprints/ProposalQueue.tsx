@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
   Sparkles, Check, X, AlertTriangle, AlertCircle, Loader2, Quote, Link2, Boxes,
 } from 'lucide-react'
@@ -131,9 +133,13 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // The queue cannot be read: the error page, not an empty queue (which would
+  // claim there is nothing to review) and not a skeleton that never resolves.
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null)
   const refresh = useCallback(() => {
-    void fetchProposalStatus().then(setStatus).catch(() => setStatus(null))
-    void fetchProposals('pending').then((r) => setProposals(r.proposals)).catch(() => setProposals([]))
+    void Promise.all([fetchProposalStatus(), fetchProposals('pending')])
+      .then(([st, r]) => { setStatus(st); setProposals(r.proposals); setLoadError(null) })
+      .catch((e: unknown) => setLoadError(toFailure(e)))
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
@@ -152,6 +158,16 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
     }
   }
 
+  if (loadError) {
+    return (
+      <TabError
+        code={loadError.status}
+        detail={loadError.message}
+        what="The proposal queue could not be read from the backend."
+        onRetry={refresh}
+      />
+    )
+  }
   if (!status) return <Skeleton className="h-64 w-full" />
 
   const nothingToRead = status.chunks_available === 0

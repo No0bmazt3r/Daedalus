@@ -6,7 +6,7 @@
 import {
   Ban, CircleDashed, Layers, OctagonAlert, ShieldAlert, ShieldCheck, ShieldX, type LucideIcon,
 } from 'lucide-react'
-import type { NumberVerdict, TraceChat, TraceFilters, TraceStatus } from '../../lib/threadClient'
+import type { NumberVerdict, TraceBucket, TraceChat, TraceStatus } from '../../lib/threadClient'
 
 /**
  * Each status has an icon and a colour, so a list reads at a glance; the label
@@ -40,9 +40,13 @@ export const STATUS: Record<TraceStatus, { label: string; tone: string; hint: st
   },
 }
 
-/** The list's filters. Each wears the icon of the statuses it lets through. */
+/**
+ * The list's filters: All, then the three buckets Settings → Ariadne's Thread
+ * files each status into. `label` is the default name; the window shows the
+ * one Settings has (`TracePage.labels`).
+ */
 export const FILTERS: {
-  id: NonNullable<TraceFilters['grounded']> | 'all'
+  id: TraceBucket | 'all'
   label: string
   hint: string
   tone: string
@@ -50,11 +54,11 @@ export const FILTERS: {
 }[] = [
   { id: 'all', label: 'All', hint: 'Every question', tone: 'theme-text', icon: Layers },
   {
-    id: 'yes', label: 'Grounded', tone: 'status-ok', icon: ShieldCheck,
-    hint: 'Passed validation and cited its evidence',
+    id: 'grounded', label: 'Grounded', tone: 'status-ok', icon: ShieldCheck,
+    hint: 'Passed validation and met what Settings says grounded requires',
   },
   {
-    id: 'no', label: 'Not grounded', tone: 'status-warn', icon: ShieldAlert,
+    id: 'ungrounded', label: 'Not grounded', tone: 'status-warn', icon: ShieldAlert,
     hint: 'Checked and not grounded: cited no evidence, or blocked by the validator',
   },
   {
@@ -62,6 +66,13 @@ export const FILTERS: {
     hint: 'No answer check ran: the guard refused it, it was answered without a model, or it failed',
   },
 ]
+
+/** A bucket's colour, for the summary strip. */
+export const BUCKET_FILL: Record<TraceBucket, string> = {
+  grounded: 'status-ok-fill',
+  ungrounded: 'bg-[var(--status-warn)]',
+  unchecked: 'bg-[var(--text-muted)]',
+}
 
 export const VERDICT: Record<NumberVerdict, { label: string; tone: string }> = {
   supported: { label: 'in the evidence', tone: 'status-ok status-ok-bg' },

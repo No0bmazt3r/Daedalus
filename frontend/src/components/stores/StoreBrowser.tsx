@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { ChevronLeft, ChevronRight, RefreshCw, X, ArrowDownUp, Table2 } from 'lucide-react'
 import { Skeleton } from '../ui/skeleton'
 import { readLogTable, type LogPage } from '../../lib/systemClient'
@@ -38,7 +40,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
   const [offset, setOffset] = useState(0)
   const [newestFirst, setNewestFirst] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const [expanded, setExpanded] = useState<Record<string, unknown> | null>(null)
 
   // Landing on a different table must not keep the previous one's page offset,
@@ -64,7 +66,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
         setError(null)
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : 'could not read that table')
+        setError(toFailure(e))
         setPage(null)
       })
       .finally(() => setLoaded(wanted)),
@@ -167,7 +169,15 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
 
       {/* Rows */}
       <div className="flex-1 overflow-auto min-h-0">
-        {error && <div className="p-4 text-sm status-warn">{error}</div>}
+        {/* The table cannot be read: the window's body is the error page. */}
+        {error && (
+          <TabError
+            code={error.status}
+            detail={error.message}
+            what={`The ${store} / ${table} table could not be read.`}
+            onRetry={() => void load()}
+          />
+        )}
 
         {/* A null page rendered nothing, so opening a table looked like an
             empty table until the rows arrived. */}

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useConfirm } from '../ui/confirm-dialog'
 import {
-  AlertTriangle, ChevronDown, Cloud, Cpu, FlaskConical, Loader2, RefreshCw, Trash2, X,
+  ChevronDown, Cloud, Cpu, FlaskConical, Loader2, RefreshCw, Trash2, X,
   CircleCheck, CircleAlert, CircleSlash, HelpCircle, Activity, Binary, ListOrdered, MessageSquare,
 } from 'lucide-react'
 import {
@@ -308,7 +310,7 @@ export function InstalledModelsView({
   const [embeddingCount, setEmbeddingCount] = useState(0)
   const [cloudCount, setCloudCount] = useState(0)
   const [usage, setUsage] = useState<Record<string, ModelUsage>>({})
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [result, setResult] = useState<BenchmarkResult | null>(null)
@@ -329,10 +331,11 @@ export function InstalledModelsView({
       setRows(all.filter((r) => r.installed && !r.remote && r.tier !== 'embedding'))
       setEmbeddingCount(all.filter((r) => r.installed && r.tier === 'embedding').length)
       setCloudCount(all.filter((r) => r.remote).length)
-      setError(table.value.ollama.available ? null : table.value.ollama.error)
+      // The backend answered, Ollama did not: that part is down all the same.
+      setError(table.value.ollama.available ? null : { status: 503, message: table.value.ollama.error ?? 'Ollama did not answer' })
     } else {
       setRows([])
-      setError(table.reason instanceof Error ? table.reason.message : 'request failed')
+      setError(toFailure(table.reason))
     }
   }), [])
 
@@ -480,6 +483,18 @@ export function InstalledModelsView({
             {sourceSwitch}
             <CloudModelsView isPeek={isPeek} />
           </>
+        ) : error ? (
+          // The installed list cannot be read: this pane is the error page.
+          <>
+            {sourceSwitch}
+            <TabError
+              code={error.status}
+              detail={error.message}
+              what={error.status === 503 ? "Ollama isn't reachable, so the installed models can't be listed." : 'The installed models could not be read from the backend.'}
+              fix={error.status === 503 ? 'Start Ollama (ollama serve), then try again.' : undefined}
+              onRetry={() => void load()}
+            />
+          </>
         ) : (
           <>
             {sourceSwitch}
@@ -489,16 +504,6 @@ export function InstalledModelsView({
               Models that answer questions, with what each has run. Both sizes are on the
               production path; the composer offers every one of them.
             </PaneIntro>
-
-            {error && (
-              <div className="flex items-start gap-2 p-3 rounded-xl border status-warn-border status-warn-bg text-xs">
-                <AlertTriangle size={14} className="status-warn shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium">Ollama isn't reachable</div>
-                  <div className="theme-text-muted mt-0.5">{error}</div>
-                </div>
-              </div>
-            )}
 
             {result && (
               <div className="p-3 rounded-xl border theme-border theme-surface-strong text-xs space-y-1">

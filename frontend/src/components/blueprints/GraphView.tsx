@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, ArrowRight, ArrowLeft, AlertCircle, Network, Table2, X } from 'lucide-react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
+import { Search, ArrowRight, ArrowLeft, Network, Table2, X } from 'lucide-react'
 import {
   fetchGraphSchema, fetchNodes, fetchNode, NODE_TYPES, nodeOrigin,
   type GraphSchema, type GraphNode, type GraphEdge, type NodeDetail, type NodeType,
@@ -169,11 +171,13 @@ export function GraphView() {
   const [selected, setSelected] = useState<string | null>(null)
   const [detail, setDetail] = useState<NodeDetail | null>(null)
   const panelRef = useRef<HTMLElement>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
+  // Bumped by Try again, to re-run every read below.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    fetchGraphSchema().then(setSchema).catch((e: Error) => setError(e.message))
-  }, [])
+    fetchGraphSchema().then(setSchema).catch((e: unknown) => setError(toFailure(e)))
+  }, [attempt])
 
   // Debounced so typing does not fire a request per keystroke. The graph is
   // tiny and the backend would cope, but a list that reorders under the cursor
@@ -185,10 +189,10 @@ export function GraphView() {
           setNodes(r.nodes)
           setEdges(r.edges)
         })
-        .catch((e: Error) => setError(e.message))
+        .catch((e: unknown) => setError(toFailure(e)))
     }, 180)
     return () => window.clearTimeout(timer)
-  }, [query, type])
+  }, [query, type, attempt])
 
   // Only the selected node's detail, derived rather than cleared in an effect —
   // so deselecting hides it at once, and a new selection never shows the
@@ -197,7 +201,7 @@ export function GraphView() {
 
   useEffect(() => {
     if (!selected) return
-    fetchNode(selected).then(setDetail).catch((e: Error) => setError(e.message))
+    fetchNode(selected).then(setDetail).catch((e: unknown) => setError(toFailure(e)))
     // `nearest` does nothing when the panel is already beside the canvas, and
     // brings it up when the container is narrow enough to have stacked it. One
     // call covers both layouts without either having to know about the other.
@@ -214,18 +218,17 @@ export function GraphView() {
     return [...out.entries()]
   }, [nodes])
 
+  // The graph cannot be read (or has an error in its file): this tab is the
+  // error page — never an empty graph that looks finished.
   if (error) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">
-        <AlertCircle size={14} className="mt-0.5 shrink-0 text-rose-400" />
-        <div>
-          <p>{error}</p>
-          <p className="mt-1 theme-text-muted">
-            The graph has an error, so it is not shown at all rather than shown empty. Fix the
-            error above in <code>knowledge_graph.yaml</code>.
-          </p>
-        </div>
-      </div>
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The knowledge graph could not be read, so it is not shown at all rather than shown empty."
+        fix={error.status === 422 || error.status === 500 ? 'Fix the error shown below in knowledge_graph.yaml, then try again.' : undefined}
+        onRetry={() => { setError(null); setAttempt((n) => n + 1) }}
+      />
     )
   }
 

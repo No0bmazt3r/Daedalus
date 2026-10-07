@@ -51,7 +51,7 @@ from . import ollama_client
 
 log = logging.getLogger("daedalus.events")
 
-TOPICS = ("models", "embeddings", "endpoints", "sessions", "rag", "corpus")
+TOPICS = ("models", "embeddings", "endpoints", "sessions", "rag", "corpus", "trace")
 
 # How often the watcher asks Ollama, while somebody is listening. Five seconds
 # is quick enough that a terminal `ollama rm` shows up before anyone goes

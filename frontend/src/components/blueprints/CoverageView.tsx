@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { TabError } from '../errors/TabError'
+import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { fetchCoverage, type Coverage, type GraphNode } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
@@ -54,18 +56,21 @@ const SECTIONS: { key: keyof Coverage; title: string; consequence: string }[] = 
 
 export function CoverageView() {
   const [data, setData] = useState<Coverage | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    fetchCoverage().then(setData).catch((e: Error) => setError(e.message))
-  }, [])
+    fetchCoverage().then((d) => { setData(d); setError(null) }).catch((e: unknown) => setError(toFailure(e)))
+  }, [attempt])
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-3 text-xs theme-text">
-        <AlertCircle size={14} className="text-rose-400 shrink-0" />
-        {error}
-      </div>
+      <TabError
+        code={error.status}
+        detail={error.message}
+        what="The graph coverage could not be read from the backend."
+        onRetry={() => { setError(null); setAttempt((n) => n + 1) }}
+      />
     )
   }
   if (!data) return <Skeleton className="h-48 w-full" />
