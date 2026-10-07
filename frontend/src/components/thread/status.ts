@@ -6,7 +6,7 @@
 import {
   Ban, CircleDashed, Layers, OctagonAlert, ShieldAlert, ShieldCheck, ShieldX, type LucideIcon,
 } from 'lucide-react'
-import type { NumberVerdict, TraceFilters, TraceStatus } from '../../lib/threadClient'
+import type { NumberVerdict, TraceChat, TraceFilters, TraceStatus } from '../../lib/threadClient'
 
 /**
  * Each status has an icon and a colour, so a list reads at a glance; the label
@@ -58,8 +58,8 @@ export const FILTERS: {
     hint: 'Checked and not grounded: cited no evidence, or blocked by the validator',
   },
   {
-    id: 'unchecked', label: 'Unchecked', tone: 'theme-text-muted', icon: CircleDashed,
-    hint: 'Never checked: refused, answered without a model, or failed',
+    id: 'unchecked', label: 'Not checked', tone: 'theme-text-muted', icon: CircleDashed,
+    hint: 'No answer check ran: the guard refused it, it was answered without a model, or it failed',
   },
 ]
 
@@ -69,6 +69,14 @@ export const VERDICT: Record<NumberVerdict, { label: string; tone: string }> = {
   stale: { label: 'only in replayed history', tone: 'status-warn status-warn-bg' },
   not_a_claim: { label: 'not a measurement', tone: 'theme-text-muted theme-surface' },
   unchecked: { label: 'not checked', tone: 'theme-accent theme-surface' },
+}
+
+/** A chat's name as the Thread shows it, and what to add when it cannot be opened. */
+export function chatLabel(chat: TraceChat | null): { title: string; note: string | null } {
+  if (!chat) return { title: 'No chat', note: 'Asked outside a chat, e.g. by an evaluation run' }
+  const title = chat.title ?? 'Untitled chat'
+  if (!chat.exists) return { title: chat.title ?? 'Deleted chat', note: 'This chat was deleted; its record remains' }
+  return { title, note: chat.incognito ? 'Incognito chat' : null }
 }
 
 /** `1840` → `1.8s`, `95` → `95ms`. */

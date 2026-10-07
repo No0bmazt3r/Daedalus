@@ -76,12 +76,31 @@ def status(row: dict[str, Any]) -> str:
     return "grounded" if row.get("grounded_flag") else "ungrounded"
 
 
-def summary(row: dict[str, Any]) -> dict[str, Any]:
+def chat_of(session_id: str | None, sessions: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """Which chat a turn came from, as the list and the trace name it.
+
+    `exists` is False once the chat was deleted (or purged, if incognito): the
+    audit row outlives it, so the Thread can say where a turn came from but
+    not open it.
+    """
+    if not session_id:
+        return None
+    session = sessions.get(session_id)
+    return {
+        "session_id": session_id,
+        "title": ((session or {}).get("title") or "").strip() or None,
+        "exists": session is not None,
+        "incognito": bool(session and session.get("ephemeral")),
+    }
+
+
+def summary(row: dict[str, Any], sessions: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     question = row.get("user_query") or ""
     return {
         "query_id": row["query_id"],
         "timestamp": row["timestamp"],
         "session_id": row.get("session_id"),
+        "chat": chat_of(row.get("session_id"), sessions or {}),
         "question": question[:200],
         "intent": row.get("intent"),
         "model": row.get("model_used"),
@@ -96,7 +115,8 @@ def summary(row: dict[str, Any]) -> dict[str, Any]:
 
 def recent(**filters: Any) -> dict[str, Any]:
     rows, total = audit_store.recent_queries(**filters)
-    return {"items": [summary(r) for r in rows], "total": total}
+    sessions = chat_store.sessions_by_id([r.get("session_id") for r in rows])
+    return {"items": [summary(r, sessions) for r in rows], "total": total}
 
 
 # ── the trace ────────────────────────────────────────────────────────────────
@@ -264,7 +284,8 @@ def trace(query_id: str) -> dict[str, Any] | None:
         "summary": summary({**convo, "query_id": query_id,
                             "tool_count": len(rows.get("tool_logs") or []),
                             "retrieval_count": len(rows.get("rag_logs") or []),
-                            "error_count": len(rows.get("error_logs") or [])})
+                            "error_count": len(rows.get("error_logs") or [])},
+                           chat_store.sessions_by_id([convo.get("session_id")]))
         if convo else None,
         "total_ms": convo.get("total_latency_ms"),
         "steps": steps,

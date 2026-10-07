@@ -459,7 +459,8 @@ keeps beside the answer. Read-only, never on the chat path.
 | Survives a deleted chat | Audit rows outlive the transcript; the trace still reads and reports `evidence_available: false` |
 
 In the UI: the sidebar window (`Ctrl+Alt+A`), and a collapsed strip under every
-chat answer (`2 tools · 1.8s · grounded`) that expands the thread in place.
+chat answer (`2 tools · 1.8s · grounded`) that opens it in a panel beside the chat; the evidence summary
+opens the same panel on its Evidence tab, so neither stretches the transcript.
 
 ### Dynamic Model Discovery — `/api/system/models`
 

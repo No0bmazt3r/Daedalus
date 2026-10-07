@@ -1,12 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, ChevronRight, MessageSquare } from 'lucide-react'
 import {
   fetchGroundedness, fetchTrace,
-  type Groundedness, type NumberMark, type Trace, type TraceStep,
+  type Groundedness, type NumberMark, type Trace, type TraceStep, type TraceSummary,
 } from '../../lib/threadClient'
 import { Skeleton } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
-import { STATUS, VERDICT, formatMs } from './status'
+import { withEvidenceHighlights } from '../Citations'
+import { STATUS, VERDICT, chatLabel, formatMs } from './status'
+import { useSessions } from '../../contexts/SessionsContext'
 import { StatusIcon } from './StatusIcon'
 
 /**
@@ -37,6 +39,11 @@ const KIND_LABEL: Record<TraceStep['kind'], string> = {
 // Step statuses as logged: `ok`, `error`, `refused` (a tool policy or the
 // safety guard said no), `warning` (an error_logs level, or evidence with a
 // failed tool in it).
+/** An evidence line without its own `[S1]` prefix — the label is shown beside it already. */
+function stripLabel(line: string): string {
+  return line.replace(/^\[[A-Z]\d+\]\s*/, '')
+}
+
 function stepTone(step: TraceStep): string {
   if (step.status === 'error') return 'status-bad'
   if (step.status === 'refused' || step.status === 'warning') return 'status-warn'
@@ -66,11 +73,11 @@ function Details({ step }: { step: TraceStep }) {
         {Object.entries(lines).map(([label, line]) => (
           <p key={label} className="text-[11px] leading-relaxed">
             <code className="mr-1.5 rounded theme-surface px-1 theme-accent">{label}</code>
-            {line}
+            {withEvidenceHighlights(stripLabel(line))}
           </p>
         ))}
         {failures.map((f) => (
-          <p key={f} className="text-[11px] status-warn">Failed: {f}</p>
+          <p key={f} className="text-[11px] status-warn">Failed: {withEvidenceHighlights(f)}</p>
         ))}
         {detail.no_documents === true && (
           <p className="text-[11px] theme-text-muted">Retrieval ran and found no documents.</p>
@@ -217,7 +224,7 @@ function GroundednessPanel({ check }: { check: Groundedness }) {
             <p key={m.start} className="text-[11px] leading-relaxed">
               <span className="mr-1.5 font-medium status-ok">{m.text}</span>
               <code className="mr-1.5 rounded theme-surface px-1 theme-accent">{m.sources[0].label}</code>
-              <span className="theme-text-muted">{m.sources[0].line}</span>
+              <span className="theme-text-muted">{withEvidenceHighlights(stripLabel(m.sources[0].line))}</span>
             </p>
           ))}
         </div>
@@ -234,6 +241,29 @@ function GroundednessPanel({ check }: { check: Groundedness }) {
         the wrong sensor, or a claim with no number in it.
       </p>
     </section>
+  )
+}
+
+/** Which chat the question was asked in, with a way back to it while it exists. */
+function ChatLine({ chat }: { chat: TraceSummary['chat'] }) {
+  const { selectSession } = useSessions()
+  const { title, note } = chatLabel(chat)
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] theme-text-muted">
+      <MessageSquare size={12} className="shrink-0 theme-accent" />
+      <span className="shrink-0">From</span>
+      <span className="min-w-0 truncate font-medium theme-text">{title}</span>
+      {note && <span className="shrink-0 opacity-70">· {note}</span>}
+      {chat?.exists && (
+        <button
+          onClick={() => selectSession(chat.session_id)}
+          className="ml-auto flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 hover:theme-text hover:theme-surface"
+          title="Show this chat behind the window"
+        >
+          Open chat <ArrowUpRight size={11} />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -268,7 +298,8 @@ export function TraceView({ queryId, compact = false }: {
     <div className="space-y-3">
       {s && !compact && (
         <section className="rounded-lg border theme-border theme-card p-3">
-          <p className="text-[13px] theme-text">{s.question || '(no question text)'}</p>
+          <ChatLine chat={s.chat} />
+          <p className="mt-1.5 text-[13px] theme-text">{s.question || '(no question text)'}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] theme-text-muted">
             <span className={`flex items-center gap-1 font-medium ${STATUS[s.status].tone}`}>
               <StatusIcon status={s.status} />

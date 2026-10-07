@@ -1,8 +1,8 @@
 {
   "provider": "local",
-  "model": "embeddinggemma",
+  "model": "qwen3-embedding:0.6b",
   "endpoint_id": null,
-  "dimensions": 768,
+  "dimensions": 1024,
   "indexed_with": null,
   "indexed_at": "2026-09-19T05:33:11+00:00",
   "verified": {

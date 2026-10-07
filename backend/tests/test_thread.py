@@ -94,6 +94,7 @@ class ThreadTest(unittest.TestCase):
         chat_service.delete_session(session_id)
         body = thread.trace(qid)
         self.assertFalse(body["evidence_available"])
+        self.assertFalse(body["summary"]["chat"]["exists"])
         self.assertNotIn("evidence", [s["kind"] for s in body["steps"]])
         # The stored verdict still decides; only the source line is gone.
         [mark] = thread.groundedness(qid)["numbers"]
@@ -106,6 +107,8 @@ class ThreadTest(unittest.TestCase):
         self.assertEqual([i["query_id"] for i in mine["items"]], [good])
         self.assertEqual(mine["total"], 1)
         self.assertEqual(mine["items"][0]["tool_count"], 1)
+        chat = mine["items"][0]["chat"]
+        self.assertEqual((chat["session_id"], chat["exists"]), (session_id, True))
         grounded = {i["query_id"] for i in self.client.get("/api/trace", params={"grounded": "yes", "limit": 500}).json()["items"]}
         self.assertIn(good, grounded)
         self.assertNotIn(bad, grounded)

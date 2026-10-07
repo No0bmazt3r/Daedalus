@@ -23,6 +23,7 @@ import { FOCUS_COMPOSER_EVENT } from '../lib/keybinds'
 import { useSessions } from '../contexts/SessionsContext'
 import { Sources, withCitations } from './Citations'
 import { TraceStrip } from './thread/TraceStrip'
+import { AnswerPanel, type AnswerTab } from './thread/AnswerPanel'
 import { useSessionTraces } from '../hooks/useSessionTraces'
 
 function TypewriterText({ text }: { text: string }) {
@@ -367,6 +368,18 @@ export function ChatInterface() {
     activeSessionId,
     messages.filter((m) => m.role === 'assistant' && m.persisted).length,
   )
+  // The answer panel beside the chat: which answer, which tab. Tied to the chat
+  // it was opened in, so switching chats closes it rather than showing nothing.
+  const [panel, setPanel] = useState<{ session: string | null; key: string; tab: AnswerTab } | null>(null)
+  const openPanel = panel?.session === activeSessionId ? panel : null
+  const panelMessage = openPanel ? messages.find((m) => m.key === openPanel.key) : undefined
+  const togglePanel = (key: string, tab: AnswerTab) =>
+    setPanel((p) =>
+      p && p.session === activeSessionId && p.key === key && p.tab === tab
+        ? null
+        : { session: activeSessionId, key, tab },
+    )
+  const closePanel = useCallback(() => setPanel(null), [])
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { show } = useUiPrefs()
@@ -417,8 +430,9 @@ export function ChatInterface() {
   // No background of its own: <main> paints the theme colour beneath the
   // background-effect canvas, so an opaque layer here would hide the effect.
   return (
-    <div className="flex-1 flex flex-col theme-text relative w-full h-full transition-colors duration-200">
+    <div className="flex-1 flex theme-text relative w-full h-full min-h-0 transition-colors duration-200">
     <TooltipProvider delay={200}>
+    <div className="flex-1 min-w-0 flex flex-col relative">
       {/* In the layout flow, not floating, so the chat never scrolls underneath.
           Minimized windows stay on one line: chips shrink and truncate their
           titles rather than wrapping onto a second row. */}
@@ -535,11 +549,20 @@ export function ChatInterface() {
                     )}
 
                     {msg.role === 'assistant' && msg.persisted && (
-                      <Sources text={msg.content} evidence={msg.evidence} />
+                      <Sources
+                        text={msg.content}
+                        evidence={msg.evidence}
+                        active={openPanel?.key === msg.key && openPanel.tab === 'evidence'}
+                        onOpen={() => togglePanel(msg.key, 'evidence')}
+                      />
                     )}
 
                     {msg.role === 'assistant' && msg.queryId && traces[msg.queryId] && (
-                      <TraceStrip trace={traces[msg.queryId]} />
+                      <TraceStrip
+                        trace={traces[msg.queryId]}
+                        active={openPanel?.key === msg.key && openPanel.tab === 'thread'}
+                        onOpen={() => togglePanel(msg.key, 'thread')}
+                      />
                     )}
 
                     {msg.role === 'assistant' && msg.persisted && msg.content !== '' && (
@@ -610,6 +633,17 @@ export function ChatInterface() {
           </div>
         </>
       )}
+    </div>
+    {openPanel && panelMessage && (
+      <AnswerPanel
+        tab={openPanel.tab}
+        onTab={(tab) => setPanel({ ...openPanel, tab })}
+        onClose={closePanel}
+        queryId={panelMessage.queryId ?? null}
+        text={panelMessage.content}
+        evidence={panelMessage.evidence}
+      />
+    )}
     </TooltipProvider>
     </div>
   )

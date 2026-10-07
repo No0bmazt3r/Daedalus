@@ -1,6 +1,5 @@
-import { Fragment, useState, type ReactNode } from 'react'
-import { AlertTriangle, BookOpen, ChevronDown, Database, Network } from 'lucide-react'
-import { Collapse } from './ui/collapse'
+import { Fragment, type ReactNode } from 'react'
+import { AlertTriangle, BookOpen, ChevronRight, Database, Network } from 'lucide-react'
 import type { StoredEvidence } from '../lib/chatClient'
 
 /**
@@ -50,12 +49,9 @@ function lineText(evidence: StoredEvidence, label: string): string {
 // A reading: a number with the unit written after it (the validator's `UNITS`,
 // `services/orchestration/numbers.py`), or pH before it. A bare number is not
 // one — a count, a step, a year — so it is left as text.
-const READING_RE = new RegExp(
-  String.raw`(?<![\w.-])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?\s?(?:°\s?[CF]|%|m³|(?:ppm|ppb|percent|degC|degrees|barg|bara|mbar|bar|kPa|Pa|psi|atm|L\/min|mL\/min|lpm|slpm|sccm|mL|L|m3|kg|mg|g|mm|cm|rpm|mV|mA|kW|mmol|mol)\b)` +
-  String.raw`|(?<![\w.-])-?\d+(?:\.\d+)?\s?(?:°\s?[CF]|%|m³|(?:ppm|ppb|percent|degC|degrees|barg|bara|mbar|bar|kPa|Pa|psi|atm|L\/min|mL\/min|lpm|slpm|sccm|mL|L|m3|kg|mg|g|mm|cm|rpm|mV|mA|kW|mmol|mol)\b)` +
-  String.raw`|\bpH\s?\d+(?:\.\d+)?`,
-  'gi',
-)
+const UNIT = String.raw`(?:°\s?[CF]|%|m³|(?:ppm|ppb|percent|degC|degrees|barg|bara|mbar|bar|kPa|Pa|psi|atm|L\/min|mL\/min|lpm|slpm|sccm|mL|L|m3|kg|mg|g|mm|cm|rpm|mV|mA|kW|mmol|mol)\b)`
+const READING = String.raw`(?<![\w.-])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s?${UNIT}|\bpH\s?\d+(?:\.\d+)?`
+const READING_RE = new RegExp(READING, 'gi')
 
 /**
  * Plain answer text with each reading picked out, so `980 ppm` can be found
@@ -73,6 +69,46 @@ function withReadings(text: string, keyBase: number): ReactNode[] {
         {m[0]}
       </span>,
     )
+    last = m.index + m[0].length
+  }
+  out.push(text.slice(last))
+  return out
+}
+
+// An evidence line, as the evidence pack writes it: `temperature = 31.74 °C.
+// Reading at 2026-09-12 17:15:52 UTC (01:15 site time), mode Desorption. STALE: …`
+// and notes like `search_corpus: the corpus is not searchable…`. Picked out:
+// the sensor name, the reading (or the bare value after `=`, as for pH), STALE
+// and the age beside it,
+// the moments, and a tool name opening a note.
+const EVIDENCE_RE = new RegExp(
+  [
+    String.raw`(?<name>^[a-z][a-z0-9_]*(?= = ))`,
+    String.raw`(?<tool>^[a-z]+_[a-z_]+(?=: ))`,
+    String.raw`(?<reading>${READING}|(?<== )-?\d+(?:\.\d+)?)`,
+    String.raw`(?<stale>\bSTALE\b|\b\d+ (?:seconds?|minutes?|hours?|days?|weeks?) old\b)`,
+    String.raw`(?<when>\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?)?(?: UTC)?|\(\d{1,2}:\d{2} site time\))`,
+  ].join('|'),
+  'g',
+)
+
+const EVIDENCE_TONE: Record<string, string> = {
+  name: 'font-medium theme-text',
+  tool: 'rounded px-1 font-mono theme-surface-strong theme-text',
+  reading: 'whitespace-nowrap font-medium theme-accent',
+  stale: 'font-medium status-warn',
+  when: 'whitespace-nowrap theme-text',
+}
+
+/** An evidence line or note with its parts picked out, for every place one is listed. */
+export function withEvidenceHighlights(text: string): ReactNode[] {
+  const out: ReactNode[] = []
+  let last = 0
+  for (const m of text.matchAll(EVIDENCE_RE)) {
+    const kind = Object.entries(m.groups ?? {}).find(([, v]) => v !== undefined)?.[0]
+    if (!kind) continue
+    out.push(text.slice(last, m.index))
+    out.push(<span key={m.index} className={EVIDENCE_TONE[kind]}>{m[0]}</span>)
     last = m.index + m[0].length
   }
   out.push(text.slice(last))
@@ -127,74 +163,89 @@ function SourceLine({ evidence, label }: { evidence: StoredEvidence; label: stri
     <li className="flex items-start gap-2">
       <code className="shrink-0 text-[10px] mt-0.5 px-1 rounded theme-surface-strong theme-text">{label}</code>
       <Icon size={11} className="shrink-0 mt-1 theme-text-muted" />
-      <span className="leading-relaxed">{lineText(evidence, label)}</span>
+      <span className="leading-relaxed">{withEvidenceHighlights(lineText(evidence, label))}</span>
     </li>
   )
 }
 
-/** The collapsible source list under an answer. Renders nothing without evidence. */
-export function Sources({ text, evidence }: { text: string; evidence: StoredEvidence | undefined }) {
-  const [open, setOpen] = useState(false)
-  const [showAll, setShowAll] = useState(false)
-  if (!evidence) return null
-
+function summaryOf(text: string, evidence: StoredEvidence): string | null {
   const cited = citedLabels(text, evidence)
-  const all = evidence.citations.map((c) => c.label)
-  const uncited = all.filter((l) => !cited.includes(l))
-  if (!all.length && !evidence.failures.length) return null
-
-  const summary = cited.length
+  const all = evidence.citations.length
+  if (!all && !evidence.failures.length) return null
+  return cited.length
     ? `${cited.length} source${cited.length === 1 ? '' : 's'} cited`
-    : all.length
-      ? `${all.length} piece${all.length === 1 ? '' : 's'} of evidence gathered, none cited`
+    : all
+      ? `${all} piece${all === 1 ? '' : 's'} of evidence gathered, none cited`
       : 'no evidence found'
+}
 
+/**
+ * The one-line summary under an answer. The list itself opens in the answer
+ * panel beside the chat (`AnswerPanel`), so a long evidence pack never
+ * stretches the transcript. Renders nothing without evidence.
+ */
+export function Sources({
+  text, evidence, active, onOpen,
+}: {
+  text: string
+  evidence: StoredEvidence | undefined
+  /** This answer's evidence is what the panel is showing. */
+  active: boolean
+  onOpen: () => void
+}) {
+  if (!evidence) return null
+  const summary = summaryOf(text, evidence)
+  if (!summary) return null
   return (
-    <div className="mt-2 text-[12px] theme-text-muted">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex items-center gap-1.5 hover:theme-text transition-colors"
-      >
-        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : '-rotate-90'}`} />
-        {summary}
-        <span className="opacity-60">· {evidence.tools_used.join(', ')}</span>
-      </button>
-      {open && (
-        <p className="mt-1 pl-4 text-[10px] opacity-60">
-          S sensor reading · D document passage · G knowledge-graph node
-        </p>
-      )}
-      <Collapse open={open} className="mt-1.5 pl-4 space-y-2">
-        {cited.length > 0 && (
+    <button
+      onClick={onOpen}
+      aria-pressed={active}
+      className={`mt-2 flex max-w-full items-center gap-1.5 text-left text-[12px] transition-colors ${
+        active ? 'theme-text' : 'theme-text-muted hover:theme-text'
+      }`}
+      title="Show the evidence beside the chat"
+    >
+      <ChevronRight size={12} className="shrink-0" />
+      <span className="shrink-0">{summary}</span>
+      <span className="truncate opacity-60">· {evidence.tools_used.join(', ')}</span>
+    </button>
+  )
+}
+
+/** Everything the tools returned for one answer, cited lines first. For the answer panel. */
+export function EvidenceList({ text, evidence }: { text: string; evidence: StoredEvidence }) {
+  const cited = citedLabels(text, evidence)
+  const uncited = evidence.citations.map((c) => c.label).filter((l) => !cited.includes(l))
+  return (
+    <div className="space-y-4 text-[12px] theme-text-muted">
+      <p className="text-[10px] opacity-70">S sensor reading · D document passage · G knowledge-graph node</p>
+      {cited.length > 0 && (
+        <section className="space-y-1.5">
+          <h4 className="text-[10px] uppercase tracking-wider theme-text">Cited in the answer</h4>
           <ul className="space-y-1.5">
             {cited.map((label) => <SourceLine key={label} evidence={evidence} label={label} />)}
           </ul>
-        )}
-        {uncited.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowAll((s) => !s)}
-              className="text-[11px] underline underline-offset-2 hover:theme-text transition-colors"
-            >
-              {showAll ? 'hide' : 'show'} {uncited.length} gathered but not cited
-            </button>
-            <Collapse open={showAll} className="mt-1.5">
-              <ul className="space-y-1.5 opacity-75">
-                {uncited.map((label) => <SourceLine key={label} evidence={evidence} label={label} />)}
-              </ul>
-            </Collapse>
-          </div>
-        )}
-        {evidence.failures.map((f) => (
-          <p key={f} className="flex items-start gap-1.5 status-warn text-[11px]">
-            <AlertTriangle size={11} className="shrink-0 mt-0.5" /> {f}
-          </p>
-        ))}
-        {evidence.notes.map((n) => (
-          <p key={n} className="text-[11px] opacity-75">{n}</p>
-        ))}
-      </Collapse>
+        </section>
+      )}
+      {uncited.length > 0 && (
+        <section className="space-y-1.5">
+          <h4 className="text-[10px] uppercase tracking-wider">Gathered, not cited</h4>
+          <ul className="space-y-1.5 opacity-75">
+            {uncited.map((label) => <SourceLine key={label} evidence={evidence} label={label} />)}
+          </ul>
+        </section>
+      )}
+      {evidence.failures.map((f) => (
+        <p key={f} className="flex items-start gap-1.5 status-warn text-[11px]">
+          <AlertTriangle size={11} className="shrink-0 mt-0.5" /> <span>{withEvidenceHighlights(f)}</span>
+        </p>
+      ))}
+      {evidence.notes.map((n) => (
+        <p key={n} className="text-[11px] opacity-75">{withEvidenceHighlights(n)}</p>
+      ))}
+      {!cited.length && !uncited.length && !evidence.failures.length && (
+        <p className="text-center text-[11px]">No evidence was gathered for this answer.</p>
+      )}
     </div>
   )
 }

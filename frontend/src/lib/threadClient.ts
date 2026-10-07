@@ -9,10 +9,19 @@ import { request } from './http';
 /** How a turn ended. See `thread.status()` for each word's meaning. */
 export type TraceStatus = 'grounded' | 'ungrounded' | 'blocked' | 'refused' | 'no_model' | 'error';
 
+/** The chat a turn came from. `exists` is false once that chat was deleted. */
+export interface TraceChat {
+  session_id: string;
+  title: string | null;
+  exists: boolean;
+  incognito: boolean;
+}
+
 export interface TraceSummary {
   query_id: string;
   timestamp: string;
   session_id: string | null;
+  chat: TraceChat | null;
   question: string;
   intent: string | null;
   model: string | null;

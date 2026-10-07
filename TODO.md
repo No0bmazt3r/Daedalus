@@ -848,7 +848,7 @@ Layer 9 below for the per-step detail.
         `/api/trace/{id}`, `/api/trace/{id}/groundedness`
         (`services/thread.py`). The sidebar window (`Ctrl+Alt+A`, and in the
         palette) and a collapsed `2 tools · 1.8s · grounded` strip under every
-        chat answer that opens the thread in place. The verdict *mirrors* the
+        chat answer that opens the thread in a side panel. The verdict *mirrors* the
         stored validator result rather than re-deciding it, and adds the
         evidence line each green number came from. 8 tests
         (`tests/test_thread.py`). Not shown: the assembled prompt (never

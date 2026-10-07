@@ -219,6 +219,19 @@ def get_session(session_id: str) -> dict[str, Any] | None:
     return _session_row(row) if row else None
 
 
+def sessions_by_id(session_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """The sessions among `session_ids` that still exist, keyed by id. One query."""
+    ids = sorted({i for i in session_ids if i})
+    if not ids:
+        return {}
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM chat_sessions WHERE session_id IN ({','.join('?' for _ in ids)})", ids
+        ).fetchall()
+    return {row["session_id"]: _session_row(row) for row in rows}
+
+
 def list_sessions(
     *,
     limit: int = 50,
