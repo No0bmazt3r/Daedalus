@@ -857,8 +857,10 @@ Layer 9 below for the per-step detail.
         evidence line each green number came from. Then: human labels,
         summary strip, compare, export, extra filters, ↑/↓, live refresh,
         incognito redaction, the prompt hash and Settings → Ariadne's Thread
-        (`docs/FEATURES.md`). 14 tests (`tests/test_thread.py`) + 4 frontend
-        logic tests. Not shown: the assembled prompt (never
+        (`docs/FEATURES.md`). Then a *Retrieval* section per trace (chunks,
+        their documents and chunking, scores, rig/reference, cited — or the
+        graph walk) and an Outcome filter for the six statuses. 17 tests
+        (`tests/test_thread.py`) + 5 frontend logic tests. Not shown: the assembled prompt (never
         stored), and the evidence lines of a deleted chat
   - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
         steps built,** as three tabs: Hardware · Models · Added Models.
@@ -1403,7 +1405,32 @@ Layer 9 below for the per-step detail.
       Re-rankers (downloaded only — benchmark, delete); the Re-rankers browse
       tab shows a downloaded model as *Downloaded · Manage*
 - [-] Archive from the sidebar *(the API supports it; no UI affordance yet)* *(cut from FYP2, 2026-10-01)*
-- [ ] Error and loading states for a backend that's down or slow
+- [x] Error and loading states for a backend that's down or slow *(2026-10-07)* —
+      a part that cannot load becomes the error page filling that tab or window
+      (`components/errors/TabError.tsx`), in every Forge pane, Blueprints tab,
+      Settings panel, Data stores and the Thread; the backend being down is the
+      full-screen 503. Load failures that used to look like empty lists or a
+      skeleton that never resolved now say so. Slow loads show skeletons
+- [ ] **Review of the Forge and Blueprints (2026-10-07)** — what would most help
+      the report, in order. None blocks anything:
+  - [ ] **Forge: export the benchmark table** (CSV/Markdown: model, quant,
+        TTFT, prefill/generation tok/s, measured vs estimated memory, machine) —
+        the evidence table Objective 3 asks for, without copying numbers by hand
+  - [ ] **Forge: two models side by side** — the same benchmark prompt, both
+        results in one view, so "which model on this machine" is read off rather
+        than remembered across tabs
+  - [ ] **Blueprints: which documents earn their place** — per document, how
+        often it was retrieved and how often cited, from `rag_logs` and the
+        stored evidence. Retrieved-but-never-cited and never-retrieved documents
+        are what to look at once the real corpus is in
+  - [ ] **Blueprints: a chunking ablation** — ingest the same corpus at a second
+        chunk size into its own collection and run the evaluation against each.
+        Every chunk already records its run's strategy, size and overlap, so the
+        Thread shows which one an answer used; this is the "expose chunk_size,
+        top_k, similarity_threshold" item in M6, done as two indexes rather than
+        a live knob
+  - [ ] **Blueprints: the ingestion graph-gap check** (already above) is the one
+        that keeps the comparison fair, and the first of these to do
 
 ---
 
@@ -1569,6 +1596,12 @@ CLI that works the same on Windows, macOS and Linux.
 
 ## Known issues
 
+- [x] **A graph citation's evidence label was overwritten by the node's name** *(fixed 2026-10-07)*.
+      `EvidencePack.citations()` spread the citation dict after `label`, and graph
+      citations carried the node name under `label`, so `G1` became "CO2 sensor".
+      The chat's source list then could not find a graph citation's kind. Fixed in
+      `evidence.py` (node name is now `name`; the evidence label is applied last);
+      turns stored before the fix keep the wrong value, which the Thread ignores
 - [x] ~~Chat responses are synchronous~~ — resolved: the chat path streams SSE
 - [x] ~~The chat path has no retrieval or tool-calling yet~~ — resolved: M5's
       orchestrator plans tools, builds the evidence pack and validates the answer
@@ -1581,9 +1614,9 @@ CLI that works the same on Windows, macOS and Linux.
       Fixing `TypewriterText` also fixed a leak — its interval was never
       cleared on unmount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
-- [ ] Tests are backend-only and not in CI. The backend has 210 `unittest` cases
+- [ ] Tests are backend-only and not in CI. The backend has 213 `unittest` cases
       (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,
-      background jobs, model fit, embedding prefixes, evaluation harness, Ariadne's Thread); the frontend has 4 logic tests
+      background jobs, model fit, embedding prefixes, evaluation harness, Ariadne's Thread); the frontend has 5 logic tests
       (`pnpm test`, Node's runner) and no component tests, and the **migration runner** still
       has no test — it is the piece that can quietly break every other store
 - [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container

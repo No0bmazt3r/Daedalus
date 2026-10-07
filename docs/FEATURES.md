@@ -67,6 +67,7 @@ to it.
 | `GET` · `PUT` | `/api/trace/settings` | Settings → Ariadne's Thread: what grounded requires, which bucket each status is filed in, the buckets' names. `PUT` merges a partial body; `{"reset": true}` restores the defaults. Relabels the view only |
 | `PUT` | `/api/trace/{query_id}/label` | A person's verdict, `{"hallucinated": true\|false\|null, "note"}` — appended to `feedback_logs` (`evaluator_role = 'label'`), newest wins, `null` withdraws. 404 for an unknown id |
 | `GET` | `/api/trace/{query_id}` | One turn as ordered steps: question → intent → tools and retrieval → evidence → context → model → validation → answer, plus errors and the rating |
+| `GET` | `/api/trace/{query_id}/retrieval` | What the turn retrieved. Track 1: every chunk with document, page, section, distance, re-rank score, origin (as logged), the chunking of its ingest run (strategy, size, overlap, embedding model), its evidence label and whether the answer cited it; the re-ranker and candidate count. Track 2: entry strategy, entry nodes, each hop, every node touched (cited ones marked). Chunks re-chunked away since are `missing`, not dropped |
 | `GET` | `/api/trace/{query_id}/groundedness` | Every number in the answer the model wrote, marked `supported`·`unsupported`·`stale`·`not_a_claim`·`unchecked`, with the evidence line each supported one came from |
 | `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
 | `GET`/`POST` | `/api/providers` | List / add a benchmark endpoint |
@@ -486,6 +487,17 @@ are only the detector). The columns icon on a row puts its thread beside the
 open one; *Markdown* and *JSON* in a trace's header download it as shown. Each
 step links to its audit table in Data stores, and the model step carries the
 prompt's SHA-256 (migration `010`: the prompt is never stored, only proven).
+
+**Retrieval.** Every trace has a *Retrieval* section between the steps and
+the groundedness check (`components/thread/RetrievalPanel.tsx`): the settings
+the search ran with, then each chunk — document, page, section, how it was
+chunked, distance, re-rank score, rig or reference, cited or not — with its
+text a click away; or, for Track 2, the entry, the hops and the nodes. Compare
+two traces to compare the tracks; the exports include it.
+
+**Outcome filter.** The three buckets are quick filters; *Outcome* (under the
+sliders icon) picks any one of the six exactly — Grounded, Not grounded,
+Blocked, Refused, No model, Error — whatever Settings files it under.
 
 **List extras.** The summary strip above the list counts every turn the filters
 match — per bucket, p50/p95 time, labelled and hallucinated. The sliders icon
@@ -2089,7 +2101,7 @@ therefore tracked with `.gitkeep`.
 | Read-only boundary | INSERT/UPDATE/DELETE/DROP all verified to raise |
 | `theme.css` injection | Hostile `bg`, `font`, `density` payloads verified dropped |
 | Container | Built and run; all five stores healthy; SPA, assets, deep links and path-traversal guard checked |
-| Frontend | **4 logic tests** (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation over folded chats, and the Markdown export (`src/lib/threadLogic.test.ts`). No component tests; the rest is verified by headless-browser screenshots |
+| Frontend | **5 logic tests** (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation over folded chats, and the Markdown export with its retrieval tables (`src/lib/threadLogic.test.ts`). No component tests; the rest is verified by headless-browser screenshots |
 | Chat store | Seq allocation, cascade delete, auto-titling, incognito sweep, budget trimming and every error path exercised by direct calls |
 | Migrations | Edited-file, gap-numbering, missing-file and bad-SQL rollback all verified to refuse or roll back |
 | Session API | Every endpoint exercised, including 404/413/422 paths and a rejected forged `assistant` role |
@@ -2100,7 +2112,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **210 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters, labels, incognito redaction, the prompt hash, and the settings moving turns between buckets). Everything else is still verified by direct API calls |
+| Backend | **213 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters, labels, incognito redaction, the prompt hash, the settings moving turns between buckets, the outcome filter, the retrieval detail for both tracks, and a graph citation keeping its evidence label). Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

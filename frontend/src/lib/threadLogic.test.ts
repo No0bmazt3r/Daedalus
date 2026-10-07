@@ -65,3 +65,22 @@ test('the Markdown export carries the question, every step and every number verd
   // A pipe in a value must not break the table.
   assert.doesNotMatch(md, /wrong \| sensor \|/);
 });
+
+test('the Markdown export lists each retrieved chunk with its chunking and whether it was cited', () => {
+  const trace: Trace = { query_id: 'q_2', summary: null, total_ms: null, evidence_available: true, steps: [] };
+  const check: Groundedness = {
+    query_id: 'q_2', answer: 'x', delivered: 'x', replaced: false, status: 'grounded', grounded: true,
+    validation: {}, counts: {}, citations: [], evidence_available: true, redacted: false, numbers: [],
+  };
+  const md = traceMarkdown(trace, check, [{
+    track: 'vector', query: 'q', top_k: 2, store: null, retrieval_ms: 5, rerank_ms: null, rerank_model: null, candidates: null,
+    documents: ['sop.pdf'],
+    chunks: [{
+      rank: 1, chunk_id: 'c1', missing: false, text: 't', document: 'sop.pdf', document_title: null, source_type: 'sop',
+      page: 4, section: 'NDIR', ordinal: 3, tokens: 120, distance: 0.2134, rerank_score: null, origin: 'rig',
+      chunking: { strategy: 'recursive', size: 512, overlap: 64, embedding_model: 'nomic' }, label: 'D1', cited: true,
+    }],
+  }]);
+  assert.match(md, /## Retrieval — Track 1 \(vector\)/);
+  assert.match(md, /\| 1 \| sop\.pdf \| p\.4 §NDIR \| recursive 512\/64 \| 0\.213 \| - \| rig \| D1 \|/);
+});

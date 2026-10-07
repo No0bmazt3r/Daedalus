@@ -12,6 +12,7 @@ import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import { FloatingWindow } from '../ui/floating-window'
 import { Collapse } from '../ui/collapse'
 import { ThemeSelect } from '../ui/theme-select'
+import { DatePicker } from '../ui/date-picker'
 import { statusOf } from '../errors/ErrorPage'
 import { TabError } from '../errors/TabError'
 import { Skeleton } from '../ui/skeleton'
@@ -193,10 +194,31 @@ function QueryList({
 /** Figures over every turn the filters match — the evaluation's numbers, live. */
 function SummaryStrip({ page }: { page: TracePage }) {
   const { stats, labels } = page
+  // Folded to one line by default: the list is what this column is for, and
+  // the full figures are one click away.
+  const [open, setOpen] = useState(false)
   if (!stats.total) return null
   const buckets: TraceBucket[] = ['grounded', 'ungrounded', 'unchecked']
   return (
-    <div className="space-y-3 rounded-lg border theme-border theme-card px-3 py-3">
+    <div className="space-y-3 rounded-lg border theme-border theme-card px-3 py-2.5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 text-[11px]"
+        title={open ? 'Hide the figures' : 'Show the figures: counts, time, labels'}
+      >
+        <ChevronRight size={11} className={`shrink-0 theme-text-muted transition-transform ${open ? 'rotate-90' : ''}`} />
+        {buckets.map((b) => (
+          <span key={b} className="flex items-center gap-1" title={`${labels[b]}: ${stats.by_bucket[b] ?? 0}`}>
+            <span className={`h-2 w-2 rounded-full ${BUCKET_FILL[b]}`} />
+            <span className="tabular-nums theme-text">{stats.by_bucket[b] ?? 0}</span>
+          </span>
+        ))}
+        <span className="ml-auto flex items-center gap-1 tabular-nums theme-text-muted" title="Labelled answers">
+          <Tag size={10} /> {stats.labelled}/{stats.total}
+        </span>
+      </button>
+      <Collapse open={open} variant="flow" className="space-y-3">
       {/* Gaps between segments, so a thin one still reads as its own colour. */}
       <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
         {buckets.map((b) => {
@@ -220,67 +242,128 @@ function SummaryStrip({ page }: { page: TracePage }) {
           </li>
         ))}
       </ul>
-      <div className="grid grid-cols-2 gap-2 border-t theme-border pt-2.5 text-[11px]">
-        <div title="Median and 95th-percentile time for the whole turn, as the operator waited">
-          <p className="text-[10px] uppercase tracking-wider theme-text-muted">Time p50 · p95</p>
-          <p className="mt-0.5 tabular-nums theme-text">
-            {formatMs(stats.latency_p50_ms)} <span className="theme-text-muted">·</span> {formatMs(stats.latency_p95_ms)}
-          </p>
-        </div>
-        <div title="Answers a person has labelled; the evaluation's ground truth">
-          <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider theme-text-muted">
-            <Tag size={9} /> Labelled
-          </p>
-          <p className="mt-0.5 tabular-nums theme-text">
-            {stats.labelled}<span className="theme-text-muted"> / {stats.total}</span>
-            {stats.hallucinated > 0 && <span className="status-bad"> · {stats.hallucinated} hallucinated</span>}
+      {/* Plain names first, the statistic's name on hover: "typical" is what
+          p50 means to whoever reads it, "slowest 5%" is p95. */}
+      <div className="grid grid-cols-2 gap-2 border-t theme-border pt-3">
+        <Stat
+          label="Typical time"
+          value={formatMs(stats.latency_p50_ms)}
+          note="median (p50)"
+          title="Half of the answers took less than this, for the whole turn as the operator waited"
+        />
+        <Stat
+          label="Slowest 5%"
+          value={formatMs(stats.latency_p95_ms)}
+          note="95th percentile"
+          title="95% of the answers were faster than this"
+        />
+        <div
+          className="col-span-2 rounded-md theme-surface px-2.5 py-2"
+          title="Answers a person has labelled Correct or Hallucinated: the evaluation's ground truth"
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider theme-text-muted">
+              <Tag size={10} /> Labelled
+            </span>
+            <span className="text-sm tabular-nums theme-text">
+              {stats.labelled}<span className="text-[11px] theme-text-muted"> of {stats.total}</span>
+            </span>
+          </div>
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full theme-bg">
+            <span
+              className="block h-full rounded-full theme-bg-primary"
+              style={{ width: `${share(stats.labelled, stats.total) ?? 0}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] theme-text-muted">
+            {stats.labelled === 0
+              ? 'None labelled yet'
+              : stats.hallucinated > 0
+                ? <span className="status-bad">{stats.hallucinated} hallucinated</span>
+                : 'None hallucinated'}
           </p>
         </div>
       </div>
+      </Collapse>
     </div>
   )
 }
 
-type Extra = { track: '' | 'vector' | 'graph'; model: string; labelled: '' | 'yes' | 'no'; since: string; until: string }
-const NO_EXTRA: Extra = { track: '', model: '', labelled: '', since: '', until: '' }
+/** One figure in the summary: what it is, the number, and its statistic's name. */
+function Stat({ label, value, note, title }: { label: string; value: string; note: string; title: string }) {
+  return (
+    <div className="rounded-md theme-surface px-2.5 py-2" title={title}>
+      <p className="truncate text-[10px] uppercase tracking-wider theme-text-muted">{label}</p>
+      <p className="mt-0.5 text-sm tabular-nums theme-text">{value}</p>
+      <p className="text-[10px] theme-text-muted">{note}</p>
+    </div>
+  )
+}
+
+type Extra = { status: '' | TraceStatus; track: '' | 'vector' | 'graph'; model: string; labelled: '' | 'yes' | 'no'; since: string; until: string }
+const NO_EXTRA: Extra = { status: '', track: '', model: '', labelled: '', since: '', until: '' }
 
 /** Track, model, label and dates — folded away until wanted. */
 function MoreFilters({ value, onChange, models }: { value: Extra; onChange: (v: Extra) => void; models: string[] }) {
-  const input = 'h-7 w-full rounded-md border theme-border bg-transparent px-2 text-[11px] theme-text outline-none'
+  // One filter per row, its name beside it: the column is narrow, and two
+  // dropdowns to a row cut both their values and their menus down to "Labe…".
+  const row = (label: string, control: React.ReactNode) => (
+    <div className="grid grid-cols-[3.75rem_1fr] items-center gap-2">
+      <span className="text-[10px] uppercase tracking-wider theme-text-muted">{label}</span>
+      <div className="min-w-0">{control}</div>
+    </div>
+  )
+  const active = JSON.stringify(value) !== JSON.stringify(NO_EXTRA)
   return (
-    <div className="grid grid-cols-2 gap-1.5 rounded-md border theme-border p-2">
-      <ThemeSelect
-        size="sm"
-        ariaLabel="Track"
-        value={value.track || 'any'}
-        onChange={(v) => onChange({ ...value, track: v === 'any' ? '' : (v as Extra['track']) })}
-        options={[{ value: 'any', label: 'Any track' }, { value: 'vector', label: 'Vector RAG' }, { value: 'graph', label: 'Graph RAG' }]}
-      />
-      <ThemeSelect
-        size="sm"
-        ariaLabel="Label"
-        value={value.labelled || 'any'}
-        onChange={(v) => onChange({ ...value, labelled: v === 'any' ? '' : (v as Extra['labelled']) })}
-        options={[{ value: 'any', label: 'Labelled or not' }, { value: 'yes', label: 'Labelled' }, { value: 'no', label: 'Not labelled' }]}
-      />
-      <ThemeSelect
-        size="sm"
-        ariaLabel="Model"
-        className="col-span-2"
-        value={value.model || 'any'}
-        onChange={(v) => onChange({ ...value, model: v === 'any' ? '' : v })}
-        options={[{ value: 'any', label: 'Any model' }, ...models.map((m) => ({ value: m, label: m }))]}
-      />
-      <label className="text-[10px] theme-text-muted">
-        From
-        <input type="date" value={value.since} onChange={(e) => onChange({ ...value, since: e.target.value })} className={input} />
-      </label>
-      <label className="text-[10px] theme-text-muted">
-        To
-        <input type="date" value={value.until} onChange={(e) => onChange({ ...value, until: e.target.value })} className={input} />
-      </label>
-      {JSON.stringify(value) !== JSON.stringify(NO_EXTRA) && (
-        <button onClick={() => onChange(NO_EXTRA)} className="col-span-2 text-left text-[10px] theme-text-muted hover:theme-text">
+    <div className="space-y-2 rounded-lg border theme-border theme-card p-3">
+      {/* The six outcomes each by name — finer than the three buckets above the list. */}
+      {row('Outcome', (
+        <ThemeSelect
+          size="sm"
+          ariaLabel="Outcome"
+          className="w-full"
+          value={value.status || 'any'}
+          onChange={(v) => onChange({ ...value, status: v === 'any' ? '' : (v as TraceStatus) })}
+          options={[
+            { value: 'any', label: 'Any outcome' },
+            ...(Object.keys(STATUS) as TraceStatus[]).map((st) => ({ value: st, label: STATUS[st].label })),
+          ]}
+        />
+      ))}
+      {row('Track', (
+        <ThemeSelect
+          size="sm"
+          ariaLabel="Track"
+          className="w-full"
+          value={value.track || 'any'}
+          onChange={(v) => onChange({ ...value, track: v === 'any' ? '' : (v as Extra['track']) })}
+          options={[{ value: 'any', label: 'Any track' }, { value: 'vector', label: 'Vector RAG' }, { value: 'graph', label: 'Graph RAG' }]}
+        />
+      ))}
+      {row('Label', (
+        <ThemeSelect
+          size="sm"
+          ariaLabel="Label"
+          className="w-full"
+          value={value.labelled || 'any'}
+          onChange={(v) => onChange({ ...value, labelled: v === 'any' ? '' : (v as Extra['labelled']) })}
+          options={[{ value: 'any', label: 'Any label' }, { value: 'yes', label: 'Labelled' }, { value: 'no', label: 'Unlabelled' }]}
+        />
+      ))}
+      {row('Model', (
+        <ThemeSelect
+          size="sm"
+          ariaLabel="Model"
+          className="w-full"
+          value={value.model || 'any'}
+          onChange={(v) => onChange({ ...value, model: v === 'any' ? '' : v })}
+          options={[{ value: 'any', label: 'Any model' }, ...models.map((m) => ({ value: m, label: m }))]}
+        />
+      ))}
+      {row('From', <DatePicker ariaLabel="From" value={value.since} max={value.until || undefined} onChange={(v) => onChange({ ...value, since: v })} />)}
+      {row('To', <DatePicker ariaLabel="To" value={value.until} min={value.since || undefined} onChange={(v) => onChange({ ...value, until: v })} />)}
+      {active && (
+        <button onClick={() => onChange(NO_EXTRA)} className="w-full pt-1 text-right text-[10px] theme-text-muted hover:theme-text">
           Clear these filters
         </button>
       )}
@@ -347,6 +430,7 @@ export function ThreadWindow({
       session_id: chat?.session_id,
       q: search.trim() || undefined,
       track: extra.track || undefined,
+      status: extra.status || undefined,
       model: extra.model || undefined,
       labelled: extra.labelled || undefined,
       since: extra.since ? new Date(`${extra.since}T00:00:00`).toISOString() : undefined,
@@ -437,7 +521,9 @@ export function ThreadWindow({
         />
       ) : (
       <div className="grid h-full min-h-0 grid-cols-[18rem_1fr]">
-        <aside className="flex min-h-0 min-w-0 flex-col gap-2 border-r theme-border p-3">
+        {/* One scrolling column: filters and figures scroll away with the list
+            rather than squeezing it to a sliver. */}
+        <aside className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overflow-x-hidden no-scrollbar border-r theme-border p-3">
           <div className="flex items-center gap-1">
             <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border theme-border px-2">
               <Search size={12} className="shrink-0 theme-text-muted" />
@@ -519,7 +605,7 @@ export function ThreadWindow({
             tabIndex={0}
             onKeyDown={onListKey}
             aria-label="Questions. Up and down arrows move the selection."
-            className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden no-scrollbar rounded-md outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
+            className="flex flex-1 shrink-0 flex-col rounded-md outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
           >
             {items === null ? (
               <Skeleton className="h-40 w-full" />

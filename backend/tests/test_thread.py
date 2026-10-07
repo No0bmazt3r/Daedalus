@@ -12,7 +12,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from app.db import audit_store
+from app.db import audit_store, migrations
 from app.main import app
 from app.services import chat_service, inference, ollama_client, orchestration, thread, thread_settings
 
@@ -25,6 +25,9 @@ class ThreadTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         fixtures.build()
         fixtures.set_track("vector")
+        # The corpus store's schema is applied at app start-up, which a bare
+        # TestClient does not run; the retrieval join reads it.
+        migrations.migrate("corpus")
         cls.client = TestClient(app)
 
     def tearDown(self) -> None:
@@ -202,6 +205,44 @@ class ThreadTest(unittest.TestCase):
         self.assertGreater(body["stats"]["total"], 1)
         self.assertIsNotNone(body["stats"]["latency_p95_ms"])
         self.assertEqual(sum(body["stats"]["by_bucket"].values()), body["total"])
+
+
+    def test_status_filter_is_exact(self) -> None:
+        refused, session_id = self.turn("Open ABV-1", "unused")
+        statuses = {i["status"] for i in self.client.get("/api/trace", params={"status": "refused", "limit": 500}).json()["items"]}
+        self.assertEqual(statuses, {"refused"})
+        self.assertEqual(self.client.get("/api/trace", params={"status": "maybe"}).status_code, 422)
+
+    def test_retrieval_detail_for_both_tracks(self) -> None:
+        qid = audit_store.new_query_id()
+        audit_store.log("conversation_logs", query_id=qid, user_query="why?", intent="document_query")
+        audit_store.log("rag_logs", query_id=qid, track="vector", top_k=2, vector_db_used="daedalus_nomic",
+                        retrieved_chunk_ids=["gone_1", "gone_2"], retrieval_scores=[0.21, 0.4],
+                        rerank_scores=[3.5, -1.0], retrieved_origins=["rig", "reference"],
+                        rerank_model="minilm", candidate_count=20)
+        audit_store.log("rag_logs", query_id=qid, track="graph", hop_count=1, entry_strategy="alias",
+                        traversal_path={"entry_nodes": ["sensor:co2"], "hops": [
+                            {"hop": 1, "from": ["sensor:co2"], "edge": "HAS_THRESHOLD", "to": ["threshold:nope"],
+                             "edges": [], "sufficient": True, "reason": "enough"}]})
+        body = self.client.get(f"/api/trace/{qid}/retrieval").json()
+        vector, graph = body["retrievals"]
+        self.assertEqual(vector["track"], "vector")
+        first = vector["chunks"][0]
+        # Re-chunked away since: reported, not dropped, with what the log kept.
+        self.assertEqual((first["rank"], first["missing"], first["distance"], first["rerank_score"], first["origin"]),
+                         (1, True, 0.21, 3.5, "rig"))
+        self.assertEqual((vector["rerank_model"], vector["candidates"]), ("minilm", 20))
+        self.assertEqual(graph["entry_strategy"], "alias")
+        self.assertEqual([n["id"] for n in graph["nodes"]], ["sensor:co2", "threshold:nope"])
+        self.assertTrue(graph["nodes"][1]["missing"])
+        self.assertEqual(self.client.get("/api/trace/q_nope/retrieval").status_code, 404)
+
+    def test_graph_citation_keeps_its_evidence_label(self) -> None:
+        from app.services.orchestration.evidence import EvidenceItem, EvidencePack  # noqa: PLC0415
+        pack = EvidencePack(items=[EvidenceItem("G1", "graph", "graph_walk", "[G1] x",
+                                                {"type": "graph", "node_id": "sensor:co2", "name": "CO2"})])
+        [c] = pack.citations()
+        self.assertEqual((c["label"], c["name"]), ("G1", "CO2"))
 
 
 if __name__ == "__main__":

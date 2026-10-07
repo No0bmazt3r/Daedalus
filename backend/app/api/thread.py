@@ -33,13 +33,14 @@ def recent(
     since: str | None = Query(default=None, max_length=40, description="ISO timestamp, inclusive"),
     until: str | None = Query(default=None, max_length=40, description="ISO timestamp, exclusive"),
     bucket: Literal["grounded", "ungrounded", "unchecked"] | None = None,
+    status: Literal["grounded", "ungrounded", "blocked", "refused", "no_model", "error"] | None = None,
     labelled: Literal["yes", "no"] | None = None,
     q: str | None = Query(default=None, max_length=200),
 ) -> dict:
     """Recent chat turns, newest first, with figures over everything the filters match."""
     try:
         return thread.recent(
-            limit=limit, offset=offset, bucket=bucket, labelled=labelled,
+            limit=limit, offset=offset, bucket=bucket, status=status, labelled=labelled,
             session_id=session_id, intent=intent, model=model, track=track,
             since=since, until=until, search=q.strip() if q else None,
         )
@@ -78,6 +79,15 @@ def trace(query_id: str) -> dict:
 def groundedness(query_id: str) -> dict:
     """Every number in the answer, marked against the evidence."""
     result = thread.groundedness(query_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"no trace for '{query_id}'")
+    return result
+
+
+@router.get("/{query_id}/retrieval")
+def retrieval(query_id: str) -> dict:
+    """What this turn retrieved — chunks and their chunking (Track 1), or the walk (Track 2)."""
+    result = thread.retrieval(query_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f"no trace for '{query_id}'")
     return result

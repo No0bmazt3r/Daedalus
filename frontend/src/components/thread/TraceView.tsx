@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { AlertTriangle, ArrowUpRight, ChevronRight, Download, EyeOff, MessageSquare, Table2, Tag } from 'lucide-react'
 import { traceMarkdown } from '../../lib/threadLogic'
 import {
-  fetchGroundedness, fetchTrace, openStore, saveLabel, type TraceLabel,
+  fetchGroundedness, fetchTrace, fetchTraceRetrieval, openStore, saveLabel, type RetrievalDetail, type TraceLabel,
   type Groundedness, type NumberMark, type Trace, type TraceStep, type TraceSummary,
 } from '../../lib/threadClient'
 import { Skeleton } from '../ui/skeleton'
@@ -13,6 +13,7 @@ import { withEvidenceHighlights } from '../Citations'
 import { STATUS, VERDICT, chatLabel, formatMs } from './status'
 import { useSessions } from '../../contexts/SessionsContext'
 import { StatusIcon } from './StatusIcon'
+import { RetrievalPanel } from './RetrievalPanel'
 
 /**
  * One answer's thread: the chain that produced it, then the answer with every
@@ -380,7 +381,7 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
   // Tagged with the id it belongs to, so a slow response for the previous
   // selection can never render against the current one.
   const [state, setState] = useState<{
-    queryId: string; trace: Trace | null; check: Groundedness | null
+    queryId: string; trace: Trace | null; check: Groundedness | null; retrievals: RetrievalDetail[]
     error: { message: string; status: number } | null
   } | null>(null)
   // Bumped by Retry, to fetch the same id again.
@@ -388,10 +389,10 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
 
   useEffect(() => {
     let live = true
-    void Promise.all([fetchTrace(queryId), fetchGroundedness(queryId)])
-      .then(([trace, check]) => { if (live) setState({ queryId, trace, check, error: null }) })
+    void Promise.all([fetchTrace(queryId), fetchGroundedness(queryId), fetchTraceRetrieval(queryId)])
+      .then(([trace, check, r]) => { if (live) setState({ queryId, trace, check, retrievals: r.retrievals, error: null }) })
       .catch((e: Error) => {
-        if (live) setState({ queryId, trace: null, check: null, error: { message: e.message, status: statusOf(e) ?? 500 } })
+        if (live) setState({ queryId, trace: null, check: null, retrievals: [], error: { message: e.message, status: statusOf(e) ?? 500 } })
       })
     return () => { live = false }
   }, [queryId, attempt])
@@ -435,14 +436,14 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
             {/* For a report appendix, or an examiner: the thread as it is on screen. */}
             <span className="ml-auto flex items-center gap-1">
               <button
-                onClick={() => download(`${trace.query_id}.md`, traceMarkdown(trace, check), 'text/markdown')}
+                onClick={() => download(`${trace.query_id}.md`, traceMarkdown(trace, check, shown.retrievals), 'text/markdown')}
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 hover:theme-text hover:theme-surface"
                 title="Download this thread as Markdown"
               >
                 <Download size={11} /> Markdown
               </button>
               <button
-                onClick={() => download(`${trace.query_id}.json`, JSON.stringify({ trace, groundedness: check }, null, 2), 'application/json')}
+                onClick={() => download(`${trace.query_id}.json`, JSON.stringify({ trace, groundedness: check, retrieval: shown.retrievals }, null, 2), 'application/json')}
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 hover:theme-text hover:theme-surface"
                 title="Download this thread as JSON"
               >
@@ -459,6 +460,7 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
         ))}
       </ol>
 
+      <RetrievalPanel retrievals={shown.retrievals} />
       <GroundednessPanel check={check} />
       {s && <LabelPanel key={trace.query_id} queryId={trace.query_id} initial={s.label} />}
     </div>

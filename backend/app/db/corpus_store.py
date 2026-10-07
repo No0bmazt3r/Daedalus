@@ -311,8 +311,11 @@ def chunks_by_id(chunk_ids: list[str]) -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
             f"""
-            SELECT c.*, d.filename, d.source_type, d.origin
+            SELECT c.*, d.filename, d.source_type, d.origin, d.title AS document_title,
+                   r.strategy AS chunk_strategy, r.chunk_size, r.chunk_overlap,
+                   r.embedding_model AS run_embedding_model
               FROM chunks c JOIN documents d ON d.document_id = c.document_id
+              LEFT JOIN ingest_runs r ON r.run_id = c.run_id
              WHERE c.chunk_id IN ({marks})
             """,
             chunk_ids,

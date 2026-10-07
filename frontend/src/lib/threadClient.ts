@@ -137,6 +137,8 @@ export interface TraceFilters {
   /** ISO timestamp, exclusive. */
   until?: string;
   bucket?: TraceBucket;
+  /** One exact outcome, finer than a bucket. */
+  status?: TraceStatus;
   labelled?: 'yes' | 'no';
   q?: string;
 }
@@ -156,6 +158,65 @@ export function fetchTrace(queryId: string): Promise<Trace> {
 
 export function fetchGroundedness(queryId: string): Promise<Groundedness> {
   return request(`/api/trace/${encodeURIComponent(queryId)}/groundedness`);
+}
+
+/** One retrieved chunk (Track 1), as the comparison needs it. */
+export interface RetrievedChunkDetail {
+  rank: number;
+  chunk_id: string;
+  /** Re-chunked away since: the log kept the id and scores, the text is gone. */
+  missing: boolean;
+  text: string | null;
+  document: string | null;
+  document_title: string | null;
+  source_type: string | null;
+  page: number | null;
+  section: string | null;
+  ordinal: number | null;
+  tokens: number | null;
+  /** Cosine distance as stored; lower is closer. */
+  distance: number | null;
+  rerank_score: number | null;
+  /** 'rig' (this reactor's own documents) or 'reference'. */
+  origin: string | null;
+  /** How its ingest run cut it. */
+  chunking: { strategy: string | null; size: number | null; overlap: number | null; embedding_model: string | null } | null;
+  /** The evidence label the model saw it under, and whether the answer cited it. */
+  label: string | null;
+  cited: boolean;
+}
+
+export interface GraphNodeDetail {
+  id: string;
+  type: string | null;
+  name: string;
+  missing: boolean;
+  label: string | null;
+  cited: boolean;
+}
+
+export interface RetrievalDetail {
+  track: 'vector' | 'graph' | string;
+  query: string | null;
+  top_k: number | null;
+  store: string | null;
+  retrieval_ms: number | null;
+  rerank_ms: number | null;
+  rerank_model: string | null;
+  candidates: number | null;
+  /** Track 1 */
+  chunks?: RetrievedChunkDetail[];
+  documents?: string[];
+  /** Track 2 */
+  entry_strategy?: string | null;
+  entry_nodes?: string[];
+  hops?: { hop: number; from: string[]; edge: string; to: string[]; sufficient: boolean | null; reason: string | null }[];
+  hop_count?: number | null;
+  nodes?: GraphNodeDetail[];
+}
+
+export function fetchTraceRetrieval(queryId: string): Promise<{ query_id: string; retrievals: RetrievalDetail[] }> {
+  return request(`/api/trace/${encodeURIComponent(queryId)}/retrieval`);
 }
 
 /** Label an answer; `hallucinated: null` withdraws the label. Returns the label in force. */

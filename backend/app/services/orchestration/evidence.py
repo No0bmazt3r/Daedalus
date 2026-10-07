@@ -103,7 +103,8 @@ class EvidencePack:
         return "\n\n".join(parts)
 
     def citations(self) -> list[dict[str, Any]]:
-        return [{"label": i.label, "kind": i.kind, "tool": i.tool, **i.citation} for i in self.items]
+        # The evidence label last, so nothing in a citation can overwrite it.
+        return [{"kind": i.kind, "tool": i.tool, **i.citation, "label": i.label} for i in self.items]
 
     def as_json(self) -> dict[str, Any]:
         """What the transcript stores beside the answer. Never replayed (§7.4)."""
@@ -242,7 +243,7 @@ class _Builder:
         if attrs:
             text += f" ({attrs})"
         return self.add("G", "graph", tool, text, {"type": "graph", "node_id": node.get("id"),
-                                                   "node_type": node.get("type"), "label": node.get("label"),
+                                                   "node_type": node.get("type"), "name": node.get("label"),
                                                    "origin": origin})
 
     def search_graph(self, data: dict[str, Any]) -> list[str]:

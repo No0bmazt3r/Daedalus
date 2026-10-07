@@ -251,9 +251,13 @@ Where it departs from the design above:
   context record are what was in it, minus the fixed rules), and the evidence
   lines of a turn whose chat was deleted. That trace still reads; it says its
   evidence is gone (`evidence_available: false`).
-- **Still open:** the incognito risk in §1.6. Turns from incognito chats are
-  listed like any other until `conversation_logs` stops recording their text
-  (TODO, M10).
+- **Retrieval, for the comparison.** Each trace has a *Retrieval* section
+  (`GET /api/trace/{id}/retrieval`): for Track 1 every chunk with its document,
+  page, section, distance, re-rank score, rig/reference origin, the chunking its
+  ingest run used and whether the answer cited it; for Track 2 the entry, each
+  hop and the nodes touched, cited ones marked. *Compare* puts two of them side
+  by side, and the Markdown export carries them as tables.
+- ~~**Still open:** the incognito risk in §1.6.~~ Closed the same day (§1.6).
 
 ---
 

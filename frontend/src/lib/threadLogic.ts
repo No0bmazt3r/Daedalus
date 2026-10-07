@@ -2,7 +2,7 @@
 // as it is (`threadLogic.test.ts`, `pnpm test`). Type-only imports keep that
 // true: they are erased before Node reads the file.
 
-import type { Groundedness, Trace, TraceChat, TraceSummary } from './threadClient';
+import type { Groundedness, RetrievalDetail, Trace, TraceChat, TraceSummary } from './threadClient';
 
 /**
  * Consecutive questions from one chat — the list's unit, under one header.
@@ -67,7 +67,7 @@ function cell(value: unknown): string {
  * examiner: what was asked, how it was answered step by step, and the verdict
  * on every number. Everything comes from the two responses already on screen.
  */
-export function traceMarkdown(trace: Trace, check: Groundedness): string {
+export function traceMarkdown(trace: Trace, check: Groundedness, retrievals: RetrievalDetail[] = []): string {
   const s = trace.summary;
   const lines: string[] = [`# Ariadne's Thread — ${trace.query_id}`, ''];
   if (s) {
@@ -87,6 +87,25 @@ export function traceMarkdown(trace: Trace, check: Groundedness): string {
   trace.steps.forEach((step, i) => {
     lines.push(`| ${i + 1} | ${step.kind} | ${cell(step.title)} | ${cell(step.ms)} | ${step.status} |`);
   });
+  for (const r of retrievals) {
+    if (r.track === 'graph') {
+      lines.push('', '## Retrieval — Track 2 (graph)', '',
+        `Entry: ${r.entry_strategy ?? '-'} at ${(r.entry_nodes ?? []).join(', ') || '-'} · ${r.hop_count ?? (r.hops ?? []).length} hops`, '');
+      for (const h of r.hops ?? []) lines.push(`${h.hop}. ${h.from.join(', ')} —${h.edge}→ ${h.to.join(', ') || '(nothing)'}`);
+      const cited = (r.nodes ?? []).filter((n) => n.cited).map((n) => `${n.label} ${n.name}`);
+      if (cited.length) lines.push('', `Cited: ${cited.join(', ')}`);
+    } else {
+      const chunking = (r.chunks ?? []).find((c) => c.chunking)?.chunking;
+      lines.push('', '## Retrieval — Track 1 (vector)', '',
+        `Top ${r.top_k ?? '-'} · ${chunking?.embedding_model ?? 'embedding model unknown'}` +
+          `${r.rerank_model ? ` · re-ranked ${r.candidates ?? '?'} with ${r.rerank_model}` : ''}`,
+        '', '| # | Document | Where | Chunking | Distance | Re-rank | Origin | Cited |', '|---|---|---|---|---|---|---|---|');
+      for (const c of r.chunks ?? []) {
+        const where = [c.page != null ? `p.${c.page}` : '', c.section ? `§${c.section}` : ''].filter(Boolean).join(' ')
+        lines.push(`| ${c.rank} | ${cell(c.missing ? '(gone)' : c.document)} | ${cell(where)} | ${cell(c.chunking ? `${c.chunking.strategy} ${c.chunking.size}/${c.chunking.overlap}` : null)} | ${cell(c.distance?.toFixed(3))} | ${cell(c.rerank_score?.toFixed(2))} | ${cell(c.origin)} | ${c.cited ? c.label : '-'} |`);
+      }
+    }
+  }
   lines.push('', '## Answer', '');
   if (check.replaced) lines.push(`> The validator replaced this answer. The operator saw: ${check.delivered}`, '');
   lines.push(check.redacted ? '_Not recorded: incognito chat._' : check.answer || '_No answer._', '');
