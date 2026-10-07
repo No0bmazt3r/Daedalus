@@ -47,15 +47,47 @@ function lineText(evidence: StoredEvidence, label: string): string {
   return (evidence.lines[label] ?? '').replace(/^\[[A-Z]\d+\]\s*/, '')
 }
 
-/** The answer text with its citation labels turned into chips. */
+// A reading: a number with the unit written after it (the validator's `UNITS`,
+// `services/orchestration/numbers.py`), or pH before it. A bare number is not
+// one — a count, a step, a year — so it is left as text.
+const READING_RE = new RegExp(
+  String.raw`(?<![\w.-])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?\s?(?:°\s?[CF]|%|m³|(?:ppm|ppb|percent|degC|degrees|barg|bara|mbar|bar|kPa|Pa|psi|atm|L\/min|mL\/min|lpm|slpm|sccm|mL|L|m3|kg|mg|g|mm|cm|rpm|mV|mA|kW|mmol|mol)\b)` +
+  String.raw`|(?<![\w.-])-?\d+(?:\.\d+)?\s?(?:°\s?[CF]|%|m³|(?:ppm|ppb|percent|degC|degrees|barg|bara|mbar|bar|kPa|Pa|psi|atm|L\/min|mL\/min|lpm|slpm|sccm|mL|L|m3|kg|mg|g|mm|cm|rpm|mV|mA|kW|mmol|mol)\b)` +
+  String.raw`|\bpH\s?\d+(?:\.\d+)?`,
+  'gi',
+)
+
+/**
+ * Plain answer text with each reading picked out, so `980 ppm` can be found
+ * without reading the sentence. Accent and weight only: every number in a
+ * delivered answer already passed the validator, so a verdict colour here
+ * would say nothing — that view is Ariadne's Thread's.
+ */
+function withReadings(text: string, keyBase: number): ReactNode[] {
+  const out: ReactNode[] = []
+  let last = 0
+  for (const m of text.matchAll(READING_RE)) {
+    out.push(text.slice(last, m.index))
+    out.push(
+      <span key={`r${keyBase + m.index}`} className="whitespace-nowrap font-medium theme-accent">
+        {m[0]}
+      </span>,
+    )
+    last = m.index + m[0].length
+  }
+  out.push(text.slice(last))
+  return out
+}
+
+/** The answer text with its readings picked out and its citation labels turned into chips. */
 export function withCitations(text: string, evidence: StoredEvidence | undefined): ReactNode {
-  if (!evidence) return text
+  if (!evidence) return withReadings(text, 0)
   const out: ReactNode[] = []
   let last = 0
   for (const match of text.matchAll(CITATION_RE)) {
     const labels = match[1].split(SPLIT_RE).map((l) => l.trim().toUpperCase())
     if (!labels.every((l) => l in evidence.lines)) continue
-    out.push(text.slice(last, match.index))
+    out.push(...withReadings(text.slice(last, match.index), last))
     out.push(
       <Fragment key={match.index}>
         {labels.map((label) => (
@@ -73,8 +105,7 @@ export function withCitations(text: string, evidence: StoredEvidence | undefined
     )
     last = match.index + match[0].length
   }
-  if (!out.length) return text
-  out.push(text.slice(last))
+  out.push(...withReadings(text.slice(last), last))
   return out
 }
 

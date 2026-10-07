@@ -7,6 +7,7 @@ import {
 import { Skeleton } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
 import { STATUS, VERDICT, formatMs } from './status'
+import { StatusIcon } from './StatusIcon'
 
 /**
  * One answer's thread: the chain that produced it, then the answer with every
@@ -126,13 +127,42 @@ function StepRow({ step, totalMs }: { step: TraceStep; totalMs: number | null })
 }
 
 /** The answer, with each number wrapped in its verdict's colour. */
+// The unit written after a number, as `numbers._UNIT_AFTER_RE` reads it. Only
+// used when the backend found a unit there, so a following word is never taken.
+const UNIT_AFTER = /^\s?(°\s?c|°|%|[a-z]+(?:\/[a-z]+)?³?\d?)/i
+
+// What else in plain text is worth catching the eye, in priority order: dates,
+// clock times, names with a digit in them (CO2, CO₂, ABV-1, SOP-04), unit and
+// tolerance symbols, and any digits left over (a list marker, a small count).
+const EMPHASIS =
+  /\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2})?)?|\b\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]\.?m\.?)?|\b[A-Za-z]+(?:-?\d+|₂)[A-Za-z0-9₂]*|°\s?[CF]?|%|±|\b\d+(?:\.\d+)?\b/g
+
+/** Plain text with its dates, times, formulae and symbols picked out. */
+function emphasise(text: string, keyBase: number): ReactNode[] {
+  const out: ReactNode[] = []
+  let last = 0
+  for (const m of text.matchAll(EMPHASIS)) {
+    out.push(text.slice(last, m.index))
+    out.push(
+      <span key={`${keyBase}-${m.index}`} className="rounded px-0.5 font-medium theme-accent theme-surface">
+        {m[0]}
+      </span>,
+    )
+    last = m.index + m[0].length
+  }
+  out.push(text.slice(last))
+  return out
+}
+
 function MarkedAnswer({ text, marks }: { text: string; marks: NumberMark[] }) {
   const out: ReactNode[] = []
   let last = 0
   for (const m of [...marks].sort((a, b) => a.start - b.start)) {
     if (m.start < last) continue
-    out.push(text.slice(last, m.start))
+    out.push(...emphasise(text.slice(last, m.start), last))
     const source = m.sources[0]
+    // `450 ppm` reads as one value, so the mark covers the unit too.
+    const end = m.unit ? m.end + (UNIT_AFTER.exec(text.slice(m.end))?.[0].length ?? 0) : m.end
     out.push(
       <mark
         key={m.start}
@@ -142,12 +172,12 @@ function MarkedAnswer({ text, marks }: { text: string; marks: NumberMark[] }) {
           source ? `[${source.label}] ${source.line}` : '',
         ].filter(Boolean).join('\n')}
       >
-        {text.slice(m.start, m.end)}
+        {text.slice(m.start, end)}
       </mark>,
     )
-    last = m.end
+    last = end
   }
-  out.push(text.slice(last))
+  out.push(...emphasise(text.slice(last), last))
   return <p className="whitespace-pre-wrap text-[13px] leading-relaxed theme-text">{out}</p>
 }
 
@@ -240,7 +270,8 @@ export function TraceView({ queryId, compact = false }: {
         <section className="rounded-lg border theme-border theme-card p-3">
           <p className="text-[13px] theme-text">{s.question || '(no question text)'}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] theme-text-muted">
-            <span className={`font-medium ${STATUS[s.status].tone}`} title={STATUS[s.status].hint}>
+            <span className={`flex items-center gap-1 font-medium ${STATUS[s.status].tone}`}>
+              <StatusIcon status={s.status} />
               {STATUS[s.status].label}
             </span>
             <span className="tabular-nums">{formatMs(s.latency_ms)}</span>

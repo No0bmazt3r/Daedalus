@@ -3,6 +3,7 @@ import { ChevronRight, ExternalLink } from 'lucide-react'
 import { openThread, type TraceSummary } from '../../lib/threadClient'
 import { Collapse } from '../ui/collapse'
 import { STATUS, formatMs } from './status'
+import { StatusIcon } from './StatusIcon'
 import { TraceView } from './TraceView'
 
 /**
@@ -30,7 +31,8 @@ export function TraceStrip({ trace }: { trace: TraceSummary }) {
           <ChevronRight size={11} className={`transition-transform ${open ? 'rotate-90' : ''}`} />
           <span className="tabular-nums">{parts.join(' · ')}</span>
           <span>·</span>
-          <span className={status.tone} title={status.hint}>{status.label}</span>
+          <StatusIcon status={trace.status} size={11} />
+          <span className={status.tone}>{status.label.toLowerCase()}</span>
         </button>
         <button
           onClick={() => openThread(trace.query_id)}

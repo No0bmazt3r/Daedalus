@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Network, RefreshCw, Search } from 'lucide-react'
 import { fetchTraces, type TraceFilters, type TraceSummary } from '../../lib/threadClient'
 import { FloatingWindow } from '../ui/floating-window'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import { Skeleton } from '../ui/skeleton'
-import { STATUS, formatMs } from './status'
+import { FILTERS, formatMs } from './status'
+import { StatusIcon } from './StatusIcon'
 import { TraceView } from './TraceView'
 
 /**
@@ -16,13 +18,6 @@ import { TraceView } from './TraceView'
  */
 
 const PAGE = 50
-
-const FILTERS: { id: TraceFilters['grounded'] | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'yes', label: 'Grounded' },
-  { id: 'no', label: 'Not grounded' },
-  { id: 'unchecked', label: 'Unchecked' },
-]
 
 function when(ts: string): string {
   const d = new Date(ts)
@@ -52,9 +47,8 @@ function QueryList({
             {/* One line that gives way rather than widening the row: the
                 status side truncates, the date keeps its width. */}
             <span className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-[10px] theme-text-muted">
+              <StatusIcon status={t.status} />
               <span className="min-w-0 truncate">
-                <span className={STATUS[t.status].tone} title={STATUS[t.status].hint}>{STATUS[t.status].label}</span>
-                {' · '}
                 <span className="tabular-nums">{formatMs(t.latency_ms)}</span>
                 {t.tool_count > 0 && ` · ${t.tool_count} tool${t.tool_count === 1 ? '' : 's'}`}
               </span>
@@ -135,6 +129,7 @@ export function ThreadWindow({
         </button>
       )}
     >
+      <TooltipProvider delay={200}>
       <div className="grid h-full min-h-0 grid-cols-[18rem_1fr]">
         <aside className="flex min-h-0 min-w-0 flex-col gap-2 border-r theme-border p-3">
           <label className="flex items-center gap-1.5 rounded-md border theme-border px-2">
@@ -146,27 +141,42 @@ export function ThreadWindow({
               className="h-8 w-full bg-transparent text-xs theme-text outline-none placeholder:opacity-50"
             />
           </label>
-          <div className="flex flex-wrap gap-1">
-            {FILTERS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setGrounded(f.id)}
-                aria-pressed={grounded === f.id}
-                className={`rounded-md border px-2 py-0.5 text-[10px] ${
-                  grounded === f.id ? 'theme-accent-border theme-surface-strong theme-text' : 'theme-border theme-text-muted hover:theme-text'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* Icons in their verdict's colour, the name and meaning on hover —
+              one row at any width, where four worded chips wrapped to two. */}
+          <div className="grid grid-cols-4 gap-1">
+            {FILTERS.map((f) => {
+              const active = grounded === f.id
+              return (
+                <Tooltip key={f.id}>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => setGrounded(f.id)}
+                        aria-pressed={active}
+                        aria-label={f.label}
+                        className={`flex h-7 items-center justify-center rounded-md border transition-colors ${
+                          active ? 'theme-accent-border theme-surface-strong' : 'theme-border opacity-60 hover:opacity-100 hover:theme-surface'
+                        }`}
+                      />
+                    }
+                  >
+                    <f.icon size={14} className={f.tone} />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="flex-col items-start gap-0.5">
+                    <span className="font-medium">{f.label}</span>
+                    <span className="opacity-80">{f.hint}</span>
+                  </TooltipContent>
+                </Tooltip>
+              )
+            })}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden no-scrollbar">
             {error ? (
-              <p className="text-xs status-bad">Could not load the questions: {error}</p>
+              <p className="my-auto text-center text-xs status-bad">Could not load the questions: {error}</p>
             ) : items === null ? (
               <Skeleton className="h-40 w-full" />
             ) : items.length === 0 ? (
-              <p className="text-xs leading-relaxed theme-text-muted">
+              <p className="my-auto text-center text-xs leading-relaxed theme-text-muted">
                 {search || grounded !== 'all'
                   ? 'No question matches these filters.'
                   : 'No questions yet. Ask something in a chat and its thread appears here.'}
@@ -186,14 +196,19 @@ export function ThreadWindow({
             )}
           </div>
         </aside>
-        <div className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden no-scrollbar p-4">
-          {selected ? (
-            <TraceView queryId={selected} />
-          ) : (
-            <p className="text-xs theme-text-muted">Pick a question to follow its thread.</p>
-          )}
+        {/* `my-auto` centres a short trace (or the empty state) in the pane;
+            a long one has no spare height, so it starts at the top and scrolls. */}
+        <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto overflow-x-hidden no-scrollbar p-4">
+          <div className="my-auto">
+            {selected ? (
+              <TraceView queryId={selected} />
+            ) : (
+              <p className="text-center text-xs theme-text-muted">Pick a question to follow its thread.</p>
+            )}
+          </div>
         </div>
       </div>
+      </TooltipProvider>
     </FloatingWindow>
   )
 }

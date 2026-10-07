@@ -19,6 +19,7 @@ import { SessionsProvider, useSessions } from '../contexts/SessionsContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { UiPrefsProvider, useUiPrefs } from '../contexts/UiPrefsContext'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
+import { TitleTooltips } from '../components/ui/title-tooltips'
 import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
@@ -58,6 +59,8 @@ function RootLayout() {
         <SessionsProvider>
           <UiPrefsProvider>
             <AppShell />
+            {/* Every `title` hint, drawn as the app's tooltip. */}
+            <TitleTooltips />
           </UiPrefsProvider>
         </SessionsProvider>
       </SettingsProvider>

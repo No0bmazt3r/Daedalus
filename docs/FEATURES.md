@@ -1724,6 +1724,16 @@ a single block of prose arrives on one beat — which is right, since staggering
 paragraphs is motion for its own sake. Everything collapses to `0.01ms` under
 `prefers-reduced-motion: reduce`.
 
+### Every hint is the same tooltip — `components/ui/title-tooltips.tsx`
+
+The app writes hover hints as plain `title="…"` attributes, a couple of hundred
+of them. One delegated listener at the root lifts the attribute on hover or
+keyboard focus, so the browser's grey box never shows, and draws the same popup
+as `ui/tooltip.tsx` instead: theme colours, arrow, fade-and-zoom in after 200ms,
+above the element or below when there is no room. A new `title` gets it with no
+extra code. Touch is skipped; elements using `<Tooltip>` carry no `title`, so
+the two never both show.
+
 ### A maximized window reflows, it does not letterbox
 
 Every window pane centres its content in a measured column, which is right for
