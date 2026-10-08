@@ -10,7 +10,7 @@ from app.db import audit_store, vector_store
 from app.services import embedding_models, ingestion, rag_config, reranker
 from app.services.agent_tools import registry
 
-from . import fixtures
+from .. import fixtures
 
 TEXTS = [f"passage {i}" for i in range(20)]
 

@@ -9,7 +9,7 @@ from app.db import audit_store
 from app.services import agent_tools, rag_config
 from app.services.agent_tools import registry
 
-from . import fixtures
+from .. import fixtures
 
 
 class RegistryTest(unittest.TestCase):

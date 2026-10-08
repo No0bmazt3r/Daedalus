@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from app.services import orchestration, query_pipeline
 from app.services.orchestration import numbers, timeparse, validator
 
-from . import fixtures
+from .. import fixtures
 
 NOW = datetime(2026, 9, 12, 12, 0, 30, tzinfo=timezone.utc)
 LATEST = datetime(2026, 9, 12, 11, 59, tzinfo=timezone.utc)

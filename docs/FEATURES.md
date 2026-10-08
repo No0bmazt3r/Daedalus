@@ -447,7 +447,7 @@ always insertion order, and same-second rows would otherwise be arbitrary.
 Cells over 4000 characters are truncated with a count, so one large transcript
 cannot push megabytes into the browser.
 
-### Ariadne's Thread — `services/thread.py`
+### Ariadne's Thread — `services/thread/`
 
 The product view of the audit store (`MODULES.md` §1): one answer, reassembled
 from the seven tables on its `query_id`, plus the evidence pack the transcript
@@ -1695,7 +1695,7 @@ comparison is frozen, and every evaluation snapshot records `disabled_rules`.
 | Add a word or tag a rule should catch | the verb lists and `*_TARGET_RE` patterns in `query_pipeline/vocabulary.py` (`ACTUATE_VERBS`, `ADJUST_VERBS`, `DATA_VERBS`, `PLANT_TARGET_RE`, `PARAMETER_TARGET_RE`, `DATA_TARGET_RE`, `OVERRIDE_RE`, `SQL_WRITE_RE`) |
 | Change what Settings shows for it | `BUILT_IN_RULES` in `api/assistant.py` |
 
-Then run `tests/test_safety.py`, which pins what each rule must and must not
+Then run `tests/chat/test_safety.py`, which pins what each rule must and must not
 refuse, and update it to match the new intent.
 
 Prompt and safety edits are refused while the comparison is frozen. An
@@ -2101,7 +2101,7 @@ therefore tracked with `.gitkeep`.
 | Read-only boundary | INSERT/UPDATE/DELETE/DROP all verified to raise |
 | `theme.css` injection | Hostile `bg`, `font`, `density` payloads verified dropped |
 | Container | Built and run; all five stores healthy; SPA, assets, deep links and path-traversal guard checked |
-| Frontend | **5 logic tests** (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation over folded chats, and the Markdown export with its retrieval tables (`src/lib/threadLogic.test.ts`). No component tests; the rest is verified by headless-browser screenshots |
+| Frontend | **5 logic tests** (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation over folded chats, and the Markdown export with its retrieval tables (`frontend/tests/threadLogic.test.ts`). No component tests; the rest is verified by headless-browser screenshots |
 | Chat store | Seq allocation, cascade delete, auto-titling, incognito sweep, budget trimming and every error path exercised by direct calls |
 | Migrations | Edited-file, gap-numbering, missing-file and bad-SQL rollback all verified to refuse or roll back |
 | Session API | Every endpoint exercised, including 404/413/422 paths and a rejected forged `assistant` role |
@@ -2112,7 +2112,7 @@ therefore tracked with `.gitkeep`.
 | Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
 | GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **213 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters, labels, incognito redaction, the prompt hash, the settings moving turns between buckets, the outcome filter, the retrieval detail for both tracks, and a graph citation keeping its evidence label). Everything else is still verified by direct API calls |
+| Backend | **215 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters, labels, incognito redaction, the prompt hash, the settings moving turns between buckets, the outcome filter, the retrieval detail for both tracks, and a graph citation keeping its evidence label). Everything else is still verified by direct API calls |
 | Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
 The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.

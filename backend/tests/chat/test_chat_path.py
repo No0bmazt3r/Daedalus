@@ -9,43 +9,14 @@ never what the operator is left reading.
 from __future__ import annotations
 
 import contextlib
-import json
 import unittest
 from unittest import mock
 
 from app.db import audit_store, paths, sqlite_util
 from app.services import chat_service, inference, ollama_client, orchestration
 
-from . import fixtures
-
-
-class _FakeResponse:
-    status_code = 200
-
-    def __init__(self, text: str) -> None:
-        self.text = text
-
-    def read(self) -> bytes:
-        return b""
-
-    def iter_lines(self):  # noqa: ANN201
-        for word in self.text.split(" "):
-            yield json.dumps({"message": {"content": word + " "}})
-        yield json.dumps({"done": True, "prompt_eval_count": 100, "eval_count": 10})
-
-
-class _FakeHttpx:
-    # `ollama_client._timeout` builds one of these before every call.
-    Timeout = staticmethod(lambda **_: None)
-
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.payloads: list[dict] = []
-
-    @contextlib.contextmanager
-    def stream(self, method, url, json=None, timeout=None):  # noqa: ANN001, ANN201, A002
-        self.payloads.append(json)
-        yield _FakeResponse(self.text)
+from .. import fixtures
+from ..fakes import FakeHttpx
 
 
 class ChatPathTest(unittest.TestCase):
@@ -54,8 +25,8 @@ class ChatPathTest(unittest.TestCase):
         fixtures.build()
         fixtures.set_track("vector")
 
-    def run_turn(self, question: str, answer: str, *, fake: object | None = None) -> tuple[list[dict], _FakeHttpx]:
-        fake = fake or _FakeHttpx(answer)
+    def run_turn(self, question: str, answer: str, *, fake: object | None = None) -> tuple[list[dict], FakeHttpx]:
+        fake = fake or FakeHttpx(answer)
         session = chat_service.create_session()
         choice = {"tag": "fake:1b", "source": "pinned", "remote": False, "reason": "test"}
         # The title job is a background model call; here it is only counted.
@@ -156,7 +127,7 @@ class ChatPathTest(unittest.TestCase):
         self.titled.assert_called_once_with(self.session_id)
 
     def test_failed_model_call_writes_an_error_row(self) -> None:
-        class _Broken(_FakeHttpx):
+        class _Broken(FakeHttpx):
             @contextlib.contextmanager
             def stream(self, method, url, json=None, timeout=None):  # noqa: ANN001, ANN201, A002
                 raise ollama_client.OllamaError("model exploded")

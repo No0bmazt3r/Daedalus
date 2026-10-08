@@ -1,8 +1,8 @@
 // The Thread's pure logic: no React, no DOM, no fetch — so `node --test` runs it
-// as it is (`threadLogic.test.ts`, `pnpm test`). Type-only imports keep that
+// as it is (`tests/threadLogic.test.ts`, `pnpm test`). Type-only imports keep that
 // true: they are erased before Node reads the file.
 
-import type { Groundedness, RetrievalDetail, Trace, TraceChat, TraceSummary } from './threadClient';
+import type { Groundedness, RetrievalDetail, Trace, TraceChat, TraceStatus, TraceSummary } from './threadClient';
 
 /**
  * Consecutive questions from one chat — the list's unit, under one header.
@@ -119,4 +119,20 @@ export function traceMarkdown(trace: Trace, check: Groundedness, retrievals: Ret
   }
   lines.push('_A detector, not a proof: it catches an invented or stale number, not a right number on the wrong sensor._', '');
   return lines.join('\n');
+}
+
+/** The list's extra filters (under the sliders icon), as the form holds them. */
+export type Extra = { status: '' | TraceStatus; track: '' | 'vector' | 'graph'; model: string; labelled: '' | 'yes' | 'no'; since: string; until: string }
+export const NO_EXTRA: Extra = { status: '', track: '', model: '', labelled: '', since: '', until: '' }
+
+/** The day after `date` (YYYY-MM-DD), as the exclusive end of a "To" day. */
+export function dayAfter(date: string): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return d.toISOString()
+}
+
+/** An evidence line without its own `[S1]` prefix — the label is shown beside it already. */
+export function stripLabel(line: string): string {
+  return line.replace(/^\[[A-Z]\d+\]\s*/, '')
 }

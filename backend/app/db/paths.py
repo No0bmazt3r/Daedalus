@@ -63,10 +63,8 @@ CORPUS_DB = Path(os.environ.get("DAEDALUS_CORPUS_DB", DATA_DIR / "sqlite" / "cor
 # supplied instead of against our reading of it.
 CORPUS_DIR = DATA_DIR / "corpus"
 
-# ChromaDB: a URL means the containerised server, otherwise an embedded
-# persistent client writing to this directory.
+# ChromaDB: an embedded persistent client writing to this directory.
 CHROMA_DIR = DATA_DIR / "chroma"
-CHROMA_URL = os.environ.get("CHROMA_URL", "").strip()
 
 # The model the orchestrator runs, written by the Forge and read by FastAPI.
 # PROJECT.md 8.1: "Selected via config/model_config.json — never hardcoded."

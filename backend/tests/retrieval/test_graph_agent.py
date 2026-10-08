@@ -14,7 +14,7 @@ from app.services import agent_tools, graph_agent, rag_config
 from app.services.agent_tools import search
 from app.services.orchestration import planner
 
-from . import fixtures
+from .. import fixtures
 
 BOTH_SPIKED = "pressure and temperature both spiked, what do I do?"
 

@@ -2,7 +2,7 @@
 //
 // One chat turn, reassembled from the audit log: the chain that produced the
 // answer, and every number in it marked against the evidence. Read-only; the
-// backend owns every decision (`services/thread.py`), this file only types it.
+// backend owns every decision (`services/thread/`), this file only types it.
 
 import { request } from './http';
 

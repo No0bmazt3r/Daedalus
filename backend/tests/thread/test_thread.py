@@ -16,8 +16,8 @@ from app.db import audit_store, migrations
 from app.main import app
 from app.services import chat_service, inference, ollama_client, orchestration, thread, thread_settings
 
-from . import fixtures
-from .test_chat_path import _FakeHttpx
+from .. import fixtures
+from ..fakes import FakeHttpx
 
 
 class ThreadTest(unittest.TestCase):
@@ -37,7 +37,7 @@ class ThreadTest(unittest.TestCase):
         """Run one chat turn; returns (query_id, session_id)."""
         session = chat_service.create_session(ephemeral=incognito)
         choice = {"tag": "fake:1b", "source": "pinned", "remote": False, "reason": "test"}
-        with mock.patch.object(ollama_client, "httpx", _FakeHttpx(answer)), \
+        with mock.patch.object(ollama_client, "httpx", FakeHttpx(answer)), \
              mock.patch.object(ollama_client, "candidate_base_urls", return_value=["http://fake"]), \
              mock.patch.object(ollama_client, "serving_host", return_value="test"), \
              mock.patch.object(inference, "choose_model", return_value=choice), \

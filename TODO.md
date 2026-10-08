@@ -59,7 +59,7 @@ Offline pipeline. Never runs during a live query.
       Malay recommendations computed per machine (the catalogue's fixed
       `recommended` flag is gone); Benchmark under Installed. Shared rule with
       the re-rankers in `fit_verdict.py`; contract in `docs/MODEL_FIT.md`,
-      enforced by `tests/test_embedding_fit.py` (10 tests). Calibrated on the dev
+      enforced by `tests/models/test_embedding_fit.py` (10 tests). Calibrated on the dev
       laptop: nomic-embed-text 35 ms, qwen3-embedding:0.6b 95 ms per question —
       the latter is now the recommendation here, for English and Malay
   - [x] An embedding model is never offered or used as the chat model: one rule
@@ -412,7 +412,7 @@ The anti-hallucination mechanism. **Highest-value milestone.**
 - [x] Query timeouts + result-size caps; errors that leak nothing internal — a
       2 s progress-handler abort per statement; errors name the bad argument,
       never a path or a statement
-- [x] Tests (`backend/tests/test_sensor_tools.py`): **no tool has a write
+- [x] Tests (`backend/tests/tools/test_sensor_tools.py`): **no tool has a write
       signature** · the store itself refuses a write · injection through a
       timestamp or sensor name fails and the table is intact · unknown sensor,
       aggregation and argument names are rejected
@@ -660,7 +660,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       asked once per arm (`vector` · `graph-walk` · `graph-agent`) through the
       real chat path, inside `rag_config.arm(...)`. That override is
       context-scoped, so the frozen config is never written. Turns log as
-      `source='eval'`. 21 tests in `tests/test_evaluation.py`
+      `source='eval'`. 21 tests in `tests/evaluation/test_evaluation.py`
   - [x] Refuses an official run unless frozen; a repeat over the same
         fingerprint and query set needs a written reason. `--practice` and
         `--ids` runs are marked not citable
@@ -807,7 +807,7 @@ Layer 9 below for the per-step detail.
       system prompt with reset, and safety: built-in refusals shown read-only,
       their wording editable, plus extra blocked phrases that only add
       refusals. `services/assistant_settings.py`, `api/assistant.py`,
-      `tests/test_assistant_settings.py`. Frozen with the comparison; recorded
+      `tests/chat/test_assistant_settings.py`. Frozen with the comparison; recorded
       in evaluation snapshots. Split into three panels: Date & Time, System
       Prompt, Safety. Each built-in rule has a switch: off needs a typed
       `DISABLE`, is refused while frozen, and is recorded in evaluation
@@ -850,7 +850,7 @@ Layer 9 below for the per-step detail.
         — with a number-by-number groundedness verdict over the answer.
         `GET /api/trace` (filter by chat, intent, verdict, text),
         `/api/trace/{id}`, `/api/trace/{id}/groundedness`
-        (`services/thread.py`). The sidebar window (`Ctrl+Alt+A`, and in the
+        (`services/thread/`). The sidebar window (`Ctrl+Alt+A`, and in the
         palette) and a collapsed `2 tools · 1.8s · grounded` strip under every
         chat answer that opens the thread in a side panel. The verdict *mirrors* the
         stored validator result rather than re-deciding it, and adds the
@@ -860,7 +860,7 @@ Layer 9 below for the per-step detail.
         (`docs/FEATURES.md`). Then a *Retrieval* section per trace (chunks,
         their documents and chunking, scores, rig/reference, cited — or the
         graph walk) and an Outcome filter for the six statuses. 17 tests
-        (`tests/test_thread.py`) + 5 frontend logic tests. Not shown: the assembled prompt (never
+        (`tests/thread/test_thread.py`) + 5 frontend logic tests. Not shown: the assembled prompt (never
         stored), and the evidence lines of a deleted chat
   - [x] **The Forge** — hardware & model console (§8.2, Layer 11). **All six
         steps built,** as three tabs: Hardware · Models · Added Models.
@@ -1596,6 +1596,22 @@ CLI that works the same on Windows, macOS and Linux.
 
 ## Known issues
 
+- [x] **Structure review (2026-10-07, finished 2026-10-08).** Done in that
+      pass: tests grouped into folders, the 19 audit cuts, the Thread split into
+      single-purpose modules (`services/thread/`, `components/thread/`).
+      Remaining, none urgent:
+  - [x] `components/forge/ModelsView.tsx` and `components/blueprints/IngestView.tsx`
+        split *(2026-10-08)*: the card, detail panel, shortlist and formatting
+        into `forge/models/`; one file per ingest step into `blueprints/ingest/`
+  - [x] The retrieval replay logic moved out of `api/corpus.py` into
+        `services/retrieval_replay.py`, its SQL into `audit_store`, with a test
+        (`tests/retrieval/test_replay.py`) *(2026-10-08)*
+  - [-] `db/vector_store.py` importing `services/embedding_models` — **kept on
+        purpose.** It is lazy and documented: it lets every caller open "the
+        current collection" without knowing the naming rule, so no caller can
+        hard-code one. Inverting it means registering a resolver at start-up, and
+        a store used before registration would silently open the default
+        collection — a worse failure than the impurity it removes
 - [x] **A graph citation's evidence label was overwritten by the node's name** *(fixed 2026-10-07)*.
       `EvidencePack.citations()` spread the citation dict after `label`, and graph
       citations carried the node name under `label`, so `G1` became "CO2 sensor".
@@ -1614,7 +1630,7 @@ CLI that works the same on Windows, macOS and Linux.
       Fixing `TypewriterText` also fixed a leak — its interval was never
       cleared on unmount
 - [ ] Anyone who ran `daedalus.sh dev` before the path fix has orphaned databases under `backend/data/` — `sync.sh` reports them; they are not deleted for you
-- [ ] Tests are backend-only and not in CI. The backend has 213 `unittest` cases
+- [ ] Tests are backend-only and not in CI. The backend has 215 `unittest` cases
       (safety, intents, sensor tools, orchestration, tool mode, rerank, chat path,
       background jobs, model fit, embedding prefixes, evaluation harness, Ariadne's Thread); the frontend has 5 logic tests
       (`pnpm test`, Node's runner) and no component tests, and the **migration runner** still
@@ -1628,11 +1644,10 @@ CLI that works the same on Windows, macOS and Linux.
       `torch`, `radio browser`). Upstream noise, unrelated to the engines
       Daedalus enables, and harmless — but it makes `docker logs` look worse
       than the container is
-- [ ] **Embedded Chroma does not work on a default install.**
-      `requirements.txt` ships `chromadb-client`, which is HTTP-only, so an
-      unset `CHROMA_URL` is not a fallback to embedded mode — it is no vector
-      store at all, and `index_state` reads `unknown`. Either run
-      `./daedalus.sh dev`, which starts the container, or install full `chromadb`
+- [x] **Embedded Chroma does not work on a default install** — *stale, closed
+      2026-10-07.* `requirements.txt` has shipped full `chromadb` since the move
+      off Docker, so embedded mode is the only mode, and the HTTP server mode
+      that the old note relied on has been removed (audit B1)
 - [ ] **`config/embedding_config.json` carries a `verified` record that cannot
       be real:** `nomic-embed-text` at 512 dimensions with `elapsed_ms: 0`, and
       `indexed_at` set while `indexed_with` is null. Nomic is 768, no embedding
@@ -1834,18 +1849,11 @@ CLI that works the same on Windows, macOS and Linux.
       end-to-end for cloud rows are measured directly and are sound
       (`BENCHMARK.md` §7)
 - [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
-- [ ] **Over-engineering audit (2026-10-02): 0 of 19 cuts done.** Dead code,
-      two unused frontend deps (`@tanstack/react-query`, `@tanstack/router-devtools`),
-      a duplicated hook and the unused Chroma server mode — about −457 lines.
-      Plus one undecided judgment call: the ~3,700-line theming subsystem.
-      Itemised with a check command per row in
-      [`docs/AUDIT_OVERENGINEERING.md`](docs/AUDIT_OVERENGINEERING.md); update
-      the count here when you tick rows there
-
----
-
-## Deferred — Phase 2
-
+- [x] **Over-engineering audit (2026-10-02): 19 of 19 cuts done (2026-10-07).**
+      Dead UI components and exports, the duplicated size hook (now
+      `useElementSize`), the two unused frontend dependencies, dead backend
+      helpers and Chroma's server mode. The theming subsystem (J1) is kept on
+      purpose. Itemised in [`docs/AUDIT_OVERENGINEERING.md`](docs/AUDIT_OVERENGINEERING.md)
 - [ ] PyQt5 embedded tab (Layer 9A)
 - [ ] Multi-device `device_profiles` + dynamically generated per-device tools
 - [ ] Kùzu graph backend comparison

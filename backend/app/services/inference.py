@@ -85,15 +85,6 @@ GENERATE_TIMEOUT = 300.0
 _LEADING_STAMP = re.compile(r"^\s*\[\s*\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
 
 
-class NoModelAvailable(RuntimeError):
-    """Nothing is installed, or the configured model is not.
-
-    Kept for callers that want to fail loudly. `answer_stream` does not raise it
-    — by the time it knows, it is already a streaming response, so it yields a
-    terminal `error` event instead.
-    """
-
-
 def _known_tags() -> tuple[set[str], set[str]]:
     """Tags Ollama will serve, split by where they run: (local, remote)."""
     local: set[str] = set()
@@ -107,11 +98,6 @@ def _known_tags() -> tuple[set[str], set[str]]:
     except Exception:
         pass
     return local, remote
-
-
-def _installed_tags() -> set[str]:
-    """Local tags only. What `auto` mode and the default path may pick from."""
-    return _known_tags()[0]
 
 
 def choose_model(requested: str | None = None) -> dict[str, Any]:

@@ -384,10 +384,6 @@ export const THEME_DEFAULT_FROSTED: Record<string, boolean> = {
  * that ships with an animated effect, since a still background has nothing to
  * react with.
  */
-// Pointer reactivity was removed — see `lib/pointerField.ts`. Kept as an empty
-// record so the shape of `ThemeState` and every stored theme stays valid, and
-// so a reader finds this note rather than a missing symbol.
-export const THEME_DEFAULT_REACTIVE: Record<string, boolean> = {};
 
 // ── Colour maths ──────────────────────────────────────────────────────────
 

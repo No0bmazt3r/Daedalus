@@ -42,6 +42,13 @@ app/
 python -m unittest discover -s tests -t .
 ```
 
+Tests are grouped by area — `chat/`, `tools/`, `retrieval/`, `models/`,
+`evaluation/`, `thread/` — with an index of every file in `tests/README.md`.
+
+```bash
+python -m unittest discover -s tests/thread -t .   # one area
+```
+
 Stdlib `unittest`, no extra dependency. `tests/__init__.py` points every store
 and the config directory at a throwaway directory before anything is imported,
 so a run never touches `data/` or `config/`; the chat-path tests fake Ollama.

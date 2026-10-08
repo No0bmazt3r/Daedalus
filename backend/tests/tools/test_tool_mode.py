@@ -7,7 +7,7 @@ import unittest
 from app.db import tool_policy_store
 from app.services import agent_tools
 
-from . import fixtures
+from .. import fixtures
 
 ANSWERING_VECTOR = {"get_live_reading", "get_trend", "search_corpus"}
 

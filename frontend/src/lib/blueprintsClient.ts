@@ -229,7 +229,6 @@ export const seedTraversals = (force = false) =>
     { method: 'POST' },
   );
 
-
 // ── the retrieval track switch (PROJECT.md §5) ───────────────────────────────
 
 export type RagTrack = 'vector' | 'graph';
@@ -382,7 +381,6 @@ export const setRagTrack = async (track: RagTrack) => {
   window.dispatchEvent(new CustomEvent(RAG_TRACK_CHANGED_EVENT, { detail: config }));
   return config;
 };
-
 
 // ── the corpus pipeline (Track 1) ────────────────────────────────────────────
 //
@@ -675,12 +673,6 @@ export const createGraphNode = (
     method: 'POST',
     body: JSON.stringify({ node_type: nodeType, node_id: nodeId, attributes }),
   });
-
-export const updateGraphNode = (nodeId: string, attributes: Record<string, unknown>) =>
-  request<{ ok: true; nodes: number; edges: number }>(
-    `/api/graph/authoring/nodes/${encodeURIComponent(nodeId)}`,
-    { method: 'PATCH', body: JSON.stringify(attributes) },
-  );
 
 export const deleteGraphNode = (nodeId: string, cascade = false) =>
   request<{ ok: true; nodes: number; edges: number }>(

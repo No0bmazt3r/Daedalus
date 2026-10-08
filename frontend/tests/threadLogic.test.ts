@@ -1,10 +1,10 @@
 /// <reference types="node" />
-// `pnpm test` — Node's own runner, no test framework. See threadLogic.ts.
+// `pnpm test` — Node's own runner, no test framework. See src/lib/threadLogic.ts.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Groundedness, Trace, TraceSummary } from './threadClient.ts';
-import { groupByChat, share, stepSelection, traceMarkdown } from './threadLogic.ts';
+import type { Groundedness, Trace, TraceSummary } from '../src/lib/threadClient.ts';
+import { groupByChat, share, stepSelection, traceMarkdown } from '../src/lib/threadLogic.ts';
 
 function turn(query_id: string, session_id: string | null): TraceSummary {
   return {

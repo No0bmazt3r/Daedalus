@@ -130,10 +130,6 @@ export async function listSessions(limit = 50): Promise<ChatSession[]> {
   return data.sessions;
 }
 
-export function getSession(id: string): Promise<ChatSessionDetail> {
-  return request<ChatSessionDetail>(`${BASE}/${encodeURIComponent(id)}`);
-}
-
 export async function getMessages(id: string): Promise<ChatMessage[]> {
   const data = await request<{ messages: ChatMessage[] }>(
     `${BASE}/${encodeURIComponent(id)}/messages`,
@@ -167,13 +163,6 @@ export function renameSession(id: string, title: string): Promise<ChatSessionDet
  */
 export function regenerateTitle(id: string): Promise<{ ok: boolean; scheduled: boolean }> {
   return request(`${BASE}/${encodeURIComponent(id)}/title`, { method: 'POST' });
-}
-
-export function archiveSession(id: string, archived = true): Promise<ChatSessionDetail> {
-  return request<ChatSessionDetail>(`${BASE}/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ archived }),
-  });
 }
 
 /** Deletes the chat and its messages. Audit rows in ai_logs.db are untouched. */

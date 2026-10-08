@@ -761,7 +761,7 @@ input[type='color']::-webkit-color-swatch {
    - **The stagger is the animation.** The container height is not animated. A
      `max-height` transition has to guess a height, and guessing short clips
      the list while guessing tall makes every collapse end with a dead pause.
-   - **Out plays before the rows are gone.** `useCollapse` keeps the children
+   - **Out plays before the rows are gone.** `Collapse` keeps the children
      mounted for the length of the outbound cascade and waits on the *real*
      animations rather than a timeout, so a list of two rows does not sit
      through the timing of a list of twelve.

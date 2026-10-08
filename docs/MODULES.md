@@ -206,7 +206,7 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 
 ### 1.7 As built (2026-10-07)
 
-`services/thread.py`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
+`services/thread/`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
 plus `q` (search the question or id) on the list. Both views of §1.3: the window
 from the sidebar (`Ctrl+Alt+A`, the palette), and the strip under every answer,
 which opens the thread in a panel beside the chat (with the evidence pack on

@@ -14,6 +14,7 @@ over anything else here.
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
 | Report progress (advisor, examiner) | [`STATUS.md`](STATUS.md) — plain-language status with screenshot placeholders |
+| Find which files make up each feature (for explaining the code) | [`CODE_MAP.md`](CODE_MAP.md) — layers, the databases, and every feature from screen to store |
 | Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — all three built: Ariadne's Thread, The Forge, Labyrinth Blueprints |
 | Know how a model is judged against this machine, or add one | [`MODEL_FIT.md`](MODEL_FIT.md) — the fit contract for chat, embedding and re-ranker models |
 | Run the dual-track evaluation | [`EVALUATION.md`](EVALUATION.md) — query set, freeze-then-run, metrics, what a run writes |

@@ -7,9 +7,8 @@ import unittest
 
 from app.db import sensor_store
 from app.services import agent_tools
-from app.services.agent_tools import registry
 
-from . import fixtures
+from .. import fixtures
 
 _UNSAFE_EFFECTS = {
     agent_tools.Effect.WRITE, agent_tools.Effect.ADMIN,

@@ -10,7 +10,7 @@ from app.services import agent_tools, ingestion
 from app.services import knowledge_graph as kg
 from app.services.orchestration import evidence, prompt
 
-from . import fixtures
+from .. import fixtures
 
 
 def upload(text: str, **kw: object) -> dict:

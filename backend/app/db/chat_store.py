@@ -517,22 +517,6 @@ def get_messages(
     return [_message_row(row) for row in rows]
 
 
-def get_recent_messages(session_id: str, *, count: int) -> list[dict[str, Any]]:
-    """The last `count` messages, still in ascending order.
-
-    Ordering descending to take the tail and reversing in Python keeps SQLite
-    on the `(session_id, seq)` index instead of scanning the whole transcript.
-    """
-    init_db()
-    with sqlite_util.connect(DB_PATH) as conn:
-        rows = conn.execute(
-            "SELECT * FROM chat_messages WHERE session_id = ? "
-            "ORDER BY seq DESC LIMIT ?",
-            (session_id, max(1, count)),
-        ).fetchall()
-    return [_message_row(row) for row in reversed(rows)]
-
-
 def message_for_query(query_id: str) -> dict[str, Any] | None:
     """The assistant turn a chat query produced, with its stored evidence pack.
 
