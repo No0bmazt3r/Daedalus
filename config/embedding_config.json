@@ -2,9 +2,9 @@
   "provider": "local",
   "model": "qwen3-embedding:0.6b",
   "endpoint_id": null,
-  "dimensions": 1024,
-  "indexed_with": "qwen3-embedding:0.6b",
-  "indexed_at": "2026-10-09T15:48:30+00:00",
+  "dimensions": 512,
+  "indexed_with": "nomic-embed-text",
+  "indexed_at": "2026-10-09T00:00:00Z",
   "verified": {
     "nomic-embed-text": {
       "dimensions": 512,
