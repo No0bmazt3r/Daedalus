@@ -8,7 +8,8 @@ import {
   type CorpusStatus, type CorpusDocument, type CorpusChunk,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
-import { bytes, ORIGIN_BADGE } from './ingest/shared'
+import { bytes, ORIGIN_BADGE, SOURCE_TYPES, SOURCE_LABEL } from './ingest/shared'
+import { ThemeSelect } from '../ui/theme-select'
 import { useConfirm } from '../ui/confirm-dialog'
 
 /**
@@ -111,6 +112,12 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<LoadFailure | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // Narrowing the document list, for when there are more than fit on screen.
+  const [docQuery, setDocQuery] = useState('')
+  const [docType, setDocType] = useState('all')
+  const [docOrigin, setDocOrigin] = useState('all')
+  const [docState, setDocState] = useState('all')
+  const [docSort, setDocSort] = useState('newest')
   const [confirm, confirmDialog] = useConfirm()
 
   const reload = useCallback(() => {
@@ -170,9 +177,37 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
       />
     )
   }
-  if (!documents || !status) return <Skeleton className="h-80 w-full" />
+  // Shaped like the page it stands in for (four tiles, then the two columns),
+  // so nothing jumps when the data arrives.
+  if (!documents || !status) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[62px] w-full" />)}
+        </div>
+        <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    )
+  }
 
   const { corpus } = status
+  const docNeedle = docQuery.trim().toLowerCase()
+  const stateOf = (d: CorpusDocument) =>
+    d.extract_status === 'failed' ? 'failed'
+    : d.chunk_count > 0 && d.embedded_count === d.chunk_count ? 'ready' : 'partial'
+  const shownDocs = documents
+    .filter((d) => !docNeedle || d.filename.toLowerCase().includes(docNeedle) || (d.title ?? '').toLowerCase().includes(docNeedle))
+    .filter((d) => docType === 'all' || d.source_type === docType)
+    .filter((d) => docOrigin === 'all' || (d.origin ?? 'reference') === docOrigin)
+    .filter((d) => docState === 'all' || stateOf(d) === docState)
+    .sort((a, b) =>
+      docSort === 'name' ? a.filename.localeCompare(b.filename)
+      : docSort === 'chunks' ? b.chunk_count - a.chunk_count
+      : b.uploaded_at.localeCompare(a.uploaded_at))
+  const filtering = !!docNeedle || docType !== 'all' || docOrigin !== 'all' || docState !== 'all'
   const needle = filter.trim().toLowerCase()
   const visible = needle
     ? chunks.filter((c) => c.text.toLowerCase().includes(needle))
@@ -245,7 +280,53 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
 
       <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
         <div className="space-y-1.5">
-          {documents.map((d) => (
+          <label className="flex items-center gap-1.5 rounded-md border theme-border theme-surface px-2 py-1">
+            <Search size={11} className="shrink-0 theme-text-muted" />
+            <input
+              value={docQuery}
+              onChange={(e) => setDocQuery(e.target.value)}
+              aria-label="Find a document by name"
+              placeholder="Find a document…"
+              className="min-w-0 flex-1 bg-transparent text-[11px] theme-text outline-none placeholder:opacity-50"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <ThemeSelect
+              size="sm" ariaLabel="Document type" value={docType} onChange={setDocType}
+              options={[{ value: 'all', label: 'All types' }, ...SOURCE_TYPES.map((t) => ({ value: t.id, label: SOURCE_LABEL[t.id] }))]}
+            />
+            <ThemeSelect
+              size="sm" ariaLabel="Whose document" value={docOrigin} onChange={setDocOrigin}
+              options={[{ value: 'all', label: 'Any origin' }, { value: 'rig', label: 'This rig' }, { value: 'reference', label: 'Reference' }]}
+            />
+            <ThemeSelect
+              size="sm" ariaLabel="Index status" value={docState} onChange={setDocState}
+              options={[
+                { value: 'all', label: 'Any status' }, { value: 'ready', label: 'Fully embedded' },
+                { value: 'partial', label: 'Not all embedded' }, { value: 'failed', label: 'Unreadable' },
+              ]}
+            />
+            <ThemeSelect
+              size="sm" ariaLabel="Sort documents" value={docSort} onChange={setDocSort}
+              options={[{ value: 'newest', label: 'Newest first' }, { value: 'name', label: 'Name A–Z' }, { value: 'chunks', label: 'Most chunks' }]}
+            />
+          </div>
+          <p className="flex items-center gap-2 text-[10px] theme-text-muted">
+            {shownDocs.length} of {documents.length} document{documents.length === 1 ? '' : 's'}
+            {filtering && (
+              <button
+                onClick={() => { setDocQuery(''); setDocType('all'); setDocOrigin('all'); setDocState('all') }}
+                className="theme-accent hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </p>
+          <div className="max-h-[28rem] space-y-1.5 overflow-y-auto no-scrollbar">
+          {shownDocs.length === 0 && (
+            <p className="py-3 text-center text-[11px] theme-text-muted">No document matches these filters.</p>
+          )}
+          {shownDocs.map((d) => (
             <button
               key={d.document_id}
               onClick={() => load(d.document_id)}
@@ -271,6 +352,7 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
               </span>
             </button>
           ))}
+          </div>
         </div>
 
         <div className="space-y-2">

@@ -73,8 +73,7 @@ export function CoverageView() {
       />
     )
   }
-  if (!data) return <Skeleton className="h-48 w-full" />
-
+  // The heading is fixed text: drawn now, the sections once the data is in.
   return (
     <div className="space-y-5">
       <header className="flex items-baseline justify-between gap-4">
@@ -84,7 +83,7 @@ export function CoverageView() {
             Every row is a question the graph cannot answer.
           </p>
         </div>
-        <span
+        {data && <span
           className={`shrink-0 rounded-full border px-2.5 py-1 text-xs ${
             data.total_gaps === 0
               ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400'
@@ -92,10 +91,11 @@ export function CoverageView() {
           }`}
         >
           {data.total_gaps} {data.total_gaps === 1 ? 'gap' : 'gaps'}
-        </span>
+        </span>}
       </header>
 
-      {SECTIONS.map(({ key, title, consequence }) => {
+      {!data && <Skeleton className="h-48 w-full" />}
+      {data && SECTIONS.map(({ key, title, consequence }) => {
         const items = (data[key] as GraphNode[]) ?? []
         return (
           <section key={key} className="rounded-lg border theme-border theme-card p-3">

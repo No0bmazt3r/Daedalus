@@ -612,6 +612,31 @@ export const clearVectors = () =>
     method: 'POST',
   });
 
+export interface DocumentLog {
+  document_id: string;
+  filename: string;
+  runs: number;
+  last_at: string;
+  errors: number;
+  warnings: number;
+  last_status: IngestRun['status'] | null;
+}
+
+export type DocumentEvent = IngestEvent & {
+  run_id: string;
+  run_status: IngestRun['status'];
+  run_started_at: string;
+  run_kind: IngestRun['kind'];
+};
+
+export const fetchDocumentLogs = () =>
+  request<{ documents: DocumentLog[] }>('/api/corpus/logs/documents');
+
+export const fetchDocumentEvents = (documentId: string) =>
+  request<{ document_id: string; events: DocumentEvent[] }>(
+    `/api/corpus/logs/documents/${encodeURIComponent(documentId)}`,
+  );
+
 export const fetchRuns = (limit = 50) =>
   request<{ runs: IngestRun[]; active_run: string | null }>(`/api/corpus/runs?limit=${limit}`);
 

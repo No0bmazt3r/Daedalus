@@ -1,4 +1,5 @@
-import { type CorpusDocument, type DocumentOrigin, type IngestEvent } from '../../../lib/blueprintsClient'
+import { CheckCircle2, Loader2, MinusCircle, XCircle } from 'lucide-react'
+import { type CorpusDocument, type DocumentOrigin, type IngestEvent, type IngestRun } from '../../../lib/blueprintsClient'
 
 export const LEVEL_STYLE: Record<IngestEvent['level'], string> = {
   debug: 'theme-text-muted opacity-60',
@@ -64,4 +65,12 @@ export function bytes(n: number): string {
 /** Fully ingested: every chunk has a vector. It lives in Corpus from then on. */
 export function isIngested(d: CorpusDocument): boolean {
   return d.extract_status === 'ok' && d.chunk_count > 0 && d.embedded_count === d.chunk_count
+}
+
+// Icon + word + colour, so a run's outcome never rests on colour alone.
+export const STATUS_BADGE: Record<IngestRun['status'], { icon: typeof Loader2; cls: string }> = {
+  running: { icon: Loader2, cls: 'border-amber-400/40 bg-amber-400/10 text-amber-400' },
+  ok: { icon: CheckCircle2, cls: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400' },
+  failed: { icon: XCircle, cls: 'border-rose-400/40 bg-rose-400/10 text-rose-400' },
+  cancelled: { icon: MinusCircle, cls: 'theme-border theme-text-muted' },
 }

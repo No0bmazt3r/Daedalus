@@ -507,6 +507,55 @@ def log(
         pass
 
 
+def document_logs(limit: int = 200) -> list[dict[str, Any]]:
+    """One row per document that any run has logged against, newest activity first."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT e.document_id,
+                   COALESCE(d.filename, '(deleted)') AS filename,
+                   COUNT(DISTINCT e.run_id) AS runs,
+                   MAX(e.at) AS last_at,
+                   SUM(e.level = 'error') AS errors,
+                   SUM(e.level = 'warn') AS warnings,
+                   (SELECT r.status FROM ingest_runs r
+                      JOIN ingest_events x ON x.run_id = r.run_id
+                     WHERE x.document_id = e.document_id
+                     ORDER BY r.started_at DESC LIMIT 1) AS last_status
+              FROM ingest_events e LEFT JOIN documents d ON d.document_id = e.document_id
+             WHERE e.document_id IS NOT NULL
+             GROUP BY e.document_id
+             ORDER BY last_at DESC
+             LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def document_events(document_id: str, *, limit: int = 2000) -> list[dict[str, Any]]:
+    """Every event about one document, across every run that touched it.
+
+    Includes the run-wide events of those runs (no document id: the stamp, the
+    completion line), because "why did this document's ingest fail" is often
+    one of them — the stamp failure was. Each row carries its run's status and
+    start time so the caller can group by run.
+    """
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT e.*, r.status AS run_status, r.started_at AS run_started_at, r.kind AS run_kind
+              FROM ingest_events e JOIN ingest_runs r ON r.run_id = e.run_id
+             WHERE e.run_id IN (SELECT run_id FROM ingest_events WHERE document_id = ?)
+               AND (e.document_id = ? OR e.document_id IS NULL)
+             ORDER BY r.started_at DESC, e.id
+             LIMIT ?
+            """,
+            (document_id, document_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def events(run_id: str, *, level: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
     where, args = "WHERE run_id = ?", [run_id]
     if level:

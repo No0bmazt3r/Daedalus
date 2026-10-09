@@ -394,7 +394,19 @@ export function AuthoringView() {
       />
     )
   }
-  if (!status) return <Skeleton className="h-96 w-full" />
+  // The step rail and heading are fixed text: drawn now, body when it loads.
+  if (!status) {
+    return (
+      <div className="space-y-4">
+        <StepRail steps={STEPS} step={step} setStep={setStep} blocked={{ 3: 'Loading…' }} />
+        <div>
+          <h3 className="text-sm theme-text">{STEPS[step - 1].label}</h3>
+          <p className="text-[11px] theme-text-muted">{STEPS[step - 1].hint}</p>
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
 
   const connectable = status.schema.edge_types.some(
     (e) => nodes.some((n) => n.type === e.from) && nodes.some((n) => n.type === e.to),

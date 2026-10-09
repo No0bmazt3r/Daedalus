@@ -1,18 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Play, RotateCcw, AlertCircle, AlertTriangle, Loader2, Eraser, ChevronRight, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
+import { Play, RotateCcw, AlertCircle, AlertTriangle, Eraser, ChevronRight } from 'lucide-react'
 import {
   startIngest, resumeIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
 } from '../../../lib/blueprintsClient'
-import { LEVEL_STYLE, bytes, runTime } from './shared'
+import { LEVEL_STYLE, STATUS_BADGE, bytes, runTime } from './shared'
 import { useConfirm } from '../../ui/confirm-dialog'
 
-// Icon + word + colour, so a run's outcome never rests on colour alone.
-const STATUS_BADGE: Record<IngestRun['status'], { icon: typeof Loader2; cls: string }> = {
-  running: { icon: Loader2, cls: 'border-amber-400/40 bg-amber-400/10 text-amber-400' },
-  ok: { icon: CheckCircle2, cls: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400' },
-  failed: { icon: XCircle, cls: 'border-rose-400/40 bg-rose-400/10 text-rose-400' },
-  cancelled: { icon: MinusCircle, cls: 'theme-border theme-text-muted' },
-}
 
 export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRun; onRefresh: () => void; defaultOpen?: boolean }) {
   const [events, setEvents] = useState<IngestEvent[]>([])

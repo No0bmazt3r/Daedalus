@@ -364,6 +364,18 @@ def get_run(run_id: str) -> dict[str, Any]:
     return {"run": run, "active": ingestion.active_run() == run_id}
 
 
+@router.get("/logs/documents")
+def document_logs() -> dict[str, Any]:
+    """Ingest logs grouped by document: which documents have history, and how it went."""
+    return {"documents": corpus_store.document_logs()}
+
+
+@router.get("/logs/documents/{document_id}")
+def document_events(document_id: str) -> dict[str, Any]:
+    """One document's whole ingest history, across runs, with the run-wide lines of each."""
+    return {"document_id": document_id, "events": corpus_store.document_events(document_id)}
+
+
 @router.get("/runs/{run_id}/events")
 def run_events(
     run_id: str,

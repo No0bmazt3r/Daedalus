@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **219 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **220 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -45,7 +45,7 @@ Shared, at the top of this folder:
 | `test_origin.py` | 11 | Document origin — this rig's own, or a reference from another installation. |
 | `test_replay.py` | 2 | Blueprints' Track 1 replay: a recorded vector query read back, never re-run. |
 | `test_rerank.py` | 13 | Track 1's two-stage retrieval: a wide Chroma pool, re-scored by a cross-encoder. |
-| `test_run_documents.py` | 1 | An ingest run names the documents it processed, even after one is deleted. |
+| `test_run_documents.py` | 2 | Ingest logs by document: a run names its documents, and a document gets its runs' logs. |
 
 ### `models/` — Which model may do which job, and the fit contract that judges a model against this machine.
 

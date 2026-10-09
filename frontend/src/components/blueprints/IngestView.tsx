@@ -139,22 +139,36 @@ export function IngestView({ onOpenForge, onShowCorpus, onShowLogs }: { onOpenFo
       />
     )
   }
-  if (!status || !config) return <Skeleton className="h-96 w-full" />
-
+  // The step rail and heading are fixed text, so they draw straight away; only
+  // the step's own body waits for the backend.
+  const loading = !status || !config
   const readable = documents.filter((d) => d.extract_status === 'ok').length
   // One sentence per step saying why it is not reachable yet — a disabled
   // control that does not say why is a dead end with a cursor change.
-  const noDocs = readable === 0 ? 'Import a readable document first' : undefined
+  const noDocs = loading ? 'Loading…' : readable === 0 ? 'Import a readable document first' : undefined
   const blocked: Record<number, string | undefined> = { 1: undefined, 2: noDocs, 3: noDocs, 4: noDocs }
 
-  return (
-    <div className="space-y-4">
+  const header = (
+    <>
       <StepRail steps={STEPS} step={step} setStep={setStep} blocked={blocked} />
-
       <div>
         <h3 className="text-sm theme-text">{STEPS[step - 1].label}</h3>
         <p className="text-[11px] theme-text-muted">{STEPS[step - 1].hint}</p>
       </div>
+    </>
+  )
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {header}
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {header}
 
       {step === 1 && (
         <ImportStep
