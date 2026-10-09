@@ -4,7 +4,7 @@
   "endpoint_id": null,
   "dimensions": 1024,
   "indexed_with": "qwen3-embedding:0.6b",
-  "indexed_at": "2026-10-09T14:26:13+00:00",
+  "indexed_at": "2026-10-09T15:48:30+00:00",
   "verified": {
     "nomic-embed-text": {
       "dimensions": 512,
