@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
-import { FileText, Search, ChevronRight, Database } from 'lucide-react'
+import { FileText, Search, ChevronRight, Database, Trash2, AlertCircle } from 'lucide-react'
 import {
-  fetchCorpusStatus, fetchCorpusDocuments, fetchDocumentChunks,
+  fetchCorpusStatus, fetchCorpusDocuments, fetchDocumentChunks, deleteDocument, updateDocument,
   type CorpusStatus, type CorpusDocument, type CorpusChunk,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
-import { bytes } from './ingest/shared'
+import { bytes, ORIGIN_BADGE } from './ingest/shared'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * The corpus — what Track 1 actually holds, MODULES.md §3.1.
@@ -109,6 +110,8 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
   const [chunks, setChunks] = useState<CorpusChunk[]>([])
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<LoadFailure | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [confirm, confirmDialog] = useConfirm()
 
   const reload = useCallback(() => {
     void fetchCorpusStatus().then(setStatus).catch((e: unknown) => setError(toFailure(e)))
@@ -125,6 +128,36 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
     // No chunks on failure would claim the document has none.
     void fetchDocumentChunks(id, 500).then((r) => setChunks(r.chunks)).catch((e: unknown) => setError(toFailure(e)))
   }, [])
+
+  // Ingested documents are managed here (Build's Import list only shows what
+  // still needs work), so this is where they are deleted and re-labelled.
+  const removeDoc = async (d: CorpusDocument) => {
+    const ok = await confirm({
+      title: `Delete ${d.filename}?`,
+      body: `This removes the document, its ${d.chunk_count} chunks and ${d.embedded_count} vectors. Track 1 can no longer find it. To get it back you'd have to import and ingest it again.`,
+      confirmLabel: 'Delete document',
+      danger: true,
+    })
+    if (!ok) return
+    setActionError(null)
+    try {
+      await deleteDocument(d.document_id)
+      setSelected(null)
+      setChunks([])
+    } catch (e) {
+      setActionError((e as Error).message)
+    }
+    reload()
+  }
+  const flipOrigin = async (d: CorpusDocument) => {
+    setActionError(null)
+    try {
+      await updateDocument(d.document_id, { origin: d.origin === 'rig' ? 'reference' : 'rig' })
+    } catch (e) {
+      setActionError((e as Error).message)
+    }
+    reload()
+  }
 
   // The documents cannot be read: this tab is the error page.
   if (error) {
@@ -173,6 +206,7 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
         {([
           ['Documents', corpus.documents, bytes(corpus.bytes)],
@@ -246,6 +280,35 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
             </p>
           ) : (
             <>
+              {(() => {
+                const doc = documents.find((d) => d.document_id === selected)
+                if (!doc) return null
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs theme-text">{doc.filename}</span>
+                    <button
+                      onClick={() => void flipOrigin(doc)}
+                      title="Whose document this is. Click to change. Takes effect from the next question, no re-ingest needed."
+                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${ORIGIN_BADGE[doc.origin ?? 'reference']}`}
+                    >
+                      {doc.origin === 'rig' ? 'This rig' : 'Reference'}
+                    </button>
+                    <button
+                      onClick={() => void removeDoc(doc)}
+                      aria-label={`Delete ${doc.filename}`}
+                      title="Delete this document, its chunks and its vectors"
+                      className="shrink-0 rounded-md p-1.5 theme-text-muted transition-colors hover:text-rose-400"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )
+              })()}
+              {actionError && (
+                <p className="flex items-start gap-1.5 text-[11px] text-rose-400">
+                  <AlertCircle size={12} className="mt-0.5 shrink-0" /> {actionError}
+                </p>
+              )}
               <label className="flex items-center gap-1.5 rounded-md border theme-border theme-surface px-2 py-1">
                 <Search size={11} className="shrink-0 theme-text-muted" />
                 <input

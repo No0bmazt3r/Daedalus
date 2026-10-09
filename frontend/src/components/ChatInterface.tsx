@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { Plus, Mic, MicOff, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -25,6 +25,8 @@ import { Sources, withCitations } from './Citations'
 import { TraceStrip } from './thread/TraceStrip'
 import { AnswerPanel, type AnswerTab } from './thread/AnswerPanel'
 import { useSessionTraces } from '../hooks/useSessionTraces'
+import { VoiceBeam, useMicrophone, type UseMicrophoneResult } from 'voice-glow'
+import { ThinkingIndicator } from './ThinkingIndicator'
 
 function TypewriterText({ text }: { text: string }) {
   // How much of `text` is typed. Keyed by the text it counts, so a new text
@@ -148,6 +150,41 @@ function MessageActions({
 }
 
 /**
+ * The glow's "thinking" motion: gathered into one beam that sweeps side to
+ * side while a reply is being worked out. voice-glow's own processing state is
+ * a paid add-on; its `motion` prop takes any getter, so this is that, by hand.
+ * `offset` is a share of half the input's width.
+ */
+const SWEEP_SECONDS = 2.4
+const sweepMotion = () => ({
+  gather: 1,
+  offset: Math.sin((performance.now() / 1000) * ((2 * Math.PI) / SWEEP_SECONDS)) * 0.7,
+  stretch: 0.4,
+  heldLevel: 0.55,
+})
+
+/** The composer box, with the voice glow along its bottom edge. */
+function GlowingComposer({
+  mic, thinking, children,
+}: {
+  mic: UseMicrophoneResult
+  thinking: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <VoiceBeam
+      stream={mic.stream}
+      active={mic.state === 'live' || thinking}
+      motion={thinking ? sweepMotion : null}
+      borderRadius={16}
+      className="w-full"
+    >
+      {children}
+    </VoiceBeam>
+  )
+}
+
+/**
  * Everything under the textarea: attach, mode, model picker, mic, send.
  *
  * One component for both composers. They were separate blocks, and the
@@ -161,10 +198,12 @@ function MessageActions({
 function ComposerControls({
   onSend,
   canSend,
+  mic,
   compact = false,
 }: {
   onSend: () => void
   canSend: boolean
+  mic: UseMicrophoneResult
   /** The in-conversation composer sits tighter than the greeting one. */
   compact?: boolean
 }) {
@@ -274,8 +313,26 @@ function ComposerControls({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" disabled aria-label="Voice input (coming soon)" title="Voice input (coming soon)" className="w-8 h-8 rounded-full theme-text-muted disabled:opacity-40 disabled:cursor-not-allowed">
-            <Mic size={18} />
+          {/* Lights the glow while you talk. Turning speech into text is not
+              built yet (TODO.md), so the button says so rather than implying it. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!mic.supported || mic.state === 'requesting'}
+            onClick={() => (mic.state === 'live' ? mic.stop() : void mic.start())}
+            aria-pressed={mic.state === 'live'}
+            aria-label={mic.state === 'live' ? 'Stop listening' : 'Listen'}
+            title={
+              !mic.supported ? "This browser can't use the microphone"
+              : mic.state === 'denied' ? 'Microphone permission was denied'
+              : mic.state === 'live' ? 'Listening. Voice-to-text is not built yet, so nothing is typed'
+              : 'Listen (glow only for now; voice-to-text is coming later)'
+            }
+            className={`w-8 h-8 rounded-full hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] disabled:opacity-40 ${
+              mic.state === 'live' ? 'theme-accent' : mic.state === 'denied' ? 'status-bad' : 'theme-text-muted hover:theme-text'
+            }`}
+          >
+            {mic.state === 'live' ? <MicOff size={18} /> : <Mic size={18} />}
           </Button>
           <Button
             onClick={onSend}
@@ -366,6 +423,7 @@ export function ChatInterface() {
   const { isIncognito, setIsIncognito, referenceModels, noModel, showNoModelPrompt } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
   const { messages, sendMessage, sending, error, modelNotice, ratings, rate, activeSessionId } = useSessions()
+  const mic = useMicrophone()
   // Ariadne's Thread, one line per answer. Re-read when a stored answer arrives:
   // its audit rows are written before the turn is, so they are there to read.
   const traces = useSessionTraces(
@@ -499,6 +557,7 @@ export function ChatInterface() {
               {error || modelNotice}
             </div>
           )}
+          <GlowingComposer mic={mic} thinking={sending}>
           <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-sm focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
             <Textarea 
               ref={textareaRef}
@@ -510,8 +569,9 @@ export function ChatInterface() {
               rows={1}
             />
             
-            <ComposerControls onSend={handleSend} canSend={!!input.trim() && !sending} />
+            <ComposerControls onSend={handleSend} canSend={!!input.trim() && !sending} mic={mic} />
           </div>
+          </GlowingComposer>
         </div>
       ) : (
         <>
@@ -543,7 +603,7 @@ export function ChatInterface() {
                     } ${msg.failed ? 'status-bad-border' : ''}`}
                   >
                     {msg.role === 'assistant' && msg.content === '' && !msg.persisted ? (
-                      <span className="theme-text-muted animate-pulse">Thinking…</span>
+                      <ThinkingIndicator phase={msg.phase} />
                     ) : msg.role === 'assistant' && msg.persisted ? (
                       // Chips only once the turn is stored: while tokens are
                       // streaming there is no evidence pack on the client yet.
@@ -616,6 +676,7 @@ export function ChatInterface() {
               </button>
             )}
             <div className={columnWidth}>
+              <GlowingComposer mic={mic} thinking={sending}>
               <div className="w-full theme-card zone-input border theme-border rounded-2xl flex flex-col shadow-lg focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)] transition-all">
                 <Textarea 
                   ref={textareaRef}
@@ -630,9 +691,11 @@ export function ChatInterface() {
                 <ComposerControls
                   onSend={handleSend}
                   canSend={!!input.trim() && !sending}
+                  mic={mic}
                   compact
                 />
               </div>
+              </GlowingComposer>
             </div>
           </div>
         </>

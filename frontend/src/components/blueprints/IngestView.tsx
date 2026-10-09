@@ -70,7 +70,7 @@ const STEPS: readonly Step[] = [
   { id: 4, label: 'Run', icon: Play, hint: 'Ingest, and watch it happen' },
 ]
 
-export function IngestView({ onOpenForge, onShowCorpus }: { onOpenForge?: () => void; onShowCorpus?: () => void }) {
+export function IngestView({ onOpenForge, onShowCorpus, onShowLogs }: { onOpenForge?: () => void; onShowCorpus?: () => void; onShowLogs?: () => void }) {
   const [status, setStatus] = useState<CorpusStatus | null>(null)
   const [documents, setDocuments] = useState<CorpusDocument[]>([])
   const [config, setConfig] = useState<CorpusConfig | null>(null)
@@ -162,6 +162,7 @@ export function IngestView({ onOpenForge, onShowCorpus }: { onOpenForge?: () => 
           extraction={status.extraction}
           onChange={refresh}
           onDelete={(id) => act('delete', () => deleteDocument(id))}
+          onShowCorpus={onShowCorpus}
         />
       )}
       {step === 2 && <ChunkStep config={config} documents={documents} onSaved={refresh} />}
@@ -175,6 +176,7 @@ export function IngestView({ onOpenForge, onShowCorpus }: { onOpenForge?: () => 
           busy={busy}
           error={error}
           onAct={act}
+          onShowLogs={onShowLogs}
           onRefresh={() => {
             if (activeRun) {
               void fetchRun(activeRun.run_id).then((r) => setActiveRun(r.run)).catch(() => {})
@@ -199,8 +201,8 @@ export function IngestView({ onOpenForge, onShowCorpus }: { onOpenForge?: () => 
           <Toast
             tone="bad"
             title={finished.status === 'cancelled' ? 'Ingest cancelled' : 'Ingest failed'}
-            body={`${finished.error ?? 'Something went wrong.'} The run log in step 4 has the details.`}
-            action={step !== 4 ? { label: 'Show log', onClick: () => setStep(4) } : undefined}
+            body={`${finished.error ?? 'Something went wrong.'} The Logs tab has the details.`}
+            action={onShowLogs ? { label: 'Show log', onClick: onShowLogs } : undefined}
             onClose={closeToast}
           />
         )

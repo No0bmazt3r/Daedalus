@@ -37,6 +37,7 @@ export type BlueprintsTab =
   | 'corpus'
   | 'retrieval'
   | 'ingest'
+  | 'logs'
   | 'graph'
   | 'coverage'
   | 'replay'
@@ -69,6 +70,10 @@ export const BLUEPRINT_TABS: readonly {
   {
     id: 'authoring', label: 'Build', track: 'graph',
     keywords: 'author edit add node edge create graph pipeline',
+  },
+  {
+    id: 'logs', label: 'Logs', track: 'vector',
+    keywords: 'ingest runs log failed errors why did it fail history',
   },
   {
     id: 'graph', label: 'Graph', track: 'graph',

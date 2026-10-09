@@ -3,7 +3,7 @@ import { Play, RotateCcw, AlertCircle, AlertTriangle, Loader2, Eraser, ChevronRi
 import {
   startIngest, resumeIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
 } from '../../../lib/blueprintsClient'
-import { LEVEL_STYLE, bytes } from './shared'
+import { LEVEL_STYLE, bytes, runTime } from './shared'
 import { useConfirm } from '../../ui/confirm-dialog'
 
 // Icon + word + colour, so a run's outcome never rests on colour alone.
@@ -34,6 +34,9 @@ export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRu
   }, [run.run_id, run.status, level, live, onRefresh])
 
   const badge = STATUS_BADGE[run.status] ?? STATUS_BADGE.cancelled
+  const when = runTime(run.started_at)
+  const docs = run.documents ?? []
+  const docLabel = docs.length === 0 ? null : docs.length === 1 ? docs[0] : `${docs[0]} +${docs.length - 1} more`
   const StatusIcon = badge.icon
 
   return (
@@ -47,13 +50,14 @@ export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRu
         <span className={`flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${badge.cls}`}>
           <StatusIcon size={10} className={live ? 'animate-spin' : ''} /> {run.status}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[11px] theme-text-muted">
+        <span className="min-w-0 flex-1 truncate text-[11px] theme-text-muted" title={docs.join('\n') || undefined}>
+          {docLabel && <span className="theme-text">{docLabel} · </span>}
           {run.kind} · {run.documents_done}/{run.documents_total} docs · {run.chunks_written} chunks ·{' '}
           {run.vectors_written} vectors
           {!open && run.error && <span className="text-rose-400"> · {run.error}</span>}
         </span>
-        <span className="shrink-0 text-[10px] tabular-nums theme-text-muted" title={run.started_at}>
-          {new Date(run.started_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+        <span className="shrink-0 text-[10px] tabular-nums theme-text-muted" title={`Started ${when.full}`}>
+          {when.short}
           {' · '}
           {run.elapsed_ms != null ? `${(run.elapsed_ms / 1000).toFixed(1)}s` : run.stage}
         </span>
@@ -80,6 +84,11 @@ export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRu
               ))}
             </span>
           </div>
+          {docs.length > 1 && (
+            <p className="mb-1.5 text-[11px] theme-text-muted">
+              Documents: <span className="theme-text">{docs.join(', ')}</span>
+            </p>
+          )}
           {run.error && (
             <p className="mb-1.5 flex items-center gap-1.5 rounded-md border border-rose-400/30 bg-rose-400/10 px-2 py-1 text-[11px] text-rose-400">
               <AlertCircle size={11} className="shrink-0" /> {run.error}
@@ -105,8 +114,9 @@ export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRu
 }
 
 export function RunStep({
-  status, config, documents, activeRun, busy, error, onAct, onRefresh,
+  status, config, documents, activeRun, busy, error, onAct, onRefresh, onShowLogs,
 }: {
+  onShowLogs?: () => void
   status: CorpusStatus
   config: CorpusConfig
   documents: CorpusDocument[]
@@ -211,15 +221,14 @@ export function RunStep({
 
       {activeRun && <RunPanel run={activeRun} onRefresh={onRefresh} />}
 
-      {/* Collapsed: the header already says how each run ended, and the
-          logs are only worth the screen for the one being inspected. */}
-      {earlier.length > 0 && (
-        <div className="space-y-1.5">
-          <h4 className="text-xs theme-text">
-            Earlier runs <span className="theme-text-muted">({Math.min(earlier.length, 5)} of {earlier.length})</span>
-          </h4>
-          {earlier.slice(0, 5).map((r) => <RunPanel key={r.run_id} run={r} onRefresh={onRefresh} defaultOpen={false} />)}
-        </div>
+      {/* Run history lives in the Logs tab. Here: just the last run's outcome. */}
+      {!activeRun && earlier[0] && (
+        <RunPanel run={earlier[0]} onRefresh={onRefresh} defaultOpen={earlier[0].status === 'failed'} />
+      )}
+      {earlier.length > 0 && onShowLogs && (
+        <button onClick={onShowLogs} className="text-[11px] theme-accent hover:underline">
+          See every run in Logs
+        </button>
       )}
       {confirmDialog}
     </div>

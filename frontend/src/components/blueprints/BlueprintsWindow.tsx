@@ -4,7 +4,7 @@ import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Map, Network, ListChecks, Route, Library, Boxes, AlertCircle,
-  PenLine, Upload,
+  PenLine, Upload, ScrollText,
 } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
 import {
@@ -19,6 +19,7 @@ import { CorpusView } from './CorpusView'
 import { IngestView } from './IngestView'
 import { RetrievalView } from './RetrievalView'
 import { AuthoringView } from './AuthoringView'
+import { IngestLogsView } from './IngestLogsView'
 
 /**
  * Labyrinth Blueprints — the knowledge map (MODULES.md §3).
@@ -126,6 +127,7 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
       { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed your documents' },
       { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Every document and chunk, as the retriever stores them' },
       { id: 'retrieval', label: 'Replay', icon: Route, hint: 'Which passages a query actually pulled, and at what distance' },
+      { id: 'logs', label: 'Logs', icon: ScrollText, hint: 'Every ingest run and its log, including why a run failed' },
     ],
   },
   graph: {
@@ -483,7 +485,8 @@ export function BlueprintsWindow({
               <>
                     {tab === 'corpus' && <CorpusView onBuild={() => setTab('ingest')} />}
                     {tab === 'retrieval' && <RetrievalView />}
-                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} onShowCorpus={() => setTab('corpus')} />}
+                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} onShowCorpus={() => setTab('corpus')} onShowLogs={() => setTab('logs')} />}
+                    {tab === 'logs' && <IngestLogsView />}
                     {tab === 'authoring' && <AuthoringView />}
                 {tab === 'graph' && <GraphView />}
                 {tab === 'coverage' && <CoverageView />}

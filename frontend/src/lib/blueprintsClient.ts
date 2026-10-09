@@ -485,6 +485,8 @@ export interface IngestRun {
   elapsed_ms: number | null;
   error: string | null;
   error_count?: number;
+  /** Filenames the run processed, from its events. "(deleted)" for one removed since. */
+  documents?: string[];
 }
 
 export interface IngestEvent {
@@ -609,6 +611,9 @@ export const clearVectors = () =>
   request<{ cleared: number; warning: string | null; note: string }>('/api/corpus/clear-vectors', {
     method: 'POST',
   });
+
+export const fetchRuns = (limit = 50) =>
+  request<{ runs: IngestRun[]; active_run: string | null }>(`/api/corpus/runs?limit=${limit}`);
 
 export const fetchRun = (runId: string) =>
   request<{ run: IngestRun; active: boolean }>(`/api/corpus/runs/${encodeURIComponent(runId)}`);

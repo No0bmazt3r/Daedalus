@@ -430,26 +430,49 @@ def finish_run(run_id: str, *, status: str, error: str | None = None) -> None:
         )
 
 
+# The documents a run touched, by name. Taken from its events, which carry the
+# document id; a document deleted since reads as "(deleted)" rather than vanishing,
+# so the count still matches documents_total.
+_RUN_DOCUMENTS = """
+    (SELECT group_concat(name, char(31)) FROM (
+        SELECT DISTINCT COALESCE(d.filename, '(deleted)') AS name
+          FROM ingest_events e LEFT JOIN documents d ON d.document_id = e.document_id
+         WHERE e.run_id = r.run_id AND e.document_id IS NOT NULL
+    )) AS document_names
+"""
+
+
+def _run(row: Any) -> dict[str, Any] | None:
+    run = _row(row)
+    if run is not None:
+        names = run.pop("document_names", None)
+        run["documents"] = names.split("\x1f") if names else []
+    return run
+
+
 def get_run(run_id: str) -> dict[str, Any] | None:
     with _connect() as conn:
-        return _row(
-            conn.execute("SELECT * FROM ingest_runs WHERE run_id = ?", (run_id,)).fetchone()
+        return _run(
+            conn.execute(
+                f"SELECT r.*, {_RUN_DOCUMENTS} FROM ingest_runs r WHERE r.run_id = ?", (run_id,)
+            ).fetchone()
         )
 
 
 def list_runs(limit: int = 30) -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT r.*, (SELECT COUNT(*) FROM ingest_events e
-                          WHERE e.run_id = r.run_id AND e.level = 'error') AS error_count
+                          WHERE e.run_id = r.run_id AND e.level = 'error') AS error_count,
+                   {_RUN_DOCUMENTS}
               FROM ingest_runs r
              ORDER BY r.started_at DESC
              LIMIT ?
             """,
             (limit,),
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [_run(r) for r in rows]
 
 
 def log(

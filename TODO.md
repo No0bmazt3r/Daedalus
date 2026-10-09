@@ -1431,6 +1431,11 @@ Layer 9 below for the per-step detail.
         a live knob
   - [ ] **Blueprints: the ingestion graph-gap check** (already above) is the one
         that keeps the comparison fair, and the first of these to do
+- [ ] **Voice-to-text in the composer** *(later scope, low priority)* — the mic
+      button only drives the `voice-glow` beam today; nothing is transcribed.
+      Do it locally (record in the browser, transcribe with a small Whisper
+      model in the backend) rather than the browser's SpeechRecognition, which
+      sends audio to Google and would break the local-only rule.
 
 ---
 

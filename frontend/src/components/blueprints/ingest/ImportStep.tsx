@@ -3,17 +3,22 @@ import { Upload, FileText, Trash2, AlertCircle, AlertTriangle, Loader2 } from 'l
 import {
   uploadDocument, updateDocument, type CorpusStatus, type CorpusDocument, type DocumentOrigin,
 } from '../../../lib/blueprintsClient'
-import { SOURCE_TYPES, SOURCE_LABEL, ORIGINS, ORIGIN_BADGE, bytes } from './shared'
+import { SOURCE_TYPES, SOURCE_LABEL, ORIGINS, ORIGIN_BADGE, bytes, isIngested } from './shared'
 import { useConfirm } from '../../ui/confirm-dialog'
 
 export function ImportStep({
-  documents, extraction, onChange, onDelete,
+  documents: all, extraction, onChange, onDelete, onShowCorpus,
 }: {
   documents: CorpusDocument[]
   extraction: CorpusStatus['extraction']
   onChange: () => void
   onDelete: (id: string) => void
+  onShowCorpus?: () => void
 }) {
+  // Only what still needs work is listed here: new, half-embedded or
+  // unreadable. Once a document is ingested it is managed from Corpus.
+  const documents = all.filter((d) => !isIngested(d))
+  const ingestedCount = all.length - documents.length
   const input = useRef<HTMLInputElement>(null)
   const [sourceType, setSourceType] = useState('manual')
   const [origin, setOrigin] = useState<DocumentOrigin>('reference')
@@ -155,7 +160,18 @@ export function ImportStep({
         </p>
       )}
 
-      {documents.length === 0 ? (
+      {ingestedCount > 0 && (
+        <p className="flex items-center gap-2 text-[11px] theme-text-muted">
+          {ingestedCount} ingested document{ingestedCount === 1 ? ' is' : 's are'} in Corpus.
+          {onShowCorpus && (
+            <button onClick={onShowCorpus} className="theme-accent hover:underline">
+              View in Corpus
+            </button>
+          )}
+        </p>
+      )}
+
+      {documents.length === 0 && ingestedCount > 0 ? null : documents.length === 0 ? (
         <p className="rounded-lg border border-dashed theme-border px-4 py-5 text-center text-[11px] leading-relaxed theme-text-muted">
           Nothing imported yet. This is where the pipeline starts. An empty corpus is
           expected, but Track 1 can't answer anything until you add documents here.
