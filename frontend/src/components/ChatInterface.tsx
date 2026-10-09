@@ -21,7 +21,8 @@ import { useSettings } from '../contexts/SettingsContext'
 import { useUiPrefs } from '../contexts/UiPrefsContext'
 import { FOCUS_COMPOSER_EVENT } from '../lib/keybinds'
 import { useSessions } from '../contexts/SessionsContext'
-import { Sources, withCitations } from './Citations'
+import { Sources } from './Citations'
+import { AnswerMarkdown } from './AnswerMarkdown'
 import { TraceStrip } from './thread/TraceStrip'
 import { AnswerPanel, type AnswerTab } from './thread/AnswerPanel'
 import { useSessionTraces } from '../hooks/useSessionTraces'
@@ -609,10 +610,11 @@ export function ChatInterface() {
                   >
                     {msg.role === 'assistant' && msg.content === '' && !msg.persisted ? (
                       <ThinkingIndicator phase={msg.phase} />
-                    ) : msg.role === 'assistant' && msg.persisted ? (
-                      // Chips only once the turn is stored: while tokens are
-                      // streaming there is no evidence pack on the client yet.
-                      withCitations(msg.content, msg.evidence)
+                    ) : msg.role === 'assistant' ? (
+                      // Markdown while streaming too, so the text does not
+                      // jump from stars to bold when it lands. Chips come once
+                      // the turn is stored: until then there is no evidence pack.
+                      <AnswerMarkdown text={msg.content} evidence={msg.persisted ? msg.evidence : undefined} />
                     ) : (
                       msg.content
                     )}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Play, RotateCcw, RefreshCw, AlertCircle, AlertTriangle, Eraser, ChevronRight } from 'lucide-react'
+import { Play, RotateCcw, RefreshCw, AlertCircle, AlertTriangle, Eraser, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import {
   startIngest, resumeIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
 } from '../../../lib/blueprintsClient'
@@ -183,6 +183,34 @@ export function RunStep({
           </div>
         ))}
       </div>
+
+      {/* What the index holds, per document: answers "is my new one in?"
+          without opening a log. Run history stays in the Logs tab. */}
+      {readable > 0 && (
+        <div className="rounded-lg border theme-border">
+          <p className="border-b theme-border px-3 py-1.5 text-[10px] uppercase tracking-wider theme-text-muted">
+            In the index
+          </p>
+          <ul className="divide-y divide-[color:var(--border)]">
+            {documents.filter((d) => d.extract_status === 'ok').map((d) => {
+              const ready = isIngested(d)
+              return (
+                <li key={d.document_id} className="flex items-center gap-2 px-3 py-1.5 text-[11px]">
+                  {ready
+                    ? <CheckCircle2 size={12} className="shrink-0 text-emerald-400" aria-label="Searchable" />
+                    : <Circle size={12} className="shrink-0 theme-text-muted" aria-label="Not ingested yet" />}
+                  <span className="min-w-0 flex-1 truncate theme-text" title={d.filename}>{d.filename}</span>
+                  <span className="shrink-0 tabular-nums theme-text-muted">
+                    {ready
+                      ? `${d.chunk_count} chunks`
+                      : d.chunk_count ? `${d.embedded_count}/${d.chunk_count} embedded` : 'not ingested yet'}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         <button

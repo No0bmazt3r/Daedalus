@@ -128,9 +128,14 @@ export function withEvidenceHighlights(text: string): ReactNode[] {
 }
 
 /** The answer text with its readings picked out and its citation labels turned into chips. */
-export function withCitations(text: string, evidence: StoredEvidence | undefined): ReactNode {
+export function withCitations(
+  text: string,
+  evidence: StoredEvidence | undefined,
+  /** The whole answer, when `text` is one fragment of it (a Markdown text node). */
+  whole: string = text,
+): ReactNode {
   if (!evidence) return withReadings(text, 0)
-  const matched = readingMatcher(text, evidence)
+  const matched = readingMatcher(whole, evidence)
   const out: ReactNode[] = []
   let last = 0
   for (const match of text.matchAll(CITATION_RE)) {
