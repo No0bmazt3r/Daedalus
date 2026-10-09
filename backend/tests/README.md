@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **222 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **225 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -24,6 +24,7 @@ Shared, at the top of this folder:
 | `test_assistant_settings.py` | 5 | Settings → Assistant: timezone precedence, validation, the freeze, custom refusals. |
 | `test_background_jobs.py` | 14 | Background jobs: model-written chat titles, their settings, and the token ratio. |
 | `test_chat_path.py` | 10 | The whole of §7.1 through `inference.answer_stream`, with Ollama faked. |
+| `test_follow_ups.py` | 3 | Follow-ups: a spoken opener ("so …") is not a continuation, and "the previous answer" is understood. |
 | `test_safety.py` | 9 | M5: every unsafe phrasing is refused before any tool or model runs. |
 | `test_summariser.py` | 5 | §7.4's rolling summary: folds what fell out of the window, never keeps a value. |
 | `test_title_display.py` | 2 | Chat titles in the sidebar: always capitalised, and flagged while being written. |

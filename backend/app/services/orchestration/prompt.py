@@ -41,6 +41,9 @@ SYSTEM_PROMPT = (
     "by step. If asked for the current status, go through every reading in the EVIDENCE: what it "
     "measures in plain words, its value with its label, and whether it is STALE. Only call a value "
     "normal, high or low if the EVIDENCE gives the limit to compare it with.\n"
+    "Stay on the question: do not add sensor readings, procedures or warnings it did not ask for, "
+    "even if they are in the EVIDENCE. If the operator refers to an earlier answer (\"explain that "
+    "more simply\", \"what did you just say\"), use the earlier conversation to do what they ask.\n"
     "Rules:\n"
     "1. Answer only from the EVIDENCE for this turn. Earlier conversation is context, not evidence.\n"
     "2. Every number you write must appear in the EVIDENCE. Quote numbers as given; you may round, "
@@ -89,7 +92,13 @@ def build(
     messages.append({"role": "system", "content": f"EVIDENCE:\n{pack.render()}"})
     # The standalone form, per §7.4: everything downstream of step 3 runs on
     # the rewritten question. The transcript keeps what was typed.
-    messages.append({"role": "user", "content": understood.standalone})
+    question = understood.standalone
+    typed = understood.normalised.text.strip()
+    # A rewrite carries the topic but can drop how they asked: "explain that
+    # more simply" becomes the previous question. Their words travel with it.
+    if typed and typed.lower() != question.strip().lower():
+        question += f'\n\n(The operator\'s own words were: "{typed}". Answer in the way they asked.)'
+    messages.append({"role": "user", "content": question})
     return messages
 
 

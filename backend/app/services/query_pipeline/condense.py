@@ -53,6 +53,21 @@ _REFERENT_RE = re.compile(
     r"\b(?:it|its|it's|that|this|those|these|them|they|there|then|the\s+same|same|earlier|previous|above"
     r"|before\s+that|after\s+that)\b"
 )
+# A connector that is only a spoken opener: "so tell me what the reactor is
+# for" is a new question, not a continuation. Taken as a follow-up it was
+# rewritten into the previous question, which is how a "what is it for"
+# answer came back with CO2 readings nobody asked for.
+_FILLER_RE = re.compile(r"^(?:so|now|then|ok(?:ay)?|well|alright|right)\b[\s,]*")
+# The operator asking about the conversation itself — "what did you just say",
+# "explain that more simply", "summarise our chat". These name nothing, so
+# without this they were filed out of scope and refused.
+_RECALL_RE = re.compile(
+    r"\b(?:previous|last|earlier|your)\s+(?:message|answer|reply|response|question)\b"
+    r"|\bwhat\s+(?:did|have)\s+(?:you|i|we)\s+(?:just\s+)?(?:say|said|ask|asked|talk(?:ed)?\s+about)\b"
+    r"|\b(?:say|explain|repeat|rephrase|simplify|summari[sz]e)\s+(?:that|it|this)\b"
+    r"|\bsummari[sz]e\s+(?:our|the|this)\s+(?:conversation|chat|discussion)\b"
+    r"|\b(?:more\s+simply|in\s+simpler\s+(?:terms|words)|in\s+plain\s+(?:english|words|terms))\b"
+)
 _QUESTION_WORD_RE = re.compile(
     r"\b(?:what|when|why|how|which|who|where|is|are|was|were|do|does|did|can|could|should|show|tell|give|list)\b"
 )
@@ -96,7 +111,11 @@ def is_follow_up(nq: NormalisedQuery, previous: str | None) -> bool:
     points, windows = vocab.find_time(text)
 
     if _CONNECTOR_RE.match(text):
-        return True
+        rest = _FILLER_RE.sub("", text, count=1)
+        # A bare opener in front of a full question of its own is not a continuation.
+        is_opener = rest != text
+        if not (is_opener and len(words) > 5 and _QUESTION_WORD_RE.search(rest)):
+            return True
     # "why did it spike?" — a pointer with nothing named to point at.
     if _REFERENT_RE.search(text) and not sensors:
         return True
@@ -234,6 +253,14 @@ def condense(
 ) -> Rewrite:
     """The standalone form of `nq`, given the turns before it."""
     previous, reply = _previous(history)
+    # About the conversation itself: asked again as the previous question, so
+    # its evidence is fetched fresh. The replayed history and the operator's
+    # own words (see `prompt.build`) let the model answer what they asked.
+    if previous and _RECALL_RE.search(nq.match):
+        return Rewrite(
+            text=previous, method="rules", basis=previous,
+            note="refers back to the previous answer, so that question is asked again",
+        )
     if not is_follow_up(nq, previous):
         return Rewrite(text=nq.text, method="none", note="stands alone" if previous else "first turn")
 
