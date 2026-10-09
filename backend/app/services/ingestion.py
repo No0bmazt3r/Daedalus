@@ -134,9 +134,15 @@ def store_upload(
 
     try:
         result = extraction.extract(raw, filename)
-    except extraction.ExtractionError as exc:
-        corpus_store.set_extraction(document_id, status="failed", error=str(exc))
-        return {**(corpus_store.get_document(document_id) or {}), "extract_error": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        # Any failure is recorded on the document, not just the ones the
+        # extractor anticipated. An unexpected parser error used to escape as an
+        # HTTP 500 and leave the row stuck half-made, with no reason shown.
+        reason = str(exc) if isinstance(exc, extraction.ExtractionError) else (
+            f"could not read this file ({type(exc).__name__}: {exc})"
+        )
+        corpus_store.set_extraction(document_id, status="failed", error=reason)
+        return {**(corpus_store.get_document(document_id) or {}), "extract_error": reason}
 
     corpus_store.set_extraction(
         document_id,

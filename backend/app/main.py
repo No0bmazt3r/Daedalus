@@ -11,12 +11,13 @@ import asyncio
 import contextlib
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
@@ -129,6 +130,30 @@ _WRITE_TOPICS = (
     # The cloud toggle changes which models the picker may list.
     ("/api/prefs/cloud-models", "models"),
 )
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    """Any error no route anticipated: logged in full, answered with its reason.
+
+    It used to leave as a bare "Internal Server Error" with nothing in the log,
+    which is how a PDF upload failed with only "HTTP 500" to go on. Now the
+    traceback goes to the Process Log and `error_logs` under a short id, and the
+    response carries the reason and that id, so the toast the UI shows can be
+    matched to the log line.
+    """
+    error_id = secrets.token_hex(4)
+    logging.getLogger("daedalus.api").error(
+        "error %s: %s %s failed: %s: %s", error_id, request.method, request.url.path,
+        type(exc).__name__, exc, exc_info=exc,
+    )
+    from .db import audit_store  # noqa: PLC0415 — imported late, like the routers' stores
+
+    audit_store.log_error(f"api {request.method} {request.url.path} [{error_id}]", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}", "error_id": error_id},
+    )
 
 
 @app.middleware("http")

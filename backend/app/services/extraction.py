@@ -157,6 +157,13 @@ def _extract_text(raw: bytes, filename: str) -> Extracted:
     return Extracted(text=_normalise(body), extractor="text")
 
 
+_NEEDS_CRYPTO = (
+    "this PDF is encrypted with AES (common for manufacturer manuals), and reading it needs the "
+    "`cryptography` package, which is not installed. Run `pip install -r requirements.txt` in "
+    "backend/ and upload it again."
+)
+
+
 def _extract_pdf(raw: bytes, filename: str) -> Extracted:
     ok, why = pdf_available()
     if not ok:
@@ -173,22 +180,43 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
 
     if getattr(reader, "is_encrypted", False):
         # Try the empty password, which is what "encrypted" means for most
-        # published PDFs — permissions set, no password to open.
+        # published PDFs — permissions set, no password to open. Manufacturer
+        # manuals usually lock permissions with AES, which pypdf can only undo
+        # with the `cryptography` package; without it that was a bare 500.
         try:
-            reader.decrypt("")
+            unlocked = reader.decrypt("")
+        except pypdf.errors.DependencyError as exc:
+            raise ExtractionError(_NEEDS_CRYPTO) from exc
         except Exception as exc:  # noqa: BLE001
+            unlocked = None
+            cause: Exception | None = exc
+        else:
+            cause = None
+        if not unlocked:
             raise ExtractionError(
                 "this PDF is password-protected. Remove the password and upload it again. "
                 "Saving the password to open it later would put a credential in the corpus."
-            ) from exc
+            ) from cause
+
+    try:
+        pages = list(reader.pages)
+    # Without `cryptography`, unlocking an AES file reports success and the
+    # failure only comes here, when the pages are decoded. That was the 500.
+    except pypdf.errors.DependencyError as exc:
+        raise ExtractionError(_NEEDS_CRYPTO) from exc
+    except Exception as exc:  # noqa: BLE001 — a broken page tree is a document problem
+        raise ExtractionError(f"pypdf could not read this file's pages: {exc}") from exc
 
     parts: list[str] = []
     breaks: list[int] = []
     warnings: list[str] = []
     cursor = 0
-    for number, page in enumerate(reader.pages, start=1):
+    for number, page in enumerate(pages, start=1):
         try:
             body = page.extract_text() or ""
+        except pypdf.errors.DependencyError as exc:
+            # Not one bad page: every page will fail the same way.
+            raise ExtractionError(_NEEDS_CRYPTO) from exc
         except Exception as exc:  # noqa: BLE001 — one bad page is not a bad document
             body = ""
             warnings.append(f"page {number} could not be read: {exc}")
@@ -201,18 +229,18 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
         # with the document rather than with the pages that happened to parse.
 
     text = _normalise("\n\n".join(parts))
-    pages = len(reader.pages)
+    page_count = len(pages)
 
     if len(text) < _EMPTY_THRESHOLD:
         raise ExtractionError(
-            f"no readable text in {pages} page{'s' if pages != 1 else ''}. This is almost "
+            f"no readable text in {page_count} page{'s' if page_count != 1 else ''}. This is almost "
             "certainly a scanned PDF. The pages are images, so there is no text layer to "
             "extract. Daedalus has no OCR; run one over the file and upload the result."
         )
     return Extracted(
         text=text,
         page_breaks=breaks,
-        page_count=pages,
+        page_count=page_count,
         extractor=f"pypdf {getattr(pypdf, '__version__', '?')}",
         warnings=warnings,
     )

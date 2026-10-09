@@ -56,7 +56,9 @@ pyyaml>=6.0
 # Pure Python, no C extensions, no network at import or at call. Rule 1 clean.
 # There is deliberately no OCR dependency: a scanned PDF has no text layer, and
 # the pipeline says so rather than storing a document whose chunks are blank.
-pypdf>=4.0
+# `[crypto]` brings `cryptography`, without which pypdf cannot open AES-encrypted
+# PDFs — the usual case for manufacturer manuals, locked only against editing.
+pypdf[crypto]>=4.0
 
 # Track 1 re-ranking (app/services/reranker.py): a cross-encoder re-scores the
 # candidates Chroma returns before the best top_k go into the evidence pack.

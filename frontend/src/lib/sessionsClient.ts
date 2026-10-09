@@ -8,6 +8,8 @@
 // The same reason is why there is no `role` on `appendUserMessage` — assistant
 // turns are written by the orchestrator once it has actually produced them.
 
+import { reportApiError } from './http';
+
 export interface ChatSession {
   session_id: string;
   created_at: string;
@@ -63,7 +65,18 @@ export class SessionApiError extends Error {
   }
 }
 
+// Its own fetch (a shorter timeout, status 0 for "offline", empty 204s), but
+// failed actions still raise the shared toast.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  try {
+    return await send<T>(path, init);
+  } catch (err) {
+    if (err instanceof SessionApiError) reportApiError(init, path, err);
+    throw err;
+  }
+}
+
+async function send<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
