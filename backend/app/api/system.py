@@ -22,7 +22,7 @@ from ..db import (
     sqlite_util,
     vector_store,
 )
-from ..services import graph_seed, model_endpoints, ollama_client
+from ..services import graph_seed, model_config, model_endpoints, ollama_client
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -242,6 +242,8 @@ def list_models() -> dict[str, Any]:
     disagreement Rule 1 is enforced against.
     """
     models: list[dict[str, Any]] = []
+    # Settings → Cloud Models off: neither kind of cloud model is offered.
+    cloud_on = model_config.cloud_allowed()
 
     try:
         for m in ollama_client.list_models():
@@ -259,6 +261,8 @@ def list_models() -> dict[str, Any]:
             # Unknown capabilities (a failed `/api/show`) keep the model listed:
             # that says nothing about what it is.
             if capabilities and not ollama_client.answers_questions(capabilities):
+                continue
+            if remote and not cloud_on:
                 continue
             models.append({
                 "id": f"ollama:{m['name']}",
@@ -285,7 +289,7 @@ def list_models() -> dict[str, Any]:
         pass
 
     try:
-        for ep in model_endpoints.list_endpoints():
+        for ep in model_endpoints.list_endpoints() if cloud_on else []:
             models.append({
                 "id": f"cloud:{ep['id']}",
                 "name": ep["label"],

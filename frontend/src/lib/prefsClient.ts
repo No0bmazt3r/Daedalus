@@ -14,6 +14,8 @@ export const PREF_KEYBINDS = 'keybinds';
 export const PREF_UI_CHROME = 'ui-chrome';
 /** The Forge's starred models — see `components/forge/ModelsView.tsx`. */
 export const PREF_FORGE_SHORTLIST = 'forge-shortlist';
+/** `{ enabled: boolean }`. The backend reads it too, so off is enforced. */
+export const PREF_CLOUD_MODELS = 'cloud-models';
 
 export type PrefKey =
   | typeof PREF_THEME
@@ -22,7 +24,8 @@ export type PrefKey =
   | typeof PREF_SETTINGS_UI
   | typeof PREF_KEYBINDS
   | typeof PREF_UI_CHROME
-  | typeof PREF_FORGE_SHORTLIST;
+  | typeof PREF_FORGE_SHORTLIST
+  | typeof PREF_CLOUD_MODELS;
 
 export type SyncStatus = 'loading' | 'ready' | 'offline';
 

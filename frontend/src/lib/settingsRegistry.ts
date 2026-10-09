@@ -22,6 +22,7 @@ import {
   Download,
   AlertTriangle,
   Wrench,
+  Cloud,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -148,6 +149,10 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
       'google', 'pse', 'tavily', 'serper', 'api', 'key', 'fallback', 'sourcing',
       'corpus', 'documents', 'safesearch',
     ],
+  }),
+  panel({
+    id: 'cloud-models', label: 'Cloud Models', group: 'connections', icon: Cloud, implemented: true,
+    keywords: ['cloud', 'hosted', 'remote', 'baseline', 'endpoint', 'openai', 'deepseek', 'ollama cloud', 'offline', 'local only'],
   }),
   panel({
     id: 'integrations', label: 'Integrations', group: 'connections', icon: LinkIcon, implemented: true,

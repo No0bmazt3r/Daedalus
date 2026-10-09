@@ -18,6 +18,7 @@ import { deleteModel } from '../../lib/forgeClient'
 import { EmbeddingRow, PullBar, type PullStatus } from './EmbeddingRow'
 import { PaneIntro, BrowseLink, SectionLabel, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
+import { useSettings } from '../../contexts/SettingsContext'
 
 /**
  * The embedding models, in three modes:
@@ -288,6 +289,7 @@ export function EmbeddingModelsPane({
   const [progress, setProgress] = useState<PullStatus | null>(null)
   const [confirm, confirmDialog] = useConfirm()
   const [showCloud, setShowCloud] = useState(false)
+  const { cloudEnabled } = useSettings()
   const [verifying, setVerifying] = useState<string | null>(null)
   const [benchmarking, setBenchmarking] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -601,7 +603,7 @@ export function EmbeddingModelsPane({
       {/* Cloud sits behind a disclosure, below the local list and after the
           explanation. It is a baseline, not an alternative, and presenting it as
           a peer of the local models would be the wrong shape for Rule 1. */}
-      {mode === 'select' && (
+      {mode === 'select' && cloudEnabled && (
       <div className="space-y-2">
       <SectionLabel icon={Cloud}>Cloud baseline</SectionLabel>
       <div className="rounded-xl border theme-border theme-surface">

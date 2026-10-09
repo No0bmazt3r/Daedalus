@@ -124,7 +124,11 @@ app.add_middleware(
 
 # Any successful write under these prefixes tells every open view to re-read,
 # so a change made in one window shows in all the others straight away.
-_WRITE_TOPICS = (("/api/corpus", "corpus"), ("/api/rag", "rag"))
+_WRITE_TOPICS = (
+    ("/api/corpus", "corpus"), ("/api/rag", "rag"),
+    # The cloud toggle changes which models the picker may list.
+    ("/api/prefs/cloud-models", "models"),
+)
 
 
 @app.middleware("http")

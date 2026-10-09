@@ -123,9 +123,9 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
     full: 'Track 1: traditional vector RAG',
     icon: Boxes,
     tabs: [
+      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed your documents' },
       { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Every document and chunk, as the retriever stores them' },
       { id: 'retrieval', label: 'Replay', icon: Route, hint: 'Which passages a query actually pulled, and at what distance' },
-      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed your documents' },
     ],
   },
   graph: {
@@ -133,15 +133,16 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
     full: 'Track 2: agentic GraphRAG',
     icon: Network,
     tabs: [
+      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges. Track 2 only knows what you add here' },
       { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 7 node types, 7 edge types' },
       { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: "Orphans and gaps. Each row is a question the graph can't answer" },
       { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
-      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges. Track 2 only knows what you add here' },
     ],
   },
 }
 
-const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'corpus', graph: 'graph' }
+// Opens on the leftmost tab, Build, which is the first step of the pipeline.
+const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'ingest', graph: 'authoring' }
 
 /**
  * Every tab is a quarter wide, and the row is centred.
@@ -482,7 +483,7 @@ export function BlueprintsWindow({
               <>
                     {tab === 'corpus' && <CorpusView onBuild={() => setTab('ingest')} />}
                     {tab === 'retrieval' && <RetrievalView />}
-                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} />}
+                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} onShowCorpus={() => setTab('corpus')} />}
                     {tab === 'authoring' && <AuthoringView />}
                 {tab === 'graph' && <GraphView />}
                 {tab === 'coverage' && <CoverageView />}

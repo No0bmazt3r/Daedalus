@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Tag } from 'lucide-react'
+import { Tag, StickyNote } from 'lucide-react'
 import { saveLabel, type TraceLabel } from '../../lib/threadClient'
 
 /**
@@ -12,6 +12,7 @@ export function LabelPanel({ queryId, initial }: { queryId: string; initial: Tra
   const [note, setNote] = useState(initial?.note ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [noteOpen, setNoteOpen] = useState(!!initial?.note)
 
   const save = (hallucinated: boolean | null) => {
     setSaving(true)
@@ -28,49 +29,65 @@ export function LabelPanel({ queryId, initial }: { queryId: string; initial: Tra
       on ? `${tone} theme-surface-strong theme-accent-border` : 'theme-border theme-text-muted hover:theme-text'
     }`
 
+  // One row of buttons by default. The note box only opens when asked for,
+  // or when there is already a note to show.
   return (
-    <section className="space-y-2 rounded-lg border theme-border theme-card p-3">
-      <header className="flex items-center gap-2">
-        <Tag size={12} className="theme-accent" />
-        <h3 className="text-xs font-medium theme-text">Your label</h3>
-        <span className="text-[10px] theme-text-muted">
-          {label ? `saved ${new Date(label.timestamp).toLocaleString()}` : 'not labelled yet'}
-        </span>
-      </header>
-      <p className="text-[10px] leading-relaxed theme-text-muted">
-        Did this answer state anything the evidence does not support? This is the evaluation's ground
-        truth; the colours above are only the detector's guess.
-      </p>
+    <section className="space-y-2 rounded-lg border theme-border px-3 py-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <button disabled={saving} onClick={() => save(false)} className={optionClass(choice === 'ok', 'status-ok')}>
+        <h3
+          className="mr-1 flex items-center gap-1.5 text-xs font-medium theme-text"
+          title="Did this answer state anything the evidence does not support? This is the evaluation's ground truth; the colours above are only the detector's guess."
+        >
+          <Tag size={12} className="theme-accent" /> Label
+        </h3>
+        <button disabled={saving} aria-pressed={choice === 'ok'} onClick={() => save(false)} className={optionClass(choice === 'ok', 'status-ok')}>
           Correct
         </button>
-        <button disabled={saving} onClick={() => save(true)} className={optionClass(choice === 'bad', 'status-bad')}>
+        <button disabled={saving} aria-pressed={choice === 'bad'} onClick={() => save(true)} className={optionClass(choice === 'bad', 'status-bad')}>
           Hallucinated
         </button>
+        <button
+          onClick={() => setNoteOpen((v) => !v)}
+          aria-expanded={noteOpen}
+          className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] theme-text-muted hover:theme-text"
+        >
+          <StickyNote size={11} /> {noteOpen ? 'Hide note' : note ? 'Note' : 'Add note'}
+        </button>
+        <span className="ml-auto text-[10px] theme-text-muted">
+          {label ? `saved ${new Date(label.timestamp).toLocaleString()}` : 'not labelled yet'}
+        </span>
         {label && (
-          <button disabled={saving} onClick={() => save(null)} className="ml-auto text-[10px] theme-text-muted hover:theme-text">
-            Clear label
+          <button disabled={saving} onClick={() => save(null)} className="text-[10px] theme-text-muted hover:theme-text">
+            Clear
           </button>
         )}
       </div>
-      <textarea
-        aria-label="Label note"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        maxLength={2000}
-        rows={2}
-        placeholder="Note (optional): what was wrong, or why it is right"
-        className="w-full resize-y rounded-md border theme-border bg-transparent px-2 py-1.5 text-[11px] theme-text outline-none placeholder:opacity-50 focus:ring-1 focus:ring-[var(--primary)]"
-      />
-      {label && note.trim() !== (label.note ?? '') && (
-        <button
-          disabled={saving}
-          onClick={() => save(label.hallucinated)}
-          className="text-[10px] theme-accent hover:underline disabled:opacity-50"
-        >
-          Save the note with this label
-        </button>
+      {noteOpen && (
+        <>
+          <textarea
+            aria-label="Label note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={2000}
+            rows={2}
+            autoFocus
+            placeholder="What was wrong, or why it is right"
+            className="w-full resize-y rounded-md border theme-border bg-transparent px-2 py-1.5 text-[11px] theme-text outline-none placeholder:opacity-50 focus:ring-1 focus:ring-[var(--primary)]"
+          />
+          {label ? (
+            note.trim() !== (label.note ?? '') && (
+              <button
+                disabled={saving}
+                onClick={() => save(label.hallucinated)}
+                className="text-[10px] theme-accent hover:underline disabled:opacity-50"
+              >
+                Save the note with this label
+              </button>
+            )
+          ) : (
+            <p className="text-[10px] theme-text-muted">The note is saved when you pick Correct or Hallucinated.</p>
+          )}
+        </>
       )}
       {error && <p className="text-[11px] status-bad">Could not save: {error}</p>}
     </section>

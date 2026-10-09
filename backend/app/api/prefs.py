@@ -26,9 +26,11 @@ router = APIRouter(prefix="/api/prefs", tags=["prefs"])
 # read back when somebody asks what the interface was when a result was taken.
 # `forge-shortlist` is the Forge's starred models, stored as edits against the
 # report's six candidates so a catalogue change still reaches an untouched list.
+# `cloud-models` is `{"enabled": bool}`, read by the backend too
+# (`model_config.cloud_allowed`), so turning it off is enforced, not just hidden.
 ALLOWED_KEYS = {
     "theme", "custom-themes", "ui-scale", "settings-ui", "keybinds", "ui-chrome",
-    "forge-shortlist",
+    "forge-shortlist", "cloud-models",
 }
 
 

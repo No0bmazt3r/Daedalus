@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **216 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **218 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -51,6 +51,7 @@ Shared, at the top of this folder:
 | File | Tests | What it pins |
 |---|---|---|
 | `test_chat_models_only.py` | 5 | An embedding model is never the chat model — at any of the three layers. |
+| `test_cloud_toggle.py` | 2 | Settings → Cloud Models off: a cloud model is neither listed nor used. |
 | `test_embedding_fit.py` | 10 | The fit contract (`docs/MODEL_FIT.md`) — for embedders, and the shared rule. |
 
 ### `evaluation/` — The evaluation harness: query sets, scoring, arms, timeouts and aborts.

@@ -172,6 +172,22 @@ def write(
     return config
 
 
+def cloud_allowed() -> bool:
+    """Settings → Cloud Models. On unless turned off; never raises.
+
+    Off means cloud models are not listed and a request naming one gets the
+    local model instead, so the setting holds even for a stale picker or a
+    scripted call.
+    """
+    try:
+        from ..db import prefs_store  # noqa: PLC0415
+
+        value = prefs_store.get_pref("cloud-models")
+    except Exception:  # noqa: BLE001
+        return True
+    return not (isinstance(value, dict) and value.get("enabled") is False)
+
+
 def ollama_client_answers(row: dict[str, Any]) -> bool:
     """`ollama_client.answers_questions` for an installed-models row."""
     from . import ollama_client  # noqa: PLC0415

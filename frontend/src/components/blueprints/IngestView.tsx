@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
@@ -12,6 +12,7 @@ import { ImportStep } from './ingest/ImportStep'
 import { ChunkStep } from './ingest/ChunkStep'
 import { EmbeddingStep } from './ingest/EmbeddingStep'
 import { RunStep } from './ingest/RunStep'
+import { Toast } from '../ui/toast'
 
 /**
  * The ingestion pipeline, as the four steps it actually is — MODULES.md §3.1.
@@ -69,7 +70,7 @@ const STEPS: readonly Step[] = [
   { id: 4, label: 'Run', icon: Play, hint: 'Ingest, and watch it happen' },
 ]
 
-export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
+export function IngestView({ onOpenForge, onShowCorpus }: { onOpenForge?: () => void; onShowCorpus?: () => void }) {
   const [status, setStatus] = useState<CorpusStatus | null>(null)
   const [documents, setDocuments] = useState<CorpusDocument[]>([])
   const [config, setConfig] = useState<CorpusConfig | null>(null)
@@ -77,6 +78,17 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeRun, setActiveRun] = useState<IngestRun | null>(null)
+  const [finished, setFinished] = useState<IngestRun | null>(null)
+  const closeToast = useCallback(() => setFinished(null), [])
+
+  // Pop up how a run ended the moment it stops running: the log says it too,
+  // but only if you happen to be looking at it.
+  const lastStatus = useRef<string | null>(null)
+  useEffect(() => {
+    const prev = lastStatus.current
+    lastStatus.current = activeRun?.status ?? null
+    if (prev === 'running' && activeRun && activeRun.status !== 'running') setFinished(activeRun)
+  }, [activeRun])
 
   // The pipeline's state cannot be read: the tab is the error page, not a
   // skeleton that never resolves. `error` is a failed action.
@@ -174,6 +186,25 @@ export function IngestView({ onOpenForge }: { onOpenForge?: () => void }) {
 
       <StepFooter steps={STEPS} step={step} setStep={setStep} nextBlocked={blocked[step + 1]} />
 
+      {finished && (
+        finished.status === 'ok' ? (
+          <Toast
+            tone="ok"
+            title="Ingest finished"
+            body={`${finished.documents_done} document(s) · ${finished.chunks_written} chunks · ${finished.vectors_written} vectors. Track 1 can search them now.`}
+            action={onShowCorpus ? { label: 'View corpus', onClick: onShowCorpus } : undefined}
+            onClose={closeToast}
+          />
+        ) : (
+          <Toast
+            tone="bad"
+            title={finished.status === 'cancelled' ? 'Ingest cancelled' : 'Ingest failed'}
+            body={`${finished.error ?? 'Something went wrong.'} The run log in step 4 has the details.`}
+            action={step !== 4 ? { label: 'Show log', onClick: () => setStep(4) } : undefined}
+            onClose={closeToast}
+          />
+        )
+      )}
     </div>
   )
 }

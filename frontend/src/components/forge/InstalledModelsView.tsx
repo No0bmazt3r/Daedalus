@@ -20,6 +20,7 @@ import { SkeletonList } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
 import { PaneIntro, BrowseLink, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
+import { useSettings } from '../../contexts/SettingsContext'
 
 /**
  * Forge → Installed: what this machine has, and what it has been doing.
@@ -304,7 +305,10 @@ export function InstalledModelsView({
 }) {
   const [pane, setPane] = useState<PaneId>(initialPane)
   const [confirm, confirmDialog] = useConfirm()
-  const [source, setSource] = useState<ChatSource>('local')
+  const [pickedSource, setSource] = useState<ChatSource>('local')
+  // Settings → Cloud Models off: the cloud pane is not offered at all.
+  const { cloudEnabled } = useSettings()
+  const source: ChatSource = cloudEnabled ? pickedSource : 'local'
   const [rerankerCount, setRerankerCount] = useState(0)
   const [tier, setTier] = useState<TierFilter>('all')
   const [rows, setRows] = useState<ModelRow[] | null>(null)
@@ -404,7 +408,7 @@ export function InstalledModelsView({
       {([
         { id: 'local' as const, label: 'Local', icon: Cpu, n: rows?.length ?? 0 },
         { id: 'cloud' as const, label: 'Cloud baselines', icon: Cloud, n: cloudCount },
-      ]).map((entry) => (
+      ]).filter((entry) => cloudEnabled || entry.id !== 'cloud').map((entry) => (
         <button
           key={entry.id}
           onClick={() => setSource(entry.id)}
@@ -451,7 +455,7 @@ export function InstalledModelsView({
           as the window narrows shifts everything below it for no reason. */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b theme-border pb-2">
         {([
-          { id: 'chat' as const, label: 'Chat models', icon: MessageSquare, n: (rows?.length ?? 0) + cloudCount },
+          { id: 'chat' as const, label: 'Chat models', icon: MessageSquare, n: (rows?.length ?? 0) + (cloudEnabled ? cloudCount : 0) },
           { id: 'embedding' as const, label: 'Embedding models', icon: Binary, n: embeddingCount },
           { id: 'rerankers' as const, label: 'Re-rankers', icon: ListOrdered, n: rerankerCount },
         ]).map((entry) => (

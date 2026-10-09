@@ -152,6 +152,18 @@ def choose_model(requested: str | None = None) -> dict[str, Any]:
                 "reason": f"per-request override to {requested}",
                 "config_tag": resolved.get("tag"),
             }
+        if requested in remote and not model_config.cloud_allowed():
+            return {
+                "tag": resolved.get("tag"),
+                "source": "config",
+                "remote": False,
+                "reason": (
+                    f"requested {requested}, a cloud model, but cloud models are turned off "
+                    f"in Settings; using the configured model instead"
+                ),
+                "config_tag": resolved.get("tag"),
+                "rejected": requested,
+            }
         if requested in remote:
             return {
                 "tag": requested,
