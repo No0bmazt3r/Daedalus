@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Play, RotateCcw, AlertCircle, AlertTriangle, Eraser, ChevronRight } from 'lucide-react'
+import { Play, RotateCcw, RefreshCw, AlertCircle, AlertTriangle, Eraser, ChevronRight } from 'lucide-react'
 import {
   startIngest, resumeIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
 } from '../../../lib/blueprintsClient'
-import { LEVEL_STYLE, STATUS_BADGE, bytes, runTime } from './shared'
+import { LEVEL_STYLE, STATUS_BADGE, bytes, isIngested, runTime } from './shared'
 import { useConfirm } from '../../ui/confirm-dialog'
 
 
@@ -122,6 +122,10 @@ export function RunStep({
   const { corpus, embedding } = status
   const pending = corpus.chunks - corpus.embedded
   const readable = documents.filter((d) => d.extract_status === 'ok').length
+  // What "Ingest" means by default: only documents not already in the index.
+  // Re-running the ones that are would re-chunk and re-embed them for nothing.
+  const fresh = documents.filter((d) => d.extract_status === 'ok' && !isIngested(d))
+  const done = readable - fresh.length
   const earlier = status.runs.filter((r) => r.run_id !== activeRun?.run_id)
   const [confirm, confirmDialog] = useConfirm()
 
@@ -144,7 +148,7 @@ export function RunStep({
         <h4 className="text-xs theme-text">What will run</h4>
         <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] @xl:grid-cols-4">
           {([
-            ['Documents', `${readable} readable`],
+            ['Documents', fresh.length ? `${fresh.length} new${done ? ` · ${done} already ingested` : ''}` : `all ${readable} ingested`],
             ['Chunking', `${config.strategy} ${config.chunk_size}/${config.chunk_overlap}`],
             ['Embedding', embedding.model ?? 'none selected'],
             ['Index', embedding.collection ?? '-'],
@@ -182,12 +186,26 @@ export function RunStep({
 
       <div className="flex flex-wrap gap-1.5">
         <button
-          onClick={() => onAct('ingest', () => startIngest())}
-          disabled={!!busy || readable === 0}
+          onClick={() => onAct('ingest', () => startIngest({ document_ids: fresh.map((d) => d.document_id) }))}
+          disabled={!!busy || fresh.length === 0}
+          title={fresh.length ? fresh.map((d) => d.filename).join('\n') : 'Every readable document is already ingested'}
           className="flex items-center gap-1.5 rounded-md border theme-accent-border px-2.5 py-1 text-[11px] theme-accent transition-colors hover:theme-surface-strong disabled:opacity-40"
         >
-          <Play size={11} /> {busy === 'ingest' ? 'Starting…' : corpus.chunks ? 'Re-ingest all' : 'Ingest'}
+          <Play size={11} />
+          {busy === 'ingest' ? 'Starting…' : fresh.length ? `Ingest ${fresh.length} new` : 'Nothing new to ingest'}
         </button>
+        {/* Everything again: for after a change to the chunk settings, which
+            only applies to what is ingested from then on. */}
+        {done > 0 && (
+          <button
+            onClick={() => onAct('reingest', () => startIngest())}
+            disabled={!!busy}
+            title="Re-chunk and re-embed every document. Use it after changing the chunk settings"
+            className="flex items-center gap-1.5 rounded-md border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:theme-text disabled:opacity-40"
+          >
+            <RefreshCw size={11} /> {busy === 'reingest' ? 'Starting…' : `Re-ingest all ${readable}`}
+          </button>
+        )}
         <button
           onClick={() => onAct('resume', () => resumeIngest())}
           disabled={!!busy || pending === 0}

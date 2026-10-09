@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **229 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **231 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -46,7 +46,7 @@ Shared, at the top of this folder:
 | `test_embedding_prefixes.py` | 5 | Asymmetric embedders get their query and document prefixes — and the index knows which. |
 | `test_graph_agent.py` | 16 | Track 2's agent loop, driven by a scripted model — no Ollama anywhere. |
 | `test_origin.py` | 11 | Document origin — this rig's own, or a reference from another installation. |
-| `test_pdf_extraction.py` | 3 | PDF uploads: an AES-locked manual opens, a missing `cryptography` is explained, and no parser error becomes an HTTP 500. |
+| `test_pdf_extraction.py` | 5 | PDF uploads: an AES-locked manual opens, font-shifted text ("WKH" for "the") is decoded, a missing `cryptography` is explained, and no parser error becomes an HTTP 500. |
 | `test_replay.py` | 2 | Blueprints' Track 1 replay: a recorded vector query read back, never re-run. |
 | `test_rerank.py` | 13 | Track 1's two-stage retrieval: a wide Chroma pool, re-scored by a cross-encoder. |
 | `test_run_documents.py` | 2 | Ingest logs by document: a run names its documents, and a document gets its runs' logs. |

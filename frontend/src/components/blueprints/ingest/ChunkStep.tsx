@@ -5,6 +5,7 @@ import {
   saveCorpusConfig, previewChunks, type CorpusDocument, type CorpusConfig, type ChunkPreview,
 } from '../../../lib/blueprintsClient'
 import { ThemeSelect } from '../../ui/theme-select'
+import { isIngested } from './shared'
 
 export function ChunkStep({
   config, documents, onSaved,
@@ -14,7 +15,11 @@ export function ChunkStep({
   onSaved: () => void
 }) {
   const readable = documents.filter((d) => d.extract_status === 'ok')
-  const [subject, setSubject] = useState<string | null>(readable[0]?.document_id ?? null)
+  // Previews a document not yet ingested when there is one: that is the one
+  // these settings are about to be applied to.
+  const [subject, setSubject] = useState<string | null>(
+    (readable.find((d) => !isIngested(d)) ?? readable[0])?.document_id ?? null,
+  )
   const [draft, setDraft] = useState({
     strategy: config.strategy,
     chunk_size: config.chunk_size,
@@ -133,14 +138,23 @@ export function ChunkStep({
         </div>
 
         <div className="space-y-2">
+          {/* Only which document the preview runs on. It does not pick what
+              gets ingested; step 4 does that. */}
           {readable.length > 1 && (
-            <ThemeSelect
-              size="sm"
-              ariaLabel="Document to preview"
-              value={subject ?? ''}
-              onChange={setSubject}
-              options={readable.map((d) => ({ value: d.document_id, label: d.filename }))}
-            />
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-[11px] theme-text-muted">Preview on</span>
+              <ThemeSelect
+                size="sm"
+                ariaLabel="Document to preview the chunking on"
+                className="min-w-0 flex-1"
+                value={subject ?? ''}
+                onChange={setSubject}
+                options={readable.map((d) => ({
+                  value: d.document_id,
+                  label: `${d.filename}${isIngested(d) ? ' (ingested)' : ' (new)'}`,
+                }))}
+              />
+            </div>
           )}
 
           {error && (

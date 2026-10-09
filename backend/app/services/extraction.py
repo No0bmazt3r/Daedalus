@@ -116,6 +116,27 @@ def pdf_available() -> tuple[bool, str]:
     return True, ""
 
 
+# Some PDFs (the Fuji ZRE manual is one) embed fonts whose character codes are
+# shifted 29 below the real letters and carry no map back to Unicode, so pypdf
+# reads "the" as "WKH" and a space as the control character 0x03. The shift is
+# fixed, and the 0x03 "space" marks exactly which runs are encoded this way,
+# so those runs are decoded and the rest of the page is left alone. Matched
+# with an explicit whitespace class: Python's \s counts 0x1c-0x1f as spaces,
+# and 0x1f here is an encoded "<".
+_SHIFT = 29
+_SHIFTED_RUN = re.compile(r"[^ \t\n\r\x03]*(?:\x03+[^ \t\n\r\x03]*)+")
+
+
+def _unshift(text: str) -> str:
+    """Decode the font-shifted runs in one page's text. Same length out as in."""
+    if "\x03" not in text:
+        return text
+    return _SHIFTED_RUN.sub(
+        lambda m: "".join(chr(ord(c) + _SHIFT) if 0 < ord(c) < 0x7F - _SHIFT else c for c in m.group(0)),
+        text,
+    )
+
+
 def _normalise(text: str) -> str:
     """Line endings, and the ligatures a PDF text layer leaves behind.
 
@@ -123,6 +144,9 @@ def _normalise(text: str) -> str:
     offset this module reports has to describe the string it returns.
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Control characters other than newline and tab are font debris (list
+    # markers, unmapped glyphs), never text anyone wrote.
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     for bad, good in (("ﬁ", "fi"), ("ﬂ", "fl"), (" ", " "), ("’", "'")):
         text = text.replace(bad, good)
     # Three or more blank lines carry no information the chunker can use and
@@ -213,7 +237,7 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
     cursor = 0
     for number, page in enumerate(pages, start=1):
         try:
-            body = page.extract_text() or ""
+            body = _unshift(page.extract_text() or "")
         except pypdf.errors.DependencyError as exc:
             # Not one bad page: every page will fail the same way.
             raise ExtractionError(_NEEDS_CRYPTO) from exc

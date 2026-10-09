@@ -69,6 +69,18 @@ class PdfExtractionTest(unittest.TestCase):
         self.assertIn("cryptography", str(caught.exception))
 
 
+class ShiftedFontTest(unittest.TestCase):
+    """Fonts whose codes sit 29 below the letters, with 0x03 as the space."""
+
+    def test_shifted_runs_are_decoded_and_plain_text_is_left_alone(self) -> None:
+        encoded = "\x37\x4b\x48\x03\x2b\x4c\x4a\x4b\x12\x2f\x52\x5a\x03\x44\x4f\x44\x55\x50"  # The High/Low alarm
+        page = f"Thank you for purchasing.\n{encoded}\n6.3 Alarm setting"
+        self.assertEqual(extraction._unshift(page), "Thank you for purchasing.\nThe High/Low alarm\n6.3 Alarm setting")  # noqa: SLF001
+
+    def test_a_page_without_the_marker_is_untouched(self) -> None:
+        self.assertEqual(extraction._unshift("WKH plain text"), "WKH plain text")  # noqa: SLF001
+
+
 class UploadNeverCrashesTest(unittest.TestCase):
     def test_an_unexpected_parser_error_is_recorded_on_the_document(self) -> None:
         with mock.patch.object(extraction, "extract", side_effect=KeyError("/Kids")):
