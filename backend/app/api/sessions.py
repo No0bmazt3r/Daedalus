@@ -77,6 +77,8 @@ def list_sessions(
         )
     except sqlite_util.DatabaseUnavailableError as exc:
         raise _unavailable(exc) from exc
+    for s in sessions:
+        s["title_pending"] = session_titles.pending(s["session_id"])
     return {"sessions": sessions}
 
 

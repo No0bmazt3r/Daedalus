@@ -126,7 +126,15 @@ function Detail({ queryId }: { queryId: string | null }) {
   }
   if (shown?.reason) return <Unavailable reason={shown.reason} />
   const data = shown?.data
-  if (!data) return <Skeleton className="h-64 w-full" />
+  // Shaped like a retrieval (query card, then ranked passages) so nothing jumps.
+  if (!data) {
+    return (
+      <div className="space-y-2" role="status" aria-busy="true" aria-label="Loading retrieval">
+        <Skeleton className="h-16 w-full" />
+        {[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">
@@ -238,7 +246,18 @@ export function RetrievalView() {
       />
     )
   }
-  if (!items) return <Skeleton className="h-64 w-full" />
+  // The query list and the detail beside it, each as its own placeholder.
+  if (!items) {
+    return (
+      <div className="grid gap-4 @2xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]" role="status" aria-busy="true" aria-label="Loading retrievals">
+        <div className="space-y-1">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-11 w-full" />)}</div>
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full" />
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+        </div>
+      </div>
+    )
+  }
 
   if (items.length === 0) {
     return (

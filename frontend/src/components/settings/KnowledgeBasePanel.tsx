@@ -5,17 +5,18 @@ import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Network, Boxes, Check, AlertCircle, Lock, AlertTriangle, ArrowUpRight,
   ListOrdered, Route,
+  type LucideIcon,
 } from 'lucide-react'
 import {
   fetchRagConfig, setGraphSettings, setRagTrack, setRerank,
   type GraphSettings, type RagConfig, type RagTrack, type RerankSettings,
   type TrackStatus,
 } from '../../lib/blueprintsClient'
-import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
 import { ThemeSelect } from '../ui/theme-select'
 import { EmbeddingModelsPane } from '../forge/EmbeddingModelsPane'
 import type { ForgeTab } from '../forge/ForgeWindow'
+import { SectionsSkeleton } from '../ui/sections-skeleton'
 
 /**
  * Settings → Retrieval Track · Vector RAG · Graph RAG — which retrieval track answers a
@@ -130,7 +131,14 @@ function useRagConfig() {
   return { config, setConfig, error, setError, loadError, load }
 }
 
-function LoadState({ failure, onRetry }: { failure: LoadFailure | null; onRetry: () => void }) {
+function LoadState({
+  failure, onRetry, sections,
+}: {
+  failure: LoadFailure | null
+  onRetry: () => void
+  /** The panel's own section headings, shown while it loads. */
+  sections: { icon?: LucideIcon; title: string }[]
+}) {
   if (failure) {
     return (
       <TabError
@@ -141,7 +149,7 @@ function LoadState({ failure, onRetry }: { failure: LoadFailure | null; onRetry:
       />
     )
   }
-  return <Skeleton className="h-52 w-full" />
+  return <SectionsSkeleton sections={sections} />
 }
 
 function FrozenNotice() {
@@ -160,7 +168,7 @@ function FrozenNotice() {
 /** Settings → Vector RAG: Track 1's re-ranking, and whether its index can answer. */
 export function VectorRagPanel({ onOpenForge }: { onOpenForge?: (tab: ForgeTab) => void }) {
   const { config, setConfig, loadError, load } = useRagConfig()
-  if (!config) return <LoadState failure={loadError} onRetry={load} />
+  if (!config) return <LoadState failure={loadError} onRetry={load} sections={[{ icon: Boxes, title: 'Vector RAG' }, { icon: ListOrdered, title: 'Re-ranking' }]} />
   return (
     <div className="space-y-4">
       <header>
@@ -195,7 +203,7 @@ export function VectorRagPanel({ onOpenForge }: { onOpenForge?: (tab: ForgeTab) 
 /** Settings → Graph RAG: Track 2's retrieval mode — the agent loop or the fixed walk. */
 export function GraphRagPanel() {
   const { config, setConfig, loadError, load } = useRagConfig()
-  if (!config) return <LoadState failure={loadError} onRetry={load} />
+  if (!config) return <LoadState failure={loadError} onRetry={load} sections={[{ icon: Network, title: 'Graph RAG' }, { icon: Route, title: 'Agent loop' }]} />
   return (
     <div className="space-y-4">
       <header>
@@ -231,7 +239,7 @@ export function KnowledgeBasePanel() {
     }
   }
 
-  if (!config) return <LoadState failure={loadError} onRetry={load} />
+  if (!config) return <LoadState failure={loadError} onRetry={load} sections={[{ title: 'Retrieval track' }]} />
 
   return (
     <div className="space-y-4">

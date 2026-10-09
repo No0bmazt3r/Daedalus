@@ -134,12 +134,17 @@ def derive_title(content: str) -> str:
     return flat[: TITLE_CHARS - 1].rstrip() + "…"
 
 
+def capitalised(title: str | None) -> str | None:
+    """A title always starts with a capital, however it was written."""
+    return title[:1].upper() + title[1:] if title else title
+
+
 def _session_row(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "session_id": row["session_id"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
-        "title": row["title"],
+        "title": capitalised(row["title"]),
         "device_id": row["device_id"],
         "summary": row["summary"],
         "summary_upto_seq": row["summary_upto_seq"],

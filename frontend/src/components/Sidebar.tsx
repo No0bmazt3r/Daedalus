@@ -40,9 +40,12 @@ function SessionRow({
   onRename,
   onRetitle,
   onDelete,
+  titling = false,
 }: {
   session: ChatSession
   active: boolean
+  /** The title is still being written: show a loading bar, not the first message. */
+  titling?: boolean
   onSelect: () => void
   onRename: (title: string) => void
   /** Ask the background title job to name it from the conversation. */
@@ -91,7 +94,13 @@ function SessionRow({
         className={`flex-1 min-w-0 justify-start h-8 px-2 text-sm font-normal hover:bg-transparent ${active ? 'theme-text' : 'theme-text-muted hover:theme-text'}`}
       >
         <Circle size={8} className={`shrink-0 mr-2 ${active ? 'theme-accent opacity-100' : 'opacity-60'}`} />
-        <span className="truncate">{sessionLabel(session)}</span>
+        {titling ? (
+          <span className="flex-1 py-1" role="status" aria-label="Writing a title for this chat">
+            <Skeleton className="h-3 w-3/4" />
+          </span>
+        ) : (
+          <span className="truncate">{sessionLabel(session)}</span>
+        )}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -265,7 +274,7 @@ function DataStores({
 }
 
 export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenThread, onOpenStore, activeStore }: SidebarProps) {
-  const { sessions, activeSessionId, status, newChat, selectSession, rename, retitle, remove } = useSessions()
+  const { sessions, activeSessionId, status, sending, newChat, selectSession, rename, retitle, remove } = useSessions()
   const [confirm, confirmDialog] = useConfirm()
   const { isIncognito } = useSettings()
   const { show } = useUiPrefs()
@@ -420,6 +429,14 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
                 onSelect={() => selectSession(session.session_id)}
                 onRename={(title) => void rename(session.session_id, title)}
                 onRetitle={() => void retitle(session.session_id)}
+                // Until a model has named it: while its first answer is being
+                // written, then while the title job runs. A chat the model or
+                // the operator already named never shows this.
+                titling={
+                  !!session.title_pending ||
+                  (sending && session.session_id === activeSessionId &&
+                    session.title_source !== 'model' && session.title_source !== 'user')
+                }
                 onDelete={async () => {
                   const ok = await confirm({
                     title: `Delete "${sessionLabel(session)}"?`,

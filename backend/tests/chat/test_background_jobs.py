@@ -32,7 +32,7 @@ class TitleJobTest(unittest.TestCase):
         sid = chat_service.create_session()["session_id"]
         chat_service.add_user_message(sid, "hi")
         session = chat_store.get_session(sid)
-        self.assertEqual((session["title"], session["title_source"]), ("hi", "first_message"))
+        self.assertEqual((session["title"], session["title_source"]), ("Hi", "first_message"))
 
     def test_model_title_replaces_the_placeholder(self) -> None:
         sid = _chat()

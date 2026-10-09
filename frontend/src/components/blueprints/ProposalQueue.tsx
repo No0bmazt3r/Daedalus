@@ -168,7 +168,22 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
       />
     )
   }
-  if (!status) return <Skeleton className="h-64 w-full" />
+  // The explanation is fixed text: shown now, the counts once they load.
+  if (!status) {
+    return (
+      <div className="space-y-3">
+      <p className="text-[11px] leading-relaxed theme-text-muted">
+        Reads your ingested documents and suggests nodes and edges that fit this graph's schema
+        (seven node types, seven relations, fixed endpoints). Nothing is written until you accept it,
+        and every proposal quotes the sentence it came from so the review is checking a claim
+        rather than trusting a model.
+      </p>
+        <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[52px] w-full" />)}
+        </div>
+      </div>
+    )
+  }
 
   const nothingToRead = status.chunks_available === 0
 
@@ -212,7 +227,7 @@ export function ProposalQueue({ onApplied }: { onApplied: () => void }) {
         <p className="flex items-start gap-1.5 text-[10px] leading-relaxed theme-text-muted">
           <AlertCircle size={11} className="mt-0.5 shrink-0" />
           There is nothing to read yet. Suggestions come from ingested chunks, so import and
-          ingest documents in Corpus → Build first. It deliberately never reads the web: unreviewed
+          ingest documents in Track 1's Build tab first. It deliberately never reads the web: unreviewed
           external text in the graph would break the provenance this queue exists to protect.
         </p>
       )}

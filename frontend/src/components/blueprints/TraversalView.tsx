@@ -202,7 +202,15 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
       />
     )
   }
-  if (!data) return <Skeleton className="h-64 w-full" />
+  // Shaped like a walk (query card, then its hops) so nothing jumps.
+  if (!data) {
+    return (
+      <div className="space-y-2" role="status" aria-busy="true" aria-label="Loading graph walk">
+        <Skeleton className="h-16 w-full" />
+        {[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+      </div>
+    )
+  }
   if (!data.available) return <Unavailable reason={data.reason} blockedBy={data.blocked_by} />
 
   const { path } = data

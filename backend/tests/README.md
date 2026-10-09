@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **220 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **222 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -26,6 +26,7 @@ Shared, at the top of this folder:
 | `test_chat_path.py` | 10 | The whole of §7.1 through `inference.answer_stream`, with Ollama faked. |
 | `test_safety.py` | 9 | M5: every unsafe phrasing is refused before any tool or model runs. |
 | `test_summariser.py` | 5 | §7.4's rolling summary: folds what fell out of the window, never keeps a value. |
+| `test_title_display.py` | 2 | Chat titles in the sidebar: always capitalised, and flagged while being written. |
 
 ### `tools/` — The deterministic tool layer: the registry's gates, simple/advanced mode, the read-only sensor tools, and planning → evidence → validation.
 

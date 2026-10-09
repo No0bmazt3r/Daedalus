@@ -50,7 +50,15 @@ export function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
       />
     )
   }
-  if (!config) return <Skeleton className="h-48 w-full" />
+  // The explanation is fixed text: shown now, the model card once it loads.
+  if (!config) {
+    return (
+      <div className="space-y-3">
+        <Intro />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    )
+  }
 
   // Choosing is still an explicit click, so nothing is defaulted behind your back.
   const choose = async (tag: string) => {
@@ -73,12 +81,7 @@ export function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] leading-relaxed theme-text-muted">
-        The model that turns chunks into vectors. Not the chat model, and the one choice in this
-        flow that cannot be changed cheaply afterwards: it is stamped onto the index it builds, and
-        vectors from two different models can't be compared, so changing it later means re-embedding
-        everything.
-      </p>
+      <Intro />
 
       <div
         className={`rounded-lg border p-3 ${
@@ -190,3 +193,14 @@ export function EmbeddingStep({ onOpenForge }: { onOpenForge?: () => void }) {
 }
 
 // ── step 4 ───────────────────────────────────────────────────────────────────
+
+function Intro() {
+  return (
+    <p className="text-[11px] leading-relaxed theme-text-muted">
+        The model that turns chunks into vectors. Not the chat model, and the one choice in this
+        flow that cannot be changed cheaply afterwards: it is stamped onto the index it builds, and
+        vectors from two different models can't be compared, so changing it later means re-embedding
+        everything.
+    </p>
+  )
+}

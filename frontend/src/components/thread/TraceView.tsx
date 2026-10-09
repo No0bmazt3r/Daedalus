@@ -108,7 +108,15 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
       />
     )
   }
-  if (!shown?.trace || !shown.check) return <Skeleton className="h-72 w-full" />
+  // Shaped like a trace (summary strip, then its steps) so nothing jumps.
+  if (!shown?.trace || !shown.check) {
+    return (
+      <div className="space-y-2" role="status" aria-busy="true" aria-label="Loading trace">
+        <Skeleton className="h-12 w-full" />
+        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+      </div>
+    )
+  }
   const { trace, check } = shown
   const s = trace.summary
 

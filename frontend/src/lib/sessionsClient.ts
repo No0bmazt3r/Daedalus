@@ -19,6 +19,8 @@ export interface ChatSession {
   message_count?: number | null;
   /** Who named it — 'first_message' placeholder, 'model' (the title job), or 'user'. */
   title_source?: 'first_message' | 'model' | 'user' | null;
+  /** The background title job is running for this chat right now. */
+  title_pending?: boolean;
 }
 
 export interface ChatSessionDetail extends ChatSession {
@@ -175,5 +177,6 @@ export async function deleteSession(id: string): Promise<boolean> {
 
 /** A chat with no title yet is shown by a placeholder, never by a blank row. */
 export function sessionLabel(session: ChatSession): string {
-  return session.title?.trim() || 'New chat';
+  const title = session.title?.trim() || 'New chat';
+  return title[0].toUpperCase() + title.slice(1);
 }

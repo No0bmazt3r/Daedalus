@@ -5,12 +5,12 @@ import {
   type ThreadSettings, type ThreadSettingsPatch, type TraceBucket, type TraceStatus,
 } from '../../lib/threadClient'
 import { Switch } from '../ui/switch'
-import { Skeleton } from '../ui/skeleton'
 import { ThemeSelect } from '../ui/theme-select'
 import { FILTERS, STATUS } from '../thread/status'
 import { statusOf } from '../errors/ErrorPage'
 import { TabError } from '../errors/TabError'
 import { useConfirm } from '../ui/confirm-dialog'
+import { SectionsSkeleton } from '../ui/sections-skeleton'
 
 /**
  * Settings → Ariadne's Thread: how the Thread labels a turn.
@@ -71,7 +71,16 @@ export function ThreadPanel(_props: { isPeek?: boolean }) {
       />
     )
   }
-  if (!state || !names) return <Skeleton className="h-64 w-full" />
+  if (!state || !names) {
+    return (
+      <SectionsSkeleton sections={[
+        { icon: Network, title: 'How the Thread labels an answer' },
+        { icon: ShieldCheck, title: 'What counts as grounded' },
+        { icon: Tags, title: 'Where each outcome is filed' },
+        { icon: Tags, title: 'What the filters are called' },
+      ]} />
+    )
+  }
   const { settings, defaults } = state
   const isDefault = JSON.stringify(settings) === JSON.stringify(defaults)
 
