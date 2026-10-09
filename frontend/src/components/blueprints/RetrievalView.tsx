@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
-import { AlertTriangle, FileText, Timer, Layers } from 'lucide-react'
+import { AlertTriangle, FileText, Timer, Layers, ChevronDown } from 'lucide-react'
+import { reflowPassage } from '../../lib/passage'
 import {
   fetchRetrievals, fetchRetrieval,
   type RetrievalSummary, type Retrieval,
@@ -54,6 +55,65 @@ function distanceTone(distance: number | null): string {
   return 'theme-text-muted'
 }
 
+type Chunk = Retrieval['chunks'][number]
+
+/**
+ * One retrieved passage: where it came from on top, then its text as
+ * paragraphs. Long passages open folded to a few lines so five of them fit on
+ * a screen; the whole text is one click away.
+ */
+function PassageCard({ c }: { c: Chunk }) {
+  const [open, setOpen] = useState(false)
+  const paragraphs = c.missing ? [] : reflowPassage(c.text ?? '')
+  const long = (c.text ?? '').length > 600
+  return (
+    <li className={`rounded-lg border ${c.missing ? 'border-amber-400/40 bg-amber-400/5' : 'theme-border theme-card'}`}>
+      <div className="flex items-start gap-2 border-b theme-border px-3 py-2">
+        <span className="mt-px shrink-0 rounded border theme-border px-1.5 text-[10px] tabular-nums theme-text-muted" title="Rank: 1 was the closest match">
+          #{c.rank}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 text-[12px] theme-text">
+            <FileText size={11} className="shrink-0 theme-text-muted" />
+            <span className="truncate" title={c.source_file ?? c.chunk_id}>{c.source_file ?? c.chunk_id}</span>
+            {c.page_number ? <span className="shrink-0 text-[11px] theme-text-muted">p.{c.page_number}</span> : null}
+          </p>
+          {c.section_title && (
+            <p className="truncate text-[11px] theme-text-muted" title={c.section_title}>§ {c.section_title}</p>
+          )}
+        </div>
+        <span
+          className={`shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] tabular-nums ${distanceTone(c.distance)}`}
+          title="Cosine distance. Lower is closer"
+        >
+          dist {c.distance != null ? c.distance.toFixed(3) : '-'}
+        </span>
+      </div>
+      {c.missing ? (
+        <p className="px-3 py-2 text-[11px] leading-relaxed text-amber-400">
+          This chunk is no longer in the corpus, so its text cannot be shown.
+        </p>
+      ) : (
+        <div className="px-3 py-2">
+          <div className={`space-y-2 text-[12px] leading-relaxed theme-text opacity-90 ${long && !open ? 'line-clamp-6' : ''}`}>
+            {paragraphs.map((p, i) => <p key={i} className="whitespace-pre-line">{p}</p>)}
+          </div>
+          {long && (
+            <button
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              className="mt-1.5 flex items-center gap-1 text-[11px] theme-accent hover:underline"
+            >
+              <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+              {open ? 'Show less' : 'Show full passage'}
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function QueryPicker({
   items, selected, onSelect,
 }: {
@@ -62,13 +122,15 @@ function QueryPicker({
   onSelect: (id: string) => void
 }) {
   return (
-    <ul className="space-y-1">
+    // Sticks while the passages scroll, so the selected query stays in view.
+    <ul className="space-y-1 @2xl:sticky @2xl:top-0 @2xl:max-h-[calc(100vh-14rem)] @2xl:self-start @2xl:overflow-y-auto no-scrollbar">
       {items.map((r) => {
         const active = r.query_id === selected
         return (
           <li key={r.query_id}>
             <button
               onClick={() => onSelect(r.query_id)}
+              title={r.query_text || undefined}
               aria-pressed={active}
               className={`w-full rounded-md border px-2.5 py-1.5 text-left transition-colors ${
                 active ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
@@ -168,39 +230,7 @@ function Detail({ queryId }: { queryId: string | null }) {
       ) : (
         <ol className="space-y-1.5">
           {data.chunks.map((c) => (
-            <li
-              key={`${c.chunk_id}-${c.rank}`}
-              className={`rounded-lg border p-2.5 ${
-                c.missing ? 'border-amber-400/40 bg-amber-400/5' : 'theme-border theme-card'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border theme-border tabular-nums theme-text-muted">
-                  {c.rank}
-                </span>
-                <FileText size={10} className="shrink-0 theme-text-muted" />
-                <span className="min-w-0 flex-1 truncate theme-text-muted">
-                  {c.source_file ?? c.chunk_id}
-                  {c.page_number ? ` · p${c.page_number}` : ''}
-                  {c.section_title ? ` · ${c.section_title}` : ''}
-                </span>
-                <span
-                  className={`shrink-0 tabular-nums ${distanceTone(c.distance)}`}
-                  title="Cosine distance. Lower is closer"
-                >
-                  {c.distance != null ? c.distance.toFixed(4) : '-'}
-                </span>
-              </div>
-              {c.missing ? (
-                <p className="mt-1.5 text-[10px] leading-relaxed text-amber-400">
-                  This chunk is no longer in the corpus, so its text cannot be shown.
-                </p>
-              ) : (
-                <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed theme-text opacity-85">
-                  {c.text}
-                </p>
-              )}
-            </li>
+            <PassageCard key={`${c.chunk_id}-${c.rank}`} c={c} />
           ))}
         </ol>
       )}

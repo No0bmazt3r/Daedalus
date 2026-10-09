@@ -171,7 +171,8 @@ function TracePicker({
   onSelect: (id: string) => void
 }) {
   return (
-    <ul className="space-y-1">
+    // Sticks while the walk scrolls, so the selected query stays in view.
+    <ul className="space-y-1 @2xl:sticky @2xl:top-0 @2xl:max-h-[calc(100vh-14rem)] @2xl:self-start @2xl:overflow-y-auto no-scrollbar">
       {traces.map((t) => {
         const active = t.query_id === selected
         return (

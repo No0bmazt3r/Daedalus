@@ -136,3 +136,98 @@ export function dayAfter(date: string): string {
 export function stripLabel(line: string): string {
   return line.replace(/^\[[A-Z]\d+\]\s*/, '')
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** An evidence timestamp in parts: `2026-09-12 16:15:52 UTC (00:15 site time)`. */
+export interface Moment { date: string; utc: string; site?: string }
+
+export function parseMoment(text: string): Moment | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}:\d{2})(?::\d{2})?(?:\.\d+)? UTC(?: \((\d{1,2}:\d{2}) site time\))?$/.exec(text.trim())
+  if (!m) return null
+  return { date: `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}`, utc: m[4], site: m[5] }
+}
+
+/** `12 Sep, 16:15 UTC (00:15 site)`, or the text unchanged if it is not a timestamp. */
+export function shortTime(text: string): string {
+  const t = parseMoment(text)
+  if (!t) return text
+  return `${t.date}, ${t.utc} UTC${t.site ? ` (${t.site} site)` : ''}`
+}
+
+/**
+ * A window, as short as it can be said: one date when both ends share it.
+ * `12 Sep · 16:15–17:15 UTC (00:15–01:15 site)`.
+ */
+export function timeRange(from: string, to: string): string {
+  const { main, site } = rangeParts(from, to)
+  return site ? `${main} (${site})` : main
+}
+
+/** The same window in two parts, so a narrow header can put site time on its own line. */
+export function rangeParts(from: string, to: string): { main: string; site?: string } {
+  const a = parseMoment(from)
+  const b = parseMoment(to)
+  if (!a || !b || a.date !== b.date) return { main: `${shortTime(from)} → ${shortTime(to)}` }
+  return {
+    main: `${a.date} · ${a.utc}–${b.utc} UTC`,
+    site: a.site && b.site ? `${a.site}–${b.site} site` : undefined,
+  }
+}
+
+export interface EvidenceRow { label: string; value: string; when?: Moment | string }
+export interface ParsedEvidence {
+  title: string
+  subtitle?: string
+  /** For a window: its UTC span and its site-time span, for a two-line header. */
+  span?: { main: string; site?: string }
+  rows: EvidenceRow[]
+  /** The day the window starts, so a row on that same day can leave its date out. */
+  date?: string
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const moment = (text: string) => parseMoment(text) ?? text
+
+/**
+ * A sensor evidence line (the shapes `orchestration/evidence.py` writes for
+ * `get_trend` and `get_live_reading`) as a title and labelled rows, so a
+ * reader scans a small table instead of a paragraph. Null for anything else
+ * (document passages, notes), which is shown as text.
+ */
+export function parseEvidenceLine(line: string): ParsedEvidence | null {
+  const text = stripLabel(line).trim()
+
+  // `co2_ppm from A to B[, X mode only], 721 readings: mean = 482.202 ppm. average …; min … at T; …`
+  const trend = /^(\S+) from (.+?) to (.+?)(?:, (.+?) mode only)?, (\d+) readings: (.*)$/.exec(text)
+  if (trend) {
+    const [, sensor, from, to, mode, count, rest] = trend
+    const rows: EvidenceRow[] = [{ label: 'Readings', value: count }]
+    for (const part of rest.split(/\.\s+|;\s+/).map((p) => p.replace(/\.$/, '').trim()).filter(Boolean)) {
+      const m = /^(\w+)\s*=?\s*(.+?)(?: at (.+))?$/.exec(part)
+      if (!m) continue
+      const [, name, value, when] = m
+      // The headline aggregation repeats the average when it is the mean.
+      if ((name === 'mean' || name === 'average') && rows.some((r) => r.label === 'Average')) continue
+      rows.push({ label: name === 'mean' ? 'Average' : cap(name), value, when: when ? moment(when) : undefined })
+    }
+    const parts = rangeParts(from, to)
+    const span = timeRange(from, to)
+    return {
+      title: sensor, subtitle: mode ? `${span} · ${mode} mode only` : span, rows,
+      date: parseMoment(from)?.date,
+      span: mode ? { ...parts, main: `${parts.main} · ${mode} mode only` } : parts,
+    }
+  }
+
+  // `co2_ppm = 488.5 ppm. Reading at T, mode Desorption. STALE: 3 days old.`
+  const live = /^(\S+) = (.+?)\. Reading at (.+?)(?:, mode ([^.]+))?\.(?:\s*(.*))?$/.exec(text)
+  if (live) {
+    const [, sensor, value, when, mode, tail] = live
+    const rows: EvidenceRow[] = [{ label: 'Value', value, when: moment(when) }]
+    if (mode) rows.push({ label: 'Mode', value: mode })
+    if (tail && /STALE/.test(tail)) rows.push({ label: 'Stale', value: tail.replace(/^STALE:?\s*/, '').replace(/\.$/, '') || 'yes' })
+    return { title: sensor, subtitle: 'Latest reading', rows }
+  }
+  return null
+}

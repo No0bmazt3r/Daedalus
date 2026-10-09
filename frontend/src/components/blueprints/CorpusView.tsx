@@ -279,7 +279,8 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
       </details>
 
       <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-        <div className="space-y-1.5">
+        {/* Sticks while the chunks scroll, so the open document stays in view. */}
+        <div className="space-y-1.5 @3xl:sticky @3xl:top-0 @3xl:self-start">
           <label className="flex items-center gap-1.5 rounded-md border theme-border theme-surface px-2 py-1">
             <Search size={11} className="shrink-0 theme-text-muted" />
             <input

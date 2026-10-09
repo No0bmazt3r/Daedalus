@@ -26,6 +26,7 @@ import { TraceStrip } from './thread/TraceStrip'
 import { AnswerPanel, type AnswerTab } from './thread/AnswerPanel'
 import { useSessionTraces } from '../hooks/useSessionTraces'
 import { ThinkingIndicator } from './ThinkingIndicator'
+import { saveLabel } from '../lib/threadClient'
 
 function TypewriterText({ text }: { text: string }) {
   // How much of `text` is typed. Keyed by the text it counts, so a new text
@@ -61,8 +62,10 @@ function TypewriterText({ text }: { text: string }) {
 }
 
 function MessageActions({
-  text, modelTag, fromCloud, rating, onRate,
+  text, modelTag, fromCloud, rating, onRate, queryId,
 }: {
+  /** The turn's audit id, for the label prompt a thumbs-down opens. */
+  queryId?: string
   text: string
   modelTag?: string
   fromCloud?: boolean
@@ -72,6 +75,22 @@ function MessageActions({
   onRate?: (rating: -1 | 0 | 1) => void
 }) {
   const [copied, setCopied] = useState(false)
+  // A thumbs-down asks whether the answer was actually wrong. "Unhelpful" and
+  // "hallucinated" are different findings, so the label is still the person's
+  // explicit choice; this only puts the question where they already are.
+  const [ask, setAsk] = useState<'open' | 'saving' | 'saved-bad' | 'saved-ok' | null>(null)
+  const [labelError, setLabelError] = useState<string | null>(null)
+  const label = (hallucinated: boolean) => {
+    if (!queryId) return
+    setAsk('saving')
+    setLabelError(null)
+    saveLabel(queryId, hallucinated, null)
+      .then(() => {
+        setAsk(hallucinated ? 'saved-bad' : 'saved-ok')
+        window.setTimeout(() => setAsk(null), 3000)
+      })
+      .catch((e: Error) => { setLabelError(e.message); setAsk('open') })
+  }
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(text)
@@ -80,7 +99,8 @@ function MessageActions({
   }
 
   return (
-    <div className="flex items-center gap-1.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+    <>
+    <div className={`flex items-center gap-1.5 mt-2 transition-opacity ${ask ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
       <button
         onClick={handleCopy}
         className="p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
@@ -103,7 +123,11 @@ function MessageActions({
             <ThumbsUp size={14} fill={rating === 1 ? 'currentColor' : 'none'} />
           </button>
           <button
-            onClick={() => onRate(rating === -1 ? 0 : -1)}
+            onClick={() => {
+              const next = rating === -1 ? 0 : -1
+              onRate(next)
+              setAsk(next === -1 && queryId ? 'open' : null)
+            }}
             aria-pressed={rating === -1}
             className={`p-1.5 rounded-md hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors ${
               rating === -1 ? 'status-bad' : 'theme-text-muted hover:theme-text'
@@ -145,6 +169,44 @@ function MessageActions({
         </span>
       )}
     </div>
+    {ask && (
+      <div
+        role="group"
+        aria-label="Label this answer"
+        className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] theme-text-muted animate-in fade-in slide-in-from-top-1 duration-200"
+      >
+        {ask === 'saved-bad' || ask === 'saved-ok' ? (
+          <span>
+            Saved as <span className={ask === 'saved-bad' ? 'status-bad' : 'status-ok'}>
+              {ask === 'saved-bad' ? 'Hallucinated' : 'Correct'}
+            </span> in Ariadne's Thread.
+          </span>
+        ) : (
+          <>
+            <span>Did it say anything wrong or made up?</span>
+            <button
+              disabled={ask === 'saving'}
+              onClick={() => label(true)}
+              className="rounded-md border theme-border px-2 py-0.5 hover:status-bad disabled:opacity-50"
+            >
+              Yes, hallucinated
+            </button>
+            <button
+              disabled={ask === 'saving'}
+              onClick={() => label(false)}
+              className="rounded-md border theme-border px-2 py-0.5 hover:theme-text disabled:opacity-50"
+            >
+              No, just unhelpful
+            </button>
+            <button onClick={() => setAsk(null)} className="px-1 py-0.5 hover:theme-text">
+              Skip
+            </button>
+            {labelError && <span className="status-bad">Couldn't save: {labelError}</span>}
+          </>
+        )}
+      </div>
+    )}
+    </>
   )
 }
 
@@ -582,6 +644,7 @@ export function ChatInterface() {
                         fromCloud={referenceModels.some((m) => m.name === msg.modelTag)}
                         rating={msg.queryId ? ratings[msg.queryId] : undefined}
                         onRate={msg.queryId ? (r) => void rate(msg.queryId!, r) : undefined}
+                        queryId={msg.queryId}
                       />
                     )}
 

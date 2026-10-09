@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Groundedness, Trace, TraceSummary } from '../src/lib/threadClient.ts';
-import { groupByChat, share, stepSelection, traceMarkdown } from '../src/lib/threadLogic.ts';
+import { groupByChat, parseEvidenceLine, share, stepSelection, traceMarkdown } from '../src/lib/threadLogic.ts';
 
 function turn(query_id: string, session_id: string | null): TraceSummary {
   return {
@@ -83,4 +83,22 @@ test('the Markdown export lists each retrieved chunk with its chunking and wheth
   }]);
   assert.match(md, /## Retrieval — Track 1 \(vector\)/);
   assert.match(md, /\| 1 \| sop\.pdf \| p\.4 §NDIR \| recursive 512\/64 \| 0\.213 \| - \| rig \| D1 \|/);
+});
+
+test('a trend evidence line reads as a small table', () => {
+  const line = '[S1] co2_ppm from 2026-09-12 16:15:52 UTC (00:15 site time) to 2026-09-12 17:15:52 UTC (01:15 site time), 721 readings: mean = 482.202 ppm. average 482.202 ppm; min 467.8 ppm at 2026-09-12 16:16:07 UTC (00:16 site time); max 497.6 ppm at 2026-09-12 17:15:02 UTC (01:15 site time); first 482.4 ppm; latest 488.5 ppm.';
+  const parsed = parseEvidenceLine(line);
+  assert.equal(parsed?.title, 'co2_ppm');
+  assert.equal(parsed?.subtitle, '12 Sep · 16:15–17:15 UTC (00:15–01:15 site)');
+  assert.deepEqual(parsed?.rows.map((r) => [r.label, r.value]), [
+    ['Readings', '721'], ['Average', '482.202 ppm'], ['Min', '467.8 ppm'],
+    ['Max', '497.6 ppm'], ['First', '482.4 ppm'], ['Latest', '488.5 ppm'],
+  ]);
+  assert.deepEqual(parsed?.rows[2].when, { date: '12 Sep', utc: '16:16', site: '00:16' });
+});
+
+test('a live reading line parses, and prose does not', () => {
+  const parsed = parseEvidenceLine('[S2] temperature = 31.74 °C. Reading at 2026-09-12 17:15:52 UTC (01:15 site time), mode Desorption. STALE: 3 days old.');
+  assert.deepEqual(parsed?.rows.map((r) => [r.label, r.value]), [['Value', '31.74 °C'], ['Mode', 'Desorption'], ['Stale', '3 days old']]);
+  assert.equal(parseEvidenceLine('[D1] manual.pdf p.3: The reactor adsorbs CO2.'), null);
 });

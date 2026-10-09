@@ -29,17 +29,28 @@ export function LabelPanel({ queryId, initial }: { queryId: string; initial: Tra
       on ? `${tone} theme-surface-strong theme-accent-border` : 'theme-border theme-text-muted hover:theme-text'
     }`
 
-  // One row of buttons by default. The note box only opens when asked for,
-  // or when there is already a note to show.
+  // The note box only opens when asked for, or when there is already a note.
   return (
     <section className="space-y-2 rounded-lg border theme-border px-3 py-2">
-      <div className="flex flex-wrap items-center gap-1.5">
+      {/* Two rows: what this is and where it stands, then the choices. One
+          row wrapped at panel width and left the status stranded on its own. */}
+      <div className="flex items-center gap-2">
         <h3
-          className="mr-1 flex items-center gap-1.5 text-xs font-medium theme-text"
+          className="flex items-center gap-1.5 text-xs font-medium theme-text"
           title="Did this answer state anything the evidence does not support? This is the evaluation's ground truth; the colours above are only the detector's guess."
         >
           <Tag size={12} className="theme-accent" /> Label
         </h3>
+        <span className="min-w-0 flex-1 truncate text-[10px] theme-text-muted">
+          {label ? `saved ${new Date(label.timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'not labelled yet'}
+        </span>
+        {label && (
+          <button disabled={saving} onClick={() => save(null)} className="shrink-0 text-[10px] theme-text-muted hover:theme-text">
+            Clear
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
         <button disabled={saving} aria-pressed={choice === 'ok'} onClick={() => save(false)} className={optionClass(choice === 'ok', 'status-ok')}>
           Correct
         </button>
@@ -49,18 +60,10 @@ export function LabelPanel({ queryId, initial }: { queryId: string; initial: Tra
         <button
           onClick={() => setNoteOpen((v) => !v)}
           aria-expanded={noteOpen}
-          className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] theme-text-muted hover:theme-text"
+          className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] theme-text-muted hover:theme-text"
         >
           <StickyNote size={11} /> {noteOpen ? 'Hide note' : note ? 'Note' : 'Add note'}
         </button>
-        <span className="ml-auto text-[10px] theme-text-muted">
-          {label ? `saved ${new Date(label.timestamp).toLocaleString()}` : 'not labelled yet'}
-        </span>
-        {label && (
-          <button disabled={saving} onClick={() => save(null)} className="text-[10px] theme-text-muted hover:theme-text">
-            Clear
-          </button>
-        )}
       </div>
       {noteOpen && (
         <>
