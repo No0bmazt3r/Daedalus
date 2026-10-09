@@ -31,7 +31,7 @@ this file says *where* each thing lives.
   └────────────────┘    └──────────────────┘   └─────────────────┘
 ```
 
-**Rules the whole design follows** (`docs/PROJECT.md` §2):
+**Rules the whole design follows** (`docs/PROJECT.md` §3):
 
 1. Fully local: no answer depends on the internet.
 2. Read-only toward the reactor: the sensor database is opened read-only.
@@ -63,18 +63,19 @@ sidebar, windows, shortcuts).
 ## 3. The databases
 
 All of them are files on this machine. Paths are set in `backend/app/db/paths.py`
+(overridable by environment; `daedalus.sh` points them at the repository root)
 and every connection goes through `db/sqlite_util.py` (pragmas, transactions,
 retry, read-only mode).
 
 | Store | File | Holds | Module | Written by | Read by |
 |---|---|---|---|---|---|
 | **Sensor** | `data/sqlite/sensor_readings.db` | Reactor telemetry (temperature, pressure, pH, level, CO₂) | `db/sensor_store.py` | The reactor's own software — **never Daedalus** (opened read-only) | Sensor tools |
-| **Audit** | `data/logs/ai_logs.db` | Seven log tables, all keyed on `query_id`: conversation, tool, rag, model, error, feedback (ratings and labels), memory | `db/audit_store.py` | The chat pipeline, every turn | Ariadne's Thread, evaluation, Data stores |
+| **Audit** | `logs/ai_logs.db` | Seven log tables, all keyed on `query_id`: conversation, tool, rag, model, error, feedback (ratings and labels), memory | `db/audit_store.py` | The chat pipeline, every turn | Ariadne's Thread, evaluation, Data stores |
 | **Chat** | `data/sqlite/chat.db` | Sessions and messages (the transcript the user owns), each answer's evidence pack | `db/chat_store.py` | `services/chat_service.py` | The chat, the Thread |
 | **Corpus** | `data/sqlite/corpus.db` | Uploaded documents, their chunks, ingest runs (with chunk size/overlap), events | `db/corpus_store.py` | `services/ingestion.py` | Track 1 search, Blueprints, the Thread |
-| **Preferences** | `data/prefs.db` | Settings: theme, keybinds, assistant, Thread settings, … | `db/prefs_store.py` | Settings panels | Everything that reads a setting |
+| **Preferences** | `backend/data/prefs.db` | Settings: theme, keybinds, assistant, Thread settings, … | `db/prefs_store.py` | Settings panels | Everything that reads a setting |
 | **Vectors** | `data/chroma/` | Chunk embeddings, one collection per embedding model | `db/vector_store.py` | Ingestion | Track 1 search |
-| **Knowledge graph** | `config/knowledge_graph.yaml` once authored; until then the seed in `backend/app/data/graph/knowledge_graph.yaml` | Track 2's nodes and edges (sensors, thresholds, SOPs, steps) | `services/knowledge_graph.py` | Blueprints → Authoring | Track 2 search |
+| **Knowledge graph** | `config/knowledge_graph.yaml` once authored; until then the seed in `backend/app/data/graph/knowledge_graph.yaml` | Track 2's nodes and edges (sensors, thresholds, SOPs, steps) | `services/knowledge_graph.py` | Blueprints → Track 2 → Build | Track 2 search |
 | Small stores | `search`, `mcp`, `model_endpoint`, `tool_policy` `_store.py` | Web-search providers, MCP servers, cloud endpoints, tool on/off | `db/*_store.py` | Their Settings panels | Their services |
 
 **Schema changes** are numbered SQL files per store in
@@ -84,7 +85,10 @@ without a migration.
 
 **Config files** in `config/`: `model_config.json` (the chosen chat model),
 `rag_config.json` (which track answers, frozen or not), `embedding_config.json`,
-`eval/` (evaluation question sets).
+`corpus_config.json` (chunking, once changed), `eval/queries.yaml` (the
+evaluation question set), `searxng/` (the optional search container's template).
+Catalogues that ship with the code are in `backend/app/data/`
+(`model_catalogue.json`, `embedding_catalogue.json`, the graph seed).
 
 ---
 
@@ -115,8 +119,10 @@ Around it: the conversation window and rolling summary (`services/chat_service.p
 which model answers (`model_config.py`, `background_models.py`).
 
 - **Screen:** `components/ChatInterface.tsx` (transcript and composer),
-  `components/Citations.tsx` (citation chips, reading highlights, the evidence
-  list), `contexts/SessionsContext.tsx` (chats, messages, sending, ratings)
+  `components/AnswerMarkdown.tsx` (an answer as Markdown, with chips applied
+  inside the text), `components/Citations.tsx` (citation chips, reading
+  highlights, the evidence list), `contexts/SessionsContext.tsx` (chats,
+  messages, sending, ratings)
 - **Client:** `lib/chatClient.ts`, `lib/sessionsClient.ts`
 - **Routes:** `api/chat.py` (send, stream, rate), `api/sessions.py` (chats)
 - **Stores:** chat, audit, sensor (read-only)
@@ -207,19 +213,21 @@ detect → estimate → score → manage → benchmark → commit.
 Shows the *active* track only. Track 1: the corpus and its pipeline. Track 2:
 the graph and how it was authored.
 
-| Tab | Shows | Screen | Backend |
+| Track · tab | Shows | Screen | Backend |
 |---|---|---|---|
-| Corpus | Documents and their chunks | `CorpusView.tsx` | `api/corpus.py`, `db/corpus_store.py` |
-| Ingest | Upload → chunk → embed → run, step by step | `IngestView.tsx` (the stepper); one file per step in `blueprints/ingest/` | `services/ingestion.py`, `extraction.py`, `chunking.py`, `corpus_config.py` |
-| Retrieval | What a vector query returned | `RetrievalView.tsx` | `api/corpus.py` → `services/retrieval_replay.py` |
-| Graph | The graph as a diagram | `GraphView.tsx`, `GraphCanvas.tsx` | `api/graph.py`, `services/knowledge_graph.py` |
-| Coverage | What the graph covers, and what it misses | `CoverageView.tsx` | `services/knowledge_graph.py` |
-| Authoring | Add nodes and edges; review the model's proposals | `AuthoringView.tsx`, `ProposalQueue.tsx` | `services/graph_authoring.py`, `graph_proposals.py` |
-| Replay | A graph walk, hop by hop | `TraversalView.tsx` | `api/graph.py` |
+| 1 · Build | Upload → extract → chunk → embed → run, step by step | `IngestView.tsx` (the stepper); one file per step in `blueprints/ingest/` (`RunStep.tsx` shows each run and its log) | `services/ingestion.py`, `extraction.py`, `chunking.py`, `corpus_config.py` |
+| 1 · Corpus | Documents and their chunks | `CorpusView.tsx` (passages re-joined for display by `lib/passage.ts`) | `api/corpus.py`, `db/corpus_store.py` |
+| 1 · Replay | What a vector query returned | `RetrievalView.tsx` | `api/corpus.py` → `services/retrieval_replay.py` |
+| 1 · Logs | Every ingest run and each document's history | `IngestLogsView.tsx` | `api/corpus.py`, `db/corpus_store.py` |
+| 2 · Build | Add nodes and edges; review the model's proposals | `AuthoringView.tsx`, `ProposalQueue.tsx` | `services/graph_authoring.py`, `graph_proposals.py` |
+| 2 · Graph | The graph as a diagram | `GraphView.tsx`, `GraphCanvas.tsx` | `api/graph.py`, `services/knowledge_graph.py` |
+| 2 · Coverage | What the graph covers, and what it misses | `CoverageView.tsx` | `services/knowledge_graph.py` |
+| 2 · Replay | A graph walk, hop by hop | `TraversalView.tsx` | `api/graph.py` |
 
 - **Window and tabs:** `components/blueprints/BlueprintsWindow.tsx`, `tabs.ts`
 - **Client:** `lib/blueprintsClient.ts`
-- **Tests:** `backend/tests/retrieval/` (search, origin, prefixes)
+- **Tests:** `backend/tests/retrieval/` (search, origin, prefixes, replay, PDF
+  extraction, per-document history), `frontend/tests/passage.test.ts`
 
 ### 4.7 Settings
 
@@ -242,6 +250,11 @@ secrets masked).
 art, animation), found automatically by `catalogue.ts`. `ErrorPage.tsx` covers
 the screen when the app cannot continue; `TabError.tsx` fills one tab or window
 that failed to load. See `docs/ERROR_PAGES.md`.
+
+A failed *action* is a toast instead (`components/ui/toast.tsx`), raised by
+`lib/http.ts` for any non-GET request; an unexpected server error carries the
+`error_id` that `backend/app/main.py`'s catch-all handler logged, so it can be
+found in Settings → Process Log. Test: `backend/tests/test_error_reporting.py`.
 
 ### 4.10 Live updates
 
@@ -280,8 +293,8 @@ the tooltip every hint uses (`components/ui/title-tooltips.tsx`), shortcuts
 
 | Where | Run | Covers |
 |---|---|---|
-| `backend/tests/` | `python -m unittest discover -s tests -t .` (from `backend/`) | 215 tests in `chat/`, `tools/`, `retrieval/`, `models/`, `evaluation/`, `thread/`; index in `backend/tests/README.md` |
-| `frontend/tests/` | `pnpm test` (from `frontend/`) | The Thread's pure logic |
+| `backend/tests/` | `python -m unittest discover -s tests -t .` (from `backend/`) | 231 tests in `chat/`, `tools/`, `retrieval/`, `models/`, `evaluation/`, `thread/`, plus `test_error_reporting.py`; index in `backend/tests/README.md` |
+| `frontend/tests/` | `pnpm test` (from `frontend/`) | 9 tests: the Thread's pure logic, and PDF passage re-joining |
 
 Backend tests run against throwaway databases and a fake Ollama, so they never
 touch real data and need no model.
@@ -299,8 +312,32 @@ Concrete places to point at when asked:
 | **Liskov / interfaces** | Every tool returns the same envelope (`ok`, `status`, `data`, `detail`), so the executor and evidence builder treat all tools alike; both retrieval tracks log the same `rag_logs` shape |
 | **Interface segregation** | One small typed client per backend area (`threadClient.ts`, `forgeClient.ts`, …) instead of one API object |
 | **Dependency inversion** | Routes depend on services, services on stores; tests swap Ollama for `FakeHttpx` and the databases for a temp directory without touching app code |
-| **KISS** | Stdlib `unittest` and Node's own test runner (no test frameworks); SQLite files instead of a database server; embedded Chroma; the over-engineering audit's 19 cuts (`docs/AUDIT_OVERENGINEERING.md`) |
+| **KISS** | Stdlib `unittest` and Node's own test runner (no test frameworks); SQLite files instead of a database server; embedded Chroma; no Docker except the optional SearXNG; the over-engineering audit's 19 cuts (2026-10-07, see §7) |
 | **DRY** | One fetch wrapper (`lib/http.ts`); one number extractor used on both the evidence and the answer (`numbers.py`); one error page design used full-screen and per tab |
 | **Fail safe** | The validator replaces an unsupported answer with a fixed fallback; logging never breaks a reply; a part that cannot load shows an error page instead of empty data |
 
 Known places still worth tidying are listed under **Known issues** in `TODO.md`.
+
+---
+
+## 7. Kept on purpose
+
+An over-engineering audit (2026-10-02, all 19 cuts done 2026-10-07: unused UI
+components and hooks, two unused dependencies, dead functions, Chroma server
+mode) left these deliberately in place. Don't re-flag them in a later audit:
+
+- **The theme and background-effects subsystem** (`lib/themes.ts`,
+  `lib/canvasEffects.ts`, `components/ThemeModal.tsx`,
+  `contexts/ThemeContext.tsx`, `lib/pointerField.ts`, ~3,700 lines) — part of
+  the product as designed, with the themed error pages, not scaffolding.
+- **`app/cli_eval.py` has no importers** — it is the evaluation CLI entry point
+  (`python -m app.cli_eval`).
+- **`nvidia-ml-py` alongside the `nvidia-smi` fallback** — measured 13 ms vs
+  613 ms under WSL (see `backend/requirements.txt`).
+- **`httpx` and `pyyaml` listed explicitly** although chromadb brings them —
+  they are imported directly, and a transitive dependency is not a contract.
+- **`db/vector_store.py` importing `services/embedding_models`** — lazy and
+  documented: it lets every caller open "the current collection" without
+  knowing the naming rule. Inverting it means a resolver registered at start-up,
+  and a store used before registration would silently open the default
+  collection.

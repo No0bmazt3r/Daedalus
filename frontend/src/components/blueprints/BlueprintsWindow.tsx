@@ -136,7 +136,7 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
     icon: Network,
     tabs: [
       { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges. Track 2 only knows what you add here' },
-      { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 7 node types, 7 edge types' },
+      { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 6 node types, 5 edge types' },
       { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: "Orphans and gaps. Each row is a question the graph can't answer" },
       { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
     ],

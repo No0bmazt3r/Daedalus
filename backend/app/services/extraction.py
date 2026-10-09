@@ -110,8 +110,8 @@ def pdf_available() -> tuple[bool, str]:
     except ImportError:
         return False, (
             "PDF support needs the `pypdf` package, which is not installed in this "
-            "image. It is listed in backend/requirements.txt, so rebuild the backend "
-            "container to pick it up. Text and Markdown documents work without it."
+            "environment. It is listed in backend/requirements.txt; run `./sync.sh` (or "
+            "`pip install -r requirements.txt` in backend/) to install it. Text and Markdown documents work without it."
         )
     return True, ""
 

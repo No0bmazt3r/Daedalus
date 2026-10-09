@@ -5,7 +5,8 @@ describes what the system is *intended* to be; this file describes what is
 *built*. Where they differ, that gap is the work remaining — see
 [`../TODO.md`](../TODO.md).
 
-Everything below was read off the source, not from memory.
+Everything below was read off the source, not from memory. Last checked
+against the code on 2026-10-10.
 
 ---
 
@@ -23,15 +24,15 @@ Everything below was read off the source, not from memory.
 | Floating windows | Built — drag, resize, Peek, minimize (chips dock beside the incognito toggle), Escape. All four windows, including the non-modal theme palette |
 | Loading skeletons | Built — pixel or smooth, switchable in Theme → Customize |
 | Store browser | Built — in the sidebar, opens in a floating window |
-| Hardware detection | Built — background-scheduled, in the Forge → Hardware. Container-aware, with GPU passthrough layered on where the host has one |
+| Hardware detection | Built — background-scheduled, in the Forge → Hardware. Reads the host directly; WSL- and container-aware when run under either |
 | The Forge | **All 6 steps built** — detect · estimate · score · manage · benchmark · commit. Five tabs — everything about models and the machine (the rule is in §6): Hardware, Chat models and Embedding models (browse), **Re-rankers** (Track 1's cross-encoders: a curated, pinned catalogue of seven — TinyBERT to bge-reranker-v2-m3 — each judged safe / marginal / will not fit for this machine on memory and on time to re-score 20 chunks against a 1 s budget, with a recommendation for English and one for Malay; download, benchmark, delete), and Installed — split the same way: Chat models (Local · Cloud baselines), Embedding models (verify), Re-rankers (benchmark, delete); the Re-rankers browse tab shows a downloaded model as *Manage*. Which embedding model builds the index and which re-ranker runs are chosen in Settings → Vector RAG, whose *Open The Forge* buttons land on the right tab; an installed embedder can also be chosen or switched from the dropdown in Blueprints → Build → Embedding. *Manage* on a browse card opens Installed on that model's own list. Pulls show a progress bar, and every delete asks through the app's own dialog |
 | Model discovery | Built — 37 verified catalogue entries, live Hugging Face GGUF search, and a Custom tab that scores any tag |
 | Model manager | Built — installed models badged SLM/LLM, with per-model runs, tokens and latency (mean/p50/p95) |
 | Theming accessibility | Built — every colour derived from the selected theme and floored to WCAG AA; all 16 themes pass on every text role |
-| Data stores (×5) | Built and containerised, each with a versioned schema. The Vector store gained a relational half — `corpus.db`, the ingestion manifest — which is that store's own record, not a sixth store |
+| Data stores (×5) | Built, each with a versioned schema. The Vector store gained a relational half — `corpus.db`, the ingestion manifest — which is that store's own record, not a sixth store |
 | Preference API | Built — six keys, all server-side, nothing in browser storage |
 | Chat session store | Built — sessions, transcripts, context-window assembly |
-| Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, answers carry citation chips and a *Sources* list from the stored evidence pack, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
+| Chat UI | Wired end to end — `POST /api/chat` streams tokens, both turns persist, answers render as Markdown (`components/AnswerMarkdown.tsx`, `react-markdown` + GFM, raw HTML never rendered) with citation chips and highlighted readings applied inside the text, and a *Sources* list from the stored evidence pack, and a generation survives the client disconnecting. The model picker is available in both composers, so it can be changed mid-conversation; `model_tag` is per message, so a transcript may legitimately mix models |
 | Agent tools | Built — 33 tools in six categories, including the two sensor tools and Track 2's two retrieval modes, `graph_walk` and `graph_agent`. **Simple** (the default) is a runtime mode, not just a view: only the tools that answer questions can run, everything else is refused at dispatch. **Advanced** restores the full list under the per-tool switches and locks. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
@@ -42,9 +43,9 @@ Everything below was read off the source, not from memory.
 
 ## 2. HTTP API
 
-All endpoints are served by the FastAPI app in `backend/app/`. In the container
-the same process also serves the built SPA; in development Vite proxies `/api`
-to it.
+All endpoints are served by the FastAPI app in `backend/app/`. Under
+`./daedalus.sh start` the same process also serves the built SPA; under `dev`
+Vite proxies `/api` to it.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -143,6 +144,16 @@ to it.
 | `POST` | `/api/system/containers/{name}/{action}` | Start or stop one managed container. Never create or remove |
 | `GET` | `/api/system/wipe` | The Danger Zone's categories and what each one costs |
 | `DELETE` | `/api/system/wipe/{kind}` | Empty one category, or `everything` |
+| `POST` | `/api/sessions/{id}/title` | Ask the title job to name this chat again, now |
+| `GET`/`POST` | `/api/chat/feedback` | A chat's current ratings, for redrawing the thumbs / rate one answer `+1`, `-1`, or `0` to withdraw |
+| `GET`/`PUT` | `/api/background-jobs` | The summariser and title jobs: their config, the local models each may use, and what each resolves to now. `PUT` merges |
+| `GET` | `/api/corpus/runs` · `/api/corpus/runs/{id}` | Ingest runs, newest first / one run with its recipe |
+| `GET` | `/api/corpus/logs/documents` · `…/{id}` | Ingest logs grouped by document / one document's whole history across runs |
+| `POST` | `/api/embeddings/benchmark` | Time embedding one question with an installed model, and keep the result — it replaces the estimate in that model's verdict |
+| `GET` | `/api/graph/authoring/schema` | Node types, edge domains and the fields each type carries |
+| `GET`/`POST` | `/api/mcp/servers` | Configured MCP servers with their pinned snapshot / add one (does not connect — `test` does) |
+| `PATCH`/`DELETE` | `/api/mcp/servers/{id}` | Enable or disable (a disabled server is refused, not deleted) / delete |
+| `POST` | `/api/mcp/servers/{id}/test` · `…/pin` | Handshake and list the tools (`pin=true` freezes them) / freeze the current list as the one drift is measured against |
 | `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
 | `POST`/`DELETE` | `/api/system/seed-graph-traces` | Record real graph traversals into `rag_logs` so Blueprints' replay can be built before the orchestrator exists. **Dev only**; rows marked `vector_db_used='seed'` |
 
@@ -294,7 +305,7 @@ so an index built with a different one reads `stale`.
 
 Paths resolve centrally in `db/paths.py`, overridable by environment:
 `DAEDALUS_DATA_DIR`, `DAEDALUS_LOG_DIR`, `DAEDALUS_PREFS_DB`,
-`DAEDALUS_CHAT_DB`, `DAEDALUS_CORPUS_DB`, `CHROMA_URL`.
+`DAEDALUS_CHAT_DB`, `DAEDALUS_CORPUS_DB`.
 
 Connection handling is shared in `db/sqlite_util.py` — WAL, a 5s busy timeout,
 `foreign_keys=ON` (per-connection, and off by default, so a schema with
@@ -619,9 +630,12 @@ migrating a database we do not own breaches Rule 2 as surely as an INSERT.
 
 ### Vector store
 
-Two shapes behind one interface: **server mode** when `CHROMA_URL` is set (the
-compose service), **embedded mode** otherwise (a persistent client under
-`data/chroma`).
+**Embedded only.** One `chromadb.PersistentClient` inside the API process,
+persisting to `data/chroma` (`$DAEDALUS_DATA_DIR/chroma`). There is no Chroma
+server and no `CHROMA_URL`: the separate service was a container, and the
+container stack is gone (§8). `requirements.txt` ships the full `chromadb`, not
+`chromadb-client` — the two install the same module, so `ensure_embedded_chroma`
+in `scripts/common.sh` removes the HTTP-only client from an older venv.
 
 Chroma is an **optional import**. A machine without it still boots the
 dashboard and preference API; absence is reported as a status, not raised.
@@ -654,18 +668,28 @@ wrongly. Documents with *no* stamp are not: something wrote them without
 recording itself, and an unknown vector space cannot be declared comparable to
 the selected one.
 
-**`./daedalus.sh dev` starts the `chromadb` container.** It previously started
-neither Docker nor Chroma, and `.env`'s `CHROMA_URL` names the compose service
-(`http://chromadb:8000`), which does not resolve on the host — so the vector
-store read as *unreachable* rather than as *not running*. `scripts/common.sh`
-now rewrites it to the published port via `host_chroma_url`, the same cure
-`host_ollama_url` already applied to Ollama, and `ensure_chroma` starts the one
-container. Non-fatal when Docker is absent: Track 2, chat, the Forge and every
-SQLite store work without a vector store.
+### Text extraction — `services/extraction.py`
 
-> Note `requirements.txt` ships `chromadb-client`, which is HTTP-only. So on a
-> default install an unset `CHROMA_URL` is not a working fallback to embedded
-> mode — it is no vector store at all. Embedded mode needs the full `chromadb`.
+TXT, MD, CSV, JSON, YAML and PDF (pypdf). Pure in-memory: bytes in, text and
+page breaks out, so every offset the chunker records describes the string this
+returns. Normalisation (line endings, ligatures, control-character debris,
+runs of blank lines) happens here for the same reason.
+
+What real PDFs needed, each found by one failing:
+
+- **Font-shifted text.** Some manuals (the Fuji ZRE NDIR manual is one) embed
+  fonts whose codes sit 29 below the real letters with no Unicode map, so
+  pypdf reads "the" as `WKH` and a space as `0x03`. The `0x03` marks exactly
+  which runs are encoded, so `_unshift()` decodes those runs and leaves the rest
+  of the page alone. Tested in `tests/retrieval/test_pdf_extraction.py`.
+- **AES-locked manuals.** Most "encrypted" manufacturer PDFs only lock
+  permissions; the empty password opens them, and AES needs the `cryptography`
+  package. Its absence is an `ExtractionError` naming the fix, not a bare 500.
+- **Password-protected files** are refused with the reason. Storing the password
+  would put a credential in the corpus.
+- **An unreadable document is a document problem**, recorded on the row
+  (`extract_status = 'failed'`, `extract_error`) and shown in Blueprints →
+  Ingest as *Unreadable*, never a server error.
 
 ### The embedding model — `services/embedding_models.py`
 
@@ -722,9 +746,6 @@ turn: embedding the corpus sends every document out, and every later query must
 be embedded by the same model to be comparable, so every question follows. A
 cloud selection therefore writes the separate collection above and
 `resolve_for_runtime()` refuses it.
-The container installs `chromadb-client` rather than full `chromadb` — it only
-talks HTTP, and the full package drags in onnxruntime for embedded mode the
-image never uses.
 
 ### Web search — `services/web_search.py`
 
@@ -750,15 +771,15 @@ is the single accessor that returns the real value, and `prefs` is absent from
 
 ### SearXNG runs here, not somewhere else
 
-The one provider that is not somebody else's API. `docker compose --profile
-with-search up` (or `./daedalus.sh start --with-search`) runs a pinned SearXNG
-on `127.0.0.1:8081`, and the query reaches a container on this machine that
+The one provider that is not somebody else's API. `./daedalus.sh dev
+--with-search` (or `start --with-search`) runs a pinned SearXNG container on
+`127.0.0.1:8081` — the only container Daedalus still uses (§8), and the query reaches a container on this machine that
 fans out to public engines — no key, no account, and no third party holding a
 log of what a reactor operator searched for. That is the whole reason it is the
-recommended provider, and it is why it is containerised rather than left as a
+recommended provider, and it is why it is bundled as a container rather than left as a
 URL you are expected to have.
 
-**Behind a profile, unlike Odysseus, which runs it always.** Rule 1 says the
+**Off by default, unlike Odysseus, which runs it always.** Rule 1 says the
 production runtime is offline, so a deployed reactor assistant should not have
 a search engine sitting next to it by default. It is started deliberately while
 somebody is sourcing the corpus, and stopped afterwards.
@@ -766,8 +787,7 @@ somebody is sourcing the corpus, and stopped afterwards.
 Three things about the bundled instance are measured rather than assumed:
 
 - **Port 8081, not SearXNG's usual 8080.** Odysseus publishes its own instance
-  on 8080 and the two projects share a development machine. ChromaDB moved off
-  8000 for the same reason.
+  on 8080 and the two projects share a development machine.
 - **The first boot seeds `/etc/searxng` from `config/searxng/settings.yml`**
   with a generated secret, then never touches it again — so an instance you
   have tuned is not silently reset by a redeploy. Changing that template only
@@ -787,8 +807,8 @@ Three things about the bundled instance are measured rather than assumed:
 `SEARXNG_URL` is only a default. A URL saved in the panel wins, so pointing at
 an instance you already run stays a matter of typing an address.
 
-**Readiness means reachable.** `SEARXNG_URL` is set in the container's
-environment whether or not the `with-search` profile is running, so a check that
+**Readiness means reachable.** `SEARXNG_URL` is set in `.env` whether or not
+SearXNG is running, so a check that
 only looked for a URL reported the provider *ready* while every search failed
 with a DNS error. The status probe now makes a 1.5-second request to the
 configured address, and an unreachable instance says so and names the command
@@ -979,7 +999,7 @@ each tool has no switch:
 The denylist is stated in the code as what it is: *a list of the ways somebody
 already thought of*. It stops a model that has confidently decided to delete a
 filesystem; it is not a sandbox, and the module says so rather than implying
-otherwise. The real boundaries are the lock and the container.
+otherwise. The real boundary is the lock: these tools run in the API's own process, as the user who started it.
 
 Verified: locked tools refuse before the function is entered; an unlock without
 a reason is rejected; the denylist blocks eight composed probes and passes
@@ -1176,10 +1196,9 @@ name. Every difference from it comes out of a rule this project already has.
 
 #### The process log
 
-Daedalus logged to stdout only, which in the container stack means `docker logs`
-and a second terminal. The same records now also go to a rotating file
-(`$DAEDALUS_LOG_DIR/daedalus.log`, 5 MB × 3) that the panel reads back. Both
-handlers, one logger — `./daedalus.sh logs` keeps working unchanged.
+Daedalus logged to stdout only, which means the terminal that started it. The
+same records now also go to a rotating file (`$DAEDALUS_LOG_DIR/daedalus.log`,
+5 MB × 3) that the panel reads back. Both handlers, one logger.
 
 The handler is attached to the **root** logger deliberately: uvicorn's records
 and any library's warnings are exactly what somebody opening a log viewer is
@@ -1214,40 +1233,33 @@ id that no longer exists. A broken trace is worse than an absent one.
 
 #### Starting SearXNG from the UI — and the socket it costs
 
-Settings → Search can start and stop the SearXNG container, **when a Docker
-socket is mounted into the backend**. It is off by default, and that default is
-a position rather than an oversight.
+Settings → Search can start and stop the SearXNG container **when
+`DOCKER_SOCKET` is set in `.env`**. It is off by default, and that default is a
+position rather than an oversight.
 
 A process that can reach the Docker socket can do anything Docker can do on the
 host: start a privileged container, mount `/`, read another project's volumes.
 Daedalus' own code is scoped hard — an allowlist of container names, checked
 before every call, so it will touch `daedalus-searxng` and nothing else (tested:
-`chromadb`, `daedalus` and a neighbouring project's `odysseus-searxng-1` are all
-refused). That limit binds *this module*. It binds nothing else on the other side
-of the socket — and `agent_tools/extended` runs `bash` and `python` in the same
-container with `execute_code` unlocked by default. Mounting the socket without
+other names, including a neighbouring project's `odysseus-searxng-1`, are
+refused). That limit binds *this module*. It binds nothing else that can reach
+the socket — and `agent_tools/extended` runs `bash` and `python` in the API's
+own process, with `execute_code` unlocked by default. Setting the socket without
 locking `execute_code` hands an agent control of the host's Docker.
 
-So: leave it off and run one command, or turn it on and lock `execute_code`. The
-panel says so where the button would be.
+So: leave it off and run one command (`./daedalus.sh dev --with-search`), or
+turn it on and lock `execute_code`. The panel says so where the button would be.
 
-Two implementation notes, both found by it failing:
-
-- **`available()` means usable, not configured.** The socket is `root:docker`
-  mode 660 and the image runs as uid 1000, so the file can be present and
-  unopenable. The first version reported the feature available and failed on
-  every click; it now pings `/_ping` and an `EACCES` says to set `DOCKER_GID`.
-- **`group_add: ${DOCKER_GID:-999}`** in compose is what makes the mounted
-  socket readable. Harmless when nothing is mounted — the container belongs to
-  one more group that owns nothing.
+**`available()` means usable, not configured.** The socket is `root:docker`
+mode 660, so the path can be set and still unopenable by the user running the
+API. The first version reported the feature available and failed on every
+click; it now pings `/_ping`, and an `EACCES` says the user needs to be in the
+`docker` group.
 
 The container is **stopped, not removed**. Re-creating one needs the image,
 entrypoint, volume and network, all of which `docker-compose.yml` already
 describes; duplicating them here would make that file stop being the answer. A
 stopped container costs nothing and starts in under a second.
-
-Unset, the mount resolves to `/dev/null` — a file that exists and is not a
-socket — so the feature reports itself unavailable and nothing else changes.
 
 #### Danger zone
 
@@ -1666,8 +1678,8 @@ question, so a change applies to the next message.
 
 - **Date and time.** A live clock on the site zone and where it came from. Auto
   by default: the app reports the browser's zone on start
-  (`reportBrowserTimezone`), which matters because the backend container's own
-  clock is usually UTC. Or pick a zone by hand from a searchable list. Order:
+  (`reportBrowserTimezone`), which matters because the backend's own clock
+  may be UTC (WSL, a server). Or pick a zone by hand from a searchable list. Order:
   manual, `DAEDALUS_TZ`, browser, machine. Used by `timeparse` and
   `get_current_time`.
 - **System prompt.** The rules the model answers under (`orchestration/prompt.py`
@@ -1744,8 +1756,7 @@ Paths are relative to `frontend/src/`.
 | `components/ui/theme-select.tsx` | The themed replacement for `<select>`. A native select's option list is drawn by the OS and ignores the palette entirely |
 | `lib/blueprintsClient.ts` | `/api/graph`, `/api/corpus` and `/api/rag/config` client. Read-only *for retrieval* by construction — there is no "run a traversal" call — while the authoring and ingestion routes it also carries are setup surfaces |
 | `components/ChatInterface.tsx` | Composer and transcript, driven by `SessionsContext` |
-| `hooks/useElementWidth.ts` | ResizeObserver width, for container-driven layout |
-| `hooks/useElementHeight.ts` | ResizeObserver height. `vh` is wrong anywhere in this app — every panel lives in a window that is draggable, resizable and maximizable, so the viewport's height says nothing about the element's |
+| `hooks/useElementSize.ts` | ResizeObserver `{width, height}`, for container-driven layout. `vh` is wrong anywhere in this app — every panel lives in a window that is draggable, resizable and maximizable, so the viewport's height says nothing about the element's |
 | `lib/systemClient.ts` | Log-browser, observability and provider API client |
 | `components/settings/` | `SettingsSearch`, `DatabasesPanel` (health only), `ModelEndpointsPanel`, `AppearancePanel`, `ShortcutsPanel` |
 
@@ -1754,7 +1765,7 @@ Paths are relative to `frontend/src/`.
 Ported from Odysseus' sidebar sections, and used by every collapsible thing
 here: a store's table list, a tool's trial body, the capability chips, the
 Forge's fit detail and architecture panes, the embedding catalogue's facts,
-Theme → More Colors, and `components/ui/accordion.tsx`. Opening cascades the rows in from a little below and to the
+and Theme → More Colors. Opening cascades the rows in from a little below and to the
 left with a small overshoot (`cubic-bezier(0.22, 1.61, 0.36, 1)`, 40ms apart);
 closing peels them off from the **bottom up**, faster and without the bounce, so
 the two read as one gesture played in both directions.
@@ -1774,17 +1785,9 @@ Three things the obvious implementation gets wrong:
   state the first click's callback decided; a stale callback now returns without
   touching anything.
 
-**The accordion composes the two animations rather than replacing one.** Base UI
-animates the panel's *height*, from a measured `--accordion-panel-height` — which
-is what makes the items below slide instead of jumping, and is not the guess a
-`max-height` transition would be — and the cascade plays over the contents on
-top of it. `data-domino` is set in the component from the panel's state, because
-CSS cannot set an attribute and the stagger rules key on one; `transitionStatus
-=== 'ending'` is what distinguishes *closing* from *closed*, and is the only
-moment an outbound cascade is visible at all, since the panel still has height
-then. The height animation is slowed to 0.42s opening and 0.3s closing so the
-last row is not carried off screen mid-fall — unlayered CSS, which beats the
-Tailwind utility that would otherwise set the same property.
+*(An accordion that layered this cascade over Base UI's height animation was
+removed in the 2026-10-07 audit — nothing used it. Its CSS hooks in
+`index.css` are what is left.)*
 
 The rows are the direct children of the animated element, so a list cascades and
 a single block of prose arrives on one beat — which is right, since staggering
@@ -1812,7 +1815,7 @@ steps** rather than stopping — `@3xl:max-w-3xl @5xl:max-w-5xl` and finally
 `@7xl:max-w-[min(100%,1500px)]`, where the `min()` keeps the cap from exceeding
 the pane it is centred in — and the panes that are made of independent cards
 **tile** once there is width to tile into: the Forge's five hardware readings go
-to two columns at `@4xl` and three at `@7xl`, and Settings → System's Storage health goes to
+to two columns at `@4xl` and three at `@7xl`, and Settings → System's Storage Health goes to
 two at `@5xl`. Both use `items-start`, because the cards are different heights
 and stretching them to match is how a grid turns into four cards of padding.
 
@@ -1869,7 +1872,7 @@ how often each is actually used:
 | Surface | Answers | Reached |
 |---|---|---|
 | **Sidebar → Data stores** | "What is in this table right now?" | One click, next to the chats. Includes `corpus` — the ingestion manifest, the per-stage event log, the graph's edit history and the proposal queue, which is where a pipeline question gets answered by reading a row |
-| **Settings → System → Storage health** | "Is every store healthy?" | Settings, occasionally |
+| **Settings → System → Storage Health** | "Is every store healthy?" | Settings, occasionally |
 | **Metrics stack** (own port) | "*Why* is this store unhealthy?" | A standing link out of that panel |
 
 Browsing rows is something you do constantly while building, so it belongs in
@@ -1955,6 +1958,17 @@ happened* and *what to try*. Buttons go back to the chat, back a page, or (for
 - **Status travels with the error.** `request()` in `lib/http.ts` attaches
   `status` to what it throws (`HttpError`): the response's code, 504 for a
   timeout, 503 when the backend cannot be reached. Messages are unchanged.
+- **An unexpected server error names itself.** `app/main.py`'s catch-all
+  handler logs the traceback under an 8-hex `error_id`, writes an `error_logs`
+  row, and answers 500 with `{"detail": "KeyError: 'boom'", "error_id"}` — the
+  real reason, not "Internal Server Error". `request()` carries the id on the
+  `HttpError`.
+- **A failed action raises a toast; a failed read does not.** Any non-GET
+  request that fails fires `daedalus:api-error`, and `ToastHost`
+  (`components/ui/toast.tsx`) shows the method, path, status, reason and error
+  id, with a copy button; the id is what to search for in Settings → Process
+  Log. GETs are left out: a tab that cannot load is already its own error page,
+  and a polling read would raise the same toast every few seconds.
 - **Every picture is animated**, CSS only (each code's `css`, on top of `animations.css`). Some
   of them: the
   thread wiggles (400), the door rattles (401), you wander the maze (404), the
@@ -1982,7 +1996,7 @@ open chat rather than destroying it — derived during render from the mode the
 session was created under, so toggling back brings it into view.
 
 > **Unknown `/api/*` paths 404 rather than falling through to the SPA.**
-> Without that, a container image predating an endpoint serves `index.html`
+> Without that, a stale `frontend/dist` or backend predating an endpoint serves `index.html`
 > with a 200 and the client fails parsing HTML as JSON — a confusing symptom
 > for a simple cause. The client guards the parse as well.
 
@@ -2013,106 +2027,65 @@ whole argument, and it applies to a keybinding exactly as it applies to a theme.
 
 ## 8. Deployment
 
-One image serves the API and the SPA (multi-stage: pnpm builds the bundle,
-FastAPI serves it). `./daedalus.sh start`, or `docker compose up` directly.
+**Everything runs on the host — no Docker.** One uvicorn process serves the API
+with ChromaDB embedded in it (`data/chroma`); Ollama is the host's own install.
+`./daedalus.sh dev` runs uvicorn `--reload` plus Vite (proxying `/api`), and
+`./daedalus.sh start` builds the dashboard once into `frontend/dist` and serves
+it from the same process (`DAEDALUS_STATIC_DIR`) on one port. Every command,
+flag and safeguard is in [`SCRIPTS.md`](SCRIPTS.md).
 
-Configuration is entirely in `.env` (template: `.env.example`), read by both
-compose and `daedalus.sh`.
+Configuration is entirely in `.env` (template: `.env.example`), read by
+`daedalus.sh`, `sync.sh` and `reset.sh` through `scripts/common.sh`.
 
-| Service | Notes |
+| Process | Notes |
 |---|---|
-| `daedalus` | The app. Volumes: `./data`, `./logs`, `./backend/data`. `docker-compose.dev.yml` retargets it at the `dev` stage with the source bind-mounted |
-| `frontend` | Dev only — Vite with hot reload, proxying `/api` to `daedalus` |
-| `chromadb` | Vector store, persistent volume, telemetry disabled |
-| `ollama` | Optional — `--profile with-ollama`; host by default for GPU |
-| `searxng` | Optional — `--profile with-search`; a self-hosted search engine for corpus sourcing |
+| uvicorn (`app.main:app`) | API, embedded Chroma, and in `start` the built SPA. Data under `data/`, `logs/`, `backend/data/` (prefs) |
+| Vite | `dev` only — hot reload, proxying `/api` to uvicorn |
+| Ollama | The host's own service; `setup` offers to install or start it |
+| SearXNG | **The only container left.** Optional, `--with-search`, for corpus sourcing; `docker-compose.yml` describes it and nothing else |
 
-### Development runs in the container
+**Why the container stack was removed.** It used to be app + Chroma containers
+with a dev overlay and a GPU overlay. On a single-user localhost install that
+bought nothing the host lacks, the Docker VM under WSL held gigabytes of memory
+for it, and `.env` held container addresses (`http://chromadb:8000`,
+`host.docker.internal`) that every host-side command had to rewrite. `common.sh`
+still rewrites a leftover container-era value with a warning, so an old `.env`
+keeps working.
 
-`./daedalus.sh dev` layers `docker-compose.dev.yml` over the base file: the same
-image at its `dev` stage, `./backend/app` bind-mounted read-only over the copy
-baked in, `uvicorn --reload` watching it, and Vite in a `node:24-slim` container
-beside it. `./daedalus.sh dev --host` keeps the older two-processes-on-the-host
-path, which is still the quickest way to attach a debugger.
+**GPU detection reads the host directly.** `services/hardware.py` still carries
+`_in_container()` — run inside a container, it says the figures are a cgroup's
+allowance rather than the machine's — and `_wsl_host()` one level up for WSL.
+On the default host install neither applies and pynvml reports the card.
 
-The reason to prefer the container is not tidiness. Every address in `.env` is
-written from the container's point of view — `http://chromadb:8000`,
-`http://searxng:8080` — and none of them resolve on the host, so the host path
-needs three functions in `scripts/common.sh` whose whole job is rewriting them
-back to published ports. In the container they are simply the addresses, and
-`/data`, `/logs` and `/config` mean what they mean in the image that ships.
-
-Three details worth knowing:
-
-- **`ports: !override`.** Compose merges `ports` by concatenation, so without
-  the tag the dev service publishes both `DAEDALUS_PORT` and `BACKEND_PORT` and
-  fails on whichever is taken — which, when both are 8000, is itself.
-- **`image: daedalus:dev`.** The shipping tag is not reused, or
-  `./daedalus.sh start` ends up serving an image built for development.
-- **`target: runtime`, named explicitly in the base file.** A Dockerfile's
-  default build target is its *last* stage, so adding `dev` at the bottom made
-  `docker compose up` build the development image — an API that worked and a
-  dashboard that 404'd, because the dev stage points `DAEDALUS_STATIC_DIR` away
-  from the bundle.
-- **An anonymous volume over `/app/node_modules`.** Rollup, esbuild and
-  Tailwind's oxide binary are compiled per platform, and a Linux container
-  loading host-built binaries fails in a way that reads as a Vite bug.
-
-`./daedalus.sh stop` passes `--remove-orphans`, which is what makes one stop
-cover both stacks. A bare `docker compose down` from the base file alone does
-not: the dev overlay's `frontend` service is an orphan from that file's point of
-view, so it is left running — and because it is still attached to the network,
-the `down` ends with *"Network daedalus_default: resource is still in use"*.
-
-**GPU passthrough is a third overlay.** `docker-compose.gpu.yml` adds `gpus: all`
-and is layered on automatically when `nvidia-smi` lists a GPU on the host;
-`--gpu` insists and `--no-gpu` refuses. It is a separate file because `gpus: all`
-is a requirement, not a preference — Docker declines to create the container at
-all where no NVIDIA driver is available — so in the base file it would mean the
-project starts only on machines that have one. On the automatic path a rejection
-is not fatal: the overlay is dropped with a warning and the stack comes up
-without it.
-
-What it fixes is *detection*, not inference — Ollama still runs on the host by
-default. Without it the container sees no driver, `services/hardware.py`
-correctly reports no GPU **for the container**, and the Forge's Hardware tab reads as
-broken detection on a laptop with the card sitting in it, while the Forge sizes
-models against zero VRAM. `_in_container()` is why the panel now says which
-machine it is describing: with no driver visible it names the passthrough flag
-instead of reporting "No GPU detected", and the Runtime card appends
-`· container` with a note that the cores and memory below are a cgroup's
-allowance, not the machine's. It is the same argument `_wsl_host()` already
-makes one level up — a correct reading of the wrong machine is the thing to
-guard against.
-
-**Two gotchas worth remembering.** The chroma image is minimal (dash only, no
-curl/wget/python), so no healthcheck can run inside it — readiness is reported
-by the app instead. And Docker creates missing bind-mount directories as
-**root**, which breaks the non-root container; `data/` and `logs/` are
-therefore tracked with `.gitkeep`.
+> **WAL needs real shared memory.** Keep the data directory on a native Linux
+> filesystem — under WSL, `/mnt/c/...` paths fail by corrupting rather than
+> erroring.
 
 ---
 
 ## 9. Verification status
 
+Run on 2026-10-10: **backend 231 tests pass**, **frontend 9 tests pass**,
+`tsc -b` and `oxlint` clean.
+
 | Area | Covered by |
 |---|---|
+| Backend | **231 `unittest` cases** in 24 files (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/` — the `-t .` matters, the test packages import each other relatively). Grouped by area: `chat/` (safety guard — 28 unsafe phrasings refused and never reaching a model — follow-ups, the chat path end to end with Ollama faked, the summariser, background jobs, titles, assistant settings), `tools/` (registry, sensor tools, planning, evidence and validation, tool mode, track gate), `retrieval/` (re-ranking, embedding prefixes, Track 2's agent loop driven by a scripted model, document origin, replay, per-document ingest history, PDF extraction including the font-shift decoder), `models/` (embedding fit, chat-models-only, the cloud toggle), `evaluation/` (query-set validation, scoring and retrieval metrics, arm scoping, timeouts, aborted runs keeping their answers), `thread/` (Ariadne's Thread end to end) and `test_error_reporting.py` (a crash returns its reason and a logged id). Index in `backend/tests/README.md` |
+| Frontend | **9 logic tests** in 2 files (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation, Markdown export and sensor-line parsing (`threadLogic.test.ts`); re-joining a PDF passage's hard line breaks for display (`passage.test.ts`). No component tests; the rest is verified by hand and by headless-browser screenshots |
+| Frontend build | `tsc -b` and `vite build` clean; `oxlint` zero warnings |
 | Theme engine | 92 assertions — hex round-trips, harmony across 4×2 modes, incognito contrast on all 16 themes, state coercion and clamping |
 | Read-only boundary | INSERT/UPDATE/DELETE/DROP all verified to raise |
 | `theme.css` injection | Hostile `bg`, `font`, `density` payloads verified dropped |
-| Container | Built and run; all five stores healthy; SPA, assets, deep links and path-traversal guard checked |
-| Frontend | **5 logic tests** (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation over folded chats, and the Markdown export with its retrieval tables (`frontend/tests/threadLogic.test.ts`). No component tests; the rest is verified by headless-browser screenshots |
 | Chat store | Seq allocation, cascade delete, auto-titling, incognito sweep, budget trimming and every error path exercised by direct calls |
 | Migrations | Edited-file, gap-numbering, missing-file and bad-SQL rollback all verified to refuse or roll back |
 | Session API | Every endpoint exercised, including 404/413/422 paths and a rejected forged `assistant` role |
-| Frontend build | `tsc -b` and `vite build` clean; session round-trip verified against a live dev server |
 | Scripts | `sync.sh --check`/apply, `reset.sh` refusal while the stack is up, WAL-sidecar deletion, host-path resolution |
 | Log browser | Allowlist verified: `sqlite_master`, `prefs` and `model_endpoints` all 404. Paging, ordering and the 1000-row cap exercised |
 | Model endpoints | Key absent from every response; duplicate URL 409; bad URL 422; unreachable-host and rejected-key paths produce distinct messages; a new key clears the cached verdict; `purpose='runtime'` refused by the schema |
-| Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas` (29 → 28), dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` — 15 of 16 return data, and the 16th needs an id from `list_sessions`, which is why it declares none |
+| Tool policy | Both axes exercised over HTTP: disabling drops the tool from `/api/tools/schemas`, dispatch answers `refused` with the reason, an unknown name is a 404, and enabling restores. Every available read-only tool was then run from its declared `example` |
 | Preferences | `keybinds` and `ui-chrome` round-trip through `PUT`/`GET`/`DELETE`; an unknown key is still a 404 |
-| GPU detection | `--gpus all` verified into the dev image before the compose overlay was written; with it, `/api/forge/hardware` reports the card through pynvml. Without it, the container path reports the passthrough message rather than "no GPU" |
-| Backend | **215 `unittest` cases** (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/`): safety guard (28 unsafe phrasings refused and never reaching a model, control questions allowed), intent examples, sensor tools (no write effect, store refuses writes, injection and unknown names rejected, nearest-row and downsampling), time resolution, planning, evidence and validation (invented, derived and stale numbers caught), track gate, one `rag_logs` row per walk, the chat path end to end with Ollama faked, the summariser (folding, redaction, fallback, one pass at a time), the simple view's tool list, Track 2's agent loop driven by a scripted model (hops, sufficiency, rejected replies, the hard budget, the no-model fallback, one `rag_logs` row) and document origin (default, correction, query-time lookup, evidence marks, logged origins), the evaluation harness (query-set validation, scoring and retrieval metrics, arm scoping across threads, the timeout and drain, aborted and killed runs keeping their answers), and Ariadne's Thread (step order on real turns, the number verdicts agreeing with the validator, a trace outliving its deleted chat, the list filters, labels, incognito redaction, the prompt hash, the settings moving turns between buckets, the outcome filter, the retrieval detail for both tracks, and a graph citation keeping its evidence label). Everything else is still verified by direct API calls |
-| Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the real sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
+| Ingestion, live | Two reference PDFs ingested end to end (162 chunks): the BRE heat-stable-salts paper and the Fuji ZRE NDIR manual, whose shifted fonts are decoded |
+| Orchestration, live | Four question types plus a refusal run end to end on qwen3:1.7b against the demo sensor data: every answer passed validation with correct citations, one `query_id` per turn across all four log tables |
 
-The frontend still has no automated tests; the backend suite covers the chat path and the tool layer but not the Forge, ingestion or the HTTP routes.
+Not covered by automated tests: the Forge, most HTTP routes, and every React
+component. Tests are not in CI — run them by hand before a commit.

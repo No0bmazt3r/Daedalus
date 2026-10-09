@@ -1,34 +1,48 @@
 # Daedalus backend
 
-FastAPI service for the Daedalus UI. Exposes the user-preference store that
-replaces browser localStorage, and the chat session store that gives the
-assistant memory within and across conversations, and `POST /api/chat` — the
-Layer 7 orchestrator that answers from sensor tools and retrieval, checks the
-answer against its evidence, and logs every step.
+FastAPI service behind the Daedalus dashboard. At its centre is `POST
+/api/chat` — the Layer 7 orchestrator that answers from sensor tools and the
+selected retrieval track, checks the answer against its evidence, and logs
+every step. Around it: the chat session store (memory within and across
+conversations), ingestion and graph authoring for the two tracks, The Forge's
+hardware and model services, Ariadne's Thread, the evaluation harness, and the
+preference store that replaces browser localStorage.
 
 ## Run
 
+From the repository root:
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+./daedalus.sh setup    # creates backend/.venv and installs requirements.txt
+./daedalus.sh dev      # uvicorn --reload on :8000, Vite on :5173
 ```
 
-Run it from this `backend/` directory. The Vite dev server proxies `/api` to
+Prefer the script, or `host_uvicorn` from `scripts/common.sh`, over a bare
+`uvicorn` in this directory. The script sets `DAEDALUS_DATA_DIR` and
+`DAEDALUS_LOG_DIR` to the repository's `data/` and `logs/`; a bare run falls
+back to `backend/data/…` and quietly writes to stores nothing else reads.
+`sync.sh` reports such orphans. The Vite dev server proxies `/api` to
 `http://localhost:8000`, so the frontend needs no extra configuration.
 
 ## Layout
 
 ```
 app/
+  main.py     the app, its routers, start-up migrations, the catch-all error handler
+  cli_eval.py the evaluation harness (python -m app.cli_eval)
   api/        HTTP only — routing, status codes, validation errors
-  services/   decisions: session policy, context-window assembly
+  services/   the logic
     query_pipeline/   §7.1 steps 1–4: normalise, rewrite, classify, guard
     orchestration/    §7.1 steps 5–8, 10: plan, execute, evidence, prompt, validate
     agent_tools/      Layer 8: every tool, and the gates it runs behind
     inference.py      step 9 (the model call) and 11 (logging), tying it together
+    thread/           Ariadne's Thread: listing, trace, groundedness, retrieval
+    ingestion.py      Track 1's pipeline (extraction.py, chunking.py, embedding_models.py)
+    knowledge_graph.py, graph_*.py   Track 2: the graph, its walk and agent, authoring, proposals
+    hardware.py, model_fit.py, benchmark.py, forge.py   The Forge
+    evaluation.py     the harness behind cli_eval.py
   models/     Pydantic wire contracts
+  data/       shipped catalogues (models, embedders) and the graph seed
   db/         persistence
     sqlite_util.py   connections, pragmas, transactions, retry, backup
     migrations.py    the versioned-schema runner
@@ -42,8 +56,10 @@ app/
 python -m unittest discover -s tests -t .
 ```
 
-Tests are grouped by area — `chat/`, `tools/`, `retrieval/`, `models/`,
-`evaluation/`, `thread/` — with an index of every file in `tests/README.md`.
+231 tests, grouped by area — `chat/`, `tools/`, `retrieval/`, `models/`,
+`evaluation/`, `thread/`, plus `test_error_reporting.py` — with an index of
+every file in `tests/README.md`. Keep `-t .`: the test packages import each
+other relatively, and without it ten of them fail to import.
 
 ```bash
 python -m unittest discover -s tests/thread -t .   # one area
@@ -65,10 +81,12 @@ tidiness — see `app/db/paths.py` and `docs/PROJECT.md` §6.3.
 | Store | File | Access |
 | --- | --- | --- |
 | Sensor | `data/sqlite/sensor_readings.db` | **read-only** (`file:…?mode=ro`) |
-| Audit | `data/logs/ai_logs.db` | read/write — its own logs |
+| Audit | `logs/ai_logs.db` | read/write — its own logs |
 | Chat | `data/sqlite/chat.db` | read/write — transcripts |
-| Vector | `data/chroma` or the Chroma service | read/write |
-| Prefs | `data/prefs.db` | read/write |
+| Vector | `data/chroma` (embedded) + `data/sqlite/corpus.db` | read/write |
+| Prefs | `backend/data/prefs.db` | read/write |
+
+Paths are relative to the repository root, as `daedalus.sh` sets them.
 
 **Chat and audit are separate on purpose**, though both hold conversation
 text. A user renames, archives and deletes their own chats; audit rows are
@@ -128,33 +146,10 @@ surely as an INSERT would.
 
 ## Endpoints
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/health` | Liveness; also lets the UI tell "backend down" from "nothing saved yet" |
-| `GET` | `/api/prefs` | Every preference in one round trip (used on boot) |
-| `GET` | `/api/prefs/{key}` | Read one |
-| `PUT` | `/api/prefs/{key}` | Write one, body `{"value": ...}` |
-| `DELETE` | `/api/prefs/{key}` | Clear one |
-| `GET` | `/api/prefs/theme.css` | Saved palette as a render-blocking stylesheet |
-| `POST` | `/api/sessions` | Open a chat. Body optional; `{}` is the normal call |
-| `GET` | `/api/sessions` | Sidebar list, most recently updated first |
-| `GET` | `/api/sessions/{id}` | One session, including its rolling summary |
-| `PATCH` | `/api/sessions/{id}` | Rename and/or archive |
-| `DELETE` | `/api/sessions/{id}` | Delete a chat and its messages. Audit rows survive |
-| `GET` | `/api/sessions/{id}/messages` | Full transcript, oldest first |
-| `POST` | `/api/sessions/{id}/messages` | Append a **user** message |
-| `GET` | `/api/logs/catalogue` | Browsable tables with live row counts |
-| `GET` | `/api/logs/{store}/{table}` | A page of raw rows — read-only, allowlisted |
-| `GET` | `/api/providers/catalogue` | Cloud providers offered in the UI |
-| `GET` | `/api/providers` | Configured benchmark endpoints (keys masked) |
-| `POST` | `/api/providers` | Add one |
-| `PATCH` | `/api/providers/{id}` | Rename, re-key, enable/disable |
-| `POST` | `/api/providers/{id}/test` | Connection test against `{base_url}/models` |
-| `DELETE` | `/api/providers/{id}` | Remove one |
-| `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
-| `POST` | `/api/system/seed-demo` | Generate demo telemetry. **Dev only, unauthenticated** |
-
-Writable preference keys: `theme`, `custom-themes`, `ui-scale`, `settings-ui`.
+About a hundred routes under `/api`, listed with their purpose in
+[`docs/FEATURES.md`](../docs/FEATURES.md) §2, and live at
+<http://localhost:8000/docs> while the app runs. Three of them carry a rule
+worth knowing before you touch them:
 
 ### Only user messages are writable over HTTP
 
@@ -184,11 +179,14 @@ log browser does not list that table.
 
 ### The raw log browser cannot reach everything
 
-`/api/logs` serves an allowlist (`chat`, `audit`), opens every connection
-`mode=ro`, and caps a page at 1000 rows. `prefs` is excluded because it holds
+`/api/logs` serves an allowlist (`chat`, `audit`, `sensor`, `corpus`, and the
+Chroma collections), opens every connection `mode=ro`, and caps a page at 1000
+rows. `prefs` is excluded because it holds
 arbitrary UI values, `model_endpoints` because it holds credentials, and
 `sqlite_master` because it is not on the list at all. Unknown names 404 rather
 than 403 — whether some other table exists is not something this should
 confirm.
 
-Interactive docs while running: <http://localhost:8000/docs>
+An unexpected exception anywhere is answered as a 500 carrying its real reason
+and an 8-hex `error_id`, logged with the traceback under the same id
+(`main.py`); the dashboard shows the id next to the failed action.

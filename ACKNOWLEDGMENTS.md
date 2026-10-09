@@ -76,12 +76,20 @@ The stack itself, each under its own permissive licence:
 | [SQLite](https://sqlite.org/) | Four of the five stores | Public domain |
 | [ChromaDB](https://www.trychroma.com/) | Vector store (Layer 5) | Apache-2.0 |
 | [Ollama](https://ollama.com/) | Local model runtime (Layer 6) | MIT |
-| [PydanticAI](https://ai.pydantic.dev/) | Typed tool contracts (Layer 8) | MIT |
+| [NetworkX](https://networkx.org/) · [PyYAML](https://pyyaml.org/) | Track 2's knowledge graph, loaded from YAML (Layer 5) | BSD-3-Clause · MIT |
+| [pypdf](https://github.com/py-pdf/pypdf) | PDF text extraction for ingestion (Layer 4) | BSD-3-Clause |
+| [ONNX Runtime](https://onnxruntime.ai/) · [Tokenizers](https://github.com/huggingface/tokenizers) | Running Track 1's cross-encoder re-rankers locally | MIT · Apache-2.0 |
+| [psutil](https://github.com/giampaolo/psutil) · [nvidia-ml-py](https://pypi.org/project/nvidia-ml-py/) | Hardware detection for The Forge (Layer 11) | BSD-3-Clause · BSD |
+| [httpx](https://www.python-httpx.org/) | Ollama, registry and provider calls | BSD-3-Clause |
 | [React](https://react.dev/) · [Vite](https://vite.dev/) · [TanStack Router](https://tanstack.com/router) | Dashboard (Layer 9B) | MIT |
 | [Tailwind CSS](https://tailwindcss.com/) · [shadcn/ui](https://ui.shadcn.com/) · [Base UI](https://base-ui.com/) | Styling and primitives | MIT |
+| [react-markdown](https://github.com/remarkjs/react-markdown) · [remark-gfm](https://github.com/remarkjs/remark-gfm) | Rendering answers as Markdown, with raw HTML never rendered | MIT |
+| [d3-force](https://d3js.org/d3-force) | Blueprints' graph layout, bundled (never a CDN — Rule 1) | ISC |
+| [thinking-orbs](https://www.npmjs.com/package/thinking-orbs) | The animated indicator while a model is thinking | MIT |
 | [Lucide](https://lucide.dev/) | Icons | ISC |
 | [Monocraft](https://github.com/IdreesInc/Monocraft) | The Minecraft typeface — the UI's default face, bundled at `frontend/src/assets/fonts/` | SIL OFL 1.1 |
 | [Geist](https://vercel.com/font) · [OpenDyslexic](https://opendyslexic.org/) | Alternative faces in the Font selector | SIL OFL 1.1 |
 
-The CO₂ sorption reactor, its SCADA layer and its ingestion subsystem are
-pre-existing; Daedalus reads from them and never writes to them. See [`docs/PROJECT.md`](docs/PROJECT.md) §4.
+The CO₂ sorption reactor and its SCADA software (CO2SorptionDT) are
+pre-existing; Daedalus is a standalone chat application that reads their data
+and never writes to them. See [`docs/PROJECT.md`](docs/PROJECT.md) §4.

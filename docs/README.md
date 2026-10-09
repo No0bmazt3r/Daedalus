@@ -13,9 +13,10 @@ over anything else here.
 | Understand the whole project | [`PROJECT.md`](PROJECT.md) |
 | Know what's actually built right now | [`FEATURES.md`](FEATURES.md) |
 | See what's next | [`../TODO.md`](../TODO.md) |
-| Report progress (advisor, examiner) | [`STATUS.md`](STATUS.md) — plain-language status with screenshot placeholders |
+| Report progress (advisor, examiner) | [`STATUS.md`](STATUS.md) — plain-language status, with the screenshot checklist |
+| Write the FYP2 report | [`REPORT_NOTES.md`](REPORT_NOTES.md) — chapter-by-chapter sources, the FYP1 framing, prior art, rejected alternatives, figures |
 | Find which files make up each feature (for explaining the code) | [`CODE_MAP.md`](CODE_MAP.md) — layers, the databases, and every feature from screen to store |
-| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — all three built: Ariadne's Thread, The Forge, Labyrinth Blueprints |
+| Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — Ariadne's Thread, The Forge, Labyrinth Blueprints, all built |
 | Know how a model is judged against this machine, or add one | [`MODEL_FIT.md`](MODEL_FIT.md) — the fit contract for chat, embedding and re-ranker models |
 | Run the dual-track evaluation | [`EVALUATION.md`](EVALUATION.md) — query set, freeze-then-run, metrics, what a run writes |
 | Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
@@ -26,86 +27,26 @@ over anything else here.
 
 ## Precedence — read this before trusting any file
 
-These documents were written at different times for different purposes. When
-two disagree, resolve in this order:
+When two documents disagree, resolve in this order:
 
-1. **[`PROJECT.md`](PROJECT.md)** — canonical. Reconciles the two historical
-   sets and records every conflict and its resolution (§2.2).
+1. **[`PROJECT.md`](PROJECT.md)** — canonical: what Daedalus is, the five
+   rules, the architecture and the comparison protocol. §2 records how the two
+   FYP1 spec sets disagreed and how each conflict was resolved.
 2. **[`FEATURES.md`](FEATURES.md)** — canonical for *implementation detail*:
-   the API surface, data-store contracts, theme engine, CSS utilities.
-   Describes what exists; `PROJECT.md` describes what is intended.
+   the API surface, data-store contracts, theme engine, deployment. Describes
+   what exists; `PROJECT.md` describes what is intended.
 3. **[`MODULES.md`](MODULES.md)** — design for Ariadne's Thread, The Forge and
    Labyrinth Blueprints. Subordinate to `PROJECT.md`: it elaborates §10.2 and
-   never overrides it. The Forge is built; Labyrinth Blueprints is built in
-   full — both halves, and both of the pipelines that fill them (§3.9: corpus
-   ingestion for Track 1, assisted graph authoring for Track 2). §3.4's storage
-   decision is settled (NetworkX over git-tracked YAML), with the *authored*
-   copy in `config/` so it stays writable in the container and still reviews in
-   a diff. Ariadne's Thread is built too; §1.7 records where it departs from the design.
-4. **[`BENCHMARK.md`](BENCHMARK.md)** — canonical for *how latency is measured
-   and what may be concluded from it*. Elaborates `MODULES.md` §2.3. Written to
-   be defended: §9 names the limitations rather than hiding them.
-5. **[`architecture/`](architecture/)** and **[`research/`](research/)** —
-   historical. Still useful for depth, but **superseded wherever they conflict
-   with `PROJECT.md`**.
+   never overrides it. All three are built; where a build departed from the
+   design, the module's section says so.
+4. **[`BENCHMARK.md`](BENCHMARK.md)**, **[`MODEL_FIT.md`](MODEL_FIT.md)**,
+   **[`EVALUATION.md`](EVALUATION.md)** — canonical for *how* latency, model
+   fit and the comparison are measured, and what may be concluded from each.
 
-> The two historical sets are kept because each is strong where the other is
-> thin: `research/` carries the academic framing and evaluation rigour,
-> `architecture/` carries the implementation-ready schemas and I/O contracts.
-> Neither is wrong; both are incomplete on their own.
-
----
-
-## `research/` — FYP1 research specifications
-
-The interim-report-aligned view. Strongest on **why** the project is shaped the
-way it is: the dual-track RAG comparison, the evaluation methodology, the
-hardware-fit tooling.
-
-| File | Covers |
-|---|---|
-| [`00-project-overview.md`](research/00-project-overview.md) | Problem statement, the three research pillars, feature list, scope |
-| [`01-system-architecture.md`](research/01-system-architecture.md) | 4-zone model, safety boundary, concurrency, dual-track routing |
-| [`02-traditional-rag-spec.md`](research/02-traditional-rag-spec.md) | Track 1 — vector RAG pipeline, chunking, embedding, retrieval |
-| [`03-agentic-graphrag-spec.md`](research/03-agentic-graphrag-spec.md) | Track 2 — knowledge graph schema, agent loop, storage options |
-| [`04-rag-comparison-framework.md`](research/04-rag-comparison-framework.md) | How the two tracks get compared fairly — controls, query set, metrics |
-| [`05-model-hardware-fit-tool.md`](research/05-model-hardware-fit-tool.md) | llmfit-inspired hardware profiler and model scoring |
-| [`06-data-schema.md`](research/06-data-schema.md) | Sensor schema, query patterns, ownership boundary |
-| [`07-tech-stack-and-tools.md`](research/07-tech-stack-and-tools.md) | Stack choices and, usefully, what was rejected and why |
-
-**Known staleness:** these files say a web frontend is out of scope. That is no
-longer true — see `PROJECT.md` §2.2 conflict #1.
-
-## `architecture/` — 11-layer implementation specifications
-
-The "Project Daedalus v2" view. Strongest on **how**: schemas, tool I/O
-contracts, orchestration steps, log tables, examiner phrasings.
-
-**Always start with [`00-design-rules.md`](architecture/00-design-rules.md)** —
-the five non-negotiable constraints every other layer must respect.
-
-| Layer | File | Covers |
-|---|---|---|
-| — | [`architecture-overview.md`](architecture/architecture-overview.md) | The v2 overview: 11 layers, 4 zones, device-agnostic ambitions |
-| — | [`00-design-rules.md`](architecture/00-design-rules.md) | **The five non-negotiable rules.** Read first |
-| 1 | [`01-physical-reactor-layer.md`](architecture/01-physical-reactor-layer.md) | Reactor hardware, sensors, the write-only ABV problem |
-| 2 | [`02-scada-layer.md`](architecture/02-scada-layer.md) | SCADA acquisition, Supabase vs local SQLite |
-| 3 | [`03-sqlite-data-layer.md`](architecture/03-sqlite-data-layer.md) | Sensor schema, read-only rules, validation |
-| 4 | [`04-rag-ingestion-layer.md`](architecture/04-rag-ingestion-layer.md) | Document sources, chunking, metadata, embeddings |
-| 5 | [`05-vector-retrieval-layer.md`](architecture/05-vector-retrieval-layer.md) | ChromaDB, advanced RAG techniques, DB benchmark framework |
-| 6 | [`06-model-provider-layer.md`](architecture/06-model-provider-layer.md) | Ollama config, model tiers, quantization, AirLLM positioning |
-| 7 | [`07-orchestration-layer.md`](architecture/07-orchestration-layer.md) | The 11-step flow, intents, safety guard, evidence pack |
-| 8 | [`08-tool-layer.md`](architecture/08-tool-layer.md) | All four tools with full input/output JSON schemas |
-| 9 | [`09-presentation-layer.md`](architecture/09-presentation-layer.md) | Chat UI responsibilities and hard constraints |
-| 10 | [`10-observability-layer.md`](architecture/10-observability-layer.md) | Log table schemas, query_id tracing, evaluation harness |
-| 11 | [`11-admin-utility-layer.md`](architecture/11-admin-utility-layer.md) | Model Selector Console spec, MVP vs optional |
-| — | [`12-query-flow-and-examples.md`](architecture/12-query-flow-and-examples.md) | Six worked query examples, end to end |
-| — | [`13-deployment.md`](architecture/13-deployment.md) | Folder structure, Docker Compose, diagrams |
-| — | [`14-examiner-statements.md`](architecture/14-examiner-statements.md) | Examiner-safe phrasings and anti-patterns |
-
-**Known staleness:** `architecture-overview.md` proposes GraphRAG *instead of*
-vector RAG and a device-agnostic core. Both are overruled — see `PROJECT.md`
-§2.2 conflicts #2 and #3.
+**The FYP1 spec sets are retired.** `research/` (8 files) and `architecture/`
+(15 files) were removed on 2026-10-10. Everything still true in them is in
+`PROJECT.md`; the report-relevant framing only they carried is in
+`REPORT_NOTES.md`; the originals are in git history.
 
 ---
 
@@ -116,15 +57,15 @@ Context windows are finite; don't paste the whole folder.
 | Task | Give it |
 |---|---|
 | Anything at all | `PROJECT.md` (start here, always) |
-| Changing existing code | `PROJECT.md` + `FEATURES.md` |
-| Building a new layer | `PROJECT.md` + `architecture/00-design-rules.md` + that layer's file |
-| Database work | `PROJECT.md` §6 + `architecture/03-sqlite-data-layer.md` |
-| The tool layer | `architecture/00-design-rules.md` + `architecture/08-tool-layer.md` |
-| RAG / retrieval | `research/02` + `research/03` + `architecture/05` |
-| Evaluation | `research/04` + `architecture/10` |
-| Report or viva prep | `research/00` + `architecture/14` |
+| Changing existing code | `PROJECT.md` + `FEATURES.md` + `CODE_MAP.md` |
+| Database work | `PROJECT.md` §6 + `FEATURES.md` §3 |
+| The tool layer | `PROJECT.md` §3 and §7 + `FEATURES.md` *Agent tools* |
+| RAG / retrieval | `PROJECT.md` §5 + `MODULES.md` §3 |
+| Model selection | `PROJECT.md` §8 + `MODEL_FIT.md` + `BENCHMARK.md` |
+| Evaluation | `PROJECT.md` §5 and §9 + `EVALUATION.md` |
+| Report or viva prep | `REPORT_NOTES.md` + `PROJECT.md` §14 + `STATUS.md` |
 
 Two rules worth passing along with the files:
 
-1. `PROJECT.md` wins over `architecture/` and `research/`.
-2. `architecture/00-design-rules.md` constrains every layer — no exceptions.
+1. `PROJECT.md` wins over everything else.
+2. Its five rules (§3) constrain every layer — no exceptions.

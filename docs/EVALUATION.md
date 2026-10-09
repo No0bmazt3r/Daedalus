@@ -5,6 +5,10 @@ targets*; this is how to run it. The machinery is `backend/app/services/evaluati
 driven from a terminal by `backend/app/cli_eval.py`. Guarded by
 `backend/tests/evaluation/test_evaluation.py`.
 
+> **Status (2026-10-10):** the harness is built and tested; no run has been
+> made. `queries.yaml` holds 5 `EX…` examples against the placeholder graph —
+> a run against them measures the harness, not Daedalus.
+
 ---
 
 ## 1. What a run is

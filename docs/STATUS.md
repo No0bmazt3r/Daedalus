@@ -1,26 +1,31 @@
 # Daedalus — FYP Status & Feature Overview
 
-*As of 2026-10-01. Figures come from the checkboxes in `TODO.md` and from reading
-the local databases directly. Nothing here is a plan dressed up as progress: where
+*As of 2026-10-10. Figures come from the checkboxes in `TODO.md`, from reading
+the local databases directly, and from running the test suites that day. Nothing here is a plan dressed up as progress: where
 something is only designed, it says so.*
 
 ---
 
 ## 1. Summary
 
-The pipeline is **built end to end** and answers questions from demo telemetry
-and a placeholder knowledge graph. What it cannot do yet is answer from the
-lab's real knowledge, and nothing has been evaluated:
+The software is **built end to end**: it answers questions from demo telemetry,
+a placeholder knowledge graph and the first two reference documents, and every
+answer can be traced in Ariadne's Thread. What it cannot do yet is answer from
+the lab's own knowledge, and nothing has been evaluated:
 
-- **no real documents have been ingested** — the corpus is empty,
+- **2 of the 17 collected reference documents are ingested** (162 chunks), and
+  none of the lab's own documents are in hand yet,
 - the knowledge graph is placeholder data, and the sensor database holds demo data,
-- both retrieval tracks run, but there is nothing real for them to retrieve,
-- evaluation has not started.
+- both retrieval tracks run, but on too little real knowledge to measure,
+- the evaluation harness is built, but the evaluation has not started.
+
+All 231 backend tests and 9 frontend tests pass, and the frontend type-checks
+and lints clean.
 
 **What Daedalus is.** A fully local, read-only **standalone chat application**
 for the CO2SorptionDT lab-scale CO₂ sorption reactor. It is not part of the
-reactor or of the existing PyQt5 SCADA app: it reads the sensor data that app
-logs (temperature, pressure, pH, level and NDIR CO₂, every 5 s) and the lab's
+reactor or of the existing PyQt5 SCADA app (CO2SorptionDT): it reads the
+sensor data that app logs (temperature, pressure, pH, level and NDIR CO₂, every 5 s) and the lab's
 documents, and never writes to either. An operator asks things like *"Is the
 reactor running fine right now?"* or *"What do I do if the NDIR reading
 drifts?"* and gets an answer traceable to a database row, a document page or a
@@ -48,27 +53,29 @@ retrieval precision, under 10% hallucination rate.
 
 ## 2. Progress by milestone
 
-Counted from `TODO.md` checkboxes (done / total tasks).
+Counted from `TODO.md` checkboxes (done / done + open; items cut from FYP2 are
+left out).
 
 | Milestone | Layer | Done | % | Honest read |
 |---|---|---|---|---|
 | M1 Sensor data layer | 3 | 4 / 5 | 80% | Works on demo data |
-| M2 Knowledge ingestion | 4 | 34 / 39 | 87%\* | Pipeline built, with categories and rig/reference origin; **0 documents ingested** |
+| M2 Knowledge ingestion | 4 | 37 / 43 | 86%\* | Pipeline built, with categories and rig/reference origin; **2 documents ingested** |
 | M3 Deterministic tool layer | 8 | 31 / 31 | 100% | Sensor tools, both tracks' retrieval, effect/track/argument gates |
 | M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested and the lab machine unconfirmed |
 | M5 Orchestration | 7 | 21 / 23 | 91% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers |
-| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 14 / 24 | 58% | Both tracks answer; Track 2's agent loop built; Track 1's hybrid search, expansion and multi-hop not built |
-| M7 Observability | 10 | 5 / 10 | 50% | Every turn fully logged on one `query_id`; no log viewer yet |
-| M8 Evaluation | — | 0 / 10 | **0%** | Not started — waits on the real corpus |
-| M9 Hardware & model console | 11 | 15 / 18 | 83% | Working ("The Forge") |
-| M10 Dashboard | 9B | 99 / 113 | 88%\* | Working; Ariadne's Thread built 2026-10-07 |
+| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 15 / 20 | 75% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
+| M7 Observability | 10 | 5 / 6 | 83% | Every turn fully logged on one `query_id`; read back in Ariadne's Thread |
+| M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** The query set, labels and runs wait on the corpus |
+| M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |
+| M10 Dashboard | 9B | 114 / 124 | 92%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
+| M11 Cross-platform installer CLI | — | 0 / 5 | 0% | Not started — optional; `daedalus.sh` works on Linux/WSL/macOS |
 
 \* **Inflated.** Many ticked boxes in M2 and M10 are small setup or UI
-sub-tasks.
+sub-tasks, and M8's ticks are the *tooling*, not the evaluation.
 
 **Do not quote a single overall percentage.** The machinery the research needs
-is largely built; the research *result* — the evaluation over real knowledge —
-has not started, and it is what the project is assessed on.
+is built; the research *result* — the evaluation over real knowledge — has not
+started, and it is what the project is assessed on.
 
 Critical path now: **real corpus → ingest and rebuild the graph from it → choose
 the model the lab machine allows → freeze both tracks → evaluate once.**
@@ -83,7 +90,7 @@ project, and a **screenshot placeholder** saying exactly what to capture.
 > **Screenshot convention.** Save images to `docs/screenshots/` using the file
 > name given in each placeholder. The `![...]()` line will then show the image
 > automatically. Delete the `[SCREENSHOT: ...]` note once the image is in. A full
-> checklist is at the end of this section (§3.14).
+> checklist is at the end of this section (§3.16).
 >
 > The demo data is synthetic — say so in any caption that shows sensor values.
 
@@ -93,7 +100,7 @@ project, and a **screenshot placeholder** saying exactly what to capture.
 
 **What it is.** The main user interface: a React web app served at
 `http://localhost:8000`. An operator types a question and the answer streams in
-word by word. Conversations are saved on the server, so they survive a page
+word by word, rendered as Markdown (lists, bold, tables). Conversations are saved on the server, so they survive a page
 reload and can be reopened from the sidebar.
 
 **Why it matters.** This replaces the planned PyQt5 tab as the primary frontend.
@@ -111,8 +118,8 @@ pack only, and a validator replaces it with a fallback if it states a number, a
 time or a cause the evidence does not. Citation chips show the evidence behind
 each claim.
 
-**Current limitation.** It answers from demo telemetry and a placeholder graph,
-and the corpus is empty, so knowledge answers are not yet meaningful.
+**Current limitation.** It answers from demo telemetry, a placeholder graph and
+two reference documents, so knowledge answers are not yet meaningful.
 
 ![Chat interface](screenshots/01-chat.png)
 
@@ -141,7 +148,7 @@ the model nicely. Even a fully compromised prompt cannot write to plant data.
 
 ![Databases panel](screenshots/03-databases.png)
 
-**[SCREENSHOT: `03-databases.png`]** — Settings → **System** → *Storage health*, showing all five
+**[SCREENSHOT: `03-databases.png`]** — Settings → **System** → *Storage Health*, showing all five
 databases and their health, with the sensor database visible.
 
 ![Sensor rows](screenshots/04-sensor-rows.png)
@@ -184,8 +191,8 @@ breaking the local-only rule.
 
 ![Cloud endpoints](screenshots/06-cloud-endpoints.png)
 
-**[SCREENSHOT: `06-cloud-endpoints.png`]** — Settings → **Model Endpoints**,
-showing the cloud endpoint configured (make sure any API key is masked).
+**[SCREENSHOT: `06-cloud-endpoints.png`]** — The Forge → **Installed** → *Cloud
+baselines*, showing the cloud endpoint configured (make sure any API key is masked).
 
 ---
 
@@ -258,7 +265,9 @@ showing time to first token, tokens/s and the prompt size.
 
 **What it is.** The offline pipeline that turns documents into searchable chunks:
 
-1. Extract text from TXT, MD, CSV, JSON, YAML and PDF.
+1. Extract text from TXT, MD, CSV, JSON, YAML and PDF — including AES-locked
+   manufacturer manuals and PDFs whose fonts are shifted (the Fuji NDIR manual
+   read as `WKH` for "the" until that was decoded).
 2. Clean it (line endings, PDF ligatures, stray spacing).
 3. Split it into chunks by section, tagging each with its source file, type and
    section title.
@@ -278,12 +287,14 @@ passage accordingly, and a rig-specific fact backed only by references must be
 called general guidance from another installation. The origin can be corrected
 at any time without re-ingesting.
 
-**Current limitation.** Built but **empty** — 0 documents ingested, because the
-corpus hasn't been collected yet.
+**Current limitation.** **2 documents ingested** (162 chunks): the BRE
+heat-stable-salts paper and the Fuji ZRE NDIR analyser manual, both references.
+15 more public documents are collected in `data/corpus_sources/`, along with 5
+placeholder rig SOPs; the lab's own manuals and SOPs are still needed.
 
 ![Ingest view](screenshots/10-ingest.png)
 
-**[SCREENSHOT: `10-ingest.png`]** — Blueprints → **Ingest**, showing the pipeline
+**[SCREENSHOT: `10-ingest.png`]** — Blueprints → **Track 1 · Vector** → **Build**, showing the pipeline
 screen with the *Import as* and *Whose* (This rig / Reference) choices, and ideally
 one uploaded document with its badge.
 
@@ -370,13 +381,13 @@ revisit once the lab machine's model is chosen.
 
 ![Graph view](screenshots/14-graph.png)
 
-**[SCREENSHOT: `14-graph.png`]** — Blueprints → **Graph** (switch to the GraphRAG
-track), showing the graph canvas.
+**[SCREENSHOT: `14-graph.png`]** — Blueprints → **Track 2 · Graph** → **Graph**,
+showing the graph canvas.
 
 ![Proposal queue](screenshots/15-proposals.png)
 
-**[SCREENSHOT: `15-proposals.png`]** *(optional)* — Blueprints → **Build**, showing
-the proposal queue screen.
+**[SCREENSHOT: `15-proposals.png`]** *(optional)* — Blueprints → **Track 2 · Graph**
+→ **Build**, showing the proposal queue.
 
 ---
 
@@ -389,14 +400,15 @@ set of views (inventory, trace, authoring), so they are inspected the same way.
 **Why it matters.** Answers must be traceable to their source. This is where an
 examiner can see *why* an answer said what it said.
 
-**Current limitation.** Track 2 walks can be replayed now, with the agent's
-verdict after each hop and why it stopped. Track 1 has nothing to replay until
-the corpus is loaded.
+**Current limitation.** None in the tooling: Track 2 walks replay with the
+agent's verdict after each hop and why it stopped, and Track 1 retrievals
+replay with each chunk's distance and re-rank score. What they replay is only
+as meaningful as the corpus behind it.
 
 ![Retrieval view](screenshots/16-retrieval.png)
 
-**[SCREENSHOT: `16-retrieval.png`]** — Blueprints → **Retrieval**. Empty state is
-acceptable.
+**[SCREENSHOT: `16-retrieval.png`]** — Blueprints → **Track 1 · Vector** →
+**Replay**, on a question answered from the NDIR manual.
 
 ---
 
@@ -407,7 +419,8 @@ conversation, tool, RAG, model, error, feedback and memory. Every question gets 
 `query_id`, so one question can be traced across all seven tables. Logging can
 never crash a chat response. Retrieval rows record which track and mode
 answered, the whole graph walk, and whether each retrieved item was this rig's
-document or a reference.
+document or a reference. An unexpected server error is logged under a short
+error id, which the app shows next to the failed action.
 
 **Why it matters.** Evaluation (latency, groundedness, precision) is computed from
 these logs. It also gives an audit trail of every tool call and model call.
@@ -419,14 +432,55 @@ these logs. It also gives an audit trail of every tool call and model call.
 
 ---
 
-### 3.13 Deployment, settings and usability
+### 3.13 Ariadne's Thread — one answer, traced
+
+**What it is.** A window that lists every chat turn and opens one as ordered
+steps: the question, how it was rewritten, its intent, the tools and retrieval
+that ran, the evidence pack, the model call, the validator's verdict on every
+number in the answer, and the answer itself. A person can label a turn as
+hallucinated or not, and export it as Markdown.
+
+**Why it matters.** It answers "why did it say that?" for any single answer,
+and the labels it collects are the hand labels the evaluation needs.
+
+![Ariadne's Thread](screenshots/20-thread.png)
+
+**[SCREENSHOT: `20-thread.png`]** — Ariadne's Thread (sidebar) with one turn
+open, showing the steps and the groundedness panel with numbers marked
+supported.
+
+---
+
+### 3.14 Evaluation harness
+
+**What it is.** A terminal command, `python -m app.cli_eval`, that asks every
+question in `config/eval/queries.yaml` once per arm — Track 1, Track 2 fixed
+walk, Track 2 agent — through the real chat path, scores each answer against
+hand-written labels (key facts, relevant documents and graph nodes), and writes
+a report, a CSV and an LLM-judge input file. It refuses an official run unless
+both tracks are frozen, and keeps every answer if a run is interrupted.
+
+**Why it matters.** It is how the headline comparison will be measured, the
+same way for every arm.
+
+**Current limitation.** The query set holds 5 example questions written against
+the placeholder graph. The real 30–50 question set is written once the corpus
+is in. Method in `docs/EVALUATION.md`.
+
+---
+
+### 3.15 Deployment, settings and usability
 
 **What it is.**
 
 - **One-command setup and run:** `./daedalus.sh setup` then `./daedalus.sh start`.
-  Everything runs in Docker, with optional GPU, Ollama and SearXNG. `sync.sh` and
-  `reset.sh` handle updates and clean resets safely (the sensor DB is never wiped
-  without asking twice).
+  Everything runs directly on the machine — one Python process with the vector
+  store inside it, and the machine's own Ollama. Docker is needed only for the
+  optional SearXNG search engine. `sync.sh` and `reset.sh` handle updates and
+  clean resets safely (the sensor DB is never wiped without asking twice).
+- **Error pages:** a window or tab that cannot load becomes a themed,
+  animated error page saying what failed and what to try; a failed action
+  shows its reason and error id.
 - **Usability:** command palette, keyboard shortcuts, theming, and a searchable
   settings window.
 
@@ -445,29 +499,30 @@ dashboard.
 
 ---
 
-### 3.14 Screenshot checklist
+### 3.16 Screenshot checklist
 
 Save all images to `docs/screenshots/`.
 
 - [ ] `01-chat.png` — chat with past sessions and one answer
 - [ ] `02-chat-streaming.png` *(optional)* — answer mid-stream
-- [ ] `03-databases.png` — Settings → System → Storage health
+- [ ] `03-databases.png` — Settings → System → Storage Health
 - [ ] `04-sensor-rows.png` — `sensor_readings` rows in the browser
 - [ ] `05-model-config.png` — The Forge → Installed → Chat models (Local)
-- [ ] `06-cloud-endpoints.png` — Settings → Model Endpoints (key masked)
+- [ ] `06-cloud-endpoints.png` — The Forge → Installed → Cloud baselines (key masked)
 - [ ] `07-forge-hardware.png` — The Forge → Hardware
 - [ ] `08-forge-models.png` — The Forge → Chat models, Shortlist, fit labels visible
 - [ ] `09-benchmark.png` — finished benchmark run
-- [ ] `10-ingest.png` — Blueprints → Ingest
+- [ ] `10-ingest.png` — Blueprints → Track 1 → Build
 - [ ] `11-knowledge-base.png` — Settings → Retrieval Track
 - [ ] `12-search.png` — Settings → Search with a test result
 - [ ] `13-agent-tools.png` — Settings → Agent Tools
-- [ ] `14-graph.png` — Blueprints → Graph
-- [ ] `15-proposals.png` *(optional)* — Blueprints → Build
-- [ ] `16-retrieval.png` — Blueprints → Retrieval
+- [ ] `14-graph.png` — Blueprints → Track 2 → Graph
+- [ ] `15-proposals.png` *(optional)* — Blueprints → Track 2 → Build
+- [ ] `16-retrieval.png` — Blueprints → Track 1 → Replay
 - [ ] `17-logs.png` — `model_logs` in the browser
 - [ ] `18-command-palette.png` — command palette open
 - [ ] `19-start.png` *(optional)* — `./daedalus.sh status` in a terminal
+- [ ] `20-thread.png` — Ariadne's Thread with one turn open
 
 ---
 
@@ -475,13 +530,20 @@ Save all images to `docs/screenshots/`.
 
 | Area | What's missing | Milestone |
 |---|---|---|
-| Knowledge | The real corpus (manuals, SOPs, troubleshooting, safety, background — tagged this rig / reference); the graph rebuilt from it | M2 · M6 |
-| Track 1 — vector RAG | Query expansion, hybrid dense + BM25, contextual compression, multi-hop re-retrieval, `VectorStoreAdapter` | M6 |
-| Evaluation | 30–50 query golden set, hand labels, groundedness / hallucination scoring, precision@3/@5, recall, MRR, latency p50/p95, three comparison runs (Track 1 · Track 2 walk · Track 2 agent), human panel | M8 |
-| Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); verify inference with networking disabled | M4 |
-| Provenance UI | Source badges (Ariadne's Thread, the per-query trace viewer, was built 2026-10-07) | M10 |
-| Validator | A check for prompt rule 9 (rig-specific facts backed only by references) | M5 |
-| PyQt5 tab | Not started — optional / Phase 2 | — |
+| Knowledge | The lab's own documents; ingesting the other 15 collected references; the graph rebuilt from the real corpus; the placeholder SOP filenames reconciled | M2 · M6 |
+| Evaluation | 30–50 question golden set and its hand labels, three comparison runs (Track 1 · Track 2 walk · Track 2 agent), failure analysis, Method B (LLM-as-judge over exported logs), human panel | M8 |
+| Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); recalibrate the estimators and re-check re-ranker fit on the lab machine; verify inference with networking disabled | M4 · M2 · M6 |
+| Fairness check | Ingestion flags documents that have no graph node, so Track 1 does not get knowledge Track 2 lacks | M10 |
+| Validator | A check for prompt rule 9 (rig-specific facts backed only by references); clock times and dates are not yet checked | M5 · M2 |
+| Before the report | Verify the six MMLU figures in the Forge catalogue; clear the bogus `verified` record in `config/embedding_config.json`; gate `seed-demo`; confirm no secrets are logged | M10 · M7 |
+| Installer | A cross-platform `doctor`/`setup` CLI (Windows without bash) — optional | M11 |
+
+**Cut from FYP2 (2026-10-01), to be stated in the report as scope:** Track 1's
+query expansion, hybrid BM25 search, contextual compression and multi-hop
+re-retrieval (Track 1 is a plain baseline with re-ranking); the vector-DB
+bake-off; the Streamlit log viewer (replaced by Ariadne's Thread); the
+Prometheus/Grafana stack; the separate source-badge row; the PyQt5 tab
+(Phase 2).
 
 ---
 
@@ -526,6 +588,9 @@ What this shows so far:
 | Scope | Chatbot alongside separate ingestion and anomaly-detection subsystems | **Chatbot only** — reads telemetry, detects nothing | Sensor ingestion and anomaly detection are outside this project |
 | Corpus | Manuals and SOPs | Five categories, each document tagged **this rig** or **reference** | Public literature is useful for concepts but wrong for this rig's specifics, and answers must say which they rest on |
 | Frontend | — | Daedalus is a **standalone chat app**, not a component of the reactor or its SCADA app | It reads the reactor's data over a read-only boundary |
+| Deployment | Docker Compose (FYP1 design) | **Runs on the host**; Docker only for the optional SearXNG | A container stack bought nothing on a single-user lab machine and cost gigabytes of memory under WSL |
+| Track 1 | Advanced RAG: expansion, hybrid, compression, multi-hop | **Plain baseline with cross-encoder re-ranking** | Scoping decision; stated so it does not read as a handicap tilting the comparison |
+| Log viewer | Streamlit | **Ariadne's Thread**, inside the web dashboard | One app, and it doubles as the labelling tool for evaluation |
 
 ---
 
@@ -541,11 +606,12 @@ What this shows so far:
 - **Lab machine RAM / GPU** — gates the final model choice (M4), which also
   decides how well Track 2's agent can drive.
 
-### Scope decisions still open
+### Scope decisions — settled
 
-- Is the PyQt5 tab still a deliverable, or fully replaced by the web dashboard?
-- Is the 6-candidate vector-database bake-off still in scope on top of the
-  dual-track RAG comparison? Two benchmark studies may overrun the timeline.
+- The PyQt5 tab is **not** an FYP2 deliverable; the web dashboard replaces it
+  (Phase 2).
+- The vector-database bake-off is **out**; the dual-track comparison is the one
+  benchmark study (Phase 2).
 
 ### Schedule risk
 
@@ -563,5 +629,5 @@ done.
 - **Goal of the meeting:** sign-off to proceed / help with a blocker / checkpoint
 - **Main ask (suggested):** the lab's own manuals and SOPs for the rig, and the
   lab machine's specs — those unblock the evaluation.
-- **Decisions to get from the advisor:** PyQt5 tab in or out; vector-DB bake-off in
-  or out.
+- **Decisions to confirm with the advisor:** PyQt5 tab and vector-DB bake-off
+  both moved to Phase 2; Track 1 kept as a plain baseline with re-ranking.
