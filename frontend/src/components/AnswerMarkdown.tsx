@@ -12,12 +12,20 @@ import type { StoredEvidence } from '../lib/chatClient'
  * `**stars**` in the text and runs list items together. `react-markdown` never
  * renders raw HTML from the text, so an answer cannot inject markup.
  */
-export function AnswerMarkdown({ text, evidence }: { text: string; evidence?: StoredEvidence }) {
+export function AnswerMarkdown({
+  text, evidence, renderText,
+}: {
+  text: string
+  evidence?: StoredEvidence
+  /** Replaces the default chips-and-readings treatment of each text node. */
+  renderText?: (fragment: string) => ReactNode
+}) {
   // Chips and readings go on the text nodes; Markdown has already taken the
   // formatting out, so `[D1]` is still plain text here (it is not a link
   // without a definition).
+  const render = renderText ?? ((c: string) => withCitations(c, evidence, text))
   const enrich = (children: ReactNode) =>
-    Children.map(children, (c) => (typeof c === 'string' ? withCitations(c, evidence, text) : c))
+    Children.map(children, (c) => (typeof c === 'string' ? render(c) : c))
 
   const components: Components = {
     p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{enrich(children)}</p>,

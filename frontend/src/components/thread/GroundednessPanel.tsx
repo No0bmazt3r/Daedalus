@@ -4,6 +4,7 @@ import { parseEvidenceLine, stripLabel, type Moment } from '../../lib/threadLogi
 import { type Groundedness, type NumberMark } from '../../lib/threadClient'
 import { withEvidenceHighlights } from '../Citations'
 import { VERDICT } from './status'
+import { AnswerMarkdown } from '../AnswerMarkdown'
 
 // The unit written after a number, as `numbers._UNIT_AFTER_RE` reads it. Only
 // used when the backend found a unit there, so a following word is never taken.
@@ -32,32 +33,60 @@ function emphasise(text: string, keyBase: number): ReactNode[] {
   return out
 }
 
-/** The answer, with each number wrapped in its verdict's colour. */
+// Private-use characters around a mark's index: plain text to the Markdown
+// parser, so a marked number survives being inside **bold** or a list item.
+const OPEN = '\uE000'
+const CLOSE = '\uE001'
+const SLOT = /\uE000(\d+)\uE001/g
+
+/**
+ * The answer as Markdown, with each number wrapped in its verdict's colour.
+ *
+ * The marks are offsets into the raw text, and Markdown rendering loses
+ * offsets. So each marked span is swapped for a placeholder first, the text is
+ * rendered, and the placeholders are turned back into marks in the text nodes.
+ */
 function MarkedAnswer({ text, marks }: { text: string; marks: NumberMark[] }) {
-  const out: ReactNode[] = []
+  const kept: { mark: NumberMark; shown: string }[] = []
+  let source = ''
   let last = 0
   for (const m of [...marks].sort((a, b) => a.start - b.start)) {
     if (m.start < last) continue
-    out.push(...emphasise(text.slice(last, m.start), last))
-    const source = m.sources[0]
     // `450 ppm` reads as one value, so the mark covers the unit too.
     const end = m.unit ? m.end + (UNIT_AFTER.exec(text.slice(m.end))?.[0].length ?? 0) : m.end
-    out.push(
-      <mark
-        key={m.start}
-        className={`rounded px-0.5 ${VERDICT[m.verdict].tone}`}
-        title={[
-          `${m.text}: ${m.reason}`,
-          source ? `[${source.label}] ${source.line}` : '',
-        ].filter(Boolean).join('\n')}
-      >
-        {text.slice(m.start, end)}
-      </mark>,
-    )
+    source += text.slice(last, m.start) + OPEN + kept.length + CLOSE
+    kept.push({ mark: m, shown: text.slice(m.start, end) })
     last = end
   }
-  out.push(...emphasise(text.slice(last), last))
-  return <p className="whitespace-pre-wrap text-[13px] leading-relaxed theme-text">{out}</p>
+  source += text.slice(last)
+
+  const renderText = (fragment: string): ReactNode[] => {
+    const out: ReactNode[] = []
+    let at = 0
+    for (const slot of fragment.matchAll(SLOT)) {
+      out.push(...emphasise(fragment.slice(at, slot.index), at))
+      const { mark: m, shown } = kept[Number(slot[1])]
+      const src = m.sources[0]
+      out.push(
+        <mark
+          key={`m${m.start}`}
+          className={`rounded px-0.5 ${VERDICT[m.verdict].tone}`}
+          title={[`${m.text}: ${m.reason}`, src ? `[${src.label}] ${src.line}` : ''].filter(Boolean).join('\n')}
+        >
+          {shown}
+        </mark>,
+      )
+      at = slot.index + slot[0].length
+    }
+    out.push(...emphasise(fragment.slice(at), at))
+    return out
+  }
+
+  return (
+    <div className="text-[13px] leading-relaxed theme-text">
+      <AnswerMarkdown text={source} renderText={renderText} />
+    </div>
+  )
 }
 
 /**
