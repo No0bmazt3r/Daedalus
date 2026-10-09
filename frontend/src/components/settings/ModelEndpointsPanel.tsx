@@ -15,6 +15,7 @@ import {
   type ModelEndpoint,
   type Provider,
 } from '../../lib/systemClient'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * The Forge → Installed → Chat models → Cloud baselines. (It was also Settings → Add Models;
@@ -47,6 +48,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
   // `endpoints` starts as [], so "still fetching" and "none configured"
   // rendered the same empty-state copy. This is what separates them.
   const [loaded, setLoaded] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
   const [providerId, setProviderId] = useState('deepseek')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -142,6 +144,7 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {confirmDialog}
       <div>
         <h3 className="text-xl font-medium mb-1">Add API Models</h3>
         <p className="text-sm theme-text-muted">
@@ -322,7 +325,15 @@ export function ModelEndpointsPanel({ isPeek }: { isPeek: boolean }) {
                     Test
                   </button>
                   <button
-                    onClick={() => void remove(ep.id)}
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `Remove ${ep.label}?`,
+                        body: 'The endpoint and its stored API key are deleted. You would have to add it again with the key.',
+                        confirmLabel: 'Remove endpoint',
+                        danger: true,
+                      })
+                      if (ok) void remove(ep.id)
+                    }}
                     aria-label={`Remove ${ep.label}`}
                     className="p-1.5 rounded-lg theme-text-muted hover:status-bad hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
                   >

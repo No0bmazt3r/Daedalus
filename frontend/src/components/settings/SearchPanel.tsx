@@ -25,6 +25,7 @@ import {
   type SearchResponse,
   type TestResult,
 } from '../../lib/searchClient'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * Settings → Search.
@@ -158,6 +159,7 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
   // keystroke would put a half-typed API key in the database.
   const [provider, setProvider] = useState<string>(DISABLED)
   const [count, setCount] = useState(5)
+  const [confirm, confirmDialog] = useConfirm()
   const [safesearch, setSafesearch] = useState<SafeSearch>('strict')
   const [chain, setChain] = useState<string[]>([])
   const [baseUrl, setBaseUrl] = useState('')
@@ -327,6 +329,7 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {confirmDialog}
       <div>
         <h3 className="text-xl font-medium mb-1">Search</h3>
         <p className="text-sm theme-text-muted">
@@ -467,8 +470,17 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
                   />
                   {selected.has_key && (
                     <button
-                      onClick={clearKey}
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: `Delete the ${selected.label} key?`,
+                          body: 'The stored key is removed, and search through this provider stops until you paste it again.',
+                          confirmLabel: 'Delete key',
+                          danger: true,
+                        })
+                        if (ok) void clearKey()
+                      }}
                       title="Delete the stored key."
+                      aria-label={`Delete the stored ${selected.label} key`}
                       className="px-2.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] transition-colors"
                     >
                       <Trash2 size={13} />
@@ -671,6 +683,7 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
           </p>
           <div className="flex gap-2">
             <input
+              aria-label="Test search query"
               value={probe}
               onChange={(e) => setProbe(e.target.value)}
               onKeyDown={(e) => {

@@ -105,6 +105,7 @@ import { AuthoringView } from './AuthoringView'
  */
 
 import { TRACK_OF_TAB, type BlueprintsTab } from './tabs'
+import { tabArrowKeys } from '../ui/tablist'
 
 type TabId = BlueprintsTab
 
@@ -174,6 +175,7 @@ function TracePicker({
           <li key={t.query_id}>
             <button
               onClick={() => onSelect(t.query_id)}
+              aria-pressed={active}
               className={`w-full rounded-md border px-2.5 py-1.5 text-left transition-colors ${
                 active ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
               }`}
@@ -403,8 +405,11 @@ export function BlueprintsWindow({
               // underline's percentages resolve against the tab group rather
               // than the full-width row the group is centred in.
               <div
+                role="tablist"
+                aria-label="Blueprints views"
                 className="relative flex"
                 style={{ width: `${TAB_BASIS * group.tabs.length}%` }}
+                onKeyDown={tabArrowKeys(group.tabs.map((t) => t.id), tab, setTab)}
               >
                 {group.tabs.map((entry) => {
                   const selectedTab = tab === entry.id
@@ -412,6 +417,10 @@ export function BlueprintsWindow({
                     <button
                       key={entry.id}
                       onClick={() => setTab(entry.id)}
+                      role="tab"
+                      data-tab={entry.id}
+                      aria-selected={selectedTab}
+                      tabIndex={selectedTab ? 0 : -1}
                       title={entry.hint}
                       style={{ flexBasis: `${100 / group.tabs.length}%` }}
                       className={`flex shrink-0 items-center justify-center gap-1.5 rounded-t-lg px-3 py-2 text-xs transition-colors duration-200 ${
@@ -471,7 +480,7 @@ export function BlueprintsWindow({
               <Skeleton className="h-64 w-full" />
             ) : (
               <>
-                    {tab === 'corpus' && <CorpusView />}
+                    {tab === 'corpus' && <CorpusView onBuild={() => setTab('ingest')} />}
                     {tab === 'retrieval' && <RetrievalView />}
                     {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} />}
                     {tab === 'authoring' && <AuthoringView />}

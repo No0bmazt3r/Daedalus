@@ -488,6 +488,7 @@ export function FloatingWindow({
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => setIsPeek(!isPeek)}
+              aria-pressed={isPeek}
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border mr-1 ${
                 isPeek
                   ? 'bg-primary/20 text-[var(--primary-readable)] border-[var(--primary)]/30'

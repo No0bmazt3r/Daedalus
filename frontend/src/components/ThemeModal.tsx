@@ -49,6 +49,7 @@ import { useMinimizeToDock, useMinimizeOnOutsideClick } from './ui/floating-wind
 import { Skeleton } from './ui/skeleton'
 import { ThemeSelect } from './ui/theme-select'
 import { Collapse } from './ui/collapse'
+import { useConfirm } from './ui/confirm-dialog'
 
 interface ThemeModalProps {
   open: boolean
@@ -171,6 +172,7 @@ function Swatches({ colors }: { colors: string[] }) {
 
 export function ThemeModal({ open, onClose }: ThemeModalProps) {
   const theme = useTheme()
+  const [confirm, confirmDialog] = useConfirm()
   const {
     state,
     customThemes,
@@ -330,6 +332,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
       <div key={id} className="relative group/swatch">
         <button
           onClick={() => theme.selectTheme(id)}
+          aria-pressed={active}
           className={`w-full flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200 hover:scale-105 ${
             active
               ? 'border-[var(--primary)] theme-surface-strong shadow-md'
@@ -364,20 +367,20 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
         )}
         {pendingDelete === id && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border border-[var(--primary)] bg-black/85 p-1 text-center">
-            <span className="text-[9px] theme-text-muted leading-tight">Delete?</span>
+            <span className="text-[10px] theme-text-muted leading-tight">Delete?</span>
             <div className="flex gap-1">
               <button
                 onClick={() => {
                   theme.deleteCustomTheme(id)
                   setPendingDelete(null)
                 }}
-                className="px-1.5 py-0.5 text-[9px] rounded status-bad-fill text-white hover:status-bad-fill"
+                className="px-1.5 py-0.5 text-[10px] rounded status-bad-fill text-white hover:status-bad-fill"
               >
                 Yes
               </button>
               <button
                 onClick={() => setPendingDelete(null)}
-                className="px-1.5 py-0.5 text-[9px] rounded theme-surface-strong theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_16%,transparent)]"
+                className="px-1.5 py-0.5 text-[10px] rounded theme-surface-strong theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_16%,transparent)]"
               >
                 No
               </button>
@@ -390,6 +393,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
 
   return (
     <>
+      {confirmDialog}
       {/* `display: none` rather than an early return, so the children stay
           mounted: unmounting would reset the open tab, the harmony previews
           and every in-progress edit, and "restore" would mean "start over". */}
@@ -432,6 +436,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => setIsPeek(!isPeek)}
+              aria-pressed={isPeek}
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors text-xs font-medium border ${
                 isPeek
                   ? 'bg-primary/20 text-[var(--primary-readable)] border-[var(--primary)]/30'
@@ -787,6 +792,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
               <Card title="Save & Share" icon={<Save size={14} className="theme-accent" />}>
                 <div className="flex gap-2">
                   <input
+                    aria-label="Theme name"
                     type="text"
                     value={saveName}
                     maxLength={32}
@@ -834,6 +840,7 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
                 {importOpen && (
                   <div className="mt-2 space-y-2">
                     <textarea
+                      aria-label="Theme JSON to import"
                       rows={4}
                       value={importText}
                       placeholder="Paste theme JSON here..."
@@ -889,7 +896,9 @@ export function ThemeModal({ open, onClose }: ThemeModalProps) {
 
               <button
                 type="button"
-                onClick={theme.resetToDefault}
+                onClick={async () => {
+                  if (await confirm({ title: 'Reset the theme to default?', body: 'Your colours, fonts and effects are replaced with the defaults. Save it under Save & Share first if you want to keep it.', confirmLabel: 'Reset theme', danger: true })) theme.resetToDefault()
+                }}
                 className="w-full flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
               >
                 <RotateCcw size={12} /> Reset to Default

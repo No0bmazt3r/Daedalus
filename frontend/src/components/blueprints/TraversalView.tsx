@@ -288,6 +288,7 @@ export function TraversalView({ queryId }: { queryId: string | null }) {
               <button
                 key={h.hop}
                 onClick={() => setStep(h.hop)}
+                aria-pressed={step === h.hop}
                 className={`rounded-md border px-2.5 py-1.5 text-[11px] transition-colors ${
                   step === h.hop
                     ? 'theme-accent-border theme-surface-strong theme-text'

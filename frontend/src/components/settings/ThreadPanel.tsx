@@ -10,6 +10,7 @@ import { ThemeSelect } from '../ui/theme-select'
 import { FILTERS, STATUS } from '../thread/status'
 import { statusOf } from '../errors/ErrorPage'
 import { TabError } from '../errors/TabError'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * Settings → Ariadne's Thread: how the Thread labels a turn.
@@ -35,6 +36,7 @@ export function ThreadPanel(_props: { isPeek?: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<{ message: string; status: number } | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [confirm, confirmDialog] = useConfirm()
   const [saving, setSaving] = useState(false)
   // Bucket names are typed, so they save on blur rather than per keystroke.
   const [names, setNames] = useState<Record<TraceBucket, string> | null>(null)
@@ -75,6 +77,7 @@ export function ThreadPanel(_props: { isPeek?: boolean }) {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       {error && <ErrorNote message={error} />}
 
       <section className="space-y-2 rounded-lg border theme-border p-4">
@@ -83,7 +86,9 @@ export function ThreadPanel(_props: { isPeek?: boolean }) {
             <Network size={14} className="theme-text-muted" /> How the Thread labels an answer
           </h4>
           <button
-            onClick={() => save({ reset: true })}
+            onClick={async () => {
+              if (await confirm({ title: 'Reset Thread labels to defaults?', body: 'Your changes to how answers are labelled are discarded.', confirmLabel: 'Reset' })) save({ reset: true })
+            }}
             disabled={saving || isDefault}
             className="flex items-center gap-1 rounded-lg border theme-border px-2.5 py-1 text-[11px] theme-text-muted hover:theme-text disabled:opacity-40"
           >

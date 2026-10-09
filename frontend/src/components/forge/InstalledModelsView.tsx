@@ -167,6 +167,7 @@ function LocalModel({
           {hasArch && (
             <button
               onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
               title="Show the shape of the file on this disk."
               className="p-1.5 rounded-lg theme-text-muted hover:theme-text transition-colors"
             >
@@ -407,6 +408,7 @@ export function InstalledModelsView({
         <button
           key={entry.id}
           onClick={() => setSource(entry.id)}
+          aria-pressed={source === entry.id}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
             source === entry.id
               ? 'theme-accent-border theme-accent theme-surface-strong'
@@ -456,6 +458,7 @@ export function InstalledModelsView({
           <button
             key={entry.id}
             onClick={() => setPane(entry.id)}
+            aria-pressed={pane === entry.id}
             className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
               pane === entry.id
                 ? 'theme-accent theme-surface-strong'

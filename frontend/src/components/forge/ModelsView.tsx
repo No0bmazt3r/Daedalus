@@ -312,6 +312,7 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
         <div className="relative flex-1 min-w-0">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
           <input
+            aria-label="Search models"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={
@@ -347,6 +348,7 @@ export function ModelsView({ onManage }: { onManage?: () => void }) {
             <button
               key={s.id}
               onClick={() => setScope(s.id)}
+              aria-pressed={scope === s.id}
               title={s.hint}
               className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] transition-colors ${
                 scope === s.id ? 'theme-accent theme-surface-strong' : 'theme-text-muted hover:theme-text'

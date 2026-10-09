@@ -69,7 +69,7 @@ function Fact({ label, value, hint, tone, source }: {
         {source && source !== 'unknown' && (
           <span
             title={SOURCE_HINT[source]}
-            className={`text-[9px] uppercase tracking-wide ${
+            className={`text-[10px] uppercase tracking-wide ${
               source === 'verified'
                 ? 'theme-accent'
                 : source === 'measured'
@@ -298,6 +298,7 @@ export function EmbeddingRow({
           )}
           <button
             onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
             title={open ? 'Hide details' : 'Show details'}
             className="rounded-lg border theme-border p-1.5 theme-text-muted transition-colors hover:theme-text"
           >

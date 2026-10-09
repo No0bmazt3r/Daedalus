@@ -17,6 +17,7 @@ import {
   type McpStatus,
   type McpTestResult,
 } from '../../lib/mcpClient'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * Settings → Integrations.
@@ -80,9 +81,11 @@ function ServerRow({ server, onChange }: {
       setBusy(null)
     }
   }, [onChange, server.id])
+  const [confirm, confirmDialog] = useConfirm()
 
   return (
     <div className="rounded-xl border theme-border p-3 space-y-2">
+      {confirmDialog}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -141,8 +144,17 @@ function ServerRow({ server, onChange }: {
             {server.enabled ? <Check size={12} className="status-ok" /> : <X size={12} />}
           </button>
           <button
-            onClick={async () => onChange(await deleteMcpServer(server.id))}
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Remove ${server.label}?`,
+                body: 'Its saved connection and pinned tool list are deleted. To use it again you would add it from scratch.',
+                confirmLabel: 'Remove server',
+                danger: true,
+              })
+              if (ok) onChange(await deleteMcpServer(server.id))
+            }}
             title="Remove this server."
+            aria-label={`Remove ${server.label}`}
             className="p-1.5 rounded-lg border theme-border theme-text-muted hover:text-[var(--status-bad)] transition-colors"
           >
             <Trash2 size={12} />
@@ -311,6 +323,7 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium theme-text-muted">Label</label>
               <input
+                aria-label="Label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="how a tool call names it, e.g. filesystem"
@@ -324,6 +337,7 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium theme-text-muted">Command</label>
                 <input
+                  aria-label="Command"
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
                   placeholder="npx"
@@ -334,6 +348,7 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium theme-text-muted">Arguments</label>
                 <input
+                  aria-label="Arguments"
                   value={args}
                   onChange={(e) => setArgs(e.target.value)}
                   placeholder="-y @modelcontextprotocol/server-filesystem /path"
@@ -346,6 +361,7 @@ export function IntegrationsPanel({ isPeek }: { isPeek: boolean }) {
             <div className="flex flex-col gap-1.5 mt-3">
               <label className="text-xs font-medium theme-text-muted">URL</label>
               <input
+                aria-label="URL"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="http://localhost:3000/mcp"

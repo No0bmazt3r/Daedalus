@@ -43,6 +43,16 @@ class PrefixTest(unittest.TestCase):
                         return_value={**built, "document_prefix": "search_document: "}):
             self.assertEqual(em.index_state(config)["index_state"], "current")
 
+    def test_an_ingest_stamps_the_collection_it_wrote(self) -> None:
+        # Regression: the stamp step once passed the model as the config dict and failed every ingest.
+        from app.db import vector_store
+        em.record_index("nomic-embed-text", em.effective_dimensions(model="nomic-embed-text")[0],
+                        "2026-10-09T00:00:00Z", collection="stamp_probe",
+                        document_prefix=em.prefixes("nomic-embed-text")[1])
+        stamp = vector_store.describe("stamp_probe")
+        self.assertEqual(stamp["embedding_model"], "nomic-embed-text")
+        self.assertEqual(stamp["document_prefix"], "search_document: ")
+
 
 if __name__ == "__main__":
     unittest.main()

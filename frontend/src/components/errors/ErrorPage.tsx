@@ -141,6 +141,7 @@ export function ErrorPage({ code, detail, preview = false }: {
                 <button
                   key={c}
                   onClick={() => void navigate({ to: '/error/$code', params: { code: c } })}
+                  aria-current={Number(c) === code ? 'page' : undefined}
                   className={`rounded border theme-border px-1.5 py-0.5 hover:theme-text ${Number(c) === code ? 'theme-accent' : ''}`}
                 >
                   {c}

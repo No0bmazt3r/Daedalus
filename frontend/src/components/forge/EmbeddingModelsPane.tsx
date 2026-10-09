@@ -471,6 +471,7 @@ export function EmbeddingModelsPane({
           <div className="relative flex-1 min-w-[160px]">
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
             <input
+              aria-label="Filter embedding models"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by name or language…"
@@ -486,6 +487,7 @@ export function EmbeddingModelsPane({
             <button
               key={id}
               onClick={() => setFilter(id)}
+              aria-pressed={filter === id}
               className={`px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
                 filter === id
                   ? 'theme-accent-border theme-accent theme-surface-strong'
@@ -499,6 +501,7 @@ export function EmbeddingModelsPane({
 
         <div className="flex items-center gap-2">
           <input
+            aria-label="Embedding model tag to pull"
             value={typedTag}
             onChange={(e) => setTypedTag(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && typedTag.trim() && !pullingTag && pull(typedTag.trim(), true)}
@@ -604,6 +607,7 @@ export function EmbeddingModelsPane({
       <div className="rounded-xl border theme-border theme-surface">
         <button
           onClick={() => setShowCloud((v) => !v)}
+          aria-expanded={showCloud}
           className="flex w-full items-center gap-2 p-3 text-left"
         >
           {config.provider === 'cloud' ? (

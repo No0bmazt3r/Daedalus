@@ -69,6 +69,7 @@ function QueryPicker({
           <li key={r.query_id}>
             <button
               onClick={() => onSelect(r.query_id)}
+              aria-pressed={active}
               className={`w-full rounded-md border px-2.5 py-1.5 text-left transition-colors ${
                 active ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
               }`}
@@ -175,7 +176,10 @@ function Detail({ queryId }: { queryId: string | null }) {
                   {c.page_number ? ` · p${c.page_number}` : ''}
                   {c.section_title ? ` · ${c.section_title}` : ''}
                 </span>
-                <span className={`shrink-0 tabular-nums ${distanceTone(c.distance)}`}>
+                <span
+                  className={`shrink-0 tabular-nums ${distanceTone(c.distance)}`}
+                  title="Cosine distance. Lower is closer"
+                >
                   {c.distance != null ? c.distance.toFixed(4) : '-'}
                 </span>
               </div>
@@ -184,7 +188,7 @@ function Detail({ queryId }: { queryId: string | null }) {
                   This chunk is no longer in the corpus, so its text cannot be shown.
                 </p>
               ) : (
-                <p className="mt-1.5 whitespace-pre-wrap text-[10px] leading-relaxed theme-text opacity-85">
+                <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed theme-text opacity-85">
                   {c.text}
                 </p>
               )}

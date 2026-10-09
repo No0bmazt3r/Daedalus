@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Play, RotateCcw, AlertCircle, AlertTriangle, Loader2, Eraser, ChevronRight } from 'lucide-react'
+import { Play, RotateCcw, AlertCircle, AlertTriangle, Loader2, Eraser, ChevronRight, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
 import {
   startIngest, resumeIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
 } from '../../../lib/blueprintsClient'
 import { LEVEL_STYLE, bytes } from './shared'
+import { useConfirm } from '../../ui/confirm-dialog'
 
-export function RunPanel({ run, onRefresh }: { run: IngestRun; onRefresh: () => void }) {
+// Icon + word + colour, so a run's outcome never rests on colour alone.
+const STATUS_BADGE: Record<IngestRun['status'], { icon: typeof Loader2; cls: string }> = {
+  running: { icon: Loader2, cls: 'border-amber-400/40 bg-amber-400/10 text-amber-400' },
+  ok: { icon: CheckCircle2, cls: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-400' },
+  failed: { icon: XCircle, cls: 'border-rose-400/40 bg-rose-400/10 text-rose-400' },
+  cancelled: { icon: MinusCircle, cls: 'theme-border theme-text-muted' },
+}
+
+export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRun; onRefresh: () => void; defaultOpen?: boolean }) {
   const [events, setEvents] = useState<IngestEvent[]>([])
   const [level, setLevel] = useState<string>('')
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(defaultOpen)
   const live = run.status === 'running'
 
   useEffect(() => {
@@ -24,24 +33,28 @@ export function RunPanel({ run, onRefresh }: { run: IngestRun; onRefresh: () => 
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [run.run_id, run.status, level, live, onRefresh])
 
-  const tone =
-    run.status === 'ok' ? 'theme-accent'
-    : run.status === 'failed' ? 'text-rose-400'
-    : 'text-amber-400'
+  const badge = STATUS_BADGE[run.status] ?? STATUS_BADGE.cancelled
+  const StatusIcon = badge.icon
 
   return (
     <div className="rounded-lg border theme-border theme-card">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
-        <ChevronRight size={12} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-        {live && <Loader2 size={12} className="shrink-0 animate-spin text-amber-400" />}
-        <span className="min-w-0 flex-1 truncate text-[11px] theme-text">
-          <span className={tone}>{run.status}</span>
-          <span className="theme-text-muted">
-            {' · '}{run.kind} · {run.documents_done}/{run.documents_total} docs ·{' '}
-            {run.chunks_written} chunks · {run.vectors_written} vectors
-          </span>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:theme-surface-strong"
+      >
+        <ChevronRight size={12} className={`shrink-0 theme-text-muted transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className={`flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${badge.cls}`}>
+          <StatusIcon size={10} className={live ? 'animate-spin' : ''} /> {run.status}
         </span>
-        <span className="shrink-0 text-[10px] theme-text-muted">
+        <span className="min-w-0 flex-1 truncate text-[11px] theme-text-muted">
+          {run.kind} · {run.documents_done}/{run.documents_total} docs · {run.chunks_written} chunks ·{' '}
+          {run.vectors_written} vectors
+          {!open && run.error && <span className="text-rose-400"> · {run.error}</span>}
+        </span>
+        <span className="shrink-0 text-[10px] tabular-nums theme-text-muted" title={run.started_at}>
+          {new Date(run.started_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+          {' · '}
           {run.elapsed_ms != null ? `${(run.elapsed_ms / 1000).toFixed(1)}s` : run.stage}
         </span>
       </button>
@@ -52,11 +65,12 @@ export function RunPanel({ run, onRefresh }: { run: IngestRun; onRefresh: () => 
             <span className="theme-text-muted">
               {run.strategy} · {run.chunk_size}/{run.chunk_overlap} · {run.embedding_model ?? 'no model'}
             </span>
-            <span className="ml-auto flex gap-1">
+            <span role="group" aria-label="Filter by level" className="ml-auto flex gap-1">
               {['', 'error', 'warn', 'info', 'debug'].map((l) => (
                 <button
                   key={l || 'all'}
                   onClick={() => setLevel(l)}
+                  aria-pressed={level === l}
                   className={`rounded px-1.5 py-0.5 transition-colors ${
                     level === l ? 'theme-surface-strong theme-text' : 'theme-text-muted hover:theme-text'
                   }`}
@@ -66,8 +80,12 @@ export function RunPanel({ run, onRefresh }: { run: IngestRun; onRefresh: () => 
               ))}
             </span>
           </div>
-          {run.error && <p className="mb-1.5 text-[10px] leading-relaxed text-rose-400">{run.error}</p>}
-          <div className="max-h-60 space-y-0.5 overflow-y-auto no-scrollbar font-mono text-[10px]">
+          {run.error && (
+            <p className="mb-1.5 flex items-center gap-1.5 rounded-md border border-rose-400/30 bg-rose-400/10 px-2 py-1 text-[11px] text-rose-400">
+              <AlertCircle size={11} className="shrink-0" /> {run.error}
+            </p>
+          )}
+          <div className="max-h-60 space-y-0.5 overflow-y-auto font-mono text-[11px] leading-relaxed">
             {events.length === 0 ? (
               <p className="py-2 theme-text-muted">No events at this level.</p>
             ) : (
@@ -101,6 +119,18 @@ export function RunStep({
   const { corpus, embedding } = status
   const pending = corpus.chunks - corpus.embedded
   const readable = documents.filter((d) => d.extract_status === 'ok').length
+  const earlier = status.runs.filter((r) => r.run_id !== activeRun?.run_id)
+  const [confirm, confirmDialog] = useConfirm()
+
+  const clear = async () => {
+    const ok = await confirm({
+      title: 'Clear all vectors?',
+      body: `This deletes ${corpus.embedded} vectors from ${embedding.collection ?? 'the index'}. Chunks are kept, so Resume can embed them again. Track 1 can't answer until you do.`,
+      confirmLabel: 'Clear vectors',
+      danger: true,
+    })
+    if (ok) onAct('clear', () => clearVectors())
+  }
 
   return (
     <div className="space-y-3">
@@ -137,10 +167,10 @@ export function RunStep({
           ['Documents', corpus.documents, bytes(corpus.bytes)],
           ['Chunks', corpus.chunks, ''],
           ['Vectors', corpus.embedded, pending > 0 ? `${pending} pending` : ''],
-          ['Failed', corpus.failed_documents, 'unreadable'],
+          ['Unreadable', corpus.failed_documents, 'documents'],
         ] as const).map(([label, value, hint]) => (
           <div key={label} className="rounded-lg border theme-border theme-card px-3 py-2">
-            <div className="text-lg tabular-nums theme-text">{value}</div>
+            <div className={`text-lg tabular-nums ${label === 'Unreadable' && value > 0 ? 'text-rose-400' : 'theme-text'}`}>{value}</div>
             <div className="text-[10px] uppercase tracking-wider theme-text-muted">{label}</div>
             {hint && <div className="mt-0.5 text-[10px] theme-text-muted opacity-70">{hint}</div>}
           </div>
@@ -164,7 +194,7 @@ export function RunStep({
           <RotateCcw size={11} /> {busy === 'resume' ? 'Embedding…' : `Resume (${pending})`}
         </button>
         <button
-          onClick={() => onAct('clear', () => clearVectors())}
+          onClick={clear}
           disabled={!!busy || corpus.embedded === 0}
           title="Delete all vectors but keep the chunks. Do this when you change the embedding model"
           className="flex items-center gap-1.5 rounded-md border theme-border px-2.5 py-1 text-[11px] theme-text-muted transition-colors hover:text-rose-400 disabled:opacity-40"
@@ -181,15 +211,17 @@ export function RunStep({
 
       {activeRun && <RunPanel run={activeRun} onRefresh={onRefresh} />}
 
-      {status.runs.filter((r) => r.run_id !== activeRun?.run_id).length > 0 && (
+      {/* Collapsed: the header already says how each run ended, and the
+          logs are only worth the screen for the one being inspected. */}
+      {earlier.length > 0 && (
         <div className="space-y-1.5">
-          <h4 className="text-xs theme-text">Earlier runs</h4>
-          {status.runs
-            .filter((r) => r.run_id !== activeRun?.run_id)
-            .slice(0, 5)
-            .map((r) => <RunPanel key={r.run_id} run={r} onRefresh={onRefresh} />)}
+          <h4 className="text-xs theme-text">
+            Earlier runs <span className="theme-text-muted">({Math.min(earlier.length, 5)} of {earlier.length})</span>
+          </h4>
+          {earlier.slice(0, 5).map((r) => <RunPanel key={r.run_id} run={r} onRefresh={onRefresh} defaultOpen={false} />)}
         </div>
       )}
+      {confirmDialog}
     </div>
   )
 }

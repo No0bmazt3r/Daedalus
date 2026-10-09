@@ -119,6 +119,7 @@ function MessageActions({
       <button
         disabled
         className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
+        aria-label="Fork the chat from here (coming soon)"
         title="Fork the chat from here (coming soon)"
       >
         <GitFork size={14} />
@@ -126,6 +127,7 @@ function MessageActions({
       <button
         disabled
         className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
+        aria-label="Rerun this prompt (coming soon)"
         title="Rerun this prompt (coming soon)"
       >
         <RefreshCw size={14} />
@@ -190,12 +192,13 @@ function ComposerControls({
   return (
       <div className={`flex items-center justify-between px-3 pt-1 ${compact ? 'pb-2' : 'pb-3'}`}>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
+          {/* Not wired up yet, so disabled rather than inert (same rule as Fork/Rerun). */}
+          <Button variant="ghost" size="icon" disabled aria-label="Attach (coming soon)" title="Attach (coming soon)" className="w-8 h-8 rounded-full theme-text-muted disabled:opacity-40 disabled:cursor-not-allowed">
             <Plus size={18} />
           </Button>
           <div className="flex items-center rounded-lg p-0.5 border theme-border bg-[color-mix(in_srgb,var(--text-main)_6%,transparent)]">
-            <button className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] transition-colors duration-200">Chat</button>
-            <button className="px-3 py-1 text-xs font-medium theme-text-muted hover:theme-text transition-colors duration-200">System</button>
+            <button aria-pressed="true" className="px-3 py-1 text-xs font-medium rounded-md shadow-sm theme-text bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] transition-colors duration-200">Chat</button>
+            <button disabled title="System mode (coming soon)" className="px-3 py-1 text-xs font-medium theme-text-muted opacity-40 cursor-not-allowed">System</button>
           </div>
         </div>
 
@@ -271,12 +274,13 @@ function ComposerControls({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
+          <Button variant="ghost" size="icon" disabled aria-label="Voice input (coming soon)" title="Voice input (coming soon)" className="w-8 h-8 rounded-full theme-text-muted disabled:opacity-40 disabled:cursor-not-allowed">
             <Mic size={18} />
           </Button>
           <Button
             onClick={onSend}
             disabled={!canSend}
+            aria-label="Send"
             className="w-8 h-8 rounded-full theme-bg-primary zone-send-btn hover: theme-text-on-primary disabled:opacity-40 disabled:theme-track disabled:theme-text-muted p-0"
           >
             <ArrowUp size={18} strokeWidth={2.5} />

@@ -4,6 +4,7 @@ import {
   uploadDocument, updateDocument, type CorpusStatus, type CorpusDocument, type DocumentOrigin,
 } from '../../../lib/blueprintsClient'
 import { SOURCE_TYPES, SOURCE_LABEL, ORIGINS, ORIGIN_BADGE, bytes } from './shared'
+import { useConfirm } from '../../ui/confirm-dialog'
 
 export function ImportStep({
   documents, extraction, onChange, onDelete,
@@ -18,6 +19,17 @@ export function ImportStep({
   const [origin, setOrigin] = useState<DocumentOrigin>('reference')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirm, confirmDialog] = useConfirm()
+
+  const remove = async (d: CorpusDocument) => {
+    const ok = await confirm({
+      title: `Delete ${d.filename}?`,
+      body: `This removes the document${d.chunk_count ? `, its ${d.chunk_count} chunks and ${d.embedded_count} vectors` : ''}. To get it back you'd have to import and ingest it again.`,
+      confirmLabel: 'Delete document',
+      danger: true,
+    })
+    if (ok) onDelete(d.document_id)
+  }
   const [dragging, setDragging] = useState(false)
 
   const send = useCallback(
@@ -62,6 +74,7 @@ export function ImportStep({
           <button
             key={t.id}
             onClick={() => setSourceType(t.id)}
+            aria-pressed={sourceType === t.id}
             className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${
               sourceType === t.id
                 ? 'theme-accent-border theme-surface-strong theme-text'
@@ -79,6 +92,7 @@ export function ImportStep({
           <button
             key={o.id}
             onClick={() => setOrigin(o.id)}
+            aria-pressed={origin === o.id}
             title={o.hint}
             className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${
               origin === o.id
@@ -179,9 +193,10 @@ export function ImportStep({
                 )}
               </div>
               <button
-                onClick={() => onDelete(d.document_id)}
+                onClick={() => void remove(d)}
                 title="Delete this document, its chunks and its vectors"
-                className="shrink-0 rounded-md p-1 theme-text-muted transition-colors hover:text-rose-400"
+                aria-label={`Delete ${d.filename}`}
+                className="shrink-0 rounded-md p-1.5 theme-text-muted transition-colors hover:text-rose-400"
               >
                 <Trash2 size={12} />
               </button>
@@ -189,6 +204,7 @@ export function ImportStep({
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   )
 }

@@ -70,6 +70,7 @@ export function AnswerPanel({
         <button
           onClick={onClose}
           className="rounded-md p-1.5 theme-text-muted hover:theme-text hover:theme-surface"
+          aria-label="Close (Esc)"
           title="Close (Esc)"
         >
           <X size={14} />

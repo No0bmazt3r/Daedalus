@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **215 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **216 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -40,7 +40,7 @@ Shared, at the top of this folder:
 
 | File | Tests | What it pins |
 |---|---|---|
-| `test_embedding_prefixes.py` | 4 | Asymmetric embedders get their query and document prefixes — and the index knows which. |
+| `test_embedding_prefixes.py` | 5 | Asymmetric embedders get their query and document prefixes — and the index knows which. |
 | `test_graph_agent.py` | 16 | Track 2's agent loop, driven by a scripted model — no Ollama anywhere. |
 | `test_origin.py` | 11 | Document origin — this rig's own, or a reference from another installation. |
 | `test_replay.py` | 2 | Blueprints' Track 1 replay: a recorded vector query read back, never re-run. |

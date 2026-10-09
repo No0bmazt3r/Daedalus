@@ -55,6 +55,7 @@ export function LabelPanel({ queryId, initial }: { queryId: string; initial: Tra
         )}
       </div>
       <textarea
+        aria-label="Label note"
         value={note}
         onChange={(e) => setNote(e.target.value)}
         maxLength={2000}

@@ -80,6 +80,7 @@ export function ModelCard({
                 <button
                   key={v.id}
                   onClick={() => setPicked(v.id)}
+                  aria-pressed={v.id === row.id}
                   title={`${v.tag}${v.installed ? ' · installed' : ''}`}
                   className={`text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wide transition-colors ${
                     v.id === row.id
@@ -184,6 +185,7 @@ export function ModelCard({
           )}
           <button
             onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
             title="Show the inputs behind these numbers."
             className="p-1.5 rounded-lg theme-text-muted hover:theme-text transition-colors"
           >

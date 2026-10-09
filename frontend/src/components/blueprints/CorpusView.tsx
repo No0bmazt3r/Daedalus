@@ -8,6 +8,7 @@ import {
   type CorpusStatus, type CorpusDocument, type CorpusChunk,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
+import { bytes } from './ingest/shared'
 
 /**
  * The corpus — what Track 1 actually holds, MODULES.md §3.1.
@@ -56,19 +57,14 @@ import { Skeleton } from '../ui/skeleton'
  * text Replay resolves a retrieved id back to — one copy, three views of it.
  */
 
-function bytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
-
 function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="rounded-md border theme-border">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[10px]"
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[10px] transition-colors hover:theme-surface"
       >
         <ChevronRight size={10} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
         <span className="shrink-0 tabular-nums theme-text-muted">#{chunk.ordinal}</span>
@@ -89,10 +85,11 @@ function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
           }`}
           title={chunk.embedded ? `embedded with ${chunk.embedding_model}` : "no vector yet, so it can't be retrieved"}
         />
+        <span className="sr-only">{chunk.embedded ? 'embedded' : 'not embedded'}</span>
       </button>
       {open && (
         <div className="border-t theme-border px-2 py-1.5">
-          <p className="whitespace-pre-wrap text-[10px] leading-relaxed theme-text opacity-85">
+          <p className="whitespace-pre-wrap text-[11px] leading-relaxed theme-text opacity-85">
             {chunk.text}
           </p>
           <p className="mt-1.5 text-[10px] theme-text-muted">
@@ -105,7 +102,7 @@ function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
   )
 }
 
-export function CorpusView() {
+export function CorpusView({ onBuild }: { onBuild?: () => void }) {
   const [status, setStatus] = useState<CorpusStatus | null>(null)
   const [documents, setDocuments] = useState<CorpusDocument[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -156,10 +153,17 @@ export function CorpusView() {
           <p className="mt-2 text-xs theme-text">The corpus is empty.</p>
           <p className="mx-auto mt-1 max-w-md text-[11px] leading-relaxed theme-text-muted">
             Nothing has been ingested, so Track 1 has nothing to retrieve from and cannot answer a
-            knowledge question. That's expected, not an error. Import documents in the
-            <span className="theme-accent"> Build </span>
-            tab and they appear here with their chunks.
+            knowledge question. That's expected, not an error. Imported documents appear here
+            with their chunks.
           </p>
+          {onBuild && (
+            <button
+              onClick={onBuild}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border theme-accent-border px-3 py-1.5 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
+            >
+              Import documents in Build <ChevronRight size={11} />
+            </button>
+          )}
         </div>
       </div>
     )
@@ -178,7 +182,7 @@ export function CorpusView() {
           ['Unreadable', corpus.failed_documents, 'failed extraction'],
         ] as const).map(([label, value, hint]) => (
           <div key={label} className="rounded-lg border theme-border theme-card px-3 py-2">
-            <div className="text-lg tabular-nums theme-text">{value}</div>
+            <div className={`text-lg tabular-nums ${label === 'Unreadable' && value > 0 ? 'text-rose-400' : 'theme-text'}`}>{value}</div>
             <div className="text-[10px] uppercase tracking-wider theme-text-muted">{label}</div>
             <div className="mt-0.5 text-[10px] theme-text-muted opacity-70">{hint}</div>
           </div>
@@ -188,7 +192,12 @@ export function CorpusView() {
       {/* Stated rather than left as a missing tab. The asymmetry with Track 2 is
           a finding about the two approaches, and §5's comparison has to say it
           somewhere — better here, where somebody is looking for it. */}
-      <p className="text-[10px] leading-relaxed theme-text-muted">
+      <details className="group text-[11px] leading-relaxed theme-text-muted">
+        <summary className="flex cursor-pointer list-none items-center gap-1 hover:theme-text">
+          <ChevronRight size={11} className="transition-transform group-open:rotate-90" />
+          Why is there no Coverage tab for Track 1?
+        </summary>
+        <p className="mt-1 pl-4">
         Track 2 has a Coverage tab and this arm does not, because the two fail differently. An
         authored graph fails by <span className="theme-text">omission</span>, and omission over a
         fixed schema can be listed out. An anomaly type with no procedure attached is a question it
@@ -197,7 +206,8 @@ export function CorpusView() {
         edge and there is no list of the passages nobody wrote. The counts above are the part that
         <span className="theme-text"> is </span>
         checkable.
-      </p>
+        </p>
+      </details>
 
       <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
         <div className="space-y-1.5">
@@ -205,6 +215,7 @@ export function CorpusView() {
             <button
               key={d.document_id}
               onClick={() => load(d.document_id)}
+              aria-pressed={selected === d.document_id}
               className={`flex w-full items-start gap-2 rounded-lg border p-2.5 text-left transition-colors ${
                 selected === d.document_id
                   ? 'theme-accent-border theme-surface-strong'
@@ -239,6 +250,7 @@ export function CorpusView() {
                 <Search size={11} className="shrink-0 theme-text-muted" />
                 <input
                   value={filter}
+                  aria-label="Find text within these chunks"
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Find text within these chunks…"
                   className="min-w-0 flex-1 bg-transparent text-[11px] theme-text outline-none placeholder:opacity-50"

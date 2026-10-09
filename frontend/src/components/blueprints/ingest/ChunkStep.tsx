@@ -80,6 +80,7 @@ export function ChunkStep({
               <button
                 key={s.id}
                 onClick={() => setDraft((d) => ({ ...d, strategy: s.id }))}
+                aria-pressed={draft.strategy === s.id}
                 className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${
                   draft.strategy === s.id
                     ? 'theme-accent-border theme-surface-strong theme-text'

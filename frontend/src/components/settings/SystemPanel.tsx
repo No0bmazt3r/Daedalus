@@ -138,6 +138,7 @@ function LogsCard({ card }: { card: string }) {
 
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <input
+          aria-label="Search the log"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search the log…"

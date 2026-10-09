@@ -408,12 +408,11 @@ def _run(
     # ── stamp ──
     if vectors_written:
         try:
-            vector_store.stamp_index(
-                collection_name, model=model,
-                dimensions=embedding_models.effective_dimensions(model), at=_now(),
+            embedding_models.record_index(
+                model, embedding_models.effective_dimensions(model=model)[0], _now(),
+                collection=collection_name,
                 document_prefix=embedding_models.prefixes(model)[1],
             )
-            embedding_models.record_index(model=model, collection=collection_name)
             corpus_store.log(run_id, "stamp", f"{collection_name} stamped as {model}")
         except Exception as exc:  # noqa: BLE001 — an unstamped index is refused, not silent
             corpus_store.log(
@@ -575,12 +574,11 @@ def resume(document_id: str | None = None) -> dict[str, Any]:
 
         if landed:
             try:
-                vector_store.stamp_index(
-                    collection_name, model=model,
-                    dimensions=embedding_models.effective_dimensions(model), at=_now(),
+                embedding_models.record_index(
+                    model, embedding_models.effective_dimensions(model=model)[0], _now(),
+                    collection=collection_name,
                     document_prefix=embedding_models.prefixes(model)[1],
                 )
-                embedding_models.record_index(model=model, collection=collection_name)
                 corpus_store.log(run_id, "stamp", f"{collection_name} stamped as {model}")
             except Exception as exc:  # noqa: BLE001
                 corpus_store.log(run_id, "stamp", f"could not stamp: {exc}", level="error")

@@ -232,6 +232,7 @@ function ApiEndpoint({ ep, onManage }: { ep: ModelEndpoint; onManage: () => void
         </div>
         <button
           onClick={onManage}
+          aria-label="Test, edit or remove this endpoint."
           title="Test, edit or remove this endpoint."
           className="shrink-0 p-1.5 rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
         >

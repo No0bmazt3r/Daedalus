@@ -2,6 +2,7 @@ import { Palette, RotateCcw } from 'lucide-react'
 import { Switch } from '../ui/switch'
 import { useUiPrefs } from '../../contexts/UiPrefsContext'
 import { CHROME_SECTIONS, sectionChangedCount } from '../../lib/uiChrome'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * Settings → Appearance.
@@ -24,6 +25,7 @@ export function AppearancePanel({
   onOpenTheme?: () => void
 }) {
   const { chrome, setChrome, resetChromeSection, resetAllChrome } = useUiPrefs()
+  const [confirm, confirmDialog] = useConfirm()
 
   const card = `p-4 rounded-xl border theme-border transition-colors ${
     isPeek ? 'bg-transparent' : 'theme-surface'
@@ -33,6 +35,7 @@ export function AppearancePanel({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
+      {confirmDialog}
       <div>
         <h3 className="text-xl font-medium mb-1">Appearance</h3>
         <p className="text-sm theme-text-muted">
@@ -43,7 +46,9 @@ export function AppearancePanel({
           <p className="flex items-center gap-2 text-xs theme-text-muted mt-1.5">
             {changed} changed from the default.
             <button
-              onClick={resetAllChrome}
+              onClick={async () => {
+                if (await confirm({ title: `Reset ${changed} appearance settings?`, body: 'Everything you turned on or off here goes back to its default.', confirmLabel: 'Reset all' })) resetAllChrome()
+              }}
               className="underline underline-offset-2 hover:theme-text transition-colors"
             >
               reset all

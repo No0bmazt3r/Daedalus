@@ -3,8 +3,8 @@
   "model": "qwen3-embedding:0.6b",
   "endpoint_id": null,
   "dimensions": 1024,
-  "indexed_with": null,
-  "indexed_at": "2026-09-19T05:33:11+00:00",
+  "indexed_with": "qwen3-embedding:0.6b",
+  "indexed_at": "2026-10-09T14:02:51+00:00",
   "verified": {
     "nomic-embed-text": {
       "dimensions": 512,

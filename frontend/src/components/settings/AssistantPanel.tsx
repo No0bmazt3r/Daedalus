@@ -226,6 +226,7 @@ function PromptSection({ status, saving, save, confirm }: SectionProps) {
       {status.frozen && <FrozenNote />}
 
       <textarea
+        aria-label="System prompt"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={status.frozen}
@@ -366,6 +367,7 @@ function SafetySection({ status, saving, save, confirm }: SectionProps) {
         )}
         <div className="flex gap-2">
           <input
+            aria-label="Blocked phrase to add"
             value={phrase}
             onChange={(e) => setPhrase(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void addPhrase() }}

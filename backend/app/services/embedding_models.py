@@ -356,7 +356,8 @@ def write(
 
 
 def record_index(
-    model: str, dimensions: int | None, at: str, *, provider: str | None = None
+    model: str, dimensions: int | None, at: str, *, provider: str | None = None,
+    collection: str | None = None, document_prefix: str = "",
 ) -> dict[str, Any]:
     """Called by ingestion when it finishes. This is what makes the guard work.
 
@@ -378,8 +379,11 @@ def record_index(
     with _lock:
         current = read()
         provider = provider or current["provider"]
-        name = collection_name(provider, model)
-        vector_store.stamp_index(name, model=normalise_tag(model), dimensions=dimensions, at=at)
+        name = collection or collection_name(provider, model)
+        vector_store.stamp_index(
+            name, model=normalise_tag(model), dimensions=dimensions, at=at,
+            document_prefix=document_prefix,
+        )
         return _persist({
             **current,
             "indexed_with": model,

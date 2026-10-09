@@ -48,6 +48,7 @@ function ChatHeader({
         <button
           onClick={onFilter}
           className="shrink-0 rounded p-0.5 theme-text-muted opacity-0 transition-opacity hover:theme-text group-hover/header:opacity-100 focus-visible:opacity-100"
+          aria-label={`Show only questions from “${title}”`}
           title={`Show only questions from “${title}”`}
         >
           <ListFilter size={11} />
@@ -71,6 +72,7 @@ function QueryRow({
       <button
         data-qid={t.query_id}
         onClick={onSelect}
+        aria-pressed={selected}
         className={`w-full rounded-md border px-2.5 py-1.5 text-left transition-colors ${
           selected ? 'theme-accent-border theme-surface-strong' : comparing ? 'border-dashed theme-accent-border' : 'theme-border hover:theme-surface'
         }`}
@@ -100,6 +102,7 @@ function QueryRow({
         <button
           onClick={onCompare}
           className="absolute right-1.5 top-1 rounded p-0.5 theme-text-muted opacity-0 transition-opacity theme-card hover:theme-text group-hover/row:opacity-100 focus-visible:opacity-100"
+          aria-label="Compare with the open thread"
           title="Compare with the open thread"
         >
           <Columns2 size={11} />

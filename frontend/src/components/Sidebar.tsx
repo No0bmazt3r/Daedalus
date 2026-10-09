@@ -17,6 +17,7 @@ import { useSettings } from '../contexts/SettingsContext'
 import { useUiPrefs } from '../contexts/UiPrefsContext'
 import { sessionLabel, type ChatSession } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
+import { useConfirm } from './ui/confirm-dialog'
 
 interface SidebarProps {
   onClose: () => void;
@@ -66,6 +67,7 @@ function SessionRow({
   if (editing) {
     return (
       <input
+        aria-label="Chat title"
         ref={inputRef}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -264,6 +266,7 @@ function DataStores({
 
 export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onOpenBlueprints, onOpenThread, onOpenStore, activeStore }: SidebarProps) {
   const { sessions, activeSessionId, status, newChat, selectSession, rename, retitle, remove } = useSessions()
+  const [confirm, confirmDialog] = useConfirm()
   const { isIncognito } = useSettings()
   const { show } = useUiPrefs()
   const [filter, setFilter] = useState('')
@@ -281,6 +284,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
 
   return (
     <div className="flex flex-col h-full theme-sidebar zone-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
+      {confirmDialog}
       {/* Header. The close button stays even when the brand is hidden — losing
           the way to collapse the column is a different thing from tidying it. */}
       <div className="flex items-center justify-between p-3">
@@ -292,7 +296,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
         ) : <span />}
         <div className="flex items-center gap-1">
           {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="w-8 h-8 theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close sidebar" title="Close sidebar" className="w-8 h-8 theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]">
               <PanelLeftClose size={16} />
             </Button>
           )}
@@ -363,6 +367,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
 
           {searching && (
             <input
+              aria-label="Search chats"
               autoFocus
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -415,7 +420,15 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
                 onSelect={() => selectSession(session.session_id)}
                 onRename={(title) => void rename(session.session_id, title)}
                 onRetitle={() => void retitle(session.session_id)}
-                onDelete={() => void remove(session.session_id)}
+                onDelete={async () => {
+                  const ok = await confirm({
+                    title: `Delete "${sessionLabel(session)}"?`,
+                    body: 'The chat and all its messages are deleted for good.',
+                    confirmLabel: 'Delete chat',
+                    danger: true,
+                  })
+                  if (ok) void remove(session.session_id)
+                }}
               />
             ))}
           </div>
