@@ -197,8 +197,12 @@ export function GraphCanvas({
     if (rafRef.current === null) rafRef.current = requestAnimationFrame(tick)
   }, [tick])
 
+  // Clears the handle too: StrictMode mounts twice, and a cancelled frame
+  // left in the ref makes `kick` think the loop is still running, so it never
+  // restarts and the globe stays folded (invisible) forever.
   useEffect(() => () => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    rafRef.current = null
   }, [])
 
   /** Halt coasting and any turn-to-front, e.g. when the user grabs the globe. */
