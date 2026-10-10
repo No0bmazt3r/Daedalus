@@ -141,12 +141,23 @@ export interface ToolCatalogue {
 
 export type ToolMode = 'simple' | 'advanced';
 
+/** Fired after the mode changes, so Settings can show or hide Advanced-only panels. */
+export const TOOL_MODE_CHANGED_EVENT = 'daedalus:tool-mode-changed';
+
+/** The current mode, without the whole catalogue. */
+export const fetchToolMode = () =>
+  request<{ mode: ToolCatalogue['mode'] }>('/api/tools/policy').then((p) => p.mode.mode);
+
 /** Switch Simple ↔ Advanced. Takes effect on the next tool call. */
-export const setToolMode = (mode: ToolMode) =>
-  request<ToolCatalogue>('/api/tools/policy/mode', {
+export const setToolMode = async (mode: ToolMode) => {
+  const catalogue = await request<ToolCatalogue>('/api/tools/policy/mode', {
     method: 'POST',
     body: JSON.stringify({ mode }),
   });
+  // After the write, like `setRagTrack`: a refused change must not announce itself.
+  window.dispatchEvent(new CustomEvent(TOOL_MODE_CHANGED_EVENT, { detail: catalogue.mode.mode }));
+  return catalogue;
+};
 
 /** What a dispatched tool hands back. Never the raw value — see `citable`. */
 export interface ToolResult {

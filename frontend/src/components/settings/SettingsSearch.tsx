@@ -6,6 +6,8 @@ interface SettingsSearchProps {
   isAdmin: boolean
   /** The selected retrieval track — the other track's panel is not offered. */
   track?: string | null
+  /** Agent Tools' mode — Advanced-only panels are not offered in Simple. */
+  mode?: string | null
   onOpenPanel: (id: string) => void
   collapsed: boolean
 }
@@ -15,15 +17,15 @@ interface SettingsSearchProps {
  * so a panel is discoverable by what it does, not only by what it's called —
  * typing "vram" finds Hardware, "sqlite" finds Databases.
  */
-export function SettingsSearch({ isAdmin, track = null, onOpenPanel, collapsed }: SettingsSearchProps) {
+export function SettingsSearch({ isAdmin, track = null, mode = null, onOpenPanel, collapsed }: SettingsSearchProps) {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const results = useMemo(
-    () => searchSettingsPanels(query, isAdmin, track),
-    [query, isAdmin, track]
+    () => searchSettingsPanels(query, isAdmin, track, mode),
+    [query, isAdmin, track, mode]
   )
 
   // Keep the highlighted row in view during arrow-key navigation.

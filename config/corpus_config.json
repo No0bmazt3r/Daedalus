@@ -1,0 +1,7 @@
+{
+  "strategy": "recursive",
+  "chunk_size": 1500,
+  "chunk_overlap": 200,
+  "context_header": true,
+  "note": "architecture/04 step 4: 300-500 tokens with overlap. Sizes here are characters."
+}

@@ -48,6 +48,8 @@ export interface SettingsPanel {
    * until somebody switches — and switching is one click in Retrieval Track.
    */
   track?: 'vector' | 'graph';
+  /** Hidden while Agent Tools is in Simple mode, whose backend refuses what it configures. */
+  advancedOnly?: boolean;
 }
 
 /**
@@ -72,8 +74,8 @@ const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
   { id: 'system', label: 'System', adminOnly: true },
 ]);
 
-function panel(p: Omit<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' | 'track'> &
-  Partial<Pick<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' | 'track'>>): SettingsPanel {
+function panel(p: Omit<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' | 'track' | 'advancedOnly'> &
+  Partial<Pick<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' | 'track' | 'advancedOnly'>>): SettingsPanel {
   return Object.freeze({
     adminOnly: false,
     implemented: false,
@@ -152,7 +154,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   // Outside services this machine talks to during setup: search providers for
   // sourcing documents, and MCP servers for tools.
   panel({
-    id: 'search', label: 'Search', group: 'connections', icon: Globe, implemented: true,
+    id: 'search', label: 'Search', group: 'connections', icon: Globe, implemented: true, advancedOnly: true,
     keywords: [
       'search', 'web', 'internet', 'provider', 'searxng', 'duckduckgo', 'brave',
       'google', 'pse', 'tavily', 'serper', 'api', 'key', 'fallback', 'sourcing',
@@ -241,23 +243,25 @@ export function getGroupLabel(groupId: string): string {
 }
 
 /**
- * Whether a panel belongs to the selected retrieval track. `null` — the track
- * not known yet — hides both track panels rather than flashing the wrong one.
+ * Whether a panel belongs to the selected retrieval track and tool mode. `null`
+ * — not known yet — hides track and Advanced-only panels rather than flashing them.
  */
-export function trackVisible(p: SettingsPanel, track: string | null): boolean {
-  return !p.track || p.track === track;
+export function panelVisible(p: SettingsPanel, track: string | null, mode: string | null = null): boolean {
+  return (!p.track || p.track === track) && (!p.advancedOnly || mode === 'advanced');
 }
 
-/** Panels in a group, honouring admin visibility and the selected track. */
-export function panelsForGroup(groupId: string, isAdmin: boolean, track: string | null = null): SettingsPanel[] {
+/** Panels in a group, honouring admin visibility, the selected track and the tool mode. */
+export function panelsForGroup(
+  groupId: string, isAdmin: boolean, track: string | null = null, mode: string | null = null,
+): SettingsPanel[] {
   return SETTINGS_PANELS.filter(
-    (p) => p.group === groupId && (!p.adminOnly || isAdmin) && trackVisible(p, track)
+    (p) => p.group === groupId && (!p.adminOnly || isAdmin) && panelVisible(p, track, mode)
   );
 }
 
-export function visibleGroups(isAdmin: boolean, track: string | null = null): SettingsGroup[] {
+export function visibleGroups(isAdmin: boolean, track: string | null = null, mode: string | null = null): SettingsGroup[] {
   return SETTINGS_GROUPS.filter((g) => !g.adminOnly || isAdmin).filter(
-    (g) => panelsForGroup(g.id, isAdmin, track).length > 0
+    (g) => panelsForGroup(g.id, isAdmin, track, mode).length > 0
   );
 }
 
@@ -274,7 +278,7 @@ function normalize(value: string): string {
  * so "model default" finds AI Defaults while "model email" finds nothing.
  */
 export function searchSettingsPanels(
-  query: string, isAdmin: boolean, track: string | null = null,
+  query: string, isAdmin: boolean, track: string | null = null, mode: string | null = null,
 ): SettingsPanel[] {
   const normalized = normalize(query);
   if (!normalized) return [];
@@ -282,7 +286,7 @@ export function searchSettingsPanels(
 
   return SETTINGS_PANELS.filter((p) => {
     if (p.adminOnly && !isAdmin) return false;
-    if (!trackVisible(p, track)) return false;
+    if (!panelVisible(p, track, mode)) return false;
     const text = haystack(p);
     return terms.every((t) => text.includes(t));
   }).sort((a, b) => {

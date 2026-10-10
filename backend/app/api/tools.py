@@ -79,6 +79,7 @@ def try_tool(
 def get_policy() -> dict[str, Any]:
     """What is closed and what is switched off. Empty is the default for both."""
     return {
+        "mode": tool_policy_store.mode(),
         "locked": sorted(tool_policy_store.locked().values(), key=lambda p: p["effect"]),
         "unlockable": list(tool_policy_store.UNLOCKABLE),
         "disabled": sorted(tool_policy_store.disabled().values(), key=lambda t: t["tool"]),

@@ -7,7 +7,8 @@ import { useSessions } from '../contexts/SessionsContext'
 import { useSettings } from '../contexts/SettingsContext'
 import { sessionLabel } from '../lib/sessionsClient'
 import { logCatalogue, type LogStore } from '../lib/systemClient'
-import { SETTINGS_PANELS, getGroupLabel, trackVisible } from '../lib/settingsRegistry'
+import { SETTINGS_PANELS, getGroupLabel, panelVisible } from '../lib/settingsRegistry'
+import { useToolMode } from '../hooks/useToolMode'
 import { fetchRagConfig, type RagTrack } from '../lib/blueprintsClient'
 import { BLUEPRINT_TABS, type BlueprintsTab } from './blueprints/tabs'
 
@@ -186,6 +187,7 @@ export function CommandPalette({
   // rather than guessing — an unreadable setting is not a reason to offer
   // Track 2's views.
   const [track, setTrack] = useState<RagTrack | null>(null)
+  const mode = useToolMode()
   const { sessions, activeSessionId } = useSessions()
   const { isIncognito } = useSettings()
 
@@ -264,8 +266,8 @@ export function CommandPalette({
       keywords: 'preferences configuration window',
       run: () => actions.openSettings(),
     })
-    // Only the selected track's settings panel, as in the Settings nav.
-    for (const panel of SETTINGS_PANELS.filter((p) => trackVisible(p, track))) {
+    // Only the panels the Settings nav shows: selected track, and Advanced-only ones in Advanced.
+    for (const panel of SETTINGS_PANELS.filter((p) => panelVisible(p, track, mode))) {
       push({
         id: `go:settings:${panel.id}`, group: 'Go to', icon: panel.icon,
         crumb: 'Settings', label: panel.label,
@@ -320,7 +322,7 @@ export function CommandPalette({
     })
 
     return out
-  }, [actions, activeSessionId, isIncognito, sessions, stores, track])
+  }, [actions, activeSessionId, isIncognito, sessions, mode, stores, track])
 
   // Filtered, grouped, capped — and flattened in the same pass, because the
   // arrow keys walk the list as rendered and a second traversal to build that

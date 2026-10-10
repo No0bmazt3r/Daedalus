@@ -12,12 +12,12 @@ import {
   DEFAULT_SETTINGS_PANEL_ID,
   getSettingsPanel,
   panelsForGroup,
-  trackVisible,
   visibleGroups,
   type SettingsPanel,
 } from '../lib/settingsRegistry'
 import { fetchRagConfig, RAG_TRACK_CHANGED_EVENT, type RagTrack } from '../lib/blueprintsClient'
 import { subscribe } from '../lib/liveEvents'
+import { useToolMode } from '../hooks/useToolMode'
 import { SettingsSearch } from './settings/SettingsSearch'
 import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/KnowledgeBasePanel'
 import { SearchPanel } from './settings/SearchPanel'
@@ -78,13 +78,17 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
     }
   }, [])
 
+  const mode = useToolMode()
+
   // Sitting on the other track's panel when the track changes (or asking for
   // it from the palette) lands on the track switch instead of a hidden page.
   const shown = getSettingsPanel(activeTab)
   // `getSettingsPanel` follows redirects, so a removed panel's id (saved, or
   // from an old link) renders the panel it moved to.
   const resolved = shown?.id ?? DEFAULT_SETTINGS_PANEL_ID
-  const effectiveTab = shown && track && !trackVisible(shown, track) ? 'knowledge' : resolved
+  // Likewise an Advanced-only panel in Simple lands on the mode switch.
+  const hidden = shown && (shown.track ? track && shown.track !== track : shown.advancedOnly && mode === 'simple')
+  const effectiveTab = hidden ? (shown.track ? 'knowledge' : 'tools') : resolved
 
   // Asking for the panel already open is a no-op, which is what makes it safe
   // for the caller to leave the request set rather than having to clear it.
@@ -124,7 +128,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
 
   if (!open) return null
 
-  const groups = visibleGroups(isAdmin, track)
+  const groups = visibleGroups(isAdmin, track, mode)
   const activePanel = getSettingsPanel(effectiveTab)
   return (
     <FloatingWindow
@@ -173,6 +177,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
             {!isCompact && (
               <SettingsSearch
                 track={track}
+                mode={mode}
                 isAdmin={isAdmin}
                 onOpenPanel={openPanel}
                 collapsed={sidebar.collapsed}
@@ -197,7 +202,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
                   {/* Groups keep their identity in the strip as a divider —
                       a flat run of 15 buttons is unreadable. */}
                   {isCompact && <div className="h-5 w-px shrink-0 theme-border border-l mx-1 first:hidden" />}
-                  {panelsForGroup(group.id, isAdmin, track).map((panel) => (
+                  {panelsForGroup(group.id, isAdmin, track, mode).map((panel) => (
                     <NavButton
                       key={panel.id}
                       panel={panel}

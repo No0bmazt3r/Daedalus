@@ -1,6 +1,6 @@
 // The dynamic imports behind every floating window, in one place.
 //
-// Each window is its own chunk: the Forge, Blueprints (with d3-force), Settings
+// Each window is its own chunk: the Forge, Blueprints, Settings
 // and the rest are not needed to render the chat, so they are not in the bundle
 // that paints it. Kept apart from `components/LazyWindows.tsx` because a file
 // that exports both components and plain functions breaks React Fast Refresh

@@ -3,11 +3,10 @@ import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { Search, ArrowRight, ArrowLeft, Network, Table2, X } from 'lucide-react'
 import {
-  fetchGraphSchema, fetchNodes, fetchNode, NODE_TYPES, nodeOrigin,
+  fetchGraphSchema, fetchNodes, fetchNode, nodeOrigin,
   type GraphSchema, type GraphNode, type GraphEdge, type NodeDetail, type NodeType,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
-import { ThemeSelect } from '../ui/theme-select'
 import { NODE_STYLE, TypeBadge, NodeChip, EdgeLabel, shortId } from './nodeStyles'
 import { GraphCanvas } from './GraphCanvas'
 
@@ -49,20 +48,29 @@ const DETAIL_FIELDS: { key: keyof GraphNode; label: string }[] = [
   { key: 'step_number', label: 'step' },
 ]
 
-function Legend({ schema }: { schema: GraphSchema }) {
+/** The legend is also the type filter: click a type to show only it, click again for all. */
+function Legend({
+  schema, active, onToggle,
+}: { schema: GraphSchema; active: NodeType | null; onToggle: (type: NodeType) => void }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by node type">
       {schema.nodes.map(({ type, count }) => {
         const Icon = NODE_STYLE[type].icon
+        const on = active === type
         return (
-          <span
+          <button
             key={type}
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] ${NODE_STYLE[type].ring}`}
+            onClick={() => onToggle(type)}
+            aria-pressed={on}
+            title={on ? 'Show every type' : `Show only ${type}`}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] transition-opacity ${
+              NODE_STYLE[type].ring
+            } ${active && !on ? 'opacity-40 hover:opacity-80' : ''}`}
           >
             <Icon size={11} className={NODE_STYLE[type].tint} />
             <span className="theme-text">{type}</span>
             <span className="theme-text-muted">{count}</span>
-          </span>
+          </button>
         )
       })}
     </div>
@@ -238,7 +246,11 @@ export function GraphView() {
     // is what makes maximizing actually enlarge the graph rather than adding
     // empty space beneath it.
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      {schema ? <Legend schema={schema} /> : <Skeleton className="h-8 w-full" />}
+      {schema ? (
+        <Legend schema={schema} active={type} onToggle={(t) => setType((cur) => (cur === t ? null : t))} />
+      ) : (
+        <Skeleton className="h-8 w-full" />
+      )}
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
@@ -251,26 +263,13 @@ export function GraphView() {
             className="w-full rounded-md border theme-border theme-card py-1.5 pl-8 pr-2 text-xs theme-text outline-none focus:theme-accent-border"
           />
         </div>
-        {/* Was a native `<select>` carrying a `theme-select` class that does not
-            exist in the stylesheet — so it was an unthemed OS menu wearing a
-            classname that looked like it had been handled. */}
-        <ThemeSelect
-          size="sm"
-          ariaLabel="Filter by node type"
-          value={type ?? ''}
-          onChange={(v) => setType((v || null) as NodeType | null)}
-          options={[
-            { value: '', label: 'All types' },
-            ...NODE_TYPES.map((t) => ({ value: t, label: t })),
-          ]}
-          className="w-40 shrink-0"
-        />
         <div className="flex shrink-0 overflow-hidden rounded-md border theme-border">
           {([['diagram', Network], ['table', Table2]] as const).map(([id, Icon]) => (
             <button
               key={id}
               onClick={() => setView(id)}
               aria-pressed={view === id}
+              aria-label={id === 'diagram' ? 'Diagram view' : 'List view'}
               title={id === 'diagram' ? 'Diagram: how nodes connect' : 'List: every node, grouped'}
               className={`px-2 py-1.5 transition-colors ${
                 view === id ? 'theme-bg-primary theme-text-on-primary' : 'theme-text-muted hover:theme-text'

@@ -628,8 +628,24 @@ def provider_chain(config: dict[str, Any] | None = None) -> list[str]:
     return chain
 
 
+def _refuse_in_simple_mode() -> None:
+    """Simple mode (Settings → Agent Tools) switches web search off entirely.
+
+    Same fail-closed reading as the tool registry: an unreadable mode is Simple.
+    """
+    from ..db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
+
+    try:
+        simple = tool_policy_store.mode()["mode"] == "simple"
+    except Exception:  # noqa: BLE001 — see above
+        simple = True
+    if simple:
+        raise SearchDisabled("web search is off in Simple mode; switch Agent Tools to Advanced")
+
+
 def search(query: str, count: int | None = None) -> dict[str, Any]:
     """Run the chain until one provider answers, and report every attempt."""
+    _refuse_in_simple_mode()
     query = (query or "").strip()
     if not query:
         raise SearchError("a query is required")
@@ -692,6 +708,7 @@ def test_provider(provider_id: str, query: str | None = None) -> dict[str, Any]:
     "is *this* provider configured correctly", and a chain that quietly answered
     from a different provider would report a pass for a broken key.
     """
+    _refuse_in_simple_mode()
     if not known(provider_id):
         raise SearchError(f"unknown provider {provider_id!r}")
 

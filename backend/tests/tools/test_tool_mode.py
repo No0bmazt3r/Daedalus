@@ -85,6 +85,15 @@ class ToolModeTest(unittest.TestCase):
             self.assertEqual(sensors, set(registry._FALLBACK_SENSOR_TOOLS))
             self.assertEqual(agent_tools.call("get_current_time", {})["status"], "refused")
 
+    def test_simple_switches_web_search_off(self) -> None:
+        from app.services import web_search  # noqa: PLC0415
+
+        tool_policy_store.set_mode("simple")
+        with self.assertRaises(web_search.SearchDisabled):
+            web_search.search("anything")
+        with self.assertRaises(web_search.SearchDisabled):
+            web_search.test_provider("duckduckgo")
+
     def test_bad_mode_is_rejected(self) -> None:
         with self.assertRaises(tool_policy_store.ToolPolicyError):
             tool_policy_store.set_mode("expert")

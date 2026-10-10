@@ -395,7 +395,7 @@ function ModeSwitch({ mode, onChange, busy }: { mode: Mode; onChange: (m: Mode) 
     <div
       role="radiogroup"
       aria-label="Agent Tools mode"
-      title="Simple: only the answering tools can run. Advanced: every tool, under your switches and locks."
+      title="Simple: only the answering tools can run, and web search (Settings → Search) is off. Advanced: every tool, under your switches and locks."
       className={`inline-flex p-0.5 rounded-lg border theme-border shrink-0 ${busy ? 'opacity-60 pointer-events-none' : ''}`}
     >
       {(['simple', 'advanced'] as const).map((m) => (
