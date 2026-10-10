@@ -181,7 +181,7 @@ export interface EmbeddingConfig {
 }
 
 /** One progress line, as `ollama_client._normalise_pull_event` shapes it. */
-export interface PullEvent {
+interface PullEvent {
   status?: string;
   completed_bytes?: number | null;
   total_bytes?: number | null;

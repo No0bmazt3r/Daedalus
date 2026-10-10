@@ -102,7 +102,7 @@ export const KEYBIND_ACTIONS: readonly KeybindAction[] = KEYBIND_CATEGORIES.flat
  * Option key sets the AltGraph state exactly like a Mac's, so it needs the same
  * carve-out in `isAltGrEvent`.
  */
-export const IS_MAC =
+const IS_MAC =
   typeof navigator !== 'undefined' &&
   (/Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || ''));
 
@@ -122,7 +122,7 @@ export const IS_MAC =
  * a deliberate `ctrl+alt+<char>` typed with the right Alt is unreachable. Use
  * the left one.
  */
-export function isAltGrEvent(e: KeyboardEvent, isMac = IS_MAC): boolean {
+function isAltGrEvent(e: KeyboardEvent, isMac = IS_MAC): boolean {
   return (
     !isMac &&
     !!e.ctrlKey &&

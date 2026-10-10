@@ -40,7 +40,7 @@ import { useLiveRefresh } from '../hooks/useLiveRefresh';
  * would leave an empty untitled row in the sidebar forever.
  */
 
-export interface DisplayMessage {
+interface DisplayMessage {
   key: string;
   role: 'user' | 'assistant';
   content: string;
@@ -58,7 +58,7 @@ export interface DisplayMessage {
   phase?: string;
 }
 
-export type SessionsStatus = 'loading' | 'ready' | 'offline';
+type SessionsStatus = 'loading' | 'ready' | 'offline';
 
 interface SessionsContextValue {
   sessions: ChatSession[];

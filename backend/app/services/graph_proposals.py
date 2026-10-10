@@ -58,7 +58,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..db import corpus_store, paths, sqlite_util
-from . import graph_authoring, knowledge_graph as kg, ollama_client
+from ..db.sqlite_util import utc_now as _now
+from . import graph_authoring, ollama_client
+from . import knowledge_graph as kg
 
 # The construction bottleneck, bounded. Extraction is one model call per chunk,
 # so an unbounded run over a real corpus is minutes of GPU and hundreds of
@@ -75,10 +77,6 @@ _active: dict[str, Any] = {"run_id": None}
 
 class ProposalError(RuntimeError):
     """The run cannot start, or a decision cannot be applied."""
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _connect() -> Any:

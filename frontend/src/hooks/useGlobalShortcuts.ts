@@ -28,7 +28,7 @@ import {
  * everywhere, and so is any combo with Ctrl or Alt, which cannot be produced by
  * typing prose.
  */
-export interface ShortcutHandlers {
+interface ShortcutHandlers {
   toggle_sidebar: () => void;
   search_chats: () => void;
   focus_input: () => void;

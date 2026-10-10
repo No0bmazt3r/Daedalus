@@ -44,11 +44,18 @@ from __future__ import annotations
 
 import hashlib
 import threading
-from datetime import datetime, timezone
 from typing import Any, Callable
 
 from ..db import corpus_store, paths, vector_store
-from . import chunking, corpus_config, embedding_models, extraction, live_events, ollama_client
+from ..db.sqlite_util import utc_now as _now
+from . import (
+    chunking,
+    corpus_config,
+    embedding_models,
+    extraction,
+    live_events,
+    ollama_client,
+)
 
 # How many chunks to embed between progress writes. Small enough that the UI
 # moves, large enough that the run is not dominated by SQLite round trips.
@@ -67,10 +74,6 @@ class IngestionError(RuntimeError):
 
 def active_run() -> str | None:
     return _active["run_id"]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def content_hash(raw: bytes) -> str:

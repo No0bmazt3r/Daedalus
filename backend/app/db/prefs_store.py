@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timezone
 from typing import Any
 
 from . import migrations, sqlite_util
 from . import paths as _paths
+from .sqlite_util import utc_now as _now
 
 # Resolved centrally so every store's location is declared in one place and
 # can be overridden per-deployment.
@@ -44,10 +44,6 @@ def init_db() -> None:
             return
         migrations.migrate(STORE)
         _initialised = True
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class PrefTooLargeError(ValueError):

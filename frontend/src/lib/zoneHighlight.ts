@@ -13,7 +13,7 @@ const OVERLAY_CLASS = 'theme-zone-highlight';
  * `zone-*` classes the components carry, so they stay correct as long as the
  * components keep wearing them.
  */
-export const ZONE_MAP: Partial<Record<BaseKey | AdvancedKey | 'effect', string>> = {
+const ZONE_MAP: Partial<Record<BaseKey | AdvancedKey | 'effect', string>> = {
   // Base palette
   bg: 'main',
   text: '.zone-brand-text, main h1',

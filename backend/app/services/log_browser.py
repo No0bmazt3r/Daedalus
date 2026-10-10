@@ -28,7 +28,6 @@ from typing import Any, Final
 from ..db import sqlite_util
 from ..db.audit_store import LOG_TABLES
 from ..db.paths import AUDIT_DB, CHAT_DB, CORPUS_DB
-
 from ..db.sensor_store import SENSOR_DB
 
 # Store → (database file, tables that may be read).

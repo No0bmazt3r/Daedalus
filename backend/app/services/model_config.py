@@ -62,10 +62,10 @@ import json
 import os
 import tempfile
 import threading
-from datetime import datetime, timezone
 from typing import Any
 
 from ..db import paths
+from ..db.sqlite_util import utc_now as _now
 
 SCHEMA_VERSION = 1
 
@@ -85,10 +85,6 @@ _DEFAULT: dict[str, Any] = {
     "updated_by": None,
     "note": None,
 }
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def read() -> dict[str, Any]:

@@ -40,12 +40,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from datetime import datetime, timezone
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from typing import Any
 
 from ..db import audit_store, sqlite_util
 from ..db.paths import AUDIT_DB
+from ..db.sqlite_util import utc_now as _now
 from . import ollama_client
 
 # Roughly four characters per token for English prose — the usual rule of
@@ -95,10 +96,6 @@ _FIXTURE_CHUNKS = [
     "boron concentration from two independent samples taken at least ten minutes "
     "apart. Agreement within 5 ppm is required before dosing proceeds.",
 ]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _fixture_pack(target_tokens: int) -> str:

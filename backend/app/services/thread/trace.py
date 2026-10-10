@@ -11,7 +11,6 @@ from ..orchestration.evidence import RETRIEVAL_TOOLS
 from .common import counts, parse_json
 from .listing import summary
 
-
 _KIND_TABLE = {
     "query": "conversation_logs", "understanding": "conversation_logs", "tool": "tool_logs",
     "retrieval": "rag_logs", "context": "memory_logs", "model": "model_logs",

@@ -3,10 +3,8 @@
 // Conversation state lives on the server, not in this component tree and not
 // in browser storage. That is deliberate: the transcript is replayed into the
 // model's context on the next turn, so history the client could edit would be
-// a client-controlled input to the prompt.
-//
-// The same reason is why there is no `role` on `appendUserMessage` — assistant
-// turns are written by the orchestrator once it has actually produced them.
+// a client-controlled input to the prompt. Assistant turns are written by the
+// orchestrator once it has actually produced them.
 
 import { reportApiError } from './http';
 
@@ -25,7 +23,7 @@ export interface ChatSession {
   title_pending?: boolean;
 }
 
-export interface ChatSessionDetail extends ChatSession {
+interface ChatSessionDetail extends ChatSession {
   summary: string | null;
   summary_upto_seq: number;
 }
@@ -150,19 +148,6 @@ export async function getMessages(id: string): Promise<ChatMessage[]> {
     `${BASE}/${encodeURIComponent(id)}/messages`,
   );
   return data.messages;
-}
-
-/**
- * Append a user message.
- *
- * There is no assistant equivalent here, and that is load bearing — see the
- * note at the top of this file.
- */
-export function appendUserMessage(id: string, content: string): Promise<ChatMessage> {
-  return request<ChatMessage>(`${BASE}/${encodeURIComponent(id)}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ content }),
-  });
 }
 
 export function renameSession(id: string, title: string): Promise<ChatSessionDetail> {

@@ -32,7 +32,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * right — snap state is a gesture, not a preference.
  */
 
-export type SnapZone =
+type SnapZone =
   | 'left'
   | 'right'
   | 'maximize'
@@ -41,7 +41,7 @@ export type SnapZone =
   | 'bottom-left'
   | 'bottom-right'
 
-export interface Rect {
+interface Rect {
   left: number
   top: number
   width: number
@@ -57,7 +57,7 @@ const EDGE = 26
  */
 const CORNER = 140
 
-export function zoneFor(x: number, y: number, vw: number, vh: number): SnapZone | null {
+function zoneFor(x: number, y: number, vw: number, vh: number): SnapZone | null {
   const nearLeft = x <= EDGE
   const nearRight = x >= vw - EDGE
   const nearTop = y <= EDGE
@@ -75,7 +75,7 @@ export function zoneFor(x: number, y: number, vw: number, vh: number): SnapZone 
   return null
 }
 
-export function rectFor(zone: SnapZone, vw: number, vh: number): Rect {
+function rectFor(zone: SnapZone, vw: number, vh: number): Rect {
   const halfW = Math.round(vw / 2)
   const halfH = Math.round(vh / 2)
   switch (zone) {

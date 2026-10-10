@@ -55,7 +55,7 @@ import {
   type SyncStatus,
 } from '../lib/prefsClient';
 
-export type SaveResult = { ok: true } | { ok: false; error: string };
+type SaveResult = { ok: true } | { ok: false; error: string };
 
 interface ThemeContextType {
   state: ThemeState;

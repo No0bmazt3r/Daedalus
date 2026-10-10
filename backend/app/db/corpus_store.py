@@ -34,10 +34,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import paths, sqlite_util
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+from .sqlite_util import utc_now as _now
 
 
 def new_id(prefix: str) -> str:

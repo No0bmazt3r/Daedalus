@@ -111,7 +111,7 @@ export const CHROME_SECTIONS: readonly ChromeSection[] = [
   },
 ];
 
-export const CHROME_TOGGLES: readonly ChromeToggle[] = CHROME_SECTIONS.flatMap((s) => s.toggles);
+const CHROME_TOGGLES: readonly ChromeToggle[] = CHROME_SECTIONS.flatMap((s) => s.toggles);
 
 /** What the app ships with, as a complete map. */
 export const CHROME_DEFAULTS: Record<ChromeKey, boolean> = Object.fromEntries(

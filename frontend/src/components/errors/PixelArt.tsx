@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
 // Grid palette: each letter is a theme colour, '.' is empty.
-export const COLOURS: Record<string, string> = {
+const COLOURS: Record<string, string> = {
   a: 'var(--primary)',
   t: 'var(--text-main)',
   m: 'var(--text-muted)',

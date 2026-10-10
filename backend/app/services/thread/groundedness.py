@@ -7,7 +7,8 @@ from typing import Any
 from ...db import audit_store, chat_store
 from .. import thread_settings
 from ..orchestration import numbers
-from .common import counts as turn_counts, parse_json
+from .common import counts as turn_counts
+from .common import parse_json
 from .listing import status
 
 # The validator's threshold for a count that is not a measurement (`_SMALL_INT`).

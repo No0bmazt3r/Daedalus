@@ -62,8 +62,8 @@ left out).
 | M2 Knowledge ingestion | 4 | 37 / 43 | 86%\* | Pipeline built, with categories and rig/reference origin; **2 documents ingested** |
 | M3 Deterministic tool layer | 8 | 31 / 31 | 100% | Sensor tools, both tracks' retrieval, effect/track/argument gates |
 | M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested and the lab machine unconfirmed |
-| M5 Orchestration | 7 | 21 / 23 | 91% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers |
-| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 15 / 20 | 75% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
+| M5 Orchestration | 7 | 22 / 23 | 96% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers |
+| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 16 / 20 | 80% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
 | M7 Observability | 10 | 5 / 6 | 83% | Every turn fully logged on one `query_id`; read back in Ariadne's Thread |
 | M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** The query set, labels and runs wait on the corpus |
 | M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |

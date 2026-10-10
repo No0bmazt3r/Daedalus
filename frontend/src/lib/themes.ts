@@ -69,17 +69,17 @@ export interface ThemeState {
 
 export type SkeletonStyle = 'smooth' | 'pixel';
 
-export const DEFAULT_SKELETON: SkeletonStyle = 'pixel';
+const DEFAULT_SKELETON: SkeletonStyle = 'pixel';
 
 export const DEFAULT_THEME_ID = 'oled';
-export const DEFAULT_FONT: FontKey = 'minecraft';
-export const DEFAULT_DENSITY: DensityKey = 'comfortable';
-export const DEFAULT_UI_SCALE: UiScale = '100';
+const DEFAULT_FONT: FontKey = 'minecraft';
+const DEFAULT_DENSITY: DensityKey = 'comfortable';
+const DEFAULT_UI_SCALE: UiScale = '100';
 export const MAX_CUSTOM_THEMES = 8;
 
 export const THEME_CHANGE_EVENT = 'daedalus-theme-change';
 
-export const FONT_MAP: Record<FontKey, string> = {
+const FONT_MAP: Record<FontKey, string> = {
   // Monocraft, bundled at src/assets/fonts and declared in index.css. It is
   // monospaced, so the fallbacks are too — a proportional fallback would
   // re-flow every table and log view if the woff2 ever failed to load.
@@ -340,7 +340,7 @@ export const THEMES: Theme[] = [
 ];
 
 /** Default background effect per built-in theme. */
-export const THEME_DEFAULT_PATTERN: Record<string, PatternKey> = {
+const THEME_DEFAULT_PATTERN: Record<string, PatternKey> = {
   oled: 'nexus',
   dark: 'nexus',
   light: 'nexus',
@@ -360,7 +360,7 @@ export const THEME_DEFAULT_PATTERN: Record<string, PatternKey> = {
 };
 
 /** Themes whose effect colour should not simply follow `primary`. */
-export const THEME_DEFAULT_EFFECT_COLOR: Record<string, string> = {
+const THEME_DEFAULT_EFFECT_COLOR: Record<string, string> = {
   midnight: '#ffffff',
   organs: '#451616',
   cute: '#ff8cb8',
@@ -368,14 +368,14 @@ export const THEME_DEFAULT_EFFECT_COLOR: Record<string, string> = {
 };
 
 /** Default effect intensity (0..1). Anything unlisted is full strength. */
-export const THEME_DEFAULT_INTENSITY: Record<string, number> = {
+const THEME_DEFAULT_INTENSITY: Record<string, number> = {
   midnight: 0.5,
   terminal: 0.8,
   organs: 0.65,
 };
 
 /** Themes that start with frosted glass on. */
-export const THEME_DEFAULT_FROSTED: Record<string, boolean> = {
+const THEME_DEFAULT_FROSTED: Record<string, boolean> = {
   lavender: true,
 };
 
@@ -394,7 +394,7 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } | nul
     : null;
 }
 
-export function hexToHSL(hex: string): [number, number, number] {
+function hexToHSL(hex: string): [number, number, number] {
   const rgb = hexToRgb(hex) || { r: 0, g: 0, b: 0 };
   const r = rgb.r / 255;
   const g = rgb.g / 255;
@@ -414,7 +414,7 @@ export function hexToHSL(hex: string): [number, number, number] {
   return [h * 360, s * 100, l * 100];
 }
 
-export function hslToHex(h: number, s: number, l: number): string {
+function hslToHex(h: number, s: number, l: number): string {
   const hh = ((h % 360) + 360) % 360;
   const ss = Math.max(0, Math.min(100, s)) / 100;
   const ll = Math.max(0, Math.min(100, l)) / 100;
@@ -448,13 +448,13 @@ export function isHex6(v: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(String(v || ''));
 }
 
-export interface SyntaxColors {
+interface SyntaxColors {
   bg: string; fg: string; keyword: string; string: string; comment: string;
   function: string; number: string; builtin: string; variable: string; params: string;
 }
 
 /** Derive a full syntax-highlighting ramp from the three anchor colours. */
-export function deriveSyntaxColors(colors: ThemeColors): SyntaxColors {
+function deriveSyntaxColors(colors: ThemeColors): SyntaxColors {
   const [fgH, fgS, fgL] = hexToHSL(colors.text);
   const [bgH, bgS, bgL] = hexToHSL(colors.bg);
   const [redH, redS] = hexToHSL(colors.primary || '#e06c75');
@@ -475,7 +475,7 @@ export function deriveSyntaxColors(colors: ThemeColors): SyntaxColors {
 }
 
 /** WCAG relative luminance. */
-export function relativeLuminance(hex: string): number {
+function relativeLuminance(hex: string): number {
   const rgb = hexToRgb(hex) || { r: 0, g: 0, b: 0 };
   const channel = (v: number) => {
     const c = v / 255;
@@ -485,7 +485,7 @@ export function relativeLuminance(hex: string): number {
 }
 
 /** WCAG contrast ratio between two colours, 1..21. */
-export function contrastRatio(a: string, b: string): number {
+function contrastRatio(a: string, b: string): number {
   const la = relativeLuminance(a);
   const lb = relativeLuminance(b);
   const [hi, lo] = la > lb ? [la, lb] : [lb, la];
@@ -503,7 +503,7 @@ export function contrastRatio(a: string, b: string): number {
  * genuinely legible — a fixed lightness fails on very light themes, where a
  * mid-tone complement washes out to barely 2:1.
  */
-export function deriveIncognitoColor(colors: ThemeColors): string {
+function deriveIncognitoColor(colors: ThemeColors): string {
   const [h, s] = hexToHSL(colors.primary);
   const [, , bgL] = hexToHSL(colors.bg);
   const isDark = bgL < 50;
@@ -676,7 +676,7 @@ interface StatusColors {
  * and saturated. Both directions clear WCAG AA for normal text against their
  * own background, which the mid-range Tailwind defaults do not.
  */
-export function deriveStatusColors(colors: ThemeColors): StatusColors {
+function deriveStatusColors(colors: ThemeColors): StatusColors {
   const isDark = relativeLuminance(colors.bg) < 0.5;
   return isDark
     ? {
@@ -715,7 +715,7 @@ const AA_CONTRAST = 4.5;
  * light one darkening. An accent that already passes is returned untouched, so
  * most themes see no change at all.
  */
-export function deriveReadableAccent(colors: ThemeColors): string {
+function deriveReadableAccent(colors: ThemeColors): string {
   if (contrastRatio(colors.primary, colors.bg) >= AA_CONTRAST) return colors.primary;
 
   const [h, s, startL] = hexToHSL(colors.primary);
@@ -795,7 +795,7 @@ export function deriveReadableText(colors: ThemeColors): string {
  * Applied to every theme, including generated ones, because a user-built theme
  * can land on the same problem and there is nowhere else to catch it.
  */
-export function deriveReadableMuted(colors: ThemeColors): string {
+function deriveReadableMuted(colors: ThemeColors): string {
   if (contrastRatio(colors.textMuted, colors.bg) >= AA_CONTRAST) return colors.textMuted;
 
   const [h, s, mutedL] = hexToHSL(colors.textMuted);
@@ -834,7 +834,7 @@ export function deriveReadableMuted(colors: ThemeColors): string {
  * Only two candidates, because a filled button wants maximum separation from
  * its background and anything in between is worse than both.
  */
-export function derivePrimaryContrast(colors: ThemeColors): string {
+function derivePrimaryContrast(colors: ThemeColors): string {
   const onBlack = contrastRatio('#000000', colors.primary);
   const onWhite = contrastRatio('#ffffff', colors.primary);
   return onBlack >= onWhite ? '#000000' : '#ffffff';
@@ -842,7 +842,7 @@ export function derivePrimaryContrast(colors: ThemeColors): string {
 
 // ── Applying a theme to the document ─────────────────────────────────────
 
-export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
+function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
   const s = document.documentElement.style;
   s.setProperty('--bg', colors.bg);
   s.setProperty('--sidebar', colors.sidebar);
@@ -890,7 +890,7 @@ export function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
   updateFavicon(colors.primary);
 }
 
-export function applyFontDensity(font: FontKey, density: DensityKey) {
+function applyFontDensity(font: FontKey, density: DensityKey) {
   const family = FONT_MAP[font] || FONT_MAP[DEFAULT_FONT];
   document.documentElement.style.setProperty('--font-family', family);
   // Monocraft is a bitmap face and wants antialiasing off to stay crisp; every
@@ -905,16 +905,16 @@ export function applyUiScale(scale: UiScale) {
   if (scale === '125') document.documentElement.classList.add('ui-scale-125');
 }
 
-export function applyBgEffectColor(color: string) {
+function applyBgEffectColor(color: string) {
   document.documentElement.style.setProperty('--bg-effect-color', color || '');
 }
 
-export function applyBgEffectIntensity(v: number) {
+function applyBgEffectIntensity(v: number) {
   const n = v === undefined || v === null || isNaN(v) ? 1 : Math.max(0, Math.min(1, Number(v)));
   document.documentElement.style.setProperty('--bg-effect-intensity', String(n));
 }
 
-export function applyBgEffectSize(v: number) {
+function applyBgEffectSize(v: number) {
   const n = v === undefined || v === null || isNaN(v) ? 1 : Math.max(0.2, Math.min(3, Number(v)));
   document.documentElement.style.setProperty('--bg-effect-size', String(n));
 }
@@ -927,15 +927,15 @@ export function applyBgEffectSize(v: number) {
  * border radius, a background grid, a stepped animation — and CSS can express
  * all of that from one selector without every skeleton having to read state.
  */
-export function applySkeletonStyle(style: SkeletonStyle) {
+function applySkeletonStyle(style: SkeletonStyle) {
   document.documentElement.dataset.skeleton = style;
 }
 
-export function applyFrostedGlass(on: boolean) {
+function applyFrostedGlass(on: boolean) {
   document.body.classList.toggle('theme-frosted', !!on);
 }
 
-export function applyReactive(on: boolean) {
+function applyReactive(on: boolean) {
   document.documentElement.style.setProperty('--bg-effect-reactive', on ? '1' : '0');
 }
 

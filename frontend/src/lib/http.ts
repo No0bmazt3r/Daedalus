@@ -17,7 +17,7 @@ export interface RequestOptions extends RequestInit {
 }
 
 /** An Error that also carries the HTTP status, for the error pages to read. */
-export type HttpError = Error & { status: number; errorId?: string };
+type HttpError = Error & { status: number; errorId?: string };
 
 function withStatus(message: string, status: number, errorId?: string): HttpError {
   return Object.assign(new Error(message), { status, errorId });

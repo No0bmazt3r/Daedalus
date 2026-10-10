@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
 from typing import Any, Callable, Final
 
 from ..db import (
@@ -55,16 +54,13 @@ from ..db import (
     tool_policy_store,
     vector_store,
 )
+from ..db.sqlite_util import utc_now as _now
 
 EXPORT_VERSION: Final = 1
 
 
 class MaintenanceError(RuntimeError):
     """A wipe or restore that could not be done, with a readable reason."""
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 # ── Export ────────────────────────────────────────────────────────────────────

@@ -7,12 +7,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadOnePref, savePref, PREF_SETTINGS_UI } from '../lib/prefsClient';
 
-export const SIDEBAR_DEFAULT_WIDTH = 220;
+const SIDEBAR_DEFAULT_WIDTH = 220;
 export const SIDEBAR_MIN_WIDTH = 150;
 export const SIDEBAR_MAX_WIDTH = 340;
 /** Drag narrower than this and the rail collapses instead of resisting. */
-export const SIDEBAR_COLLAPSE_THRESHOLD = 110;
-export const SIDEBAR_COLLAPSED_WIDTH = 60;
+const SIDEBAR_COLLAPSE_THRESHOLD = 110;
+const SIDEBAR_COLLAPSED_WIDTH = 60;
 
 /**
  * Below this container width the rail stops being a vertical sidebar and

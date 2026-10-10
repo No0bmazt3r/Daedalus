@@ -79,7 +79,7 @@ export interface GpuDevice {
 }
 
 /** Per-section freshness. Tiers and their rates live in the backend service. */
-export interface HardwareSectionMeta {
+interface HardwareSectionMeta {
   tier: 'static' | 'live' | 'slow';
   captured_at: string | null;
   age_seconds: number | null;

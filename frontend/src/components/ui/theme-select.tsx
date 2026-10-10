@@ -7,7 +7,7 @@ import {
   DropdownMenuTrigger,
 } from './dropdown-menu'
 
-export interface SelectOption<T extends string> {
+interface SelectOption<T extends string> {
   value: T
   label: string
 }

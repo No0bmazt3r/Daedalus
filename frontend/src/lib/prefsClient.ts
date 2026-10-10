@@ -17,7 +17,7 @@ export const PREF_FORGE_SHORTLIST = 'forge-shortlist';
 /** `{ enabled: boolean }`. The backend reads it too, so off is enforced. */
 export const PREF_CLOUD_MODELS = 'cloud-models';
 
-export type PrefKey =
+type PrefKey =
   | typeof PREF_THEME
   | typeof PREF_CUSTOM_THEMES
   | typeof PREF_UI_SCALE

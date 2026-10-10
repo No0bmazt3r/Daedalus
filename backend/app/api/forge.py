@@ -20,8 +20,14 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from ..services import benchmark as benchmark_service
+from ..services import (
+    embedding_models,
+    hardware,
+    live_events,
+    model_usage,
+    ollama_client,
+)
 from ..services import forge as forge_service
-from ..services import embedding_models, hardware, live_events, model_usage, ollama_client
 
 router = APIRouter(prefix="/api/forge", tags=["forge"])
 

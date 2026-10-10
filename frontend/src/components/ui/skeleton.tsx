@@ -17,7 +17,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
 }
 
 /** A labelled figure, as used in the hardware and model stat grids. */
-export function SkeletonStat() {
+function SkeletonStat() {
   return (
     <div className="space-y-1.5">
       <Skeleton className="h-2 w-16" />
@@ -48,7 +48,7 @@ export function SkeletonCard({ stats = 4, className = '' }: { stats?: number; cl
 }
 
 /** A list row with a leading label, a couple of figures and trailing buttons. */
-export function SkeletonRow() {
+function SkeletonRow() {
   return (
     <div className="flex items-start gap-3 p-3 rounded-xl border theme-border theme-surface">
       <Skeleton className="h-3 w-4 mt-1 shrink-0" />

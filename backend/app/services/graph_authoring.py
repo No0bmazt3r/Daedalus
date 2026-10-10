@@ -61,6 +61,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..db import paths, sqlite_util
+from ..db.sqlite_util import utc_now as _now
 from . import knowledge_graph as kg
 
 # One writer. Two concurrent edits would each build a candidate from the graph
@@ -76,10 +77,6 @@ def edge_key(source: str, edge_type: str, target: str) -> str:
 
 class AuthoringError(ValueError):
     """The edit is invalid, or would make the graph invalid. Nothing was written."""
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 # ── reading the file as data, not as a graph ────────────────────────────────

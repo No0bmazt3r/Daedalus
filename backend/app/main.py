@@ -21,15 +21,32 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
-    assistant, background_jobs, chat, corpus, embeddings, events, forge, graph, health, logs, maintenance,
-    mcp, prefs, providers, search, sessions, system, thread, tools,
+    assistant,
+    background_jobs,
+    chat,
+    corpus,
+    embeddings,
+    events,
+    forge,
+    graph,
+    health,
+    logs,
+    maintenance,
+    mcp,
+    prefs,
+    providers,
+    search,
+    sessions,
+    system,
+    thread,
+    tools,
 )
 from .db import migrations, paths, sqlite_util
-from .services import app_logs
+from .services import app_logs, chat_service, hardware, live_events
+
 # Aliased: `api.forge` is already imported above under that name, and the two
 # shadowing each other broke router registration at import time.
 from .services import forge as forge_service
-from .services import chat_service, hardware, live_events
 
 # The same records that go to stdout also go to a rotating file, so Settings →
 # System can read them back without a second terminal and a container name.

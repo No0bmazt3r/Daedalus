@@ -22,8 +22,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import graph_tools, knowledge_graph
 from ...db import vector_store
+from .. import graph_tools, knowledge_graph
 from .registry import Effect, Integrity, Param, ToolError, register
 
 # §7.2's cap, and the reason for it: retrieved chunks share the prompt with the
@@ -327,7 +327,8 @@ def graph_agent(query: str, limit: int) -> dict[str, Any]:
     taken as arguments: they are part of the frozen comparison, not something a
     caller may vary per query.
     """
-    from .. import graph_agent as agent, rag_config  # noqa: PLC0415 — avoids an import cycle at boot
+    from .. import graph_agent as agent  # noqa: PLC0415 — avoids an import cycle at boot
+    from .. import rag_config
 
     if not knowledge_graph.schema()["total_nodes"]:
         return {"data": {"nodes": [], "track": "graph"}, "detail": "the graph is empty"}

@@ -8,7 +8,7 @@
 import { request, streamEvents } from './http';
 import type { ChatMessage } from './sessionsClient';
 
-export interface ChatTimings {
+interface ChatTimings {
   /** Wall clock, what the operator waited through. */
   time_to_first_token_ms: number | null;
   total_inference_ms: number | null;
@@ -18,7 +18,7 @@ export interface ChatTimings {
 }
 
 /** One evidence label an answer may cite — `[S1]` a reading, `[D1]` a passage, `[G1]` a graph node. */
-export interface ChatCitation {
+interface ChatCitation {
   label: string;
   kind: 'sensor' | 'document' | 'graph';
   tool: string;
@@ -27,7 +27,7 @@ export interface ChatCitation {
 }
 
 /** Step 10's verdict. When `passed` is false the answer is the fixed fallback. */
-export interface ChatValidation {
+interface ChatValidation {
   passed: boolean;
   reasons: string[];
   unsupported_numbers: string[];
@@ -65,7 +65,7 @@ export function asEvidence(value: unknown): StoredEvidence | undefined {
   }
 }
 
-export interface ChatReply {
+interface ChatReply {
   query_id: string;
   session_id: string;
   /** The stored user turn, replacing the optimistic echo. */
@@ -99,7 +99,7 @@ export interface ChatReply {
 }
 
 /** One event from the answer stream. Exactly one `done` or `error` arrives. */
-export interface ChatProgress {
+interface ChatProgress {
   /**
    * In order: `understood` (steps 1–4), `evidence` (5–7), `generating` per
    * token, `validated` (10), then `done` or `error`. Streamed tokens are
@@ -165,7 +165,7 @@ export function activeChatModel(): Promise<ActiveChatModel> {
   return request<ActiveChatModel>('/api/chat/model');
 }
 
-export interface ChatStatus {
+interface ChatStatus {
   generating: boolean;
   model?: string;
   started_at?: number;

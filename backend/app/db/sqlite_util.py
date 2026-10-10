@@ -35,6 +35,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -201,3 +202,8 @@ def file_size(path: Path) -> int | None:
         except OSError:
             pass
     return total
+
+
+def utc_now() -> str:
+    """The timestamp format every store writes: UTC ISO-8601 to the second."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")

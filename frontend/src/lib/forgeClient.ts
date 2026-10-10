@@ -23,10 +23,10 @@ import { request, streamEvents, type EventStream } from './http';
  */
 export type Provenance = 'declared' | 'registry' | 'measured' | 'assumed' | 'unknown';
 
-export type FitVerdict = 'safe' | 'marginal' | 'will_not_fit' | 'cloud' | 'unknown';
+type FitVerdict = 'safe' | 'marginal' | 'will_not_fit' | 'cloud' | 'unknown';
 
 /** Where the model would actually run, which is why a verdict needs two pools. */
-export type Placement = 'gpu' | 'offload' | 'cpu' | 'none' | 'cloud' | 'unknown';
+type Placement = 'gpu' | 'offload' | 'cpu' | 'none' | 'cloud' | 'unknown';
 
 export interface MemoryEstimate {
   total_bytes: number;
@@ -200,7 +200,7 @@ export interface ModelTable {
   weights: Record<string, number>;
 }
 
-export interface TableOptions {
+interface TableOptions {
   contextTokens?: number;
 }
 
@@ -212,7 +212,7 @@ export function modelTable(opts: TableOptions = {}): Promise<ModelTable> {
   return request<ModelTable>(`/api/forge/models${query ? `?${query}` : ''}`);
 }
 
-export interface HuggingFaceResult {
+interface HuggingFaceResult {
   rows: ModelRow[];
   /** Non-null when the search could not run — offline is a normal state here. */
   error: string | null;
@@ -382,7 +382,7 @@ export function runBenchmark(
 
 // ── inspect one arbitrary tag ────────────────────────────────────────────────
 
-export interface InspectResult {
+interface InspectResult {
   row: ModelRow | null;
   /** Names the fix when a tag cannot be resolved — "no manifest for …", and so on. */
   error: string | null;
@@ -427,7 +427,7 @@ export interface ModelUsage {
   tokens_per_sec: LatencySummary;
 }
 
-export interface UsageReport {
+interface UsageReport {
   models: Record<string, ModelUsage>;
   totals: {
     models: number;

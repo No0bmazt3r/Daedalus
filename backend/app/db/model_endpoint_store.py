@@ -31,6 +31,7 @@ from typing import Any, Final
 
 from . import migrations, sqlite_util
 from .paths import PREFS_DB
+from .sqlite_util import utc_now as _now
 
 DB_PATH = PREFS_DB
 STORE = "prefs"
@@ -62,10 +63,6 @@ def init_db() -> None:
             return
         migrations.migrate(STORE)
         _initialised = True
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def new_endpoint_id() -> str:

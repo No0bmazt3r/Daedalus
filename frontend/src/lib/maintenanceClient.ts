@@ -32,7 +32,7 @@ export interface WipeCategory {
   grave: boolean;
 }
 
-export interface WipeResult {
+interface WipeResult {
   kind?: string;
   label?: string;
   count?: number;
@@ -42,7 +42,7 @@ export interface WipeResult {
   total?: number;
 }
 
-export interface ImportResult {
+interface ImportResult {
   ok: boolean;
   restored: Record<string, number>;
   skipped: string[];
@@ -127,7 +127,7 @@ export interface ManagedContainer {
   error: string | null;
 }
 
-export interface ContainerStatus {
+interface ContainerStatus {
   control_available: boolean;
   containers: ManagedContainer[];
 }

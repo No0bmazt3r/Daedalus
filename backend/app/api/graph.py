@@ -33,9 +33,14 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from ..db import audit_store, paths, sqlite_util
-from ..services import graph_seed
+from ..services import (
+    graph_authoring,
+    graph_proposals,
+    graph_seed,
+    rag_config,
+    reranker,
+)
 from ..services import knowledge_graph as kg
-from ..services import graph_authoring, graph_proposals, rag_config, reranker
 
 router = APIRouter(prefix="/api", tags=["blueprints"])
 

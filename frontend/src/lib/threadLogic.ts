@@ -142,14 +142,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** An evidence timestamp in parts: `2026-09-12 16:15:52 UTC (00:15 site time)`. */
 export interface Moment { date: string; utc: string; site?: string }
 
-export function parseMoment(text: string): Moment | null {
+function parseMoment(text: string): Moment | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}:\d{2})(?::\d{2})?(?:\.\d+)? UTC(?: \((\d{1,2}:\d{2}) site time\))?$/.exec(text.trim())
   if (!m) return null
   return { date: `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}`, utc: m[4], site: m[5] }
 }
 
 /** `12 Sep, 16:15 UTC (00:15 site)`, or the text unchanged if it is not a timestamp. */
-export function shortTime(text: string): string {
+function shortTime(text: string): string {
   const t = parseMoment(text)
   if (!t) return text
   return `${t.date}, ${t.utc} UTC${t.site ? ` (${t.site} site)` : ''}`
@@ -159,13 +159,13 @@ export function shortTime(text: string): string {
  * A window, as short as it can be said: one date when both ends share it.
  * `12 Sep · 16:15–17:15 UTC (00:15–01:15 site)`.
  */
-export function timeRange(from: string, to: string): string {
+function timeRange(from: string, to: string): string {
   const { main, site } = rangeParts(from, to)
   return site ? `${main} (${site})` : main
 }
 
 /** The same window in two parts, so a narrow header can put site time on its own line. */
-export function rangeParts(from: string, to: string): { main: string; site?: string } {
+function rangeParts(from: string, to: string): { main: string; site?: string } {
   const a = parseMoment(from)
   const b = parseMoment(to)
   if (!a || !b || a.date !== b.date) return { main: `${shortTime(from)} → ${shortTime(to)}` }
@@ -175,8 +175,8 @@ export function rangeParts(from: string, to: string): { main: string; site?: str
   }
 }
 
-export interface EvidenceRow { label: string; value: string; when?: Moment | string }
-export interface ParsedEvidence {
+interface EvidenceRow { label: string; value: string; when?: Moment | string }
+interface ParsedEvidence {
   title: string
   subtitle?: string
   /** For a window: its UTC span and its site-time span, for a two-line header. */

@@ -83,7 +83,7 @@ export interface GraphEdge {
   to: string;
 }
 
-export interface NodeList {
+interface NodeList {
   available: true;
   nodes: GraphNode[];
   /** Only edges with both endpoints in `nodes` — what the diagram can draw. */
@@ -650,9 +650,9 @@ export const fetchRunEvents = (runId: string, level?: string) =>
 
 // ── graph authoring (Track 2) ────────────────────────────────────────────────
 
-export interface GraphFieldSpec { name: string; hint: string }
-export interface GraphNodeTypeSpec { id: NodeType; id_prefix: string; fields: GraphFieldSpec[] }
-export interface GraphEdgeTypeSpec { id: EdgeType; from: NodeType; to: NodeType }
+interface GraphFieldSpec { name: string; hint: string }
+interface GraphNodeTypeSpec { id: NodeType; id_prefix: string; fields: GraphFieldSpec[] }
+interface GraphEdgeTypeSpec { id: EdgeType; from: NodeType; to: NodeType }
 
 export interface GraphSchemaSpec {
   node_types: GraphNodeTypeSpec[];

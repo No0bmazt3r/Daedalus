@@ -498,7 +498,9 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       — the summary is replayed into every later prompt and is not evidence — and
       the validator counts the summary as history. One `memory_logs` row
       (`kind='summary'`) per run. qwen3:1.7b folds 26 turns in ~20 s
-- [ ] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values
+- [x] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values —
+      `services/token_calibration.py` takes the median measured ratio per model (audit
+      migration 008 logs `prompt_chars`); falls back to 4 until real chat turns exist
 - [x] Response validator — empty · too long · a number absent from the evidence ·
       a citation label the pack never issued · a first-person control claim.
       A failed answer is replaced by §7.1's fallback; the model's text is kept
@@ -627,7 +629,9 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       for real chat queries now, not only for seeded ones
 
 ### Routing
-- [ ] Config/CLI flag to point the same UI at either track — required for a fair replay
+- [x] Config/CLI flag to point the same UI at either track — required for a fair replay.
+      `config/rag_config.json` `track` (set from the UI through `PUT /api/rag/config`)
+      and `cli_eval run --arms` for the evaluation
 
 ### Store plumbing
 - [x] ChromaDB persisted under `data/chroma` — embedded in the API process since

@@ -42,12 +42,12 @@ export function groupRows(rows: ModelRow[], starrable: boolean): ModelGroup[] {
  * candidate then reaches everyone who has not removed it, and "what did you
  * change?" has an answer.
  */
-export interface ShortlistPref {
+interface ShortlistPref {
   added: string[]
   removed: string[]
 }
 
-export function isShortlistPref(v: unknown): v is ShortlistPref {
+function isShortlistPref(v: unknown): v is ShortlistPref {
   if (!v || typeof v !== 'object') return false
   const o = v as Record<string, unknown>
   return Array.isArray(o.added) && Array.isArray(o.removed)

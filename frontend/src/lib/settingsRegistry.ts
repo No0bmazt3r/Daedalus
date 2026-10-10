@@ -26,7 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export interface SettingsGroup {
+interface SettingsGroup {
   id: string;
   label: string;
   adminOnly?: boolean;
@@ -62,7 +62,7 @@ export interface SettingsPanel {
  * rather than kept as two entry points to one screen; `REDIRECTS` sends their
  * old ids somewhere sensible.
  */
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
+const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
   { id: 'general', label: 'General' },
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'assistant', label: 'Assistant' },

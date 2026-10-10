@@ -22,7 +22,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react'
  * whatever opened it on close.
  */
 
-export interface ConfirmDialogProps {
+interface ConfirmDialogProps {
   open: boolean
   title: string
   /** What will happen. Shown as body copy, so it can be a sentence or two. */

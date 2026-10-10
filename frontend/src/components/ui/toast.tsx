@@ -6,7 +6,7 @@ import { API_ERROR_EVENT, type ApiErrorDetail } from '../../lib/http'
 type Action = { label: string; onClick: () => void }
 
 /** The toast itself, with no positioning: `Toast` and `ToastHost` place it. */
-export function ToastCard({
+function ToastCard({
   tone, title, body, action, footer, onClose,
 }: {
   tone: 'ok' | 'bad'

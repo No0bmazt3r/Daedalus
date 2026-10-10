@@ -48,7 +48,7 @@ function ensureListening() {
 }
 
 /** Always false — pointer reactivity was removed. See the module note. */
-export function reactiveEnabled(): boolean {
+function reactiveEnabled(): boolean {
   return false;
 }
 
@@ -75,7 +75,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export interface LocalPointer {
+interface LocalPointer {
   /** Pointer position in canvas-local pixels. */
   x: number;
   y: number;

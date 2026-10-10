@@ -28,8 +28,15 @@ as the dispatcher is concerned — which is the intended way to retire one.
 
 from __future__ import annotations
 
-from . import knowledge, other, search, sensor, session, system  # noqa: F401 — registration
-from . import extended  # noqa: F401 — registers the unlockable tools, refused until unlocked
+from . import (  # noqa: F401 — registration
+    extended,  # noqa: F401 — registers the unlockable tools, refused until unlocked
+    knowledge,
+    other,
+    search,
+    sensor,
+    session,
+    system,
+)
 from .registry import (
     CATEGORIES,
     EXCLUDED,

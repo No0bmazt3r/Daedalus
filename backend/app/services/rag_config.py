@@ -328,7 +328,6 @@ def status() -> dict[str, Any]:
     vector_ready, vector_detail, vector_blocker = False, "the corpus could not be read", None
     try:
         from ..db import corpus_store, vector_store  # noqa: PLC0415
-
         from . import embedding_models  # noqa: PLC0415
 
         health = vector_store.stats()
