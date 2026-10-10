@@ -43,7 +43,9 @@ produce a corpus that claims to be complete.
 from __future__ import annotations
 
 import hashlib
+import os
 import threading
+import time
 from typing import Any, Callable
 
 from ..db import corpus_store, paths, vector_store
@@ -60,6 +62,11 @@ from . import (
 # How many chunks to embed between progress writes. Small enough that the UI
 # moves, large enough that the run is not dominated by SQLite round trips.
 BATCH = 16
+# Seconds to rest between embed batches. Back to back, a re-index holds the GPU
+# at full load for the whole run, and the dev laptop powered off mid-embed three
+# times. Each batch takes ~0.5-1s, so 0.5 roughly halves the duty cycle; 0 for
+# full speed on a machine with cooling to spare.
+EMBED_PAUSE_S = float(os.environ.get("DAEDALUS_EMBED_PAUSE", "0.5"))
 
 # One ingest at a time. Two concurrent runs over the same document would race on
 # `replace_chunks` and could leave Chroma holding vectors for chunk ids that no
@@ -516,6 +523,8 @@ def _embed_document(
     context = corpus_config.read()["context_header"]
     landed = 0
     for start in range(0, len(rows), BATCH):
+        if start and EMBED_PAUSE_S:
+            time.sleep(EMBED_PAUSE_S)
         batch = rows[start:start + BATCH]
         ids = [r["chunk_id"] for r in batch]
         texts = [r["text"] for r in batch]

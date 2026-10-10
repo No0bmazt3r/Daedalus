@@ -216,6 +216,7 @@ class RunTest(unittest.TestCase):
         self.patches = [
             mock.patch.object(evaluation, "QUERY_PATH", root / "queries.yaml"),
             mock.patch.object(evaluation, "RUNS_DIR", self.runs),
+            mock.patch.object(evaluation, "QUESTION_PAUSE_S", 0),
             mock.patch.object(evaluation, "snapshot", return_value={"fingerprint": "f"}),
         ]
         for p in self.patches:

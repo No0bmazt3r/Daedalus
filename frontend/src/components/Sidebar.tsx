@@ -173,7 +173,8 @@ function DataStores({
     }
 
     void load()
-    const timer = setInterval(() => void load(), 3000)
+    // Not while the tab is hidden: nobody is reading the counts.
+    const timer = setInterval(() => { if (!document.hidden) void load() }, 3000)
 
     return () => {
       cancelled = true

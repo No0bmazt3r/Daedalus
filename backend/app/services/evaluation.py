@@ -97,6 +97,11 @@ QUESTION_TIMEOUT_S = 180
 # cannot be cancelled, and the next question timed while it still holds the
 # model would carry its cost — so the run waits, and gives up rather than guess.
 DRAIN_TIMEOUT_S = 120
+# Seconds of rest between questions, outside every timed span. An official run
+# is up to an hour of back-to-back inference; on a laptop that heats until it
+# throttles, so later questions run slower than early ones and arm latencies
+# stop being comparable — or it powers off mid-run. 0 to run flat out.
+QUESTION_PAUSE_S = float(os.environ.get("DAEDALUS_EVAL_PAUSE", "3"))
 
 # An answer that says the information is not there. The validator's fallback,
 # the out-of-scope reply, and the phrasings prompt rule 4 asks for.
@@ -697,7 +702,9 @@ def run(
             for arm in arms:
                 track, mode = ARMS[arm]
                 with rag_config.arm(track, mode):  # type: ignore[arg-type]
-                    for q in queries:
+                    for i, q in enumerate(queries):
+                        if i and QUESTION_PAUSE_S:
+                            time.sleep(QUESTION_PAUSE_S)
                         progress.current = f"{arm} · {q['id']}"
                         if on_progress:
                             on_progress(progress)
