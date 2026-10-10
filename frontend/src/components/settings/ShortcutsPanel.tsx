@@ -12,6 +12,7 @@ import {
   formatCombo,
   type KeybindAction,
 } from '../../lib/keybinds'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * Settings → Shortcuts.
@@ -176,6 +177,7 @@ function ShortcutRow({ action, conflicted }: { action: KeybindAction; conflicted
 
 export function ShortcutsPanel({ isPeek }: { isPeek: boolean }) {
   const { keybinds, resetAllKeybinds } = useUiPrefs()
+  const [confirm, confirmDialog] = useConfirm()
   const { isIncognito, setIsIncognito } = useSettings()
   const conflicts = findConflicts(keybinds)
 
@@ -189,6 +191,7 @@ export function ShortcutsPanel({ isPeek }: { isPeek: boolean }) {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
+      {confirmDialog}
       <div>
         <h3 className="text-xl font-medium mb-1">Shortcuts</h3>
         <p className="text-sm theme-text-muted">
@@ -200,7 +203,9 @@ export function ShortcutsPanel({ isPeek }: { isPeek: boolean }) {
           <p className="flex items-center gap-2 text-xs theme-text-muted mt-1.5">
             {changed} changed from the default.
             <button
-              onClick={resetAllKeybinds}
+              onClick={async () => {
+                if (await confirm({ title: `Reset ${changed} shortcuts?`, body: 'Every shortcut you rebound goes back to its default.', confirmLabel: 'Reset all' })) resetAllKeybinds()
+              }}
               className="underline underline-offset-2 hover:theme-text transition-colors"
             >
               reset all

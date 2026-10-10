@@ -62,7 +62,7 @@ export function ModelArchitecture({ arch }: { arch?: ModelArch | null }) {
               ? 'Read from the pulled file.'
               : 'Partly inferred: this family did not publish every field, so head_dim or kv_heads were derived from the standard relations.'
           }
-          className={`text-[9px] uppercase tracking-wide ${arch.measured ? 'status-ok' : 'theme-text-muted opacity-70'}`}
+          className={`text-[10px] uppercase tracking-wide ${arch.measured ? 'status-ok' : 'theme-text-muted opacity-70'}`}
         >
           {arch.measured ? 'measured' : 'partly inferred'}
         </span>

@@ -28,6 +28,22 @@ from .evidence import EvidencePack
 
 SYSTEM_PROMPT = (
     "You are Daedalus, a read-only monitoring assistant for a lab-scale CO2 sorption reactor.\n"
+    # The people asking are mostly not engineers (lab visitors, students, new
+    # staff), so the default is a complete, plain-language answer rather than a
+    # terse one an expert could fill in. The rules below are unchanged by that.
+    "Who you are talking to: usually someone with no engineering background who has never seen this "
+    "reactor. Write for them. Use everyday words; the first time a technical term or sensor name "
+    "appears, say what it means in a few plain words (write \"the CO2 level\" rather than only "
+    "\"co2_ppm\"). You may explain a general idea in everyday language, but every fact about this "
+    "reactor must come from the EVIDENCE.\n"
+    "How much to say: answer the question fully. If asked what the reactor is or how it works, give "
+    "a complete explanation from the EVIDENCE: what it is for, the main parts, and what happens step "
+    "by step. If asked for the current status, go through every reading in the EVIDENCE: what it "
+    "measures in plain words, its value with its label, and whether it is STALE. Only call a value "
+    "normal, high or low if the EVIDENCE gives the limit to compare it with.\n"
+    "Stay on the question: do not add sensor readings, procedures or warnings it did not ask for, "
+    "even if they are in the EVIDENCE. If the operator refers to an earlier answer (\"explain that "
+    "more simply\", \"what did you just say\"), use the earlier conversation to do what they ask.\n"
     "Rules:\n"
     "1. Answer only from the EVIDENCE for this turn. Earlier conversation is context, not evidence.\n"
     "2. Every number you write must appear in the EVIDENCE. Quote numbers as given; you may round, "
@@ -51,7 +67,8 @@ SYSTEM_PROMPT = (
     # models copy the format straight into their own replies, which is how
     # llama3.2 opened an answer with "[2026-09-16 10:05 UTC]" in testing.
     "Earlier turns are shown with a timestamp in square brackets so you can judge how stale a value "
-    "is. Never write one yourself. Reply in short, plain prose."
+    "is. Never write one yourself. Reply in plain prose; use a short list when you go through "
+    "several readings or steps."
 )
 
 _LANGUAGE = {
@@ -75,7 +92,13 @@ def build(
     messages.append({"role": "system", "content": f"EVIDENCE:\n{pack.render()}"})
     # The standalone form, per §7.4: everything downstream of step 3 runs on
     # the rewritten question. The transcript keeps what was typed.
-    messages.append({"role": "user", "content": understood.standalone})
+    question = understood.standalone
+    typed = understood.normalised.text.strip()
+    # A rewrite carries the topic but can drop how they asked: "explain that
+    # more simply" becomes the previous question. Their words travel with it.
+    if typed and typed.lower() != question.strip().lower():
+        question += f'\n\n(The operator\'s own words were: "{typed}". Answer in the way they asked.)'
+    messages.append({"role": "user", "content": question})
     return messages
 
 

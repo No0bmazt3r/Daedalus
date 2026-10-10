@@ -206,7 +206,7 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 
 ### 1.7 As built (2026-10-07)
 
-`services/thread.py`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
+`services/thread/`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
 plus `q` (search the question or id) on the list. Both views of §1.3: the window
 from the sidebar (`Ctrl+Alt+A`, the palette), and the strip under every answer,
 which opens the thread in a panel beside the chat (with the evidence pack on
@@ -269,12 +269,13 @@ Where it departs from the design above:
 ### 2.1 What it is
 
 Where the model is shaped to fit the machine. This is `PROJECT.md` §8.2 in full,
-which is itself the merge of `research/05` (llmfit-inspired fit tool) and
-`architecture/11` (Model Selector Console) into one deliverable.
+which is itself the merge of the FYP1 llmfit-inspired fit tool and the Model
+Selector Console into one deliverable.
 
-§8.2 specifies six functions. The Forge is those six with a face, in three tabs:
-**Hardware** (step 1), **Models** (2–5, discovery and ranking) and **Added
-Models** (inventory and management). **All six are built.**
+§8.2 specifies six functions. The Forge is those six with a face, in five tabs:
+**Hardware** (step 1); **Chat models**, **Embedding models** and **Re-rankers**
+(steps 2–5 — browse, rank, pull); and **Installed** (manage, benchmark, delete,
+cloud baselines). **All six are built.**
 
 | # | Function | Detail |
 |---|---|---|
@@ -386,10 +387,10 @@ Three decisions in that module worth keeping:
   card is worse than useless.
 - **Disk is measured where models land**, not at `/`. On a small root with a
   large home, the root figure answers the wrong question.
-- **The Ollama probe falls back, but only across local aliases.**
-  `OLLAMA_BASE_URL` is `host.docker.internal` so a container can reach the host,
-  and that does not resolve when `./daedalus.sh dev` runs the backend on the
-  host itself. `127.0.0.1` is tried too, because `localhost` resolves to `::1`
+- **The Ollama probe falls back, but only across local aliases.** It was
+  written when `OLLAMA_BASE_URL` was `host.docker.internal` (so a container
+  could reach the host) and the same file had to work for a backend on the
+  host; the default is now `http://localhost:11434`. `127.0.0.1` is tried too, because `localhost` resolves to `::1`
   first on a dual-stack machine and Ollama binds IPv4 only — a refused
   connection on a machine where the daemon is running perfectly well. The
   fallbacks are deliberately *not* applied when the configured host is a real
@@ -413,8 +414,8 @@ production.
 
 ### 2.5 The catalogue is a seed, not a closed list
 
-`research/05` scopes the shortlist to six candidates, and that shortlist is what
-the report argues about. The console answers a broader question too — *what else
+The FYP1 fit-tool spec scoped the shortlist to six candidates, and that
+shortlist is what the report argues about. The console answers a broader question too — *what else
 could this machine run?* — from four sources, all scored by the same code
 against the same hardware so rows from different sources are comparable:
 
@@ -503,8 +504,9 @@ resolved to.
 > edges, validated before the file is written, with refused edits kept). §3.9 has
 > both. The window
 > shows **one** retrieval track — the one answering queries, read from Settings →
-> Retrieval Track — and only that track's tabs: Track 1 · Vector holds Corpus,
-> Track 2 · Graph holds Graph, Coverage and Replay. The other track is a
+> Retrieval Track — and only that track's tabs: Track 1 · Vector holds Build,
+> Corpus, Replay and Logs; Track 2 · Graph holds Build, Graph, Coverage and
+> Replay. The other track is a
 > fallback, not a peer. §3.8 has the reasoning and the failure cases.
 
 ### 3.1 What it is
@@ -592,11 +594,11 @@ is the failure mode §3.3 is about.
 
 **Two paths, one file.** `backend/app/data/graph/knowledge_graph.yaml` is the
 packaged **seed**; `config/knowledge_graph.yaml` is the **authored** copy, and
-the loader serves whichever exists. The split is not tidiness — `docker-compose`
-mounts `app/` read-only, correctly, since the application source is not
-something the application should rewrite. Authoring into the source tree worked
-under a bare `uvicorn` and failed in the container, which is the worse of the two
-ways round. `config/` is writable *and* git-tracked, so this section's argument
+the loader serves whichever exists. The split is not tidiness — the application
+source is not something the application should rewrite. (It was found the hard
+way: the old container mounted `app/` read-only, so authoring into the source
+tree worked under a bare `uvicorn` and failed in the container.) `config/` is
+writable *and* git-tracked, so this section's argument
 is untouched: the file is still the authoring surface and still reviews in a pull
 request, beside `model_config.json` and `rag_config.json`.
 
@@ -619,7 +621,7 @@ hand-authored, and changes by editing rather than by insert — so the file *is*
 the authoring surface, it reviews in a pull request, and Blueprints renders it.
 It also keeps the store count at five, which §6.4 spends real effort defending.
 
-**Track 2 is deliberately embedding-free.** `research/03` §7 specified
+**Track 2 is deliberately embedding-free.** The FYP1 GraphRAG spec specified
 `graph_query_natural` as a vector search over node descriptions; it is authored
 aliases plus a stdlib fuzzy fallback instead. If both tracks depend on an
 embedding model, the comparison cannot separate "the graph structure helped"
@@ -629,7 +631,8 @@ nodes per query, so the report can state this from the data rather than from
 this paragraph.
 
 The honest framing is *not* "the graph track needs no model" — it needs a more
-capable one, since the model drives traversal (`research/03` §10). It is that
+capable one, since the model drives traversal (`REPORT_NOTES.md` §4, Lu et
+al.). It is that
 **Track 1 is pinned to an embedding model and Track 2 is pinned to none**:
 swapping the embedding model invalidates Track 1's whole index and costs Track 2
 nothing, because there is no index.
@@ -868,10 +871,10 @@ first 399 and `Resume` picks up exactly the rest. Rolling back would discard
 minutes of correct work over one bad row; not recording it would produce a corpus
 that claims to be complete.
 
-**The authored graph lives in `config/`, not `app/data/`.** `docker-compose`
-mounts `app/` read-only — correctly, since the application source is not
-something the application should rewrite — so authoring into it worked in a bare
-`uvicorn` and failed in the container. `config/` is writable *and* git-tracked, so
+**The authored graph lives in `config/`, not `app/data/`.** The application
+source is not something the application should rewrite (the old container
+mounted it read-only, which is how this was found). `config/` is writable *and*
+git-tracked, so
 §3.4's "the file is the authoring surface and it reviews in a pull request" still
 holds exactly. The packaged copy is a seed; the first edit copies it across.
 

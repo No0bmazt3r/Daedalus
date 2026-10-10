@@ -35,7 +35,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from ..db import corpus_store
-from ..services import chunking, corpus_config, extraction, ingestion
+from ..services import chunking, corpus_config, extraction, ingestion, retrieval_replay
 
 router = APIRouter(prefix="/api/corpus", tags=["corpus"])
 
@@ -341,118 +341,14 @@ def clear_vectors() -> dict[str, Any]:
 
 @router.get("/retrievals")
 def list_retrievals(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
-    """Vector retrievals, newest first — Track 1's counterpart to `/graph/traversals`.
-
-    The comparison in `PROJECT.md` §10 needs both arms to be inspectable the same
-    way, and until this existed only Track 2 was: you could replay a graph walk
-    hop by hop and had no way at all to see which chunks a vector query pulled.
-    An arm you cannot audit cannot be defended as grounded, whatever its numbers.
-
-    Read from `rag_logs`, never re-run. Re-querying would show what the index
-    returns *today* rather than what produced that answer, and Layer 10 has one
-    source of truth.
-    """
-    from ..db import audit_store, paths, sqlite_util  # noqa: PLC0415
-
-    audit_store.init_db()
-    with sqlite_util.connect(paths.AUDIT_DB, read_only=True) as conn:
-        rows = conn.execute(
-            "SELECT query_id, timestamp, query_text, top_k, retrieval_latency_ms, "
-            "vector_db_used, retrieved_chunk_ids IS NOT NULL AS replayable "
-            "FROM rag_logs WHERE track = 'vector' ORDER BY id DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
-
-    return {
-        "available": True,
-        "retrievals": [{**dict(r), "replayable": bool(r["replayable"])} for r in rows],
-        "total": len(rows),
-    }
+    """Vector retrievals, newest first. See `services/retrieval_replay.py`."""
+    return retrieval_replay.recent(limit)
 
 
 @router.get("/retrieval/{query_id}")
 def get_retrieval(query_id: str) -> dict[str, Any]:
-    """What one vector query actually retrieved: chunks, distances, sources.
-
-    ## The chunk text is joined, and may be missing
-
-    `rag_logs` records chunk *ids*; the text lives in the corpus manifest. They
-    are joined here rather than duplicated into the log, because a log that
-    copied the text would be a second copy to keep true — and re-chunking would
-    make it a copy of something that no longer exists.
-
-    The join can miss, and that is reported rather than hidden: a chunk
-    retrieved before a re-ingest has an id nothing holds any more. `missing:
-    true` on that row is a real finding — it says this answer was grounded in a
-    passage the corpus can no longer produce, which is exactly the kind of thing
-    an evaluation needs to know about rather than see silently dropped.
-
-    ## Distances are shown as stored
-
-    Cosine distance from Chroma, never converted to a similarity percentage. A
-    reader has to be able to check the number against the store, and a converted
-    figure quietly becomes a different claim.
-    """
-    import json  # noqa: PLC0415
-
-    from ..db import audit_store, paths, sqlite_util  # noqa: PLC0415
-
-    audit_store.init_db()
-    with sqlite_util.connect(paths.AUDIT_DB, read_only=True) as conn:
-        row = conn.execute(
-            "SELECT * FROM rag_logs WHERE query_id = ? AND track = 'vector' "
-            "ORDER BY id DESC LIMIT 1",
-            (query_id,),
-        ).fetchone()
-
-    if row is None:
-        return {
-            "available": False,
-            "reason": f"no vector retrieval recorded for {query_id!r}",
-        }
-
-    def _parse(value: Any) -> list[Any]:
-        if not value:
-            return []
-        try:
-            parsed = json.loads(value)
-        except (ValueError, TypeError):
-            return []
-        return parsed if isinstance(parsed, list) else []
-
-    ids = _parse(row["retrieved_chunk_ids"])
-    scores = _parse(row["retrieval_scores"])
-    stored = {c["chunk_id"]: c for c in corpus_store.chunks_by_id(ids)}
-
-    chunks = []
-    for rank, chunk_id in enumerate(ids):
-        held = stored.get(chunk_id)
-        chunks.append({
-            "rank": rank + 1,
-            "chunk_id": chunk_id,
-            "distance": scores[rank] if rank < len(scores) else None,
-            "missing": held is None,
-            "text": (held or {}).get("text"),
-            "source_file": (held or {}).get("filename"),
-            "source_type": (held or {}).get("source_type"),
-            "page_number": (held or {}).get("page_number"),
-            "section_title": (held or {}).get("section_title"),
-            "ordinal": (held or {}).get("ordinal"),
-        })
-
-    return {
-        "available": True,
-        "query_id": row["query_id"],
-        "timestamp": row["timestamp"],
-        "track": "vector",
-        "query_text": row["query_text"],
-        "top_k": row["top_k"],
-        "collection": row["vector_db_used"],
-        "retrieval_latency_ms": row["retrieval_latency_ms"],
-        "source_files": _parse(row["source_files"]),
-        "chunks": chunks,
-        "missing_count": sum(1 for c in chunks if c["missing"]),
-    }
+    """What one vector query actually retrieved. See `services/retrieval_replay.py`."""
+    return retrieval_replay.replay(query_id)
 
 
 @router.get("/runs")
@@ -466,6 +362,18 @@ def get_run(run_id: str) -> dict[str, Any]:
     if not run:
         raise HTTPException(404, f"no run {run_id!r}")
     return {"run": run, "active": ingestion.active_run() == run_id}
+
+
+@router.get("/logs/documents")
+def document_logs() -> dict[str, Any]:
+    """Ingest logs grouped by document: which documents have history, and how it went."""
+    return {"documents": corpus_store.document_logs()}
+
+
+@router.get("/logs/documents/{document_id}")
+def document_events(document_id: str) -> dict[str, Any]:
+    """One document's whole ingest history, across runs, with the run-wide lines of each."""
+    return {"document_id": document_id, "events": corpus_store.document_events(document_id)}
 
 
 @router.get("/runs/{run_id}/events")

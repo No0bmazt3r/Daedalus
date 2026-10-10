@@ -18,6 +18,7 @@ import { deleteModel } from '../../lib/forgeClient'
 import { EmbeddingRow, PullBar, type PullStatus } from './EmbeddingRow'
 import { PaneIntro, BrowseLink, SectionLabel, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
+import { useSettings } from '../../contexts/SettingsContext'
 
 /**
  * The embedding models, in three modes:
@@ -288,6 +289,7 @@ export function EmbeddingModelsPane({
   const [progress, setProgress] = useState<PullStatus | null>(null)
   const [confirm, confirmDialog] = useConfirm()
   const [showCloud, setShowCloud] = useState(false)
+  const { cloudEnabled } = useSettings()
   const [verifying, setVerifying] = useState<string | null>(null)
   const [benchmarking, setBenchmarking] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -471,6 +473,7 @@ export function EmbeddingModelsPane({
           <div className="relative flex-1 min-w-[160px]">
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
             <input
+              aria-label="Filter embedding models"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by name or language…"
@@ -486,6 +489,7 @@ export function EmbeddingModelsPane({
             <button
               key={id}
               onClick={() => setFilter(id)}
+              aria-pressed={filter === id}
               className={`px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
                 filter === id
                   ? 'theme-accent-border theme-accent theme-surface-strong'
@@ -499,6 +503,7 @@ export function EmbeddingModelsPane({
 
         <div className="flex items-center gap-2">
           <input
+            aria-label="Embedding model tag to pull"
             value={typedTag}
             onChange={(e) => setTypedTag(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && typedTag.trim() && !pullingTag && pull(typedTag.trim(), true)}
@@ -598,12 +603,13 @@ export function EmbeddingModelsPane({
       {/* Cloud sits behind a disclosure, below the local list and after the
           explanation. It is a baseline, not an alternative, and presenting it as
           a peer of the local models would be the wrong shape for Rule 1. */}
-      {mode === 'select' && (
+      {mode === 'select' && cloudEnabled && (
       <div className="space-y-2">
       <SectionLabel icon={Cloud}>Cloud baseline</SectionLabel>
       <div className="rounded-xl border theme-border theme-surface">
         <button
           onClick={() => setShowCloud((v) => !v)}
+          aria-expanded={showCloud}
           className="flex w-full items-center gap-2 p-3 text-left"
         >
           {config.provider === 'cloud' ? (

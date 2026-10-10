@@ -4,7 +4,7 @@ import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
   Map, Network, ListChecks, Route, Library, Boxes, AlertCircle,
-  PenLine, Upload,
+  PenLine, Upload, ScrollText,
 } from 'lucide-react'
 import { FloatingWindow } from '../ui/floating-window'
 import {
@@ -19,6 +19,7 @@ import { CorpusView } from './CorpusView'
 import { IngestView } from './IngestView'
 import { RetrievalView } from './RetrievalView'
 import { AuthoringView } from './AuthoringView'
+import { IngestLogsView } from './IngestLogsView'
 
 /**
  * Labyrinth Blueprints — the knowledge map (MODULES.md §3).
@@ -105,6 +106,7 @@ import { AuthoringView } from './AuthoringView'
  */
 
 import { TRACK_OF_TAB, type BlueprintsTab } from './tabs'
+import { tabArrowKeys } from '../ui/tablist'
 
 type TabId = BlueprintsTab
 
@@ -122,9 +124,10 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
     full: 'Track 1: traditional vector RAG',
     icon: Boxes,
     tabs: [
+      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed your documents' },
       { id: 'corpus', label: 'Corpus', icon: Library, hint: 'Every document and chunk, as the retriever stores them' },
       { id: 'retrieval', label: 'Replay', icon: Route, hint: 'Which passages a query actually pulled, and at what distance' },
-      { id: 'ingest', label: 'Build', icon: Upload, hint: 'Import, chunk and embed your documents' },
+      { id: 'logs', label: 'Logs', icon: ScrollText, hint: 'Every ingest run and its log, including why a run failed' },
     ],
   },
   graph: {
@@ -132,15 +135,16 @@ const TRACKS: Record<RagTrack, TrackSpec> = {
     full: 'Track 2: agentic GraphRAG',
     icon: Network,
     tabs: [
-      { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 7 node types, 7 edge types' },
+      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges. Track 2 only knows what you add here' },
+      { id: 'graph', label: 'Graph', icon: Network, hint: 'The knowledge graph: 6 node types, 5 edge types' },
       { id: 'coverage', label: 'Coverage', icon: ListChecks, hint: "Orphans and gaps. Each row is a question the graph can't answer" },
       { id: 'replay', label: 'Replay', icon: Route, hint: 'The walk a graph-track query actually took, hop by hop' },
-      { id: 'authoring', label: 'Build', icon: PenLine, hint: 'Add nodes and edges. Track 2 only knows what you add here' },
     ],
   },
 }
 
-const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'corpus', graph: 'graph' }
+// Opens on the leftmost tab, Build, which is the first step of the pipeline.
+const DEFAULT_TAB: Record<RagTrack, TabId> = { vector: 'ingest', graph: 'authoring' }
 
 /**
  * Every tab is a quarter wide, and the row is centred.
@@ -167,13 +171,15 @@ function TracePicker({
   onSelect: (id: string) => void
 }) {
   return (
-    <ul className="space-y-1">
+    // Sticks while the walk scrolls, so the selected query stays in view.
+    <ul className="space-y-1 @2xl:sticky @2xl:top-0 @2xl:max-h-[calc(100vh-14rem)] @2xl:self-start @2xl:overflow-y-auto no-scrollbar">
       {traces.map((t) => {
         const active = t.query_id === selected
         return (
           <li key={t.query_id}>
             <button
               onClick={() => onSelect(t.query_id)}
+              aria-pressed={active}
               className={`w-full rounded-md border px-2.5 py-1.5 text-left transition-colors ${
                 active ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
               }`}
@@ -403,8 +409,11 @@ export function BlueprintsWindow({
               // underline's percentages resolve against the tab group rather
               // than the full-width row the group is centred in.
               <div
+                role="tablist"
+                aria-label="Blueprints views"
                 className="relative flex"
                 style={{ width: `${TAB_BASIS * group.tabs.length}%` }}
+                onKeyDown={tabArrowKeys(group.tabs.map((t) => t.id), tab, setTab)}
               >
                 {group.tabs.map((entry) => {
                   const selectedTab = tab === entry.id
@@ -412,6 +421,10 @@ export function BlueprintsWindow({
                     <button
                       key={entry.id}
                       onClick={() => setTab(entry.id)}
+                      role="tab"
+                      data-tab={entry.id}
+                      aria-selected={selectedTab}
+                      tabIndex={selectedTab ? 0 : -1}
                       title={entry.hint}
                       style={{ flexBasis: `${100 / group.tabs.length}%` }}
                       className={`flex shrink-0 items-center justify-center gap-1.5 rounded-t-lg px-3 py-2 text-xs transition-colors duration-200 ${
@@ -471,9 +484,10 @@ export function BlueprintsWindow({
               <Skeleton className="h-64 w-full" />
             ) : (
               <>
-                    {tab === 'corpus' && <CorpusView />}
+                    {tab === 'corpus' && <CorpusView onBuild={() => setTab('ingest')} />}
                     {tab === 'retrieval' && <RetrievalView />}
-                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} />}
+                    {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} onShowCorpus={() => setTab('corpus')} onShowLogs={() => setTab('logs')} />}
+                    {tab === 'logs' && <IngestLogsView />}
                     {tab === 'authoring' && <AuthoringView />}
                 {tab === 'graph' && <GraphView />}
                 {tab === 'coverage' && <CoverageView />}

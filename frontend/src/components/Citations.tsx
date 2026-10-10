@@ -59,7 +59,7 @@ const READING_RE = new RegExp(READING, 'gi')
  * delivered answer already passed the validator, so a verdict colour here
  * would say nothing — that view is Ariadne's Thread's.
  */
-function withReadings(text: string, keyBase: number): ReactNode[] {
+function withReadings(text: string, keyBase: number, matched?: (reading: string) => string | null): ReactNode[] {
   const out: ReactNode[] = []
   let last = 0
   for (const m of text.matchAll(READING_RE)) {
@@ -69,6 +69,18 @@ function withReadings(text: string, keyBase: number): ReactNode[] {
         {m[0]}
       </span>,
     )
+    const label = matched?.(m[0])
+    if (label) {
+      out.push(
+        <span
+          key={`m${keyBase + m.index}`}
+          title={`Matched to ${KIND_NAME[label[0]] ?? 'evidence'} ${label}. The model stated this number without citing it; the validator checked it against this line.`}
+          className="inline-block align-baseline mx-0.5 px-1 rounded border border-dashed theme-border text-[10px] leading-[1.35] theme-text-muted opacity-80 cursor-help"
+        >
+          {label}
+        </span>,
+      )
+    }
     last = m.index + m[0].length
   }
   out.push(text.slice(last))
@@ -116,14 +128,20 @@ export function withEvidenceHighlights(text: string): ReactNode[] {
 }
 
 /** The answer text with its readings picked out and its citation labels turned into chips. */
-export function withCitations(text: string, evidence: StoredEvidence | undefined): ReactNode {
+export function withCitations(
+  text: string,
+  evidence: StoredEvidence | undefined,
+  /** The whole answer, when `text` is one fragment of it (a Markdown text node). */
+  whole: string = text,
+): ReactNode {
   if (!evidence) return withReadings(text, 0)
+  const matched = readingMatcher(whole, evidence)
   const out: ReactNode[] = []
   let last = 0
   for (const match of text.matchAll(CITATION_RE)) {
     const labels = match[1].split(SPLIT_RE).map((l) => l.trim().toUpperCase())
     if (!labels.every((l) => l in evidence.lines)) continue
-    out.push(...withReadings(text.slice(last, match.index), last))
+    out.push(...withReadings(text.slice(last, match.index), last, matched))
     out.push(
       <Fragment key={match.index}>
         {labels.map((label) => (
@@ -141,8 +159,30 @@ export function withCitations(text: string, evidence: StoredEvidence | undefined
     )
     last = match.index + match[0].length
   }
-  out.push(...withReadings(text.slice(last), last))
+  out.push(...withReadings(text.slice(last), last, matched))
   return out
+}
+
+const numberIn = (s: string) => Number(s.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)?.[0])
+
+/**
+ * For a reading the model wrote without a label: the one sensor line it came
+ * from, shown as a dashed chip. Display only — the stored answer keeps exactly
+ * what the model wrote, so citation-rate figures still measure the model.
+ * Only an unambiguous match counts: a number on two lines, or a line the
+ * answer already cites, gets no chip.
+ */
+function readingMatcher(text: string, evidence: StoredEvidence): (reading: string) => string | null {
+  const cited = new Set(citedLabels(text, evidence))
+  const sensorLines = Object.entries(evidence.lines).filter(([label]) => label.startsWith('S'))
+  return (reading) => {
+    const value = numberIn(reading)
+    if (!Number.isFinite(value)) return null
+    const hits = sensorLines.filter(([, line]) =>
+      [...line.matchAll(/-?\d+(?:\.\d+)?/g)].some((n) => Number(n[0]) === value),
+    )
+    return hits.length === 1 && !cited.has(hits[0][0]) ? hits[0][0] : null
+  }
 }
 
 /** Labels the answer actually cited, in order of first use. */

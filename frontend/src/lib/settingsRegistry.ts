@@ -22,6 +22,7 @@ import {
   Download,
   AlertTriangle,
   Wrench,
+  SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -62,6 +63,7 @@ export interface SettingsPanel {
  * old ids somewhere sensible.
  */
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = Object.freeze([
+  { id: 'general', label: 'General' },
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'assistant', label: 'Assistant' },
   { id: 'connections', label: 'Connections' },
@@ -82,6 +84,14 @@ function panel(p: Omit<SettingsPanel, 'adminOnly' | 'implemented' | 'keywords' |
 
 /** Order here is the order rendered in the sidebar. */
 export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
+  // App-wide feature switches.
+  panel({
+    id: 'general', label: 'General', group: 'general', icon: SlidersHorizontal, implemented: true,
+    keywords: [
+      'general', 'features', 'toggle', 'enable', 'disable', 'switch', 'cloud', 'hosted', 'remote',
+      'baseline', 'endpoint', 'ollama cloud', 'offline', 'local only',
+    ],
+  }),
   // The knowledge layer: which track answers, then that track's own settings —
   // only the selected track's panel is listed (`track`, `trackVisible`). The id
   // 'knowledge' is kept for the switch so a saved "last open panel" still
@@ -202,7 +212,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
   }),
 ]);
 
-export const DEFAULT_SETTINGS_PANEL_ID = 'knowledge';
+export const DEFAULT_SETTINGS_PANEL_ID = 'general';
 
 /**
  * Panel ids that no longer exist, and where they now land. A saved "last open
@@ -217,6 +227,7 @@ const REDIRECTS: Readonly<Record<string, string>> = Object.freeze({
   'added-models': DEFAULT_SETTINGS_PANEL_ID,
   hardware: DEFAULT_SETTINGS_PANEL_ID,
   assistant: 'assistant-prompt',
+  'cloud-models': 'general',
 });
 
 const byId = new Map(SETTINGS_PANELS.map((p) => [p.id, p]));

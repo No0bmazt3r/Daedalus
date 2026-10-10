@@ -147,15 +147,6 @@ load_env() {
   # …and put them back over whatever the file just wrote.
   local kv
   for kv in ${preserved[@]+"${preserved[@]}"}; do export "${kv?}"; done
-
-  # A .env from before the move off Docker names the chromadb container, which
-  # no longer exists. Unset is what selects the embedded store, so say so and
-  # drop it rather than have the vector store report itself unreachable.
-  if [ "${CHROMA_URL:-}" = "http://chromadb:8000" ]; then
-    warn "CHROMA_URL in .env names the old chromadb container — ignoring it (embedded store)."
-    info "Delete the value in .env to silence this: CHROMA_URL="
-    unset CHROMA_URL
-  fi
 }
 
 # ── runtime state ────────────────────────────────────────────────────────────

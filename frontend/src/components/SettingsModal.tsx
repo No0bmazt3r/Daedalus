@@ -7,7 +7,7 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_DESKTOP_MIN_CONTAINER,
 } from '../hooks/useResizableSidebar'
-import { useElementWidth } from '../hooks/useElementWidth'
+import { useElementSize } from '../hooks/useElementSize'
 import {
   DEFAULT_SETTINGS_PANEL_ID,
   getSettingsPanel,
@@ -23,6 +23,7 @@ import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/Kn
 import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
 import { IntegrationsPanel } from './settings/IntegrationsPanel'
+import { GeneralPanel } from './settings/GeneralPanel'
 import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
@@ -99,7 +100,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
   // dragging and collapsing stop being offered because they no longer mean
   // anything. This is Odysseus' `isDesktopSidebarMode`, same 620px threshold.
   const bodyRef = useRef<HTMLDivElement>(null)
-  const bodyWidth = useElementWidth(bodyRef)
+  const bodyWidth = useElementSize(bodyRef).width
   // `0` means "not measured yet"; assume desktop so the compact layout never
   // flashes on the first frame.
   const isCompact = bodyWidth > 0 && bodyWidth < SIDEBAR_DESKTOP_MIN_CONTAINER
@@ -259,6 +260,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
             {effectiveTab === 'graph-rag' && <GraphRagPanel />}
             {effectiveTab === 'search' && <SearchPanel isPeek={isPeek} />}
             {effectiveTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
+            {effectiveTab === 'general' && <GeneralPanel isPeek={isPeek} />}
             {effectiveTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
             {effectiveTab === 'storage' && <DatabasesPanel isPeek={isPeek} />}
             {effectiveTab === 'logs' && <LogsPanel />}

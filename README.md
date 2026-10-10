@@ -2,7 +2,7 @@
 
 # Daedalus
 
-**A 100% local, read-only conversational AI layer for real-time CO₂ sorption reactor monitoring.**
+**A 100% local, read-only chat assistant for real-time CO₂ sorption reactor monitoring.**
 
 Ask a reactor plain-language questions. Get grounded, cited answers.
 No cloud. No hallucinated sensor values. No write path to the plant.
@@ -19,7 +19,8 @@ concentration to SQLite every 5 seconds. Understanding what the reactor is doing
 today means reading raw graphs, knowing SCADA jargon, and manually
 cross-referencing SOP documents and logs.
 
-Daedalus sits **on top of** that stack — never replacing it — so anyone can ask:
+Daedalus is a **standalone chat application** that reads that stack's data —
+never replacing or controlling it — so anyone can ask:
 
 > *"Is the reactor running fine right now?"*
 > *"Why did the CO₂ reading spike at 10:00?"*
@@ -143,7 +144,6 @@ Everything lives in **`.env`**, created from [`.env.example`](.env.example) by
 |---|---|---|
 | `DAEDALUS_PORT` | `8000` | Dashboard + API under `start` |
 | `BACKEND_PORT` / `FRONTEND_PORT` | `8000` / `5173` | `dev` mode |
-| `CHROMA_URL` | *(empty)* | Vector store. Empty = embedded in the API, in `data/chroma`; set it to use a separate Chroma server |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Model runtime |
 | `SEARXNG_URL` | `http://127.0.0.1:8081` | Optional web search |
 
@@ -152,7 +152,8 @@ The five stores live in the repo, and the scripts set their paths themselves:
 ```
 data/sqlite/sensor_readings.db   sensor telemetry (read-only)
 logs/ai_logs.db                  audit logs
-data/chroma/                     vector store
+data/chroma/                     vector store (embedded in the API)
+data/sqlite/corpus.db            what was ingested, and the graph's edit history
 data/sqlite/chat.db              chat transcripts
 backend/data/prefs.db            UI preferences
 ```
@@ -169,7 +170,7 @@ local with no cloud APIs. `.env` is gitignored if that ever changes.
 ## The five databases
 
 Separate on purpose: a fault in ingestion or logging physically cannot reach the
-sensor data of record. **Settings → System → Storage health** shows all five live, and
+sensor data of record. **Settings → System → Storage Health** shows all five live, and
 `./daedalus.sh status` prints the same from the terminal.
 
 | Store | Engine | Access | Holds |
@@ -206,7 +207,7 @@ Each writable store has a **versioned schema** — numbered SQL files applied
 once, in order, inside a transaction, recorded in the database itself and
 applied automatically at startup. See `backend/README.md`.
 
-**No telemetry yet?** Settings → System → Storage health → *Generate demo data* seeds a
+**No telemetry yet?** Settings → System → Storage Health → *Generate demo data* seeds a
 plausible run offline. It refuses if data already exists.
 
 ---
@@ -216,40 +217,43 @@ plausible run offline. It refuses if data already exists.
 ```
 ├── frontend/            React dashboard (Zone 4)
 │   ├── src/
-│   │   ├── components/  Chat, sidebar, theme modal, settings
+│   │   ├── components/  Chat, Forge, Blueprints, Thread, settings, error pages
 │   │   ├── contexts/    Theme, settings and conversation state
-│   │   ├── hooks/       Draggable, resizable sidebar
-│   │   └── lib/         Theme engine, canvas effects, API clients
-│   ├── public/
+│   │   ├── hooks/       Windows, sizing, live refresh, shortcuts
+│   │   └── lib/         Theme engine, one typed API client per backend area
+│   ├── tests/           Node's own test runner — pure logic only
 │   └── package.json     …and the rest of the Vite/TS toolchain
 │
 ├── backend/             FastAPI service (Zone 3)
 │   ├── app/
 │   │   ├── api/         Route handlers — HTTP only
-│   │   ├── services/    Session policy, context-window assembly
+│   │   ├── services/    Chat pipeline, tools, retrieval, Forge, evaluation
 │   │   ├── models/      Pydantic wire contracts
-│   │   └── db/          The five stores, and schema migrations
+│   │   ├── db/          The five stores, and schema migrations
+│   │   ├── data/        Shipped catalogues and the graph seed
+│   │   └── cli_eval.py  The evaluation harness
+│   ├── tests/           Stdlib unittest, grouped by area
 │   └── requirements.txt
 │
-├── docs/                All documentation
-│   ├── README.md        Index — start here
+├── config/              Committed choices: model, retrieval track, embedder,
+│                        the authored graph, the evaluation query set
+├── docs/                All documentation — start at docs/README.md
 │   ├── PROJECT.md       Canonical specification
 │   ├── FEATURES.md      What's actually built
-│   ├── SCRIPTS.md       Every script, command and flag
-│   ├── research/        FYP1 research specs    ─┐ historical,
-│   └── architecture/    11-layer design specs  ─┘ superseded by PROJECT.md
+│   ├── STATUS.md        Plain-language progress
+│   └── REPORT_NOTES.md  Material for the FYP2 report
 │
 ├── scripts/
 │   └── common.sh        Shared shell helpers for the three scripts below
 │
-├── data/                Runtime: sensor DB, chat DB, documents, chroma  (gitignored)
+├── data/                Runtime: sensor, chat and corpus DBs, chroma   (gitignored)
+│   └── corpus_sources/  Documents collected for the corpus, with their sources
 ├── logs/                Runtime: audit logs                     (gitignored)
 ├── backups/             Snapshots from `migrate backup`         (gitignored)
 │
 ├── .env.example         Configuration template
 ├── daedalus.sh          Entry point — setup, dev, start, migrate
 ├── docker-compose.yml   The optional SearXNG container — nothing else
-├── config/searxng/      Settings template for the optional search container
 ├── sync.sh              Get a checkout working after a pull (safe)
 ├── reset.sh             Wipe and rebuild the databases (destructive)
 ├── ACKNOWLEDGMENTS.md   What this project borrowed, and from whom
@@ -264,63 +268,54 @@ is built on its own and served as static files.
 
 ## Status
 
-Zone 4 (the dashboard) and the data layer exist. The AI layer — the actual
-research contribution — is the work ahead. Tracked in [`TODO.md`](TODO.md),
-detailed in [`docs/FEATURES.md`](docs/FEATURES.md).
+The software is built end to end; the research result is not. Both retrieval
+tracks answer, every answer is traceable, and the evaluation harness is ready —
+but the knowledge is still mostly placeholder and nothing has been evaluated.
+Plain-language progress: [`docs/STATUS.md`](docs/STATUS.md). Item by item:
+[`TODO.md`](TODO.md). In depth: [`docs/FEATURES.md`](docs/FEATURES.md).
 
 ### Built
 
 | Area | What works |
 |---|---|
-| **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui |
-| **Chat interface** | Message list, composer, model selector, incognito — wired end to end. Replies stream token by token from a real local model, survive a reload mid-answer, and carry citation chips and a *Sources* list showing exactly which reading, passage or graph node backs each claim |
-| **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen |
-| **Dynamic Models**| Unified `/api/system/models` querying Ollama + cloud baselines, with per-model capability badges (reasoning · tools · vision). Cloud models are selectable but marked, and their turns are logged apart |
-| **Theme engine** | 16 themes · live editing of 7 base + 14 per-zone colours · derived syntax ramps · harmony generator · font/density/scale · frosted glass · import/export |
-| **Typography** | **Monocraft** — the Minecraft typeface — as the default face, bundled and self-hosted; four alternatives in the Font selector |
-| **Background effects** | 13 options, 11 canvas-animated — including Nexus, Aurora, Bubbles and Voxels. Cursor reactivity was built and then deliberately removed: on a monitoring console, the only thing moving for a reason should be the answer on screen |
-| **Attention dimming** | The sidebar and the chat surfaces sit back translucent while the pointer and focus are elsewhere |
-| **Floating windows** | Settings, Data stores, the Forge and the theme palette open as draggable, resizable windows with **Peek** (fade to see the page behind) and **minimize** (collapse to a chip beside the incognito toggle, restored exactly as you left it). Clicking outside minimizes rather than closes, so a stray click never discards what you were doing |
-| **Window snapping** | Drag a window into an edge and it takes that region on release — halves, quadrants, or the whole screen from the top. The target is drawn as a dashed outline first, dragging a snapped window restores its old size under the cursor, and double-clicking the header maximizes |
-| **Collapse animation** | One cascade for every collapsible thing: rows arrive from below with a small overshoot, staggered, and leave bottom-up without one. The exit waits on the real animations rather than a timeout, so a two-row section does not sit through a twelve-row section's timing |
-| **Loading skeletons** | Placeholders shaped like the content they precede, in a pixel or smooth style — switchable in Theme → Customize |
-| **Data stores** | Four browsable stores in the sidebar under the chats — chat · audit · sensor · vector. Expand one, click a table, read its rows in a floating window. Preferences is the fifth store and is deliberately absent: it holds this UI's own settings, not evidence |
-| **Hardware detection** | RAM · CPU · GPU/VRAM · disk · Ollama. Probed on a background schedule, not on every panel open, and dormant when nobody is looking. **The Forge** → Hardware. Reads the host directly, so the GPU it reports is the real card |
-| **The Forge** | Hardware and model console. Estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`, GPU / offload / CPU), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice to `config/model_config.json` Also where Track 1's re-rankers are downloaded and deleted. |
-| **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, live Hugging Face GGUF search, and a Custom tab that scores any tag you type. Sizes come from published manifests, so an estimate uses real bytes before anything is downloaded |
-| **Model manager** | What is installed, badged SLM or LLM, with per-model usage: runs split by chat and benchmark, token totals, and latency as mean / p50 / p95 |
-| **Chat** | `POST /api/chat` runs the whole pipeline: understand the question, refuse control requests, plan tools by rule, read sensors and the selected track's knowledge, build a labelled evidence pack, stream the answer, and replace it with a fallback if it states a number, time or cause the evidence does not. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged apart |
-| **Accessible theming** | Every colour derives from the selected theme and is floored to WCAG AA: body, muted, accent-as-text, on-accent labels and the three status colours. All 16 shipped themes pass on every role, and custom themes run through the same derivation |
-| **Settings** | Registry-driven nav, keyword search, drag-resizable rail, layout persisted server-side. Grouped Knowledge · Assistant · Connections · Experience · Administration · System. Settings is *how the assistant behaves*; models and the machine live in **The Forge** — see `docs/FEATURES.md` §6 |
-| **Keyboard shortcuts** | 11 rebindable actions across navigation, conversations and windows. Click a chord, press keys, Enter saves and Escape abandons — nothing commits on the first keypress. Duplicates are shown with the rule that resolves them, unbinding is Backspace, and AltGr is not mistaken for Ctrl+Alt |
-| **Appearance** | Nine switches over the app's own furniture — sidebar brand, New, core modules, chat list, data stores, bottom bar; welcome message, incognito button, full-width transcript. Chrome only: nothing switchable can hide an answer, a citation or a refusal |
-| **Web search** | Six providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper) with an ordered fallback chain, per-provider credentials and a live probe. A **setup** surface for sourcing corpus documents — SearXNG ships as an optional Docker container tuned for technical literature |
+| **Chat** | `POST /api/chat` runs the whole pipeline: understand the question, refuse control requests, plan tools by rule, read sensors and the selected track's knowledge, build a labelled evidence pack, stream the answer, and replace it with a fallback if it states a number, time or cause the evidence does not. Answers render as Markdown with citation chips and a *Sources* list. The committed model is always local; a cloud model answers only when explicitly picked, and that turn is logged apart |
+| **Chat history** | Real sidebar from `GET /api/sessions` — select, inline rename, delete, filter; transcripts reload on reopen; replies survive a reload mid-answer |
+| **Conversation memory** | Session store, transcripts, rolling summary and token-budgeted context assembly, incognito |
+| **Ariadne's Thread** | Every chat turn as ordered steps — question, intent, tools, retrieval, evidence, model, validation, answer — with every number in the answer checked against the evidence, a human label for evaluation, and Markdown export |
+| **Labyrinth Blueprints** | Track 1: build the corpus (upload → extract → chunk → embed, as recorded runs), browse it, replay a retrieval, read ingest logs. Track 2: author the graph by hand or review a local model's proposals, see it as a diagram, find coverage gaps, replay a walk hop by hop |
+| **The Forge** | Hardware and model console. Detects the machine, estimates memory per model × quantization, scores fit against **both** memory pools (`safe` / `marginal` / `will_not_fit`), pulls and deletes via Ollama, benchmarks on a RAG-sized prompt, and commits the choice — for chat models, embedding models and Track 1's re-rankers |
+| **Model discovery** | 37 catalogue entries with every Ollama tag verified against the registry, 16 embedding models, live Hugging Face GGUF search, and a Custom tab that scores any tag you type |
 | **Agent tools** | 33 tools in six categories behind a dispatcher that checks declared effects, the selected retrieval track and the arguments before the function is entered. Every call writes a `tool_logs` row. **Simple** mode (default) lets only the answering tools run; **Advanced** opens the rest under per-tool switches and capability locks |
-| **Tool policy** | Two axes, deliberately separate: four capability locks (`network_egress` · `write` · `admin` · `execute_code`) that say what the machine may do while a result is recorded, and a per-tool switch that says which tools the model is offered. A switched-off tool leaves the schema list and is refused if asked for by name. Every parameter carries a working example, so a trial run is one click |
-| **System maintenance** | Settings → System: a filterable viewer over the backend's own rotating log, a credential-free backup/restore, and a per-category Danger Zone with typed confirmation. The sensor database is absent from all three by rule |
-| **Container control** | Settings → Search can start and stop the SearXNG container, when `DOCKER_SOCKET` is set. Off by default — the socket is a host-level privilege, and the agent's `bash` tool runs as the same user |
-| **MCP** | Connect to external tool servers over stdio or HTTP. Each server's tool list is **pinned and hashed**, so a server that grows a tool is reported as drift and the new tool is refused — the protocol is designed to be dynamic, and §7.2 needs it not to be |
-| **Backend** | FastAPI · health + system endpoints · preference store · flash-free first paint |
-| **Conversation memory** | Session store, transcripts, rolling-summary and token-budgeted context assembly, incognito |
-| **Data stores** | All five wired, health-reported, each with a versioned schema |
+| **Tool policy** | Two axes, deliberately separate: four capability locks (`network_egress` · `write` · `admin` · `execute_code`) and a per-tool switch. A switched-off tool leaves the schema list and is refused if asked for by name |
+| **Evaluation harness** | `python -m app.cli_eval` asks the query set once per arm (Track 1 · Track 2 walk · Track 2 agent) through the real chat path, scores it, and refuses an official run unless the comparison is frozen |
+| **Data stores** | All five wired, health-reported, each with a versioned schema; chat, audit, sensor, corpus and vector browsable from the sidebar (prefs deliberately not) |
 | **Migrations** | Numbered SQL files, applied in a transaction at startup, with drift and gap detection |
-| **Deployment** | Single-image build + ChromaDB, one-command startup, and a dev overlay that runs the same image with hot reload |
+| **Error pages** | A tab or window that cannot load becomes a themed, animated error page; a failed action shows its reason and a server error id |
+| **Web search** | Six providers with an ordered fallback chain — a **setup** surface for sourcing corpus documents. SearXNG ships as an optional container tuned for technical literature, and Settings → Search can start it when `DOCKER_SOCKET` is set |
+| **MCP** | Connect to external tool servers over stdio or HTTP. Each server's tool list is **pinned and hashed**, so a server that grows a tool is reported as drift and the new tool is refused |
+| **System maintenance** | Settings → System: storage health, a filterable process log, a credential-free backup/restore, and a per-category Danger Zone with typed confirmation. The sensor database is absent from all of them by rule |
+| **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui. Floating windows with Peek, minimize and edge snapping; command palette; 11 rebindable shortcuts; registry-driven, searchable Settings |
+| **Theming** | 16 themes, live per-zone colours, import/export, all floored to WCAG AA on every text role; Monocraft as the default face; 13 background effects; pixel or smooth loading skeletons |
+| **Deployment** | Runs on the host — one uvicorn process with embedded Chroma — via `./daedalus.sh`; `sync.sh` after a pull, `reset.sh` to rebuild |
+| **Tests** | 231 backend `unittest` cases and 9 frontend logic tests |
 
 ### Retrieval
 
 | | Status |
 |---|---|
-| **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma, as one recorded run. Each document has a category (manual · SOP · troubleshooting/incident · safety (UAUC) · background) and an origin — **this rig** or **reference** (another installation), defaulting to reference |
-| **Track 1 — vector RAG** | Top-k with category filtering and cross-encoder re-ranking |
+| **Knowledge ingestion** | Each document has a category (manual · SOP · troubleshooting/incident · safety (UAUC) · background) and an origin — **this rig** or **reference** (another installation), defaulting to reference. PDFs include AES-locked and font-shifted manuals |
+| **Track 1 — vector RAG** | Top-k with category filtering and cross-encoder re-ranking — a plain baseline by decision |
 | **Track 2 — graph RAG** | Embedding-free: entry by authored aliases, then either the **agent loop** (the local model picks each hop and decides when it has enough, under a hard time budget) or the **fixed walk** it is measured against |
 | **Provenance** | Every passage and node is marked this rig or reference; an answer that rests only on a reference for a rig-specific fact must say so |
 
-### Not built yet
+### Not done yet
 
-- **The real knowledge.** No documents are ingested and the graph is placeholder data.
-- **Evaluation** — the query set, ground truth, scoring, and the three comparison runs (Track 1 · Track 2 walk · Track 2 agent).
-- Track 1's hybrid search, query expansion, compression and multi-hop re-retrieval.
-- Ariadne's Thread, the provenance viewer.
+- **The real knowledge.** 2 reference documents are ingested (162 chunks); the
+  lab's own documents are still needed, and the graph is placeholder data.
+- **Evaluation** — the 30–50 question set and its labels, and the three
+  comparison runs.
+- **Model choice** — the small-model tier is untested and the lab machine's
+  specs are unconfirmed.
 
 ---
 
@@ -375,7 +370,7 @@ selected track answers any question; the comparison is between runs.
 Zone 1  Physical reactor ─ sensors, ABV valves          pre-existing
 Zone 2  SCADA acquisition ─ CO2SorptionDT → SQLite      pre-existing
           │ read-only  ◄── the safety boundary
-Zone 3  AI layer ─ FastAPI · tools · RAG · Ollama       ← this project
+Zone 3  Daedalus ─ FastAPI · tools · RAG · Ollama       ← this project
 Zone 4  Presentation ─ React dashboard                  ← this project
 ```
 
@@ -404,12 +399,15 @@ cd frontend && pnpm dev
 ```bash
 cd frontend
 npx tsc -b          # typecheck
-npm run build       # production build
-npx oxlint src      # lint
+pnpm lint           # oxlint
+pnpm test           # logic tests (Node's own runner)
+pnpm build          # production build
 
 cd ../backend
-.venv/bin/python -m compileall -q app
+.venv/bin/python -m unittest discover -s tests -t .   # -t . is required
 ```
+
+Tests are not in CI; run them before a commit.
 
 </details>
 
@@ -418,8 +416,8 @@ cd ../backend
 ## Tech stack
 
 **Frontend** — React 19 · TypeScript · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui · Lucide
-**Backend** — FastAPI · Pydantic/PydanticAI · SQLite (WAL) · Uvicorn
-**AI** — Ollama (Qwen3 1.7B · Phi-3 Mini · Gemma 3 1B, Q4_K_M) · ChromaDB · NetworkX · nomic-embed-text
+**Backend** — FastAPI · Pydantic · SQLite (WAL) · Uvicorn · pypdf
+**AI** — Ollama (candidates: Qwen3 1.7B · Phi-3 Mini · Gemma 3 1B, Q4_K_M) · ChromaDB · NetworkX · a local embedding model chosen per machine · ONNX cross-encoder re-rankers
 **Ops** — runs on the host: one uvicorn process, embedded ChromaDB · Docker only for optional SearXNG
 
 ---
@@ -430,8 +428,8 @@ cd ../backend
 plant · cybersecurity/IIoT hardening · automated chart generation (existing SCADA
 covers it) · physical hardware changes · auth/multi-tenancy · fine-tuning.
 
-**Deferred to Phase 2:** the PyQt5 embedded tab · multi-device support · Kùzu
-backend · multi-lab LAN deployment.
+**Deferred to Phase 2:** the PyQt5 embedded tab · the vector-DB bake-off ·
+multi-device support · Kùzu backend · multi-lab LAN deployment.
 
 ---
 
@@ -450,7 +448,7 @@ here were written from scratch. No Odysseus source code is present in this
 repository. That distinction is also a licensing one — Odysseus is AGPL-3.0,
 and adapting its code would oblige this project to be AGPL-3.0 too.
 
-Full attribution, including the stack and the wider project team:
+Full attribution, including the rest of the stack:
 [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
 ---

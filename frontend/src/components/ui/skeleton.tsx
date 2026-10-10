@@ -16,23 +16,6 @@ export function Skeleton({ className = '' }: { className?: string }) {
   return <div aria-hidden className={`skeleton ${className}`} />
 }
 
-/**
- * A run of text lines. The last is short, because a paragraph's final line
- * usually is, and a stack of equal bars reads as a table rather than prose.
- */
-export function SkeletonText({ lines = 3, className = '' }: { lines?: number; className?: string }) {
-  return (
-    <div className={`space-y-2 ${className}`}>
-      {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton
-          key={i}
-          className={`h-3 ${i === lines - 1 ? 'w-2/5' : i % 2 ? 'w-4/5' : 'w-full'}`}
-        />
-      ))}
-    </div>
-  )
-}
-
 /** A labelled figure, as used in the hardware and model stat grids. */
 export function SkeletonStat() {
   return (

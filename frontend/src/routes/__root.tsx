@@ -24,6 +24,7 @@ import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 import { OPEN_STORE_EVENT, OPEN_THREAD_EVENT } from '../lib/threadClient'
+import { ToastHost } from '../components/ui/toast'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -299,6 +300,9 @@ function AppShell() {
               <Outlet />
             </div>
           </main>
+
+          {/* Failed actions, with the reason, from anywhere in the app. */}
+          <ToastHost />
 
           {/* Each window mounts the first time it opens and stays mounted, so
               its state survives a close exactly as it did before splitting. */}

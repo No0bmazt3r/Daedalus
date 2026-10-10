@@ -110,10 +110,31 @@ def pdf_available() -> tuple[bool, str]:
     except ImportError:
         return False, (
             "PDF support needs the `pypdf` package, which is not installed in this "
-            "image. It is listed in backend/requirements.txt, so rebuild the backend "
-            "container to pick it up. Text and Markdown documents work without it."
+            "environment. It is listed in backend/requirements.txt; run `./sync.sh` (or "
+            "`pip install -r requirements.txt` in backend/) to install it. Text and Markdown documents work without it."
         )
     return True, ""
+
+
+# Some PDFs (the Fuji ZRE manual is one) embed fonts whose character codes are
+# shifted 29 below the real letters and carry no map back to Unicode, so pypdf
+# reads "the" as "WKH" and a space as the control character 0x03. The shift is
+# fixed, and the 0x03 "space" marks exactly which runs are encoded this way,
+# so those runs are decoded and the rest of the page is left alone. Matched
+# with an explicit whitespace class: Python's \s counts 0x1c-0x1f as spaces,
+# and 0x1f here is an encoded "<".
+_SHIFT = 29
+_SHIFTED_RUN = re.compile(r"[^ \t\n\r\x03]*(?:\x03+[^ \t\n\r\x03]*)+")
+
+
+def _unshift(text: str) -> str:
+    """Decode the font-shifted runs in one page's text. Same length out as in."""
+    if "\x03" not in text:
+        return text
+    return _SHIFTED_RUN.sub(
+        lambda m: "".join(chr(ord(c) + _SHIFT) if 0 < ord(c) < 0x7F - _SHIFT else c for c in m.group(0)),
+        text,
+    )
 
 
 def _normalise(text: str) -> str:
@@ -123,6 +144,9 @@ def _normalise(text: str) -> str:
     offset this module reports has to describe the string it returns.
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Control characters other than newline and tab are font debris (list
+    # markers, unmapped glyphs), never text anyone wrote.
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     for bad, good in (("ﬁ", "fi"), ("ﬂ", "fl"), (" ", " "), ("’", "'")):
         text = text.replace(bad, good)
     # Three or more blank lines carry no information the chunker can use and
@@ -157,6 +181,13 @@ def _extract_text(raw: bytes, filename: str) -> Extracted:
     return Extracted(text=_normalise(body), extractor="text")
 
 
+_NEEDS_CRYPTO = (
+    "this PDF is encrypted with AES (common for manufacturer manuals), and reading it needs the "
+    "`cryptography` package, which is not installed. Run `pip install -r requirements.txt` in "
+    "backend/ and upload it again."
+)
+
+
 def _extract_pdf(raw: bytes, filename: str) -> Extracted:
     ok, why = pdf_available()
     if not ok:
@@ -173,22 +204,43 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
 
     if getattr(reader, "is_encrypted", False):
         # Try the empty password, which is what "encrypted" means for most
-        # published PDFs — permissions set, no password to open.
+        # published PDFs — permissions set, no password to open. Manufacturer
+        # manuals usually lock permissions with AES, which pypdf can only undo
+        # with the `cryptography` package; without it that was a bare 500.
         try:
-            reader.decrypt("")
+            unlocked = reader.decrypt("")
+        except pypdf.errors.DependencyError as exc:
+            raise ExtractionError(_NEEDS_CRYPTO) from exc
         except Exception as exc:  # noqa: BLE001
+            unlocked = None
+            cause: Exception | None = exc
+        else:
+            cause = None
+        if not unlocked:
             raise ExtractionError(
                 "this PDF is password-protected. Remove the password and upload it again. "
                 "Saving the password to open it later would put a credential in the corpus."
-            ) from exc
+            ) from cause
+
+    try:
+        pages = list(reader.pages)
+    # Without `cryptography`, unlocking an AES file reports success and the
+    # failure only comes here, when the pages are decoded. That was the 500.
+    except pypdf.errors.DependencyError as exc:
+        raise ExtractionError(_NEEDS_CRYPTO) from exc
+    except Exception as exc:  # noqa: BLE001 — a broken page tree is a document problem
+        raise ExtractionError(f"pypdf could not read this file's pages: {exc}") from exc
 
     parts: list[str] = []
     breaks: list[int] = []
     warnings: list[str] = []
     cursor = 0
-    for number, page in enumerate(reader.pages, start=1):
+    for number, page in enumerate(pages, start=1):
         try:
-            body = page.extract_text() or ""
+            body = _unshift(page.extract_text() or "")
+        except pypdf.errors.DependencyError as exc:
+            # Not one bad page: every page will fail the same way.
+            raise ExtractionError(_NEEDS_CRYPTO) from exc
         except Exception as exc:  # noqa: BLE001 — one bad page is not a bad document
             body = ""
             warnings.append(f"page {number} could not be read: {exc}")
@@ -201,18 +253,18 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
         # with the document rather than with the pages that happened to parse.
 
     text = _normalise("\n\n".join(parts))
-    pages = len(reader.pages)
+    page_count = len(pages)
 
     if len(text) < _EMPTY_THRESHOLD:
         raise ExtractionError(
-            f"no readable text in {pages} page{'s' if pages != 1 else ''}. This is almost "
+            f"no readable text in {page_count} page{'s' if page_count != 1 else ''}. This is almost "
             "certainly a scanned PDF. The pages are images, so there is no text layer to "
             "extract. Daedalus has no OCR; run one over the file and upload the result."
         )
     return Extracted(
         text=text,
         page_breaks=breaks,
-        page_count=pages,
+        page_count=page_count,
         extractor=f"pypdf {getattr(pypdf, '__version__', '?')}",
         warnings=warnings,
     )

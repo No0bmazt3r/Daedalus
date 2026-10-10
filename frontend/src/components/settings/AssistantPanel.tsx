@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
-import { AlertCircle, Clock, Lock, MessageSquareText, Plus, ShieldAlert, X } from 'lucide-react'
+import { AlertCircle, Clock, Lock, MessageSquareText, Plus, ShieldAlert, X, type LucideIcon } from 'lucide-react'
 import {
   browserTimezone,
   fetchAssistant,
@@ -12,9 +12,9 @@ import {
   type RuleKind,
 } from '../../lib/assistantClient'
 import { Switch } from '../ui/switch'
-import { Skeleton } from '../ui/skeleton'
 import { ThemeSelect } from '../ui/theme-select'
 import { useConfirm } from '../ui/confirm-dialog'
+import { SectionsSkeleton } from '../ui/sections-skeleton'
 
 /**
  * Settings → Assistant's three panels: what the assistant is told, and when it
@@ -76,7 +76,13 @@ function useClock(timeZone: string) {
 }
 
 /** Loads the settings once per panel; each panel renders one section of them. */
-function AssistantShell({ render }: { render: (props: SectionProps) => ReactNode }) {
+function AssistantShell({
+  render, heading,
+}: {
+  render: (props: SectionProps) => ReactNode
+  /** The section's heading, shown while its data loads. */
+  heading: { icon: LucideIcon; title: string }
+}) {
   const [status, setStatus] = useState<AssistantStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -115,7 +121,7 @@ function AssistantShell({ render }: { render: (props: SectionProps) => ReactNode
       />
     )
   }
-  if (!status) return <Skeleton className="h-64 w-full" />
+  if (!status) return <SectionsSkeleton sections={[heading]} />
 
   return (
     <div className="space-y-4">
@@ -129,15 +135,15 @@ function AssistantShell({ render }: { render: (props: SectionProps) => ReactNode
 // Three panels under Settings → Assistant. `isPeek` is accepted for the modal's
 // uniform panel signature; nothing here is translucent.
 export function DateTimePanel(_props: { isPeek?: boolean }) {
-  return <AssistantShell render={(p) => <TimeSection {...p} />} />
+  return <AssistantShell heading={{ icon: Clock, title: 'Date and time' }} render={(p) => <TimeSection {...p} />} />
 }
 
 export function SystemPromptPanel(_props: { isPeek?: boolean }) {
-  return <AssistantShell render={(p) => <PromptSection {...p} />} />
+  return <AssistantShell heading={{ icon: MessageSquareText, title: 'System prompt' }} render={(p) => <PromptSection {...p} />} />
 }
 
 export function SafetyPanel(_props: { isPeek?: boolean }) {
-  return <AssistantShell render={(p) => <SafetySection {...p} />} />
+  return <AssistantShell heading={{ icon: ShieldAlert, title: 'Safety' }} render={(p) => <SafetySection {...p} />} />
 }
 
 type SectionProps = {
@@ -226,6 +232,7 @@ function PromptSection({ status, saving, save, confirm }: SectionProps) {
       {status.frozen && <FrozenNote />}
 
       <textarea
+        aria-label="System prompt"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={status.frozen}
@@ -366,6 +373,7 @@ function SafetySection({ status, saving, save, confirm }: SectionProps) {
         )}
         <div className="flex gap-2">
           <input
+            aria-label="Blocked phrase to add"
             value={phrase}
             onChange={(e) => setPhrase(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void addPhrase() }}

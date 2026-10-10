@@ -43,10 +43,6 @@ class SearchStoreError(RuntimeError):
     """Base class for this module's errors."""
 
 
-class UnknownProviderError(SearchStoreError):
-    """No such provider id — maps to 400."""
-
-
 def init_db() -> None:
     global _initialised
     with _init_lock:
@@ -100,15 +96,6 @@ def list_providers() -> dict[str, dict[str, Any]]:
     with sqlite_util.connect(DB_PATH) as conn:
         rows = conn.execute("SELECT * FROM search_providers").fetchall()
     return {row["id"]: public(row) for row in rows}
-
-
-def get_provider(provider_id: str) -> dict[str, Any] | None:
-    init_db()
-    with sqlite_util.connect(DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT * FROM search_providers WHERE id = ?", (provider_id,)
-        ).fetchone()
-    return public(row) if row else None
 
 
 def secret_for(provider_id: str) -> tuple[str | None, str | None, str | None]:

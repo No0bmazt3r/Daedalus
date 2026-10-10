@@ -27,7 +27,7 @@ leaves embedders out, `inference.choose_model` refuses an override to one and
 answers with the configured model, and `model_config` refuses to pin one. An
 embedder is chosen only in Settings → Vector RAG, or from the dropdown in
 Blueprints → Build → Embedding, which sends the same request. Guarded by
-`tests/test_chat_models_only.py`.
+`tests/models/test_chat_models_only.py`.
 
 Chat models have a richer scorer because they are the expensive part: weights
 × quantization × context against two memory pools (VRAM and RAM), with fit,
@@ -171,10 +171,10 @@ does.
 
 | Test | Guards |
 |---|---|
-| `tests/test_embedding_fit.py` · `CatalogueContractTest` | Every embedding and re-ranker entry carries every field its verdict needs; no catalogue declares `recommended` |
-| `tests/test_embedding_fit.py` · `SharedRuleTest` | The verdict levels, hard failures, and the recommendation fallback |
-| `tests/test_embedding_fit.py` · `EmbeddingFitTest` | The chunk-window rule, English/Malay recommendations, benchmark-over-estimate, models pulled from outside the catalogue |
-| `tests/test_rerank.py` · `RerankerFitTest` | Re-ranker estimates, verdicts and recommendations |
+| `tests/models/test_embedding_fit.py` · `CatalogueContractTest` | Every embedding and re-ranker entry carries every field its verdict needs; no catalogue declares `recommended` |
+| `tests/models/test_embedding_fit.py` · `SharedRuleTest` | The verdict levels, hard failures, and the recommendation fallback |
+| `tests/models/test_embedding_fit.py` · `EmbeddingFitTest` | The chunk-window rule, English/Malay recommendations, benchmark-over-estimate, models pulled from outside the catalogue |
+| `tests/retrieval/test_rerank.py` · `RerankerFitTest` | Re-ranker estimates, verdicts and recommendations |
 
 ## 7. Known limits
 

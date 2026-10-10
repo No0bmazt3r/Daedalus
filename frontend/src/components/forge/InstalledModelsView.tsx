@@ -20,6 +20,7 @@ import { SkeletonList } from '../ui/skeleton'
 import { Collapse } from '../ui/collapse'
 import { PaneIntro, BrowseLink, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
+import { useSettings } from '../../contexts/SettingsContext'
 
 /**
  * Forge → Installed: what this machine has, and what it has been doing.
@@ -167,6 +168,7 @@ function LocalModel({
           {hasArch && (
             <button
               onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
               title="Show the shape of the file on this disk."
               className="p-1.5 rounded-lg theme-text-muted hover:theme-text transition-colors"
             >
@@ -303,7 +305,10 @@ export function InstalledModelsView({
 }) {
   const [pane, setPane] = useState<PaneId>(initialPane)
   const [confirm, confirmDialog] = useConfirm()
-  const [source, setSource] = useState<ChatSource>('local')
+  const [pickedSource, setSource] = useState<ChatSource>('local')
+  // Settings → Cloud Models off: the cloud pane is not offered at all.
+  const { cloudEnabled } = useSettings()
+  const source: ChatSource = cloudEnabled ? pickedSource : 'local'
   const [rerankerCount, setRerankerCount] = useState(0)
   const [tier, setTier] = useState<TierFilter>('all')
   const [rows, setRows] = useState<ModelRow[] | null>(null)
@@ -403,10 +408,11 @@ export function InstalledModelsView({
       {([
         { id: 'local' as const, label: 'Local', icon: Cpu, n: rows?.length ?? 0 },
         { id: 'cloud' as const, label: 'Cloud baselines', icon: Cloud, n: cloudCount },
-      ]).map((entry) => (
+      ]).filter((entry) => cloudEnabled || entry.id !== 'cloud').map((entry) => (
         <button
           key={entry.id}
           onClick={() => setSource(entry.id)}
+          aria-pressed={source === entry.id}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
             source === entry.id
               ? 'theme-accent-border theme-accent theme-surface-strong'
@@ -449,13 +455,14 @@ export function InstalledModelsView({
           as the window narrows shifts everything below it for no reason. */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b theme-border pb-2">
         {([
-          { id: 'chat' as const, label: 'Chat models', icon: MessageSquare, n: (rows?.length ?? 0) + cloudCount },
+          { id: 'chat' as const, label: 'Chat models', icon: MessageSquare, n: (rows?.length ?? 0) + (cloudEnabled ? cloudCount : 0) },
           { id: 'embedding' as const, label: 'Embedding models', icon: Binary, n: embeddingCount },
           { id: 'rerankers' as const, label: 'Re-rankers', icon: ListOrdered, n: rerankerCount },
         ]).map((entry) => (
           <button
             key={entry.id}
             onClick={() => setPane(entry.id)}
+            aria-pressed={pane === entry.id}
             className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[11px] rounded-lg transition-colors ${
               pane === entry.id
                 ? 'theme-accent theme-surface-strong'

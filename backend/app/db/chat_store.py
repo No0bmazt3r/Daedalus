@@ -134,12 +134,17 @@ def derive_title(content: str) -> str:
     return flat[: TITLE_CHARS - 1].rstrip() + "…"
 
 
+def capitalised(title: str | None) -> str | None:
+    """A title always starts with a capital, however it was written."""
+    return title[:1].upper() + title[1:] if title else title
+
+
 def _session_row(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "session_id": row["session_id"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
-        "title": row["title"],
+        "title": capitalised(row["title"]),
         "device_id": row["device_id"],
         "summary": row["summary"],
         "summary_upto_seq": row["summary_upto_seq"],
@@ -515,22 +520,6 @@ def get_messages(
     with sqlite_util.connect(DB_PATH) as conn:
         rows = conn.execute(sql, params).fetchall()
     return [_message_row(row) for row in rows]
-
-
-def get_recent_messages(session_id: str, *, count: int) -> list[dict[str, Any]]:
-    """The last `count` messages, still in ascending order.
-
-    Ordering descending to take the tail and reversing in Python keeps SQLite
-    on the `(session_id, seq)` index instead of scanning the whole transcript.
-    """
-    init_db()
-    with sqlite_util.connect(DB_PATH) as conn:
-        rows = conn.execute(
-            "SELECT * FROM chat_messages WHERE session_id = ? "
-            "ORDER BY seq DESC LIMIT ?",
-            (session_id, max(1, count)),
-        ).fetchall()
-    return [_message_row(row) for row in reversed(rows)]
 
 
 def message_for_query(query_id: str) -> dict[str, Any] | None:

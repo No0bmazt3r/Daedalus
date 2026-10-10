@@ -31,7 +31,6 @@ function Chip({ children, title, tone = 'theme-text-muted' }: { children: React.
 
 function ChunkRow({ c }: { c: RetrievedChunkDetail }) {
   const [open, setOpen] = useState(false)
-  const where = [c.page != null ? `p.${c.page}` : null, c.section ? `§${c.section}` : null].filter(Boolean).join(' · ')
   return (
     <li className={`rounded-md border ${c.cited ? 'status-ok-border' : 'theme-border'}`}>
       <button
@@ -43,9 +42,16 @@ function ChunkRow({ c }: { c: RetrievedChunkDetail }) {
         <div className="min-w-0 flex-1 space-y-1">
           <p className="flex items-center gap-1.5 text-xs theme-text">
             <BookOpen size={11} className="shrink-0 theme-accent" />
-            <span className="min-w-0 truncate">{c.missing ? '(no longer in the corpus)' : c.document ?? c.chunk_id}</span>
-            {where && <span className="shrink-0 text-[10px] theme-text-muted">{where}</span>}
+            <span className="min-w-0 truncate" title={c.document ?? c.chunk_id}>
+              {c.missing ? '(no longer in the corpus)' : c.document ?? c.chunk_id}
+            </span>
+            {c.page != null && <span className="shrink-0 text-[10px] theme-text-muted">p.{c.page}</span>}
           </p>
+          {/* Its own line, cut short: a long section heading used to push the
+              filename out of view and run past the card's edge. */}
+          {c.section && (
+            <p className="truncate text-[10px] theme-text-muted" title={c.section}>§ {c.section}</p>
+          )}
           <div className="flex flex-wrap items-center gap-1">
             {c.cited && <Chip tone="status-ok" title="The answer cited this chunk">cited {c.label}</Chip>}
             {!c.cited && c.label && <Chip title="Shown to the model, not cited">{c.label}</Chip>}

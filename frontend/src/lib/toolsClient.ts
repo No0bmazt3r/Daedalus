@@ -205,10 +205,6 @@ export const enableTool = (tool?: string) =>
 export const fetchToolCatalogue = (surface = 'runtime') =>
   request<ToolCatalogue>(`/api/tools?surface=${encodeURIComponent(surface)}`);
 
-/** The function-calling payload the model is given, exactly as sent. */
-export const fetchToolSchemas = () =>
-  request<unknown[]>('/api/tools/schemas');
-
 /**
  * Run one tool from Settings, with a person watching.
  *

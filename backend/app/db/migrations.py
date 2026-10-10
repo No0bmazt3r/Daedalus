@@ -322,5 +322,3 @@ def status(store: str) -> dict[str, object]:
     }
 
 
-def status_all() -> list[dict[str, object]]:
-    return [status(store) for store in STORES]

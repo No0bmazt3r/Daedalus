@@ -326,6 +326,7 @@ function ToolRow({ tool, onChange }: {
 
           {tool.params.map((p) => (
             <input
+              aria-label={p.name}
               key={p.name}
               value={args[p.name] ?? ''}
               onChange={(e) => setArgs((a) => ({ ...a, [p.name]: e.target.value }))}

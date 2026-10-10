@@ -161,7 +161,7 @@ It runs seven checks in order:
 | # | Section | What it catches |
 |---|---|---|
 | 1 | **Prerequisites** | Missing `python3` (fatal), `pnpm` (skips frontend) |
-| 2 | **Configuration** | A teammate added a key to `.env.example`; your git-ignored `.env` never got it |
+| 2 | **Configuration** | A pull added a key to `.env.example`; your git-ignored `.env` never got it |
 | 3 | **Backend dependencies** | `requirements.txt` changed since you last installed. Also swaps an old venv's `chromadb-client` for the full `chromadb` |
 | 4 | **Frontend dependencies** | `pnpm-lock.yaml` is newer than `node_modules` |
 | 5 | **Database schema** | A pulled migration has not been applied |
@@ -183,16 +183,19 @@ variable. Missing keys are appended with `.env.example`'s values; **existing
 values are never touched**, and you are told to check the new ones suit your
 machine.
 
-**Section 5 is the one that matters most after a pull.** A teammate's
-migration arrives as a file, and until it runs, the code and the database
+**Section 5 is the one that matters most after a pull.** A new migration
+arrives as a file, and until it runs, the code and the database
 disagree about the shape of the data.
 
 **Section 7** is a one-off: before `scripts/common.sh` mapped host paths,
 `daedalus.sh dev` inherited the container paths from `.env` and `paths.py`
 fell back to `backend/data/…`, while Docker wrote to `data/` and `logs/`.
 Anyone who ran the dev servers then has a second, stale copy of each database.
-`sync.sh` reports them and **does not delete them** — one of them may hold
-demo telemetry worth keeping.
+The same copies reappear whenever backend code runs without the host paths —
+a bare `uvicorn` from `backend/`, or the backend tests run without `-t .` (which
+also skips the tests' own isolation). `sync.sh` reports them and **does not
+delete them** — one of them may hold demo telemetry worth keeping. Everything
+under `backend/data/` except `prefs.db` is such a copy.
 
 ### `--check` mode
 

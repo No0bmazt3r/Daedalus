@@ -37,6 +37,7 @@ export type BlueprintsTab =
   | 'corpus'
   | 'retrieval'
   | 'ingest'
+  | 'logs'
   | 'graph'
   | 'coverage'
   | 'replay'
@@ -55,6 +56,10 @@ export const BLUEPRINT_TABS: readonly {
   keywords: string;
 }[] = [
   {
+    id: 'ingest', label: 'Build', track: 'vector',
+    keywords: 'import upload chunk embed ingest pipeline run documents',
+  },
+  {
     id: 'corpus', label: 'Corpus', track: 'vector',
     keywords: 'documents chunks inventory what is indexed vector track 1',
   },
@@ -63,8 +68,12 @@ export const BLUEPRINT_TABS: readonly {
     keywords: 'retrieval chunks distances trace grounded evidence which passages vector',
   },
   {
-    id: 'ingest', label: 'Build', track: 'vector',
-    keywords: 'import upload chunk embed ingest pipeline run documents',
+    id: 'authoring', label: 'Build', track: 'graph',
+    keywords: 'author edit add node edge create graph pipeline',
+  },
+  {
+    id: 'logs', label: 'Logs', track: 'vector',
+    keywords: 'ingest runs log failed errors why did it fail history',
   },
   {
     id: 'graph', label: 'Graph', track: 'graph',
@@ -77,10 +86,6 @@ export const BLUEPRINT_TABS: readonly {
   {
     id: 'replay', label: 'Replay', track: 'graph',
     keywords: 'traversal hops walk trace query path',
-  },
-  {
-    id: 'authoring', label: 'Build', track: 'graph',
-    keywords: 'author edit add node edge create graph pipeline',
   },
 ];
 

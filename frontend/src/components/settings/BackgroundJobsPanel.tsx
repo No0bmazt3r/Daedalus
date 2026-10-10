@@ -11,8 +11,8 @@ import {
   type TitleMode,
 } from '../../lib/backgroundJobsClient'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
-import { Skeleton } from '../ui/skeleton'
 import { ThemeSelect } from '../ui/theme-select'
+import { SectionsSkeleton } from '../ui/sections-skeleton'
 
 /**
  * Settings → Background Jobs — the model work that runs after an answer.
@@ -92,7 +92,14 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
       />
     )
   }
-  if (!status) return <Skeleton className="h-64 w-full" />
+  if (!status) {
+    return (
+      <SectionsSkeleton sections={[
+        { icon: Tag, title: 'Chat titles' },
+        { icon: FileText, title: 'Rolling summary' },
+      ]} />
+    )
+  }
 
   const { config, models, resolved } = status
   const modelOptions = [

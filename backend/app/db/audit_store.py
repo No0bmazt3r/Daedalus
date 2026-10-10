@@ -235,7 +235,7 @@ def recent_queries(
     One row per `query_id` — the latest `conversation_logs` row for it, which is
     the one that records how the turn ended. Unpaged: how a turn is *classified*
     (grounded or not) depends on Settings → Ariadne's Thread, so the caller
-    classifies, filters and pages (`services/thread.py`). `since`/`until` are
+    classifies, filters and pages (`services/thread/`). `since`/`until` are
     ISO timestamps, `until` exclusive; `track` is a `rag_logs.track`.
     """
     init_db()
@@ -282,6 +282,30 @@ def recent_queries(
             params,
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def vector_retrievals(limit: int) -> list[dict[str, Any]]:
+    """Track 1 retrievals, newest first, for Blueprints' replay list. Read-only."""
+    init_db()
+    with sqlite_util.connect(AUDIT_DB, read_only=True) as conn:
+        rows = conn.execute(
+            "SELECT query_id, timestamp, query_text, top_k, retrieval_latency_ms, "
+            "vector_db_used, retrieved_chunk_ids IS NOT NULL AS replayable "
+            "FROM rag_logs WHERE track = 'vector' ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{**dict(r), "replayable": bool(r["replayable"])} for r in rows]
+
+
+def latest_vector_retrieval(query_id: str) -> dict[str, Any] | None:
+    """The newest Track 1 `rag_logs` row for one query, or None. Read-only."""
+    init_db()
+    with sqlite_util.connect(AUDIT_DB, read_only=True) as conn:
+        row = conn.execute(
+            "SELECT * FROM rag_logs WHERE query_id = ? AND track = 'vector' ORDER BY id DESC LIMIT 1",
+            (query_id,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 # ── human labels ─────────────────────────────────────────────────────────────

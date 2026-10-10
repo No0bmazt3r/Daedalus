@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useElementHeight } from '../../hooks/useElementHeight'
+import { useElementSize } from '../../hooks/useElementSize'
 import {
   forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide,
   forceX, forceY,
@@ -200,7 +200,7 @@ export function GraphCanvas({
   // first observation, so the fit maths never divides by zero and the canvas
   // never renders at no height for a frame.
   const frameRef = useRef<HTMLDivElement>(null)
-  const measured = useElementHeight(frameRef)
+  const measured = useElementSize(frameRef).height
   const drawHeight = height ?? (measured > 0 ? measured : HEIGHT)
 
   const viewRef = useRef({ x: 0, y: 0, w: WIDTH, h: drawHeight })

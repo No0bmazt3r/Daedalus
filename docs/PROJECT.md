@@ -1,9 +1,9 @@
 # Project Daedalus — Canonical Project Specification
 
-> **This file is the single source of truth.** It reconciles the two older
-> specification sets (`docs/` and `context/`) into one coherent description of
-> what Daedalus is, what it must never do, and what is actually built so far.
-> When any other document disagrees with this one, **this one wins**.
+> **This file is the single source of truth.** It reconciled the two FYP1
+> specification sets into one coherent description of what Daedalus is, what
+> it must never do, and what is actually built so far. When any other document
+> disagrees with this one, **this one wins**.
 
 ---
 
@@ -13,15 +13,29 @@
 |---|---|---|
 | **`PROJECT.md`** (this file) | Reconciled canonical spec | **Authoritative** |
 | [`FEATURES.md`](FEATURES.md) | What is actually built: API surface, store contracts, theme engine | **Authoritative for implementation detail** |
-| [`research/00–07`](research/) | FYP1 / interim-report-aligned specs. Strong on the *research* framing: dual-track RAG comparison, hardware-fit tooling, evaluation rigour | Historical + still-valid research design |
-| [`architecture/00–14`](architecture/) | "Project Daedalus v2" 11-layer implementation specs. Strong on *engineering* detail: tool I/O schemas, log tables, orchestration steps, examiner phrasings | Historical + still-valid implementation detail |
+| [`REPORT_NOTES.md`](REPORT_NOTES.md) | Material for writing the FYP2 report: FYP1 framing, prior art, rejected alternatives, what changed since the proposal | Report companion |
 
-All of the above live in this one `docs/` folder — see [`README.md`](README.md)
-for the navigation index and guidance on what to feed an AI for a given task.
+All of these live in `docs/` — see [`README.md`](README.md) for the navigation
+index and what to feed an AI for a given task.
 
-Neither older set is wrong — they were written at different times for different
-purposes. Section 2 documents exactly where they diverge and which way each
-conflict was resolved.
+**The FYP1 spec sets are retired.** `docs/research/` (8 interim-report-aligned
+files) and `docs/architecture/` (15 "Project Daedalus v2" layer files) were
+removed on 2026-10-10: everything still true in them is in this file, and the
+report-relevant framing they alone carried (literature anchors, rejected
+alternatives, prior-art positioning, data-flow figures) moved to
+`REPORT_NOTES.md`. They remain in git history. Section 2 keeps the record of
+where they disagreed and how each conflict was resolved, because that is a
+design-decision record the report can cite.
+
+Code comments still cite them by short name. Where each now lives:
+
+| Cited as | Was | Now |
+|---|---|---|
+| `research/03` | Agentic GraphRAG spec | §5 *Track 2*; `MODULES.md` §3 |
+| `research/05` | llmfit-inspired fit tool | §8; `MODEL_FIT.md`; `MODULES.md` §2 |
+| `architecture/04` | Ingestion layer (steps 1–6: extract, clean, chunk 300–500 tokens with overlap, metadata, embed locally, store) | §5 *Corpus categories*; `FEATURES.md` *Text extraction*, *Vector store* |
+| `architecture/07` | Orchestration layer (11 steps, response contract) | §7.1 |
+| `architecture/08` | Tool layer (I/O contracts) | §7.2 |
 
 ---
 
@@ -75,7 +89,7 @@ This is not "add a chatbot". Three pillars make it a defensible FYP:
 
 ---
 
-## 2. Reconciling `research/` and `architecture/`
+## 2. Reconciling the FYP1 spec sets (`research/` and `architecture/`)
 
 ### 2.1 Where they already agree — the stable core
 
@@ -102,9 +116,9 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 1 | **Frontend** | PyQt5 tab only; a web frontend is *explicitly out of scope*, "deferred to Phase 2" | Dual: Layer 9A PyQt5 tab **and** Layer 9B standalone React/Vite/TanStack/shadcn dashboard | **Web dashboard is primary.** It is what actually exists today and it proves the backend is decoupled. The PyQt5 tab drops to optional/Phase-2. `research/` is simply out of date here |
 | 2 | **Retrieval strategy** | Two tracks, built and compared: vector RAG vs GraphRAG | `architecture-overview.md` says Graph RAG *instead of* vector DBs; but `05-vector-retrieval-layer.md` specifies ChromaDB production **plus** a 6-candidate vector-DB benchmark | **Keep the dual-track comparison** — it is the headline research contribution. The vector-DB bake-off is a *sub-study inside Track 1*, not a competing plan. `architecture-overview.md`'s "instead of" is overruled |
 | 3 | **Device scope** | CO₂ reactor only | Device-agnostic `device_profiles` schema, dynamically generated per-device tools, `/device/:id/chat` routing | **Single-device for FYP2.** Multi-device is genuine scope creep against the timeline. Keep the schema *forward-compatible* (a `device_id` column, defaulted) so Phase 2 needs no migration, but build and evaluate one device |
-| 4 | **Tool typing** | Plain Python function signatures | PydanticAI-enforced typed tool calling | **Adopt PydanticAI.** Typed tool contracts make Rule 3 structurally enforceable rather than conventional |
-| 5 | **Observability** | Not covered at all | Six log tables, `query_id` tracing, Arize Phoenix, Streamlit log viewer | **Adopt `architecture/` wholesale.** `research/` has a genuine gap; there is no conflict to resolve |
-| 6 | **Model-fit tooling** | `05-model-hardware-fit-tool.md` — llmfit-inspired CLI | `11-admin-utility-layer.md` — Model Selector Console (Streamlit) | **Same deliverable, two names.** Merge into one "Hardware & Model Console": CLI-first (the safe MVP), optional web UI later |
+| 4 | **Tool typing** | Plain Python function signatures | PydanticAI-enforced typed tool calling | **Typed contracts, without PydanticAI.** Typed tool contracts make Rule 3 structurally enforceable rather than conventional. Built as Daedalus' own registry (`agent_tools/registry.py`): each tool's `Param` declarations generate the function-calling schema and are enforced at dispatch, so PydanticAI would have added a dependency for what the registry already does |
+| 5 | **Observability** | Not covered at all | Six log tables, `query_id` tracing, Arize Phoenix, Streamlit log viewer | **Adopt the logging wholesale; drop Streamlit.** Seven log tables (a `memory_logs` was added) on one `query_id`. The log viewer was built inside the web dashboard as Ariadne's Thread rather than as a separate Streamlit app |
+| 6 | **Model-fit tooling** | `05-model-hardware-fit-tool.md` — llmfit-inspired CLI | `11-admin-utility-layer.md` — Model Selector Console (Streamlit) | **Same deliverable, two names.** Merged into one "Hardware & Model Console", built directly as a web console (The Forge) — the scoring logic is the substance, and a UI over it was cheaper than a second surface |
 | 7 | **Evaluation method** | Local manual labelling | Hybrid: local Streamlit + n8n/Google Sheets + LLM-as-a-judge | **Adopt the hybrid**, with the cloud half explicitly fenced as an *offline, post-hoc* workflow over exported logs. It never touches the live runtime |
 | 8 | **Sensor table PK** | `timestamp DATETIME PRIMARY KEY` | `id INTEGER PRIMARY KEY AUTOINCREMENT` + `timestamp TEXT` | **ISO-8601 `timestamp TEXT` as PK.** `architecture/03` itself recommends collapsing to a single ISO timestamp. Simpler joins, natural ordering |
 | 9 | **Column naming** | `temp_c`, `pressure_barg`, `ph`, `co2_ppm` | `temperature`, `pressure`, `ph`, `co2_ppm`, `mode` | **Unit-suffixed physical columns** (`temp_c`, `pressure_barg`) — self-documenting. The tool layer exposes *friendly* names (`temperature`) and maps them to columns via a whitelist |
@@ -112,13 +126,17 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 | 11 | **Model list drift** | Qwen3, Phi-3, Gemma 3, Llama 3.1, Mistral | `architecture-overview` says Qwen2.5/Llama 3.2; `06` says Qwen3/Phi-3/Gemma 3 | **Use the `06`/`docs` list** (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B for SLM tier). The overview's list is stale |
 | 12 | **Naming** | "CO2SorptionDT Conversational Agentic AI" | "Project Daedalus" | **Daedalus** is the system/product name; the FYP title stays the formal academic one |
 
-### 2.3 Open questions still needing your decision
+### 2.3 Open questions
 
-These are genuinely undecided — flagged rather than silently resolved:
-
-- [ ] **Is the PyQt5 tab still a deliverable at all**, or fully replaced by the web dashboard? Affects whether Zone 4 needs two clients.
-- [ ] **Is the vector-DB bake-off (6 candidates) still in scope for FYP2**, on top of the dual-track RAG comparison? Two benchmark studies may be more than the timeline allows.
-- [ ] **Confirm the lab machine's actual specs** (RAM/GPU) — this gates the entire model-tier decision.
+- [x] **Is the PyQt5 tab still a deliverable?** No — the web dashboard replaces
+  it for FYP2; the tab is deferred to Phase 2.
+- [x] **Is the vector-DB bake-off (6 candidates) still in scope?** No — the
+  dual-track comparison is the one benchmark study; the bake-off is deferred to
+  Phase 2.
+- [ ] **Confirm the lab machine's actual specs** (RAM/GPU) — this gates the
+  entire model-tier decision.
+- [ ] **Get the lab's own documents** — rig-specific answers and their ground
+  truth can only come from `rig` documents.
 
 ---
 
@@ -211,12 +229,12 @@ evaluation harness are administrative. They never sit in the live query path.
 └────────────────────────────┬────────────────────────────────────────┘
                              │ read-only SQL  ◄── THE SAFETY BOUNDARY
 ┌─ Zone 3 ─ Read-Only AI Layer ──────────────── THIS PROJECT'S WORK ─┐
-│  FastAPI orchestrator · PydanticAI tools · Track 1 vector RAG ·     │
+│  FastAPI orchestrator · typed tool registry · Track 1 vector RAG ·  │
 │  Track 2 agentic GraphRAG · Ollama SLM · audit logs                 │
 └────────────────────────────┬────────────────────────────────────────┘
                              │ grounded answer + citations
 ┌─ Zone 4 ─ Presentation ─────────────────────────────────────────────┐
-│  9B React web dashboard (PRIMARY, built) · 9A PyQt5 tab (optional)  │
+│  9B React web dashboard (built) · 9A PyQt5 tab (Phase 2)           │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -227,14 +245,14 @@ evaluation harness are administrative. They never sit in the live query path.
 | 1 | Physical reactor & sensors | 1 | Pre-existing, untouched |
 | 2 | SCADA acquisition | 2 | Pre-existing |
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
-| 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); waiting on the real corpus |
-| 5 | Retrieval — vector + graph | 3 | **Wired into chat**, one track at a time — Track 1 top-k over the current index with metadata filtering and cross-encoder re-ranking; Track 2 the agent loop (`graph_agent`) or the fixed walk it is measured against (`graph_walk`). Every result marked this rig or reference. Track 1's hybrid search, query expansion, compression and multi-hop not built |
+| 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Track 1 → Build). 2 reference PDFs ingested (162 chunks); the rest of the corpus is not |
+| 5 | Retrieval — vector + graph | 3 | **Wired into chat**, one track at a time — Track 1 top-k over the current index with metadata filtering and cross-encoder re-ranking; Track 2 the agent loop (`graph_agent`) or the fixed walk it is measured against (`graph_walk`). Every result marked this rig or reference. Track 1's hybrid search, query expansion, compression and multi-hop were cut from FYP2 |
 | 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
 | 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback, background summariser; citations shown in the chat |
 | 8 | Deterministic tool layer | 3 | **Built** — the two sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
-| 9A | PyQt5 chat tab | 4 | Deferred / optional |
-| 9B | React web dashboard | 4 | **Partially built** — see §11 |
-| 10 | Observability & evaluation | Support | **Logging wired** — every chat turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags; evaluation harness not built |
+| 9A | PyQt5 chat tab | 4 | Deferred to Phase 2 |
+| 9B | React web dashboard | 4 | **Built** — chat, The Forge, Labyrinth Blueprints, Ariadne's Thread, settings |
+| 10 | Observability & evaluation | Support | **Built** — every chat turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags; Ariadne's Thread reads them back per turn; the evaluation harness (`python -m app.cli_eval`) runs the query set per arm. **No evaluation run yet** — it waits on the corpus |
 | 11 | Admin utilities | Setup | **Built** — The Forge: all six §8.2 steps, plus model discovery and per-model usage |
 
 ---
@@ -247,16 +265,21 @@ Both tracks share Zones 1/2/4 and all deterministic sensor tools. They diverge
 ### Track 1 — Traditional vector RAG (baseline / control)
 
 ChromaDB, local embeddings, top-k cosine retrieval. Advanced techniques layered
-on top (all from `architecture/05`):
+on top (all from the FYP1 retrieval-layer spec):
 
 | Technique | Purpose | Status |
 |---|---|---|
 | Metadata-filtered retrieval | Narrow by `source_type`, `reactor_mode`, `document_version` | **Built** (`source_type`) |
-| Query expansion | LLM rewrites the query with lab synonyms before searching | Not built |
-| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | Not built |
+| Query expansion | LLM rewrites the query with lab synonyms before searching | Cut from FYP2 |
+| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | Cut from FYP2 |
 | Cross-encoder re-ranking | Re-score top-N locally before synthesis | **Built** — on by default, frozen with the track |
-| Contextual compression | Strip irrelevant sentences to save context window | Not built |
-| Multi-hop | Loop back and re-retrieve if evidence is insufficient | Not built |
+| Contextual compression | Strip irrelevant sentences to save context window | Cut from FYP2 |
+| Multi-hop | Loop back and re-retrieve if evidence is insufficient | Cut from FYP2 |
+
+**Track 1 is deliberately a plain baseline with cross-encoder re-ranking**
+(decided 2026-10-01). The report must say so, so that the four cut techniques
+read as a scoping decision rather than as a handicap that tilts the comparison
+towards Track 2.
 
 ### Track 2 — Agentic GraphRAG (comparison arm)
 
@@ -317,7 +340,7 @@ surfaces** under Rule 5 — they write, so neither is ever exposed to the model.
 | | Track 1 | Track 2 |
 |---|---|---|
 | Knowledge arrives by | ingesting documents | somebody authoring nodes |
-| Surface | Blueprints → Corpus → **Build** | Blueprints → **Build** |
+| Surface | Blueprints → Track 1 → **Build** | Blueprints → Track 2 → **Build** |
 | Source of truth | ChromaDB + `corpus.db` manifest | `config/knowledge_graph.yaml` |
 | Log | `ingest_events`, per stage | `graph_edits`, including refusals |
 
@@ -478,11 +501,14 @@ the report.
 
 | Store | Engine | Path | AI access | Holds |
 |---|---|---|---|---|
-| **Sensor** | SQLite | `/data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
-| **Audit** | SQLite | `/logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
-| **Chat** | SQLite | `/data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
-| **Vector** | ChromaDB + SQLite | `chromadb` service (or `data/chroma`), plus `/data/sqlite/corpus.db` | read/write | embedded manual/SOP/troubleshooting/safety chunks, and the manifest of what was ingested |
-| **Prefs** | SQLite | `/app/data/prefs.db` | read/write | UI state, kept out of the browser |
+| **Sensor** | SQLite | `data/sqlite/sensor_readings.db` | **read-only** (`mode=ro`) | IoT telemetry written by SCADA |
+| **Audit** | SQLite | `logs/ai_logs.db` | read/write | conversation · tool · rag · model · error · feedback · memory logs |
+| **Chat** | SQLite | `data/sqlite/chat.db` | read/write | conversation sessions and messages — the transcript the user owns |
+| **Vector** | ChromaDB + SQLite | `data/chroma` (embedded), plus `data/sqlite/corpus.db` | read/write | embedded manual/SOP/troubleshooting/safety chunks, and the manifest of what was ingested |
+| **Prefs** | SQLite | `backend/data/prefs.db` | read/write | UI state, kept out of the browser |
+
+Paths are relative to the repository root, as `daedalus.sh` sets them; each is
+overridable by environment (`db/paths.py`).
 
 **The Vector store has two halves and is still one store.** Chroma holds the
 vectors; `corpus.db` holds the record of what was ingested — documents, chunk
@@ -597,7 +623,7 @@ instrumentation methods as much as two retrieval strategies. A call with no
 for one would land in the evaluation set as though it were.
 
 **Security rules:** whitelisted sensor names (`temperature`, `pressure`, `ph`,
-`co2_ppm`, `mode`) and aggregations (`average`, `min`, `max`,
+`level`, `co2_ppm`, `mode`) and aggregations (`average`, `min`, `max`,
 `count`, `latest`, `first`); parameterized SQL only; no write queries; query
 timeout and result-size caps; errors that never leak internals.
 
@@ -695,8 +721,10 @@ Selected via `config/model_config.json` — **never hardcoded** in FastAPI.
 
 ### 8.2 Hardware & Model Console
 
-Merges `research/05` (llmfit-inspired fit tool) and `architecture/11` (Model Selector
-Console) into one deliverable. CLI-first; web UI only if time allows.
+Merges the FYP1 llmfit-inspired fit tool and the Model Selector Console into
+one deliverable, built as a web console: **The Forge** (`MODULES.md` §2). It
+judges chat models, embedding models and re-rankers against this machine; the
+contract is in [`MODEL_FIT.md`](MODEL_FIT.md).
 
 1. **Detect** RAM, CPU, GPU/VRAM, disk, Ollama version (`psutil`, `pynvml`)
 2. **Estimate** memory per model × quantization:
@@ -721,10 +749,12 @@ and used to sanity-check our estimates, never production inference.
 
 ### 9.1 Tracing
 
-Every query gets a `query_id` (e.g. `q_20260107_0001`) threading through six log
-tables in a **separate** `ai_logs.db`: `conversation_logs`, `tool_logs`,
-`rag_logs`, `model_logs`, `error_logs`, `feedback_logs`. JSONL fallbacks for raw
-debug. Logging must never block the response — use FastAPI `BackgroundTasks`.
+Every query gets a `query_id` (e.g. `q_20260107_0001`) threading through seven
+log tables in a **separate** `ai_logs.db`: `conversation_logs`, `tool_logs`,
+`rag_logs`, `model_logs`, `error_logs`, `feedback_logs`, `memory_logs`. Logging
+must never block or crash the response. **Ariadne's Thread** (`MODULES.md` §1)
+reads one `query_id` back as ordered steps — question, intent, tools, evidence,
+model, validation, answer — and is where a person labels a turn.
 
 This is how "prove it was grounded" gets answered concretely:
 
@@ -745,10 +775,14 @@ query_id q_20260107_0001 · tool get_live_reading · SQLite 470.2 ppm
 
 ### 9.3 Hybrid evaluation
 
-- **Method A — local (Streamlit).** Log viewer with an evaluation mode; ratings
-  land in local `feedback_logs`. Fully offline.
+- **Method A — local.** The evaluation harness (`python -m app.cli_eval`,
+  [`EVALUATION.md`](EVALUATION.md)) runs the query set once per arm through the
+  real chat path and scores it against hand-written labels; Ariadne's Thread is
+  where a person labels individual turns (`feedback_logs`). Fully offline.
+  *(The Streamlit viewer the FYP1 spec planned was cut — the Thread replaces it.)*
 - **Method B — distributed (n8n + Google Sheets + LLM-as-a-judge).** Exported
-  historical logs only, processed asynchronously for statistical scale.
+  logs only — the harness writes `judge.jsonl` for it — processed
+  asynchronously for statistical scale. Not built.
 
 > Method B never touches the live reactor, never runs during operator chat, and
 > has no SCADA access. It processes exported logs after the fact. This is the
@@ -772,111 +806,111 @@ Ollama directly, or send control commands. **The UI is purely a client of
 
 Trust comes from visible reasoning, not a black box:
 
-- **Streaming chat** — token-by-token via SSE
-- **Tool-call trace** — collapsible Thought → Action → Observation steps
-- **Graph visualiser** — mini node-graph showing how GraphRAG connected a
-  sensor to an SOP
-- **Source badges** — `[Live DB]` `[Trend]` `[SOP]` `[Manual]` `[Graph]`
-- **Hardware/model console** — CPU/RAM/VRAM stats, swap active SLM
+| Element | Built as |
+|---|---|
+| **Streaming chat** — token-by-token via SSE | Built |
+| **Tool-call trace** — Thought → Action → Observation | Ariadne's Thread: every turn as ordered steps, with the evidence and the validator's verdict on each number |
+| **Graph visualiser** — how GraphRAG connected a sensor to an SOP | Blueprints → Graph and Replay: the recorded walk, hop by hop |
+| **Source badges** | Evidence labels as citation chips (`[S1]` sensor, `[D1]` document, `[G1]` graph node) with `THIS RIG` / `REFERENCE` marks. A separate badge row in the planned `[Live DB] [SOP] [Graph]` style was cut — the labels already carry it |
+| **Hardware/model console** — CPU/RAM/VRAM, swap active SLM | The Forge |
 
 ---
 
 ## 11. Current implementation status
 
-*As of 2026-10-01. `TODO.md` is the item-level record; this is the summary.*
+*As of 2026-10-10. `TODO.md` is the item-level record; this is the summary.*
 
 ### Built and working
 
 | Area | Detail |
 |---|---|
-| **Chat** | `POST /api/chat` runs the whole §7.1 flow and streams tokens over SSE; both turns persist, and the answer carries citation chips and a *Sources* list from the stored evidence pack |
+| **Chat** | `POST /api/chat` runs the whole §7.1 flow and streams tokens over SSE; both turns persist; the answer renders as Markdown with citation chips and a *Sources* list from the stored evidence pack |
 | **Orchestration** | All 11 steps: normalise, rewrite follow-ups, classify (7 intents), safety guard, deterministic planning, tool execution, labelled evidence pack, prompt, stream, validate (numbers, times, causes, control claims → fallback), log |
-| **Sensor data** | Read-only store (`mode=ro`) with a demo seeder; `get_live_reading` and `get_trend` with enum-checked columns, timeouts and downsampling |
-| **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Corpus); per-document category and rig/reference origin. **No real documents ingested yet** |
+| **Sensor data** | Read-only store (`mode=ro`) with a demo seeder (4,320 rows); `get_live_reading` and `get_trend` with enum-checked columns, timeouts and downsampling |
+| **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Track 1 → Build); per-document category and rig/reference origin; PDF extraction handles AES-locked and font-shifted manuals. **2 reference PDFs ingested (162 chunks)**; 15 more collected in `data/corpus_sources/`, and the lab's own documents not yet obtained |
 | **Track 1** | Chroma top-k with `source_type` filtering and cross-encoder re-ranking; refuses an index built by a different embedding model |
 | **Track 2** | Hand-authored 34-node graph (placeholder data until the real corpus), editable in Blueprints with an assisted proposal queue; the agent loop and the fixed walk, switchable; replay of every walk |
 | **Tool layer** | 33 tools in six categories behind effect, track and argument gates; Simple/Advanced mode enforced at dispatch |
-| **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins |
-| **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit |
-| **Frontend** | React dashboard: theming, settings, store browser, Blueprints (corpus, graph, coverage, authoring, replay) |
-| **Tests** | 143 backend `unittest` cases; the frontend has none |
+| **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins; Ariadne's Thread reads them back and takes human labels |
+| **Evaluation harness** | `python -m app.cli_eval` — validates the query set, runs it per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores it, refuses an official run unless frozen. The query set holds 5 examples |
+| **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit — for chat models, embedders and re-rankers |
+| **Frontend** | React dashboard: chat, The Forge, Labyrinth Blueprints (ingest, corpus, graph, coverage, authoring, proposals, replay), Ariadne's Thread, theming, settings, store browser, full-tab error pages |
+| **Deployment** | Runs on the host: `./daedalus.sh setup` then `dev` or `start`; no Docker except the optional SearXNG |
+| **Tests** | 231 backend `unittest` cases and 9 frontend logic tests, all passing; not in CI |
 
 ### Not built
 
-- **Real knowledge.** The corpus is empty and the graph is placeholder data —
+- **Real knowledge.** 2 of 17 collected reference documents are ingested, the
+  lab's own documents are not yet in hand, and the graph is placeholder data —
   this blocks meaningful answers from either track and the whole evaluation.
-- **Track 1 extras:** hybrid BM25 search, query expansion, contextual
-  compression, multi-hop re-retrieval.
-- **Evaluation (§9):** golden query set, ground truth, scoring and latency
-  harness, the three comparison runs.
-- **Model choice (§8):** the SLM tier is not smoke-tested and the lab machine's
-  specs are unconfirmed; qwen3:1.7b drives Track 2's agent poorly.
-- **Ariadne's Thread** — the provenance viewer (`MODULES.md`).
+- **Evaluation (§9):** the 30–50 question golden set and its hand labels, the
+  three comparison runs, failure analysis, Method B and the human panel.
+- **Model choice (§8):** the SLM tier is not smoke-tested, the lab machine's
+  specs are unconfirmed, and qwen3:1.7b drives Track 2's agent poorly.
 - A validator check for prompt rule 9 (reference-only rig specifics).
+- The ingestion graph-gap check (Blueprints), which keeps the comparison fair to Track 2.
+
+**Cut from FYP2 (2026-10-01), stated as scope:** Track 1's hybrid BM25 search,
+query expansion, contextual compression and multi-hop re-retrieval; the
+`VectorStoreAdapter` and vector-DB bake-off; the Streamlit log viewer; the
+Prometheus/Grafana metrics stack; the separate source-badge row.
 
 > **Honest framing:** the pipeline is built end to end and runs on demo
-> telemetry and a placeholder graph. What is missing is the lab's real
-> documents, the evaluation that measures the two tracks, and the model choice
-> the lab machine allows.
+> telemetry, a placeholder graph and two reference documents. What is missing is
+> the lab's real documents, the evaluation that measures the two tracks, and the
+> model choice the lab machine allows.
 
 ---
 
 ## 12. Deployment
 
-**Target:** one command brings up frontend + backend together.
+**Target:** one command brings up the dashboard and the API together, on the
+lab machine itself.
 
 ```bash
-./daedalus.sh setup   # one-time: deps, .env, runtime dirs
-./daedalus.sh start   # or: docker compose up
+./daedalus.sh setup   # one-time: prerequisites, .env, dependencies, migrations
+./daedalus.sh start   # build the dashboard once, serve it and the API on :8000
+./daedalus.sh dev     # or: hot reload, uvicorn :8000 + Vite :5173
 ```
 
-Configuration lives in `.env` (template `.env.example`), read by both compose
-and the script, so the container stack and the dev servers share one source.
-
-A multi-stage build compiles the React app, then serves the static bundle *and*
-the API from a **single FastAPI container** — one image, one port, no CORS, no
-separate web server.
+**Everything runs on the host — no Docker.** One uvicorn process serves the
+API, the built React SPA (`start`) and ChromaDB embedded in-process
+(`data/chroma`) — one port, no CORS, no separate web server. Ollama is the
+host's own install, which keeps GPU access and the model cache simple.
 
 ```
-┌─ daedalus container ─────────────────────────┐
-│  FastAPI (uvicorn) :8000                     │
-│   ├── /api/*     → orchestrator, tools, prefs│
-│   └── /*         → built React SPA           │
-└───┬───────────────┬───────────────┬──────────┘
-    │ volumes       │ CHROMA_URL    │ OLLAMA_BASE_URL
-┌───▼──────────┐ ┌──▼───────────┐ ┌─▼──────────┐
-│ ./data       │ │ chromadb     │ │ Ollama     │
-│ ./logs       │ │ (compose)    │ │ host or    │
-│ backend/data │ │ vector store │ │ --profile  │
-└──────────────┘ └──────────────┘ └────────────┘
-  sensor + audit
-  + prefs SQLite
+┌─ uvicorn :8000 (host) ───────────────────────┐
+│   /api/*  → orchestrator, tools, prefs       │
+│   /*      → built React SPA (start)          │
+│   ChromaDB embedded → data/chroma            │
+└───┬──────────────────────────────┬───────────┘
+    │ files                        │ OLLAMA_BASE_URL
+┌───▼───────────────────┐   ┌──────▼──────────┐
+│ data/   sensor, chat, │   │ Ollama (host)   │
+│         corpus, chroma│   └─────────────────┘
+│ logs/   ai_logs.db    │   optional, setup only:
+│ backend/data prefs.db │   SearXNG container (--with-search)
+└───────────────────────┘
 ```
 
-`chromadb` runs as its own service so the index survives app rebuilds and the
-offline ingestion pipeline can write to it independently. It has no
-healthcheck — the image is minimal (dash only, no curl/wget/python), so
-nothing inside it can probe the port; readiness is reported by the app at
-`/api/system/databases` instead, and the dashboard boots fine without it.
+The container stack (app + ChromaDB, dev and GPU overlays) was removed: on a
+single-user localhost install it bought nothing the host lacks, and the Docker
+VM under WSL held gigabytes of memory for it. The one container left is
+SearXNG, a setup surface for sourcing documents, started deliberately.
 
-**Ollama runs on the host by default** — GPU passthrough is far simpler that way,
-and models stay in the host cache. `docker compose --profile with-ollama up`
-runs it as a container instead.
-
-Volumes keep state on the host: `./data` (sensor DB, Chroma, graph, documents),
-`./logs` (ai_logs.db), `backend/data` (prefs.db).
-
-**Ports bind to `127.0.0.1` by default.** Widen to the LAN only deliberately.
+Configuration lives in `.env` (template `.env.example`), read by all three
+scripts through `scripts/common.sh`. Ports bind to `127.0.0.1`. Every command
+and safeguard is in [`SCRIPTS.md`](SCRIPTS.md).
 
 ---
 
 ## 13. Scope boundaries
 
 ### In scope (FYP2)
-Both retrieval tracks and their comparison · the four deterministic tools ·
-FastAPI orchestration with safety guard and response validation · Ollama SLM
-serving · React dashboard · observability + evaluation harness · hardware/model
-console · containerised deployment
+Both retrieval tracks and their comparison · the deterministic sensor tools and
+each track's retrieval tool · FastAPI orchestration with safety guard and
+response validation · Ollama SLM serving · React dashboard · observability +
+evaluation harness · hardware/model console · one-command host deployment
 
 ### Out of scope (state plainly if asked)
 - Cloud LLMs in production (benchmark-only ceiling)
@@ -888,8 +922,9 @@ console · containerised deployment
 - Model fine-tuning or a prompt playground
 
 ### Deferred to Phase 2
-PyQt5 embedded tab · multi-device `device_profiles` + dynamic per-device tools ·
-Kùzu graph backend · LAN/multi-lab deployment
+PyQt5 embedded tab · the 6-candidate vector-DB bake-off · multi-device
+`device_profiles` + dynamic per-device tools · Kùzu graph backend · LAN/multi-lab
+deployment
 
 ### Anti-patterns — never build or draw these
 
@@ -900,7 +935,7 @@ Kùzu graph backend · LAN/multi-lab deployment
 | Cloud vector DBs (Pinecone, Atlas) | Breaks local-first |
 | AirLLM as production runtime | Experimental and slow; feasibility tool only |
 | Model console framed as a chat UI | Mispositions an admin utility |
-| Grafana / Prometheus | Overkill; Streamlit suffices |
+| Grafana / Prometheus | Overkill; Ariadne's Thread reads the audit log directly |
 | A log-viewer → reactor arrow | The viewer only ever reads logs |
 
 ---
@@ -917,14 +952,22 @@ Kùzu graph backend · LAN/multi-lab deployment
 
 > **Logging vs read-only:** "The read-only boundary applies to the reactor control layers. The AI layer writes to its own local audit database so that every query, tool call, and model response can be audited for groundedness and safety without transmitting data externally."
 
-> **Vector DB choice:** "Each candidate database is wrapped behind a common adapter interface and evaluated using the same corpus, chunking strategy, embedding model, and held-out query set. This allows the final selection to be justified empirically rather than qualitatively."
+> **Cloud override:** "The console does permit an operator to direct a single chat turn at a cloud model for comparison; such a turn is written to `model_logs` as `chat_cloud` rather than `chat`, is labelled in the transcript, and is excluded from every production latency figure. The boundary is therefore enforced *and* auditable rather than merely asserted."
+
+> **Dual-track comparison:** "Both retrieval tracks answer the same query set with the same model, quantization, corpus and hardware, and only the selected track's retrieval tool can run in any answer. The comparison therefore isolates retrieval architecture as the only variable. The tracks were frozen before the official run, so no track was tuned after its results were seen."
+
+> **Model console:** "The model console is a local administrative utility supporting Objective 3. It profiles the lab hardware, judges each candidate model safe, marginal or will-not-fit, manages local Ollama models and records benchmark results. It is not part of the operator-facing conversational interface; its purpose is to make model selection reproducible, hardware-aware and documented."
+
+> **AirLLM / LLM Checker:** "AirLLM and LLM Checker were used only as feasibility references for the hardware-fit estimates. The production system uses Ollama with fully resident quantized models for stable low-latency inference."
+
+> **Evaluation pipeline:** "While the production runtime is strictly local and offline, the evaluation phase may use an asynchronous pipeline over exported logs — n8n into Google Sheets, with an LLM-as-a-judge baseline — for scale. It never touches the live system, never runs during operator chat, and has no SCADA access."
 
 > **Offline model download:** "Model downloading is a one-time setup activity performed when internet is available. The production runtime remains fully offline. For strictly offline deployment, models are pre-downloaded and transferred using Ollama's local model cache or portable storage."
 
 ### Abstract paragraph
 
-> The proposed system is a fully local, read-only conversational agentic AI layer
-> for an existing CO₂ sorption reactor monitoring stack. Sensor telemetry is
+> The proposed system is a fully local, read-only conversational agentic AI
+> application for an existing CO₂ sorption reactor monitoring stack. Sensor telemetry is
 > acquired by the existing SCADA layer into a local SQLite database. Domain
 > knowledge from manuals and SOPs is chunked,
 > embedded locally, and stored in local vector and graph knowledge bases. When a

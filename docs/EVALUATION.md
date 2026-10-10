@@ -3,7 +3,11 @@
 [`PROJECT.md`](PROJECT.md) §5 says *what* is compared and §9 *against which
 targets*; this is how to run it. The machinery is `backend/app/services/evaluation.py`,
 driven from a terminal by `backend/app/cli_eval.py`. Guarded by
-`backend/tests/test_evaluation.py`.
+`backend/tests/evaluation/test_evaluation.py`.
+
+> **Status (2026-10-10):** the harness is built and tested; no run has been
+> made. `queries.yaml` holds 5 `EX…` examples against the placeholder graph —
+> a run against them measures the harness, not Daedalus.
 
 ---
 

@@ -17,10 +17,41 @@ export interface RequestOptions extends RequestInit {
 }
 
 /** An Error that also carries the HTTP status, for the error pages to read. */
-export type HttpError = Error & { status: number };
+export type HttpError = Error & { status: number; errorId?: string };
 
-function withStatus(message: string, status: number): HttpError {
-  return Object.assign(new Error(message), { status });
+function withStatus(message: string, status: number, errorId?: string): HttpError {
+  return Object.assign(new Error(message), { status, errorId });
+}
+
+/**
+ * Fired on `window` when something the person *did* fails — a save, an upload,
+ * a delete (any non-GET request). `ToastHost` shows it. Reads are left out:
+ * a tab that cannot load already becomes its own error page, and a polling
+ * read would raise the same toast every few seconds.
+ */
+export const API_ERROR_EVENT = 'daedalus:api-error';
+
+export interface ApiErrorDetail {
+  method: string;
+  path: string;
+  status: number;
+  message: string;
+  /** The backend's id for an unexpected error, as written in the Process Log. */
+  errorId?: string;
+}
+
+/** Raise the toast for a failed action. Exported for clients with their own fetch. */
+export function reportApiError(init: RequestInit | undefined, path: string, err: { status: number; message: string; errorId?: string }): void {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method === 'GET') return;
+  window.dispatchEvent(new CustomEvent<ApiErrorDetail>(API_ERROR_EVENT, {
+    detail: { method, path, status: err.status, message: err.message, errorId: err.errorId },
+  }));
+}
+
+function report(init: RequestInit | undefined, path: string, err: HttpError): HttpError {
+  reportApiError(init, path, err);
+  return err;
 }
 
 export async function request<T>(path: string, init?: RequestOptions): Promise<T> {
@@ -39,23 +70,25 @@ export async function request<T>(path: string, init?: RequestOptions): Promise<T
     });
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'AbortError';
-    throw withStatus(
+    throw report(init, path, withStatus(
       timedOut ? 'the backend did not respond in time' : 'could not reach the backend',
       timedOut ? 504 : 503,
-    );
+    ));
   } finally {
     window.clearTimeout(timer);
   }
 
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
+    let errorId: string | undefined;
     try {
-      const body = (await res.json()) as { detail?: unknown };
+      const body = (await res.json()) as { detail?: unknown; error_id?: unknown };
       if (typeof body.detail === 'string') detail = body.detail;
+      if (typeof body.error_id === 'string') errorId = body.error_id;
     } catch {
       /* non-JSON error body — the status is the message */
     }
-    throw withStatus(detail, res.status);
+    throw report(init, path, withStatus(detail, res.status, errorId));
   }
 
   try {

@@ -7,6 +7,7 @@ import { EmbeddingModelsPane } from './EmbeddingModelsPane'
 import { InstalledModelsView, type PaneId } from './InstalledModelsView'
 import { RerankersPane } from './RerankersPane'
 import { MarqueeText } from '../ui/marquee-text'
+import { tabArrowKeys } from '../ui/tablist'
 
 /**
  * The Forge — hardware and model console (Layer 11, PROJECT.md §8.2).
@@ -103,13 +104,22 @@ export function ForgeWindow({
               is just an index, which keeps this to a transform and avoids
               measuring anything on every render. */}
           <div className="px-6 pt-4 border-b theme-border shrink-0">
-            <div className="relative flex items-center">
+            <div
+              role="tablist"
+              aria-label="Forge views"
+              className="relative flex items-center"
+              onKeyDown={tabArrowKeys(TABS.map((t) => t.id), tab, setTab)}
+            >
               {TABS.map((entry) => {
                 const selected = tab === entry.id
                 return (
                   <button
                     key={entry.id}
                     onClick={() => setTab(entry.id)}
+                    role="tab"
+                    data-tab={entry.id}
+                    aria-selected={selected}
+                    tabIndex={selected ? 0 : -1}
                     title={entry.hint}
                     style={{ flexBasis: `${100 / TABS.length}%` }}
                     className={`flex min-w-0 items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-t-lg transition-colors duration-200 ${

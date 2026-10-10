@@ -22,7 +22,6 @@ os.environ["DAEDALUS_LOG_DIR"] = os.path.join(_ROOT, "logs")
 os.environ["DAEDALUS_PREFS_DB"] = os.path.join(_ROOT, "prefs.db")
 os.environ["DAEDALUS_CONFIG_DIR"] = os.path.join(_ROOT, "config")
 os.environ["DAEDALUS_TZ"] = "UTC"
-os.environ.pop("CHROMA_URL", None)
 os.makedirs(os.environ["DAEDALUS_CONFIG_DIR"], exist_ok=True)
 
 TEST_ROOT = _ROOT

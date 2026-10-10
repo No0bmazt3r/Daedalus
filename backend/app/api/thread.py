@@ -4,7 +4,7 @@ Read-only toward the record: served from `ai_logs.db` and the transcript's
 stored evidence, never on the chat path. Two writes, neither of which changes
 what happened: a person's label on an answer (appended to `feedback_logs`),
 and Settings → Ariadne's Thread (a preference). The logic lives in
-`services/thread.py` and `services/thread_settings.py`.
+`services/thread/` and `services/thread_settings.py`.
 """
 
 from __future__ import annotations

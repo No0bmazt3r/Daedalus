@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useState, useEffect, useRef, ty
 import { listModels, type SystemModel } from '../lib/systemClient';
 import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { loadOnePref, savePref, PREF_CLOUD_MODELS } from '../lib/prefsClient';
 
 /**
  * Per-session UI state, including which model the composer will use.
@@ -73,6 +74,9 @@ interface SettingsContextType {
   /** Reopen the "add a model first" prompt — e.g. on a send with nothing to answer it. */
   showNoModelPrompt: () => void;
   dismissNoModelPrompt: () => void;
+  /** Settings → Cloud Models. Off hides cloud models everywhere, and the backend refuses them. */
+  cloudEnabled: boolean;
+  setCloudEnabled: (on: boolean) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -88,6 +92,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Dismissed rather than open: the prompt shows whenever `noModel` is true
   // and this is false, so it appears on its own once the list says so.
   const [noModelDismissed, setNoModelDismissed] = useState(false);
+  const [cloudEnabled, setCloudState] = useState(true);
+  useEffect(() => {
+    loadOnePref(PREF_CLOUD_MODELS)
+      .then((v) => setCloudState(!(v && typeof v === 'object' && (v as { enabled?: boolean }).enabled === false)))
+      .catch(() => undefined);
+  }, []);
+  // The backend publishes a `models` refresh on this write, so the picker
+  // re-reads its list without being told here.
+  const setCloudEnabled = useCallback((on: boolean) => {
+    setCloudState(on);
+    savePref(PREF_CLOUD_MODELS, { enabled: on });
+  }, []);
 
   // Only the newest response is applied. Two changes in quick succession start
   // two fetches, and the older one must not land last and win.
@@ -159,6 +175,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       noModelPromptOpen: noModel && !noModelDismissed,
       showNoModelPrompt,
       dismissNoModelPrompt,
+      cloudEnabled,
+      setCloudEnabled,
     }}>
       {children}
     </SettingsContext.Provider>

@@ -54,6 +54,8 @@ export interface DisplayMessage {
   evidence?: StoredEvidence;
   /** The turn's audit id — what a rating is recorded against. Assistant turns only. */
   queryId?: string;
+  /** While a reply is in flight: the stage the server last reported (evidence, generating…). */
+  phase?: string;
 }
 
 export type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -300,11 +302,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         // One call. /api/chat records both turns server-side, so posting the
         // user message separately would store it twice.
         const reply = await sendChat(sessionId, trimmed, selectedModel || null, (p) => {
-          if (p.phase !== 'generating' || !p.piece) return;
-          const piece = p.piece;
+          const piece = p.phase === 'generating' ? p.piece ?? '' : '';
           setMessages((prev) =>
             prev.map((m) =>
-              m.key === assistantKey ? { ...m, content: m.content + piece } : m,
+              m.key === assistantKey ? { ...m, phase: p.phase, content: m.content + piece } : m,
             ),
           );
         });

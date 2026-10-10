@@ -140,13 +140,6 @@ def _remember(base: str) -> None:
         _resolved_base = base
 
 
-def forget_resolved_base() -> None:
-    """Drop the cached URL — for a test, or after Ollama is known to have moved."""
-    global _resolved_base
-    with _resolve_lock:
-        _resolved_base = None
-
-
 def _timeout(read: float) -> Any:
     return httpx.Timeout(connect=CONNECT_TIMEOUT, read=read, write=10.0, pool=CONNECT_TIMEOUT)
 

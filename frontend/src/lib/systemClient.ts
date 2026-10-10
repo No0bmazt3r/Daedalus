@@ -249,16 +249,6 @@ export function testEndpoint(id: string): Promise<ModelEndpoint> {
   });
 }
 
-export function updateEndpoint(
-  id: string,
-  body: { label?: string; api_key?: string; enabled?: boolean },
-): Promise<ModelEndpoint> {
-  return request<ModelEndpoint>(`/api/providers/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
-  });
-}
-
 export async function deleteEndpoint(id: string): Promise<boolean> {
   const data = await request<{ deleted: boolean }>(
     `/api/providers/${encodeURIComponent(id)}`,

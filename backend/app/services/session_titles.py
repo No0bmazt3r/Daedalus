@@ -81,6 +81,12 @@ _running: set[str] = set()
 _lock = threading.Lock()
 
 
+def pending(session_id: str) -> bool:
+    """A title job is running for this chat right now (the sidebar shows it loading)."""
+    with _lock:
+        return session_id in _running
+
+
 def schedule(session_id: str, *, force: bool = False) -> bool:
     """Start the title job in the background. False if one is already running."""
     with _lock:
@@ -97,6 +103,9 @@ def schedule(session_id: str, *, force: bool = False) -> bool:
         finally:
             with _lock:
                 _running.discard(session_id)
+            # Always, not only when a title was written: the sidebar shows this
+            # chat loading while the job runs, and has to hear that it ended.
+            live_events.publish("sessions", session_id=session_id)
 
     threading.Thread(target=_run, name=f"title-{session_id[:8]}", daemon=True).start()
     return True

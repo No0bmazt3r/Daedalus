@@ -1,9 +1,7 @@
 """RAG vector store (Layer 5) — ChromaDB.
 
-Two deployment shapes, same interface:
-
-* **Server mode** — `CHROMA_URL` points at the `chromadb` compose service.
-* **Embedded mode** — no URL, so a persistent client writes to `data/chroma/`.
+Embedded in the API process: a persistent client writing to `data/chroma/`.
+(A server mode over HTTP existed for the Docker deployment and went with it.)
 
 Chroma is an optional import: the dashboard and preference API must still boot
 on a machine where the RAG stack has not been installed yet, so a missing
@@ -42,9 +40,8 @@ to be loud.
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlparse
 
-from .paths import CHROMA_DIR, CHROMA_URL, ensure_dirs
+from .paths import CHROMA_DIR, ensure_dirs
 
 # The prefix every collection this project owns begins with — and, on its own,
 # the name used when no embedding model has been chosen yet or the config cannot
@@ -85,12 +82,6 @@ def _make_client() -> Any:
         return None
 
     try:
-        if CHROMA_URL:
-            parsed = urlparse(CHROMA_URL)
-            return chromadb.HttpClient(
-                host=parsed.hostname or "localhost",
-                port=parsed.port or 8001,
-            )
         ensure_dirs()
         return chromadb.PersistentClient(path=str(CHROMA_DIR))
     except Exception as exc:  # noqa: BLE001 — surfaced as status, never fatal
@@ -319,8 +310,8 @@ def collections() -> list[dict[str, Any]]:
 
 def stats(name: str | None = None) -> dict[str, Any]:
     """Reachability, size and provenance — for Settings → System → Storage health."""
-    mode = "server" if CHROMA_URL else "embedded"
-    target = CHROMA_URL or str(CHROMA_DIR)
+    mode = "embedded"
+    target = str(CHROMA_DIR)
     info = describe(name)
 
     return {

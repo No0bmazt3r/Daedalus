@@ -244,6 +244,7 @@ export function GraphView() {
         <div className="relative flex-1">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 theme-text-muted" />
           <input
+            aria-label="Search nodes by id, label or alias"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search id, label or alias"
@@ -269,6 +270,7 @@ export function GraphView() {
             <button
               key={id}
               onClick={() => setView(id)}
+              aria-pressed={view === id}
               title={id === 'diagram' ? 'Diagram: how nodes connect' : 'List: every node, grouped'}
               className={`px-2 py-1.5 transition-colors ${
                 view === id ? 'theme-bg-primary theme-text-on-primary' : 'theme-text-muted hover:theme-text'
@@ -368,6 +370,7 @@ export function GraphView() {
                     <li key={n.id}>
                       <button
                         onClick={() => setSelected(n.id)}
+                        aria-pressed={active}
                         className={`flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors ${
                           active ? 'theme-accent-border theme-surface-strong' : 'theme-border hover:theme-surface'
                         }`}

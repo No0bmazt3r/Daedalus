@@ -35,6 +35,15 @@ function canvasBox(canvas: HTMLCanvasElement) {
   return { w, h };
 }
 
+// Background effects are decoration, so they run at 30fps instead of the
+// display's refresh rate (60–165Hz). Uncapped, a full-screen canvas kept the
+// GPU busy the whole time the app was open, even with nothing else running.
+// Still rAF-driven, so a hidden tab stops drawing entirely.
+const FRAME_MS = 1000 / 30;
+function nextFrame(draw: FrameRequestCallback): number {
+  return window.setTimeout(() => window.requestAnimationFrame(draw), FRAME_MS);
+}
+
 // getComputedStyle forces a style recalc, so the theme variables are read
 // once and reused until the theme actually changes rather than being sampled
 // every frame (and, in the ember loop, every particle).
@@ -118,7 +127,7 @@ export function initSynapse(canvas: HTMLCanvasElement, cancelToken: { cancelled:
 
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
 
@@ -209,7 +218,7 @@ export function initRain(canvas: HTMLCanvasElement, cancelToken: { cancelled: bo
 
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
     // Intensity also controls rain speed + spawn rate (feels slower/lighter when dim)
@@ -298,7 +307,7 @@ export function initConstellations(canvas: HTMLCanvasElement, cancelToken: { can
   let t = 0;
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     t += 0.01;
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
@@ -413,7 +422,7 @@ export function initPerlinFlow(canvas: HTMLCanvasElement, cancelToken: { cancell
   }
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx.fillStyle = getFade();
     ctx.fillRect(0, 0, W, H);
     const c = getColor();
@@ -475,7 +484,7 @@ export function initPetals(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
   function getColor() { return effectColor(); }
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
     const sz = effectScale();
@@ -548,7 +557,7 @@ export function initSparkles(canvas: HTMLCanvasElement, cancelToken: { cancelled
   }
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx.clearRect(0, 0, W, H);
     const c = getColor();
     const sizeMult = effectScale();
@@ -625,7 +634,7 @@ export function initEmbers(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
   }
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     // Fade previous frame (destination-out keeps canvas transparent where no embers)
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -727,7 +736,7 @@ export function initNexus(canvas: HTMLCanvasElement, cancelToken: { cancelled: b
   function animate() {
     if (cancelToken.cancelled) {
       window.removeEventListener('resize', resize);
-      cancelAnimationFrame(frame);
+      clearTimeout(frame);
       return;
     }
     
@@ -807,7 +816,7 @@ export function initNexus(canvas: HTMLCanvasElement, cancelToken: { cancelled: b
       }
     }
     
-    frame = requestAnimationFrame(animate);
+    frame = nextFrame(animate);
   }
   
   if (!cancelToken.cancelled) animate();
@@ -847,7 +856,7 @@ export function initAurora(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
 
   function draw(now: number) {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx!.clearRect(0, 0, W, H);
 
     const c = effectColor();
@@ -892,7 +901,7 @@ export function initAurora(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
     }
     ctx!.globalCompositeOperation = "source-over";
   }
-  requestAnimationFrame(draw);
+  nextFrame(draw);
 }
 
 // ── Bubbles — gas rising through a column ───────────────────────────────────
@@ -937,7 +946,7 @@ export function initBubbles(canvas: HTMLCanvasElement, cancelToken: { cancelled:
 
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx!.clearRect(0, 0, W, H);
 
     const c = effectColor();
@@ -1040,7 +1049,7 @@ export function initVoxels(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
 
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
-    requestAnimationFrame(draw);
+    nextFrame(draw);
     ctx!.clearRect(0, 0, W, H);
 
     const c = effectColor();

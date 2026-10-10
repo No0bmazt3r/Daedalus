@@ -16,6 +16,7 @@ import { NodeChip } from './nodeStyles'
 import { ThemeSelect } from '../ui/theme-select'
 import { StepRail, StepFooter, type Step } from '../ui/stepper'
 import { ProposalQueue } from './ProposalQueue'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * Building the graph — Track 2's pipeline, MODULES.md §3.
@@ -76,7 +77,7 @@ const STEPS: readonly Step[] = [
 
 function EdgeBadge({ type }: { type: string }) {
   return (
-    <code className="rounded border theme-border px-1 py-0.5 text-[9px] theme-text-muted">
+    <code className="rounded border theme-border px-1 py-0.5 text-[10px] theme-text-muted">
       {type}
     </code>
   )
@@ -127,6 +128,7 @@ function NodeForm({
           <button
             key={t.id}
             onClick={() => { setType(t.id); setFields({}) }}
+            aria-pressed={type === t.id}
             className={`rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
               type === t.id
                 ? 'theme-accent-border theme-surface-strong theme-text'
@@ -238,6 +240,7 @@ function EdgeForm({
           <button
             key={e.id}
             onClick={() => setEdgeType(e.id)}
+            aria-pressed={edgeType === e.id}
             title={`${e.from} → ${e.to}`}
             className={`rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
               edgeType === e.id
@@ -313,6 +316,7 @@ function HistoryRow({ edit }: { edit: GraphEdit }) {
     <div className={`rounded-md border px-2 py-1 ${failed ? 'border-rose-400/40 bg-rose-400/5' : 'theme-border'}`}>
       <button
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         className="flex w-full items-center gap-1.5 text-left text-[10px]"
       >
         {failed ? (
@@ -365,7 +369,12 @@ export function AuthoringView() {
     void fetchAuthoringHistory(failuresOnly).then((r) => setHistory(r.edits)).catch((e: unknown) => setLoadError(toFailure(e)))
   }, [failuresOnly, status?.totals.nodes, status?.totals.edges])
 
-  const remove = async (fn: () => Promise<unknown>) => {
+  const [confirm, confirmDialog] = useConfirm()
+
+  // Confirmed first: an edit is saved to the graph file straight away, and the
+  // only way back from here is re-adding it by hand (or git).
+  const remove = async (what: string, body: string, fn: () => Promise<unknown>) => {
+    if (!(await confirm({ title: `Delete ${what}?`, body, confirmLabel: 'Delete', danger: true }))) return
     setError(null)
     try {
       await fn()
@@ -385,7 +394,19 @@ export function AuthoringView() {
       />
     )
   }
-  if (!status) return <Skeleton className="h-96 w-full" />
+  // The step rail and heading are fixed text: drawn now, body when it loads.
+  if (!status) {
+    return (
+      <div className="space-y-4">
+        <StepRail steps={STEPS} step={step} setStep={setStep} blocked={{ 3: 'Loading…' }} />
+        <div>
+          <h3 className="text-sm theme-text">{STEPS[step - 1].label}</h3>
+          <p className="text-[11px] theme-text-muted">{STEPS[step - 1].hint}</p>
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
 
   const connectable = status.schema.edge_types.some(
     (e) => nodes.some((n) => n.type === e.from) && nodes.some((n) => n.type === e.to),
@@ -482,16 +503,17 @@ export function AuthoringView() {
               <NodeChip node={n} />
               <span className="min-w-0 flex-1 truncate text-[10px] theme-text-muted">{n.id}</span>
               <button
-                onClick={() => remove(() => deleteGraphNode(n.id))}
+                onClick={() => remove(n.id, 'This removes the node from the graph file. It is refused if any edge still points to it.', () => deleteGraphNode(n.id))}
                 title="Can't delete while edges point to it. Use cascade to delete those edges too"
-                className="shrink-0 rounded p-0.5 theme-text-muted transition-colors hover:text-rose-400"
+                aria-label={`Delete node ${n.id}`}
+                className="shrink-0 rounded p-1.5 theme-text-muted transition-colors hover:text-rose-400"
               >
                 <Trash2 size={11} />
               </button>
               <button
-                onClick={() => remove(() => deleteGraphNode(n.id, true))}
+                onClick={() => remove(`${n.id} and its edges`, 'This removes the node and every edge attached to it from the graph file.', () => deleteGraphNode(n.id, true))}
                 title="Delete this node and every edge attached to it"
-                className="shrink-0 rounded px-1 text-[9px] theme-text-muted transition-colors hover:text-rose-400"
+                className="shrink-0 rounded px-1.5 py-1 text-[10px] theme-text-muted transition-colors hover:text-rose-400"
               >
                 cascade
               </button>
@@ -519,8 +541,9 @@ export function AuthoringView() {
                   {e.from} <EdgeBadge type={e.type} /> {e.to}
                 </span>
                 <button
-                  onClick={() => remove(() => deleteGraphEdge(e.from, e.type, e.to))}
-                  className="shrink-0 rounded p-0.5 theme-text-muted transition-colors hover:text-rose-400"
+                  onClick={() => remove(`${e.from} ${e.type} ${e.to}`, 'This removes the edge from the graph file.', () => deleteGraphEdge(e.from, e.type, e.to))}
+                  aria-label={`Delete edge ${e.from} ${e.type} ${e.to}`}
+                  className="shrink-0 rounded p-1.5 theme-text-muted transition-colors hover:text-rose-400"
                 >
                   <Trash2 size={11} />
                 </button>
@@ -553,6 +576,7 @@ export function AuthoringView() {
           <h4 className="text-xs theme-text">Edit history</h4>
           <button
             onClick={() => setFailuresOnly((v) => !v)}
+            aria-pressed={failuresOnly}
             className={`ml-auto rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
               failuresOnly
                 ? 'border-rose-400/40 text-rose-400'
@@ -579,6 +603,7 @@ export function AuthoringView() {
       )}
 
       <StepFooter steps={STEPS} step={step} setStep={setStep} nextBlocked={blocked[step + 1]} />
+      {confirmDialog}
     </div>
   )
 }

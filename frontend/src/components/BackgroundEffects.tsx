@@ -46,7 +46,8 @@ export function BackgroundEffects() {
   useEffect(() => {
     const init = CANVAS_EFFECTS[pattern]
     const canvas = canvasRef.current
-    if (!init || !canvas) return
+    // The OS "reduce motion" setting means no animated background at all.
+    if (!init || !canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const cancelToken = { cancelled: false }
     init(canvas, cancelToken)

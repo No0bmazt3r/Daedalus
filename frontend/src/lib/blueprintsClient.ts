@@ -229,7 +229,6 @@ export const seedTraversals = (force = false) =>
     { method: 'POST' },
   );
 
-
 // ── the retrieval track switch (PROJECT.md §5) ───────────────────────────────
 
 export type RagTrack = 'vector' | 'graph';
@@ -383,7 +382,6 @@ export const setRagTrack = async (track: RagTrack) => {
   return config;
 };
 
-
 // ── the corpus pipeline (Track 1) ────────────────────────────────────────────
 //
 // M2, built. These replace the `available: false, blocked_by: 'M2'` shapes the
@@ -487,6 +485,8 @@ export interface IngestRun {
   elapsed_ms: number | null;
   error: string | null;
   error_count?: number;
+  /** Filenames the run processed, from its events. "(deleted)" for one removed since. */
+  documents?: string[];
 }
 
 export interface IngestEvent {
@@ -612,6 +612,34 @@ export const clearVectors = () =>
     method: 'POST',
   });
 
+export interface DocumentLog {
+  document_id: string;
+  filename: string;
+  runs: number;
+  last_at: string;
+  errors: number;
+  warnings: number;
+  last_status: IngestRun['status'] | null;
+}
+
+export type DocumentEvent = IngestEvent & {
+  run_id: string;
+  run_status: IngestRun['status'];
+  run_started_at: string;
+  run_kind: IngestRun['kind'];
+};
+
+export const fetchDocumentLogs = () =>
+  request<{ documents: DocumentLog[] }>('/api/corpus/logs/documents');
+
+export const fetchDocumentEvents = (documentId: string) =>
+  request<{ document_id: string; events: DocumentEvent[] }>(
+    `/api/corpus/logs/documents/${encodeURIComponent(documentId)}`,
+  );
+
+export const fetchRuns = (limit = 50) =>
+  request<{ runs: IngestRun[]; active_run: string | null }>(`/api/corpus/runs?limit=${limit}`);
+
 export const fetchRun = (runId: string) =>
   request<{ run: IngestRun; active: boolean }>(`/api/corpus/runs/${encodeURIComponent(runId)}`);
 
@@ -675,12 +703,6 @@ export const createGraphNode = (
     method: 'POST',
     body: JSON.stringify({ node_type: nodeType, node_id: nodeId, attributes }),
   });
-
-export const updateGraphNode = (nodeId: string, attributes: Record<string, unknown>) =>
-  request<{ ok: true; nodes: number; edges: number }>(
-    `/api/graph/authoring/nodes/${encodeURIComponent(nodeId)}`,
-    { method: 'PATCH', body: JSON.stringify(attributes) },
-  );
 
 export const deleteGraphNode = (nodeId: string, cascade = false) =>
   request<{ ok: true; nodes: number; edges: number }>(

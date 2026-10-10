@@ -8,6 +8,8 @@
 // The same reason is why there is no `role` on `appendUserMessage` — assistant
 // turns are written by the orchestrator once it has actually produced them.
 
+import { reportApiError } from './http';
+
 export interface ChatSession {
   session_id: string;
   created_at: string;
@@ -19,6 +21,8 @@ export interface ChatSession {
   message_count?: number | null;
   /** Who named it — 'first_message' placeholder, 'model' (the title job), or 'user'. */
   title_source?: 'first_message' | 'model' | 'user' | null;
+  /** The background title job is running for this chat right now. */
+  title_pending?: boolean;
 }
 
 export interface ChatSessionDetail extends ChatSession {
@@ -61,7 +65,18 @@ export class SessionApiError extends Error {
   }
 }
 
+// Its own fetch (a shorter timeout, status 0 for "offline", empty 204s), but
+// failed actions still raise the shared toast.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  try {
+    return await send<T>(path, init);
+  } catch (err) {
+    if (err instanceof SessionApiError) reportApiError(init, path, err);
+    throw err;
+  }
+}
+
+async function send<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
@@ -130,10 +145,6 @@ export async function listSessions(limit = 50): Promise<ChatSession[]> {
   return data.sessions;
 }
 
-export function getSession(id: string): Promise<ChatSessionDetail> {
-  return request<ChatSessionDetail>(`${BASE}/${encodeURIComponent(id)}`);
-}
-
 export async function getMessages(id: string): Promise<ChatMessage[]> {
   const data = await request<{ messages: ChatMessage[] }>(
     `${BASE}/${encodeURIComponent(id)}/messages`,
@@ -169,13 +180,6 @@ export function regenerateTitle(id: string): Promise<{ ok: boolean; scheduled: b
   return request(`${BASE}/${encodeURIComponent(id)}/title`, { method: 'POST' });
 }
 
-export function archiveSession(id: string, archived = true): Promise<ChatSessionDetail> {
-  return request<ChatSessionDetail>(`${BASE}/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ archived }),
-  });
-}
-
 /** Deletes the chat and its messages. Audit rows in ai_logs.db are untouched. */
 export async function deleteSession(id: string): Promise<boolean> {
   const data = await request<{ deleted: boolean }>(`${BASE}/${encodeURIComponent(id)}`, {
@@ -186,5 +190,6 @@ export async function deleteSession(id: string): Promise<boolean> {
 
 /** A chat with no title yet is shown by a placeholder, never by a blank row. */
 export function sessionLabel(session: ChatSession): string {
-  return session.title?.trim() || 'New chat';
+  const title = session.title?.trim() || 'New chat';
+  return title[0].toUpperCase() + title.slice(1);
 }

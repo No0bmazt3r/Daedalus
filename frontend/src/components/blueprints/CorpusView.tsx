@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
-import { FileText, Search, ChevronRight, Database } from 'lucide-react'
+import { FileText, Search, ChevronRight, Database, Trash2, AlertCircle } from 'lucide-react'
 import {
-  fetchCorpusStatus, fetchCorpusDocuments, fetchDocumentChunks,
+  fetchCorpusStatus, fetchCorpusDocuments, fetchDocumentChunks, deleteDocument, updateDocument,
   type CorpusStatus, type CorpusDocument, type CorpusChunk,
 } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
+import { bytes, ORIGIN_BADGE, SOURCE_TYPES, SOURCE_LABEL } from './ingest/shared'
+import { ThemeSelect } from '../ui/theme-select'
+import { useConfirm } from '../ui/confirm-dialog'
 
 /**
  * The corpus — what Track 1 actually holds, MODULES.md §3.1.
@@ -56,19 +59,14 @@ import { Skeleton } from '../ui/skeleton'
  * text Replay resolves a retrieved id back to — one copy, three views of it.
  */
 
-function bytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
-
 function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="rounded-md border theme-border">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[10px]"
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[10px] transition-colors hover:theme-surface"
       >
         <ChevronRight size={10} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
         <span className="shrink-0 tabular-nums theme-text-muted">#{chunk.ordinal}</span>
@@ -89,10 +87,11 @@ function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
           }`}
           title={chunk.embedded ? `embedded with ${chunk.embedding_model}` : "no vector yet, so it can't be retrieved"}
         />
+        <span className="sr-only">{chunk.embedded ? 'embedded' : 'not embedded'}</span>
       </button>
       {open && (
         <div className="border-t theme-border px-2 py-1.5">
-          <p className="whitespace-pre-wrap text-[10px] leading-relaxed theme-text opacity-85">
+          <p className="whitespace-pre-wrap text-[11px] leading-relaxed theme-text opacity-85">
             {chunk.text}
           </p>
           <p className="mt-1.5 text-[10px] theme-text-muted">
@@ -105,13 +104,21 @@ function ChunkRow({ chunk }: { chunk: CorpusChunk }) {
   )
 }
 
-export function CorpusView() {
+export function CorpusView({ onBuild }: { onBuild?: () => void }) {
   const [status, setStatus] = useState<CorpusStatus | null>(null)
   const [documents, setDocuments] = useState<CorpusDocument[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [chunks, setChunks] = useState<CorpusChunk[]>([])
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<LoadFailure | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  // Narrowing the document list, for when there are more than fit on screen.
+  const [docQuery, setDocQuery] = useState('')
+  const [docType, setDocType] = useState('all')
+  const [docOrigin, setDocOrigin] = useState('all')
+  const [docState, setDocState] = useState('all')
+  const [docSort, setDocSort] = useState('newest')
+  const [confirm, confirmDialog] = useConfirm()
 
   const reload = useCallback(() => {
     void fetchCorpusStatus().then(setStatus).catch((e: unknown) => setError(toFailure(e)))
@@ -129,6 +136,36 @@ export function CorpusView() {
     void fetchDocumentChunks(id, 500).then((r) => setChunks(r.chunks)).catch((e: unknown) => setError(toFailure(e)))
   }, [])
 
+  // Ingested documents are managed here (Build's Import list only shows what
+  // still needs work), so this is where they are deleted and re-labelled.
+  const removeDoc = async (d: CorpusDocument) => {
+    const ok = await confirm({
+      title: `Delete ${d.filename}?`,
+      body: `This removes the document, its ${d.chunk_count} chunks and ${d.embedded_count} vectors. Track 1 can no longer find it. To get it back you'd have to import and ingest it again.`,
+      confirmLabel: 'Delete document',
+      danger: true,
+    })
+    if (!ok) return
+    setActionError(null)
+    try {
+      await deleteDocument(d.document_id)
+      setSelected(null)
+      setChunks([])
+    } catch (e) {
+      setActionError((e as Error).message)
+    }
+    reload()
+  }
+  const flipOrigin = async (d: CorpusDocument) => {
+    setActionError(null)
+    try {
+      await updateDocument(d.document_id, { origin: d.origin === 'rig' ? 'reference' : 'rig' })
+    } catch (e) {
+      setActionError((e as Error).message)
+    }
+    reload()
+  }
+
   // The documents cannot be read: this tab is the error page.
   if (error) {
     return (
@@ -140,9 +177,37 @@ export function CorpusView() {
       />
     )
   }
-  if (!documents || !status) return <Skeleton className="h-80 w-full" />
+  // Shaped like the page it stands in for (four tiles, then the two columns),
+  // so nothing jumps when the data arrives.
+  if (!documents || !status) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[62px] w-full" />)}
+        </div>
+        <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    )
+  }
 
   const { corpus } = status
+  const docNeedle = docQuery.trim().toLowerCase()
+  const stateOf = (d: CorpusDocument) =>
+    d.extract_status === 'failed' ? 'failed'
+    : d.chunk_count > 0 && d.embedded_count === d.chunk_count ? 'ready' : 'partial'
+  const shownDocs = documents
+    .filter((d) => !docNeedle || d.filename.toLowerCase().includes(docNeedle) || (d.title ?? '').toLowerCase().includes(docNeedle))
+    .filter((d) => docType === 'all' || d.source_type === docType)
+    .filter((d) => docOrigin === 'all' || (d.origin ?? 'reference') === docOrigin)
+    .filter((d) => docState === 'all' || stateOf(d) === docState)
+    .sort((a, b) =>
+      docSort === 'name' ? a.filename.localeCompare(b.filename)
+      : docSort === 'chunks' ? b.chunk_count - a.chunk_count
+      : b.uploaded_at.localeCompare(a.uploaded_at))
+  const filtering = !!docNeedle || docType !== 'all' || docOrigin !== 'all' || docState !== 'all'
   const needle = filter.trim().toLowerCase()
   const visible = needle
     ? chunks.filter((c) => c.text.toLowerCase().includes(needle))
@@ -156,10 +221,17 @@ export function CorpusView() {
           <p className="mt-2 text-xs theme-text">The corpus is empty.</p>
           <p className="mx-auto mt-1 max-w-md text-[11px] leading-relaxed theme-text-muted">
             Nothing has been ingested, so Track 1 has nothing to retrieve from and cannot answer a
-            knowledge question. That's expected, not an error. Import documents in the
-            <span className="theme-accent"> Build </span>
-            tab and they appear here with their chunks.
+            knowledge question. That's expected, not an error. Imported documents appear here
+            with their chunks.
           </p>
+          {onBuild && (
+            <button
+              onClick={onBuild}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border theme-accent-border px-3 py-1.5 text-[11px] theme-accent transition-colors hover:theme-surface-strong"
+            >
+              Import documents in Build <ChevronRight size={11} />
+            </button>
+          )}
         </div>
       </div>
     )
@@ -169,6 +241,7 @@ export function CorpusView() {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
         {([
           ['Documents', corpus.documents, bytes(corpus.bytes)],
@@ -178,7 +251,7 @@ export function CorpusView() {
           ['Unreadable', corpus.failed_documents, 'failed extraction'],
         ] as const).map(([label, value, hint]) => (
           <div key={label} className="rounded-lg border theme-border theme-card px-3 py-2">
-            <div className="text-lg tabular-nums theme-text">{value}</div>
+            <div className={`text-lg tabular-nums ${label === 'Unreadable' && value > 0 ? 'text-rose-400' : 'theme-text'}`}>{value}</div>
             <div className="text-[10px] uppercase tracking-wider theme-text-muted">{label}</div>
             <div className="mt-0.5 text-[10px] theme-text-muted opacity-70">{hint}</div>
           </div>
@@ -188,7 +261,12 @@ export function CorpusView() {
       {/* Stated rather than left as a missing tab. The asymmetry with Track 2 is
           a finding about the two approaches, and §5's comparison has to say it
           somewhere — better here, where somebody is looking for it. */}
-      <p className="text-[10px] leading-relaxed theme-text-muted">
+      <details className="group text-[11px] leading-relaxed theme-text-muted">
+        <summary className="flex cursor-pointer list-none items-center gap-1 hover:theme-text">
+          <ChevronRight size={11} className="transition-transform group-open:rotate-90" />
+          Why is there no Coverage tab for Track 1?
+        </summary>
+        <p className="mt-1 pl-4">
         Track 2 has a Coverage tab and this arm does not, because the two fail differently. An
         authored graph fails by <span className="theme-text">omission</span>, and omission over a
         fixed schema can be listed out. An anomaly type with no procedure attached is a question it
@@ -197,14 +275,63 @@ export function CorpusView() {
         edge and there is no list of the passages nobody wrote. The counts above are the part that
         <span className="theme-text"> is </span>
         checkable.
-      </p>
+        </p>
+      </details>
 
       <div className="grid gap-3 @3xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-        <div className="space-y-1.5">
-          {documents.map((d) => (
+        {/* Sticks while the chunks scroll, so the open document stays in view. */}
+        <div className="space-y-1.5 @3xl:sticky @3xl:top-0 @3xl:self-start">
+          <label className="flex items-center gap-1.5 rounded-md border theme-border theme-surface px-2 py-1">
+            <Search size={11} className="shrink-0 theme-text-muted" />
+            <input
+              value={docQuery}
+              onChange={(e) => setDocQuery(e.target.value)}
+              aria-label="Find a document by name"
+              placeholder="Find a document…"
+              className="min-w-0 flex-1 bg-transparent text-[11px] theme-text outline-none placeholder:opacity-50"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <ThemeSelect
+              size="sm" ariaLabel="Document type" value={docType} onChange={setDocType}
+              options={[{ value: 'all', label: 'All types' }, ...SOURCE_TYPES.map((t) => ({ value: t.id, label: SOURCE_LABEL[t.id] }))]}
+            />
+            <ThemeSelect
+              size="sm" ariaLabel="Whose document" value={docOrigin} onChange={setDocOrigin}
+              options={[{ value: 'all', label: 'Any origin' }, { value: 'rig', label: 'This rig' }, { value: 'reference', label: 'Reference' }]}
+            />
+            <ThemeSelect
+              size="sm" ariaLabel="Index status" value={docState} onChange={setDocState}
+              options={[
+                { value: 'all', label: 'Any status' }, { value: 'ready', label: 'Fully embedded' },
+                { value: 'partial', label: 'Not all embedded' }, { value: 'failed', label: 'Unreadable' },
+              ]}
+            />
+            <ThemeSelect
+              size="sm" ariaLabel="Sort documents" value={docSort} onChange={setDocSort}
+              options={[{ value: 'newest', label: 'Newest first' }, { value: 'name', label: 'Name A–Z' }, { value: 'chunks', label: 'Most chunks' }]}
+            />
+          </div>
+          <p className="flex items-center gap-2 text-[10px] theme-text-muted">
+            {shownDocs.length} of {documents.length} document{documents.length === 1 ? '' : 's'}
+            {filtering && (
+              <button
+                onClick={() => { setDocQuery(''); setDocType('all'); setDocOrigin('all'); setDocState('all') }}
+                className="theme-accent hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </p>
+          <div className="max-h-[28rem] space-y-1.5 overflow-y-auto no-scrollbar">
+          {shownDocs.length === 0 && (
+            <p className="py-3 text-center text-[11px] theme-text-muted">No document matches these filters.</p>
+          )}
+          {shownDocs.map((d) => (
             <button
               key={d.document_id}
               onClick={() => load(d.document_id)}
+              aria-pressed={selected === d.document_id}
               className={`flex w-full items-start gap-2 rounded-lg border p-2.5 text-left transition-colors ${
                 selected === d.document_id
                   ? 'theme-accent-border theme-surface-strong'
@@ -226,6 +353,7 @@ export function CorpusView() {
               </span>
             </button>
           ))}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -235,10 +363,40 @@ export function CorpusView() {
             </p>
           ) : (
             <>
+              {(() => {
+                const doc = documents.find((d) => d.document_id === selected)
+                if (!doc) return null
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs theme-text">{doc.filename}</span>
+                    <button
+                      onClick={() => void flipOrigin(doc)}
+                      title="Whose document this is. Click to change. Takes effect from the next question, no re-ingest needed."
+                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${ORIGIN_BADGE[doc.origin ?? 'reference']}`}
+                    >
+                      {doc.origin === 'rig' ? 'This rig' : 'Reference'}
+                    </button>
+                    <button
+                      onClick={() => void removeDoc(doc)}
+                      aria-label={`Delete ${doc.filename}`}
+                      title="Delete this document, its chunks and its vectors"
+                      className="shrink-0 rounded-md p-1.5 theme-text-muted transition-colors hover:text-rose-400"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )
+              })()}
+              {actionError && (
+                <p className="flex items-start gap-1.5 text-[11px] text-rose-400">
+                  <AlertCircle size={12} className="mt-0.5 shrink-0" /> {actionError}
+                </p>
+              )}
               <label className="flex items-center gap-1.5 rounded-md border theme-border theme-surface px-2 py-1">
                 <Search size={11} className="shrink-0 theme-text-muted" />
                 <input
                   value={filter}
+                  aria-label="Find text within these chunks"
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Find text within these chunks…"
                   className="min-w-0 flex-1 bg-transparent text-[11px] theme-text outline-none placeholder:opacity-50"

@@ -32,6 +32,29 @@ export interface Step {
   hint: string
 }
 
+/**
+ * The four stages, as circles joined by a track that fills as you advance.
+ *
+ * ## Why a filling connector rather than four buttons
+ *
+ * The buttons said "these are four places you can go". They are not — they are
+ * one process with an order, and the order is the thing a first-time reader most
+ * needs to see. A connector that fills between 1 and 2 says *2 comes after 1 and
+ * you have crossed it*, which is a claim four separate boxes cannot make however
+ * they are styled.
+ *
+ * ## The animation carries direction, and only one segment moves
+ *
+ * The fill is a `scaleX` from the left, so going forward it grows toward the
+ * next step and going back it drains toward the previous one — the motion
+ * matches the travel rather than just marking a state change. The travelling
+ * highlight is on the segment being crossed *only*: a row where every connector
+ * shimmers reads as "loading", not as "you are here".
+ *
+ * Under `prefers-reduced-motion` the fill still lands in the right place and
+ * only the travel is dropped. Progress is information; the motion carrying it
+ * is decoration, and the two must not fail together.
+ */
 export function StepRail({
   steps, step, setStep, blocked,
 }: {
