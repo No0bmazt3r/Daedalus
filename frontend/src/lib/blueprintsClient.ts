@@ -442,6 +442,8 @@ export interface CorpusDocument {
   title: string | null;
   document_version: string | null;
   reactor_mode: string | null;
+  /** PDF pages to read, like "11-12, 71-92"; null reads every page. Applies on the next re-ingest. */
+  page_ranges: string | null;
   extract_status: 'pending' | 'ok' | 'failed';
   extract_error: string | null;
   extractor: string | null;
@@ -472,6 +474,8 @@ export interface ChunkSettings {
   strategy: string;
   chunk_size: number;
   chunk_overlap: number;
+  /** Embed each chunk with "document title — section" prepended. An ablation; off by default. */
+  context_header?: boolean;
 }
 
 export interface ChunkStrategy {
@@ -597,7 +601,7 @@ export const uploadDocument = (
   });
 };
 
-export const updateDocument = (id: string, fields: Partial<Pick<CorpusDocument, 'origin' | 'title'>>) =>
+export const updateDocument = (id: string, fields: Partial<Pick<CorpusDocument, 'origin' | 'title' | 'page_ranges'>>) =>
   request<{ document: CorpusDocument; note: string }>(
     `/api/corpus/documents/${encodeURIComponent(id)}`,
     { method: 'PATCH', body: JSON.stringify(fields) },

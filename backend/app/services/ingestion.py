@@ -170,7 +170,9 @@ def read_text(document: dict[str, Any]) -> extraction.Extracted:
             f"{document['filename']}'s stored copy is missing from {paths.CORPUS_DIR}. "
             "The record is still there but the file is gone. Delete the document and upload it again."
         )
-    return extraction.extract(path.read_bytes(), document["filename"])
+    return extraction.extract(
+        path.read_bytes(), document["filename"], pages=extraction.parse_pages(document.get("page_ranges")),
+    )
 
 
 # ── preview ──────────────────────────────────────────────────────────────────
@@ -445,6 +447,17 @@ def _run(
     return corpus_store.get_run(run_id) or {}
 
 
+def context_text(document: dict[str, Any], row: dict[str, Any]) -> str:
+    """What the embedder sees with `context_header` on: where the chunk is from, then the chunk.
+
+    "Step 3: close the valve" means nothing on its own; prefixed with the SOP's
+    title it embeds near questions about that SOP. No model writes the header —
+    it is the document's own title and the section the chunker found.
+    """
+    where = " — ".join(x for x in (document.get("title") or document.get("filename"), row.get("section_title")) if x)
+    return f"{where}\n{row['text']}" if where else row["text"]
+
+
 def _context_window(model: str) -> int | None:
     """The embedder's context in tokens: measured from Ollama, else the catalogue's figure."""
     try:
@@ -500,13 +513,14 @@ def _embed_document(
         )
 
     document = corpus_store.get_document(document_id) or {}
+    context = corpus_config.read()["context_header"]
     landed = 0
     for start in range(0, len(rows), BATCH):
         batch = rows[start:start + BATCH]
         ids = [r["chunk_id"] for r in batch]
         texts = [r["text"] for r in batch]
         try:
-            vectors = _embed_batch(model, texts)
+            vectors = _embed_batch(model, [context_text(document, r) for r in batch] if context else texts)
             collection.upsert(
                 ids=ids,
                 documents=texts,
@@ -528,7 +542,7 @@ def _embed_document(
                     for r in batch
                 ],
             )
-            corpus_store.mark_embedded(ids, model=model, collection=collection_name)
+            corpus_store.mark_embedded(ids, model=model, collection=collection_name, context=context)
             landed += len(ids)
         except Exception as exc:  # noqa: BLE001 — one batch failing is not the run failing
             corpus_store.mark_embedded(ids, model=model, collection=collection_name, error=str(exc))

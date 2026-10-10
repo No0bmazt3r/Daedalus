@@ -159,7 +159,7 @@ def update_document(document_id: str, **fields: Any) -> dict[str, Any] | None:
     silently ignored key — the same argument `registry.validate` makes about
     unknown tool arguments.
     """
-    allowed = {"source_type", "title", "document_version", "reactor_mode", "origin"}
+    allowed = {"source_type", "title", "document_version", "reactor_mode", "origin", "page_ranges"}
     unknown = set(fields) - allowed
     if unknown:
         raise ValueError(f"cannot update {', '.join(sorted(unknown))}; allowed: {', '.join(sorted(allowed))}")
@@ -238,7 +238,7 @@ def replace_chunks(document_id: str, chunks: list[dict[str, Any]], *, run_id: st
 
 
 def mark_embedded(
-    chunk_ids: list[str], *, model: str, collection: str, error: str | None = None
+    chunk_ids: list[str], *, model: str, collection: str, error: str | None = None, context: bool = False,
 ) -> None:
     """Record the outcome per chunk, not per document.
 
@@ -252,10 +252,10 @@ def mark_embedded(
         conn.executemany(
             """
             UPDATE chunks
-               SET embedded = ?, embedding_model = ?, collection = ?, embed_error = ?
+               SET embedded = ?, embedding_model = ?, collection = ?, embed_error = ?, embed_context = ?
              WHERE chunk_id = ?
             """,
-            [(embedded, model, collection, error, cid) for cid in chunk_ids],
+            [(embedded, model, collection, error, int(context), cid) for cid in chunk_ids],
         )
 
 
@@ -584,9 +584,10 @@ def chunk_recipes() -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT r.strategy, r.chunk_size, r.chunk_overlap, COUNT(*) AS chunks
+            SELECT r.strategy, r.chunk_size, r.chunk_overlap, c.embed_context AS context_header,
+                   COUNT(*) AS chunks
               FROM chunks c JOIN ingest_runs r ON r.run_id = c.run_id
-             GROUP BY r.strategy, r.chunk_size, r.chunk_overlap
+             GROUP BY r.strategy, r.chunk_size, r.chunk_overlap, c.embed_context
              ORDER BY chunks DESC
             """
         ).fetchall()

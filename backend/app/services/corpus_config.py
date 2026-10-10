@@ -41,6 +41,10 @@ DEFAULT: dict[str, Any] = {
     "strategy": chunking.DEFAULT_STRATEGY,
     "chunk_size": chunking.DEFAULT_CHUNK_SIZE,
     "chunk_overlap": chunking.DEFAULT_OVERLAP,
+    # Embed each chunk with "document title — section" prepended. The stored and
+    # shown text stays the chunk itself; only the vector sees the header. Off by
+    # default: it changes Track 1's arm, so it is an ablation, decided before the freeze.
+    "context_header": False,
     "note": "architecture/04 step 4: 300-500 tokens with overlap. Sizes here are characters.",
 }
 
@@ -77,17 +81,21 @@ def read() -> dict[str, Any]:
         "strategy": strategy,
         "chunk_size": size,
         "chunk_overlap": overlap,
+        "context_header": raw.get("context_header") is True,
         "note": raw.get("note", DEFAULT["note"]),
     }
 
 
-def write(*, strategy: str, chunk_size: int, chunk_overlap: int) -> dict[str, Any]:
+def write(
+    *, strategy: str, chunk_size: int, chunk_overlap: int, context_header: bool | None = None,
+) -> dict[str, Any]:
     """Commit settings. Validated first, so a bad set never reaches the file."""
     size, overlap, strat = chunking.validate(chunk_size, chunk_overlap, strategy)
     payload = {
         "strategy": strat,
         "chunk_size": size,
         "chunk_overlap": overlap,
+        "context_header": read()["context_header"] if context_header is None else bool(context_header),
         "note": DEFAULT["note"],
     }
     with _lock:

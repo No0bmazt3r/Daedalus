@@ -332,6 +332,7 @@ nodes:
   description: The NDIR indication has moved off its zero or span point, or reads high or low. Dust or
     water in the sampling cell, or air leaking into the sample line, are the usual causes (Fuji ZRE manual
     §7.2–7.3, p64–65).
+  page: 64
 - id: SOPDocument:Fuji_NDIR_Maintenance
   type: SOPDocument
   label: Fuji ZRE NDIR analyser — calibration and maintenance (manual §6.8, §7)
@@ -354,6 +355,7 @@ nodes:
   description: Press ZERO, select the channel and press ENT to supply zero gas; once the indication is
     stable, press ENT (§6.8.1, p62).
   origin: reference
+  page: 62
 - id: SOPStep:fuji_ndir_maintenance_2
   type: SOPStep
   label: Span calibration with standard gas
@@ -361,6 +363,7 @@ nodes:
   description: Press SPAN and supply standard gas at 90 % or more of the range value; once stable, press
     ENT (§6.8.2, p63). Zero first, then span; repeat weekly (§7.1, p64).
   origin: reference
+  page: 63
 - id: SOPStep:fuji_ndir_maintenance_3
   type: SOPStep
   label: Check the sample and purge flows
@@ -368,6 +371,7 @@ nodes:
   description: Sampling gas 0.5 ± 0.2 L/min, purge about 1 L/min; outside 0.3–0.7 L/min, adjust the flow
     meter's needle valve (§7.1–7.2, p64).
   origin: reference
+  page: 64
 - id: SOPStep:fuji_ndir_maintenance_4
   type: SOPStep
   label: Clean the sampling cell if readings are off
@@ -375,6 +379,7 @@ nodes:
   description: 'Low or high readings with dust in the cell: clean the cell and check the sampling devices,
     especially the gas filter (§7.2–7.3, p64–65).'
   origin: reference
+  page: 64
 - id: SOPStep:fuji_ndir_maintenance_5
   type: SOPStep
   label: Find and repair air leaks in the sample line
@@ -382,6 +387,7 @@ nodes:
   description: Air drawn in midway along the sampling pipe dilutes the sample; find the leak and repair
     it (§7.2, p64).
   origin: reference
+  page: 64
 - id: AnomalyType:ph_electrode_fault
   type: AnomalyType
   label: pH electrode out of calibration
@@ -400,6 +406,7 @@ nodes:
   description: The pH electrode's calibration slope is outside 95–105 % (EPA SOP EQ-01-09 §12.6, p12);
     ThermoFisher gives 92–102 % slope and ±59 mV offset as ideal (p1). An unreliable pH reading can look
     like solvent degradation.
+  page: 12
 - id: SOPDocument:EPA_pH_Calibration
   type: SOPDocument
   label: EPA SOP EQ-01-09 — pH meter calibration and corrective actions
@@ -420,24 +427,28 @@ nodes:
   description: Rinse with de-ionised water and blot dry (do not wipe) between buffers; use each buffer
     once (§12, §12.1, p6–8).
   origin: reference
+  page: 6
 - id: SOPStep:epa_ph_calibration_2
   type: SOPStep
   label: Check the slope and confirm with pH 7
   step_number: 2
   description: Slope must be 95–105 %; confirm by re-reading the pH 7 buffer (§12.1h–i, p8).
   origin: reference
+  page: 8
 - id: SOPStep:epa_ph_calibration_3
   type: SOPStep
   label: 'Corrective action 1: fresh buffers'
   step_number: 3
   description: Change the standard buffers and recalibrate (§12.6b, p12).
   origin: reference
+  page: 12
 - id: SOPStep:epa_ph_calibration_4
   type: SOPStep
   label: 'Corrective action 2: fill solution'
   step_number: 4
   description: Change the 3M KCl fill solution or bring it up to volume, then recalibrate (§12.6c, p12–13).
   origin: reference
+  page: 12
 - id: SOPStep:epa_ph_calibration_5
   type: SOPStep
   label: 'Corrective action 3: clean the electrode'
@@ -445,6 +456,7 @@ nodes:
   description: Soak the tip in electrode cleaning solution for 1–2 h, rinse, soak in pH 7 buffer until
     stable (§12.6d, §12.8c, p13).
   origin: reference
+  page: 13
 - id: SOPStep:epa_ph_calibration_6
   type: SOPStep
   label: 'If it still fails: replace the junction or call the manufacturer'
@@ -452,6 +464,7 @@ nodes:
   description: Replace a clogged junction and refill with 3M KCl; if the problem persists, call the manufacturer
     (§12.6e, §12.8e, p13).
   origin: reference
+  page: 13
 - id: SOPDocument:ThermoFisher_pH_Electrode
   type: SOPDocument
   label: ThermoFisher — pH electrode preparation and maintenance
@@ -470,18 +483,21 @@ nodes:
   description: Unscrew the storage bottle and rinse the electrode with distilled water to remove salt
     precipitate (p1).
   origin: reference
+  page: 1
 - id: SOPStep:thermofisher_ph_electrode_2
   type: SOPStep
   label: Refill if refillable
   step_number: 2
   description: Open the fill hole, drain the chamber and refill with the appropriate fill solution (p1).
   origin: reference
+  page: 1
 - id: SOPStep:thermofisher_ph_electrode_3
   type: SOPStep
   label: Calibrate with fresh pH 4.01 and 7.00 buffers
   step_number: 3
   description: Ideal slope 92–102 %, ideal offset ±59 mV at pH 7 (p1).
   origin: reference
+  page: 1
 - id: SOPStep:thermofisher_ph_electrode_4
   type: SOPStep
   label: 'Out of range: clean, then fresh buffers, then replace'
@@ -489,12 +505,14 @@ nodes:
   description: Clean and recondition the electrode; if it still fails, use fresh unopened buffers; if
     that fails, replace the electrode (p1).
   origin: reference
+  page: 1
 - id: SOPStep:thermofisher_ph_electrode_5
   type: SOPStep
   label: Never store it dry
   step_number: 5
   description: Keep the bulb and junction wet; store in electrode storage solution (p1).
   origin: reference
+  page: 1
 - id: AnomalyType:gas_cylinder_hazard
   type: AnomalyType
   label: Compressed gas leak or unsafe cylinder
@@ -511,6 +529,7 @@ nodes:
   - cylinder handling
   description: Released gas expands greatly and can make a poorly ventilated room oxygen-deficient (Waterloo
     compressed gases SOP, p1). The rig's zero (N₂) and span (CO₂) gases are supplied from cylinders.
+  page: 1
 - id: SOPDocument:Waterloo_Compressed_Gases
   type: SOPDocument
   label: Waterloo — compressed gas cylinder SOP
@@ -528,6 +547,7 @@ nodes:
   step_number: 1
   description: Check regularly with a monitoring instrument or soapy water (p1).
   origin: reference
+  page: 1
 - id: SOPStep:waterloo_compressed_gases_2
   type: SOPStep
   label: Secure cylinders with two chains
@@ -535,6 +555,7 @@ nodes:
   description: Cylinders over 26″ tall to an anchored rack at 1/3 and 2/3 height; at most two cylinders
     per pair of chains (p2).
   origin: reference
+  page: 2
 - id: SOPStep:waterloo_compressed_gases_3
   type: SOPStep
   label: Move cylinders only on a hand truck, capped
@@ -542,6 +563,7 @@ nodes:
   description: Never transport an unsecured cylinder; replace valve caps before moving; never ride in
     a lift with one (p1–2).
   origin: reference
+  page: 1
 - id: SOPStep:waterloo_compressed_gases_4
   type: SOPStep
   label: Store and segregate correctly
@@ -549,6 +571,7 @@ nodes:
   description: Away from heat and oil or grease; mark full and empty ("MT") cylinders; separate flammable
     and oxidising gases (p2–3).
   origin: reference
+  page: 2
 - id: SOPStep:waterloo_compressed_gases_5
   type: SOPStep
   label: Ventilation
@@ -556,6 +579,7 @@ nodes:
   description: Under 6 air changes per hour, ask the safety office about an oxygen-deficiency monitor
     (p2).
   origin: reference
+  page: 2
 edges:
 - from: Sensor:co2_ppm
   type: MONITORED_IN

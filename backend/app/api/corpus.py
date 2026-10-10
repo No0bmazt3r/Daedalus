@@ -154,11 +154,17 @@ def update_document(document_id: str, fields: dict[str, Any] = Body(...)) -> dic
         raise HTTPException(400, f"source_type must be one of {', '.join(SOURCE_TYPES)}")
     if "origin" in fields and fields["origin"] not in ORIGINS:
         raise HTTPException(400, f"origin must be one of {', '.join(ORIGINS)}")
+    if "page_ranges" in fields:
+        try:
+            extraction.parse_pages(fields["page_ranges"])
+        except extraction.ExtractionError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        fields["page_ranges"] = (fields["page_ranges"] or "").strip() or None
     try:
         document = corpus_store.update_document(document_id, **fields)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    reindex = set(fields) - {"origin", "title"}
+    reindex = set(fields) - {"origin", "title"}  # page_ranges too: it is read at extraction
     return {
         "document": document,
         "note": (
@@ -205,11 +211,13 @@ def get_config() -> dict[str, Any]:
 @router.put("/config")
 def set_config(
     strategy: str = Body(...), chunk_size: int = Body(...), chunk_overlap: int = Body(...),
+    context_header: bool | None = Body(None),
 ) -> dict[str, Any]:
     """Commit chunk settings. Not retroactive — see `corpus_config`."""
     try:
         corpus_config.write(
-            strategy=strategy, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            strategy=strategy, chunk_size=chunk_size, chunk_overlap=chunk_overlap,
+            context_header=context_header,
         )
     except chunking.ChunkingError as exc:
         raise HTTPException(400, str(exc)) from exc

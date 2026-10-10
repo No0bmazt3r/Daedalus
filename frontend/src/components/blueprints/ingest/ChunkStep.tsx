@@ -24,6 +24,7 @@ export function ChunkStep({
     strategy: config.strategy,
     chunk_size: config.chunk_size,
     chunk_overlap: config.chunk_overlap,
+    context_header: config.context_header ?? false,
   })
   // Tagged with the document it describes, so a preview for the *previous*
   // selection cannot render against the current one. That pairing is also what
@@ -41,7 +42,8 @@ export function ChunkStep({
   const dirty =
     draft.strategy !== config.strategy ||
     draft.chunk_size !== config.chunk_size ||
-    draft.chunk_overlap !== config.chunk_overlap
+    draft.chunk_overlap !== config.chunk_overlap ||
+    draft.context_header !== (config.context_header ?? false)
 
   useEffect(() => {
     if (!subject) return
@@ -122,6 +124,21 @@ export function ChunkStep({
               />
             </label>
           ))}
+
+          <label className="flex items-start gap-2 text-[11px] theme-text-muted">
+            <input
+              type="checkbox"
+              checked={draft.context_header}
+              onChange={(e) => setDraft((d) => ({ ...d, context_header: e.target.checked }))}
+              className="mt-0.5 accent-[var(--primary)]"
+            />
+            <span>
+              <span className="theme-text">Embed with a context header.</span> Each chunk is embedded with its
+              document title and section in front, so "Step 3: close the valve" embeds near questions about
+              that SOP. The stored text is unchanged. Changes Track 1, so treat it as an ablation and decide
+              before the freeze.
+            </span>
+          </label>
 
           <button
             onClick={save}

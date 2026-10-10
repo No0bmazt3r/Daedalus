@@ -97,7 +97,7 @@ _SEPARATORS: tuple[str, ...] = (
 
 _HEADING = re.compile(
     r"^\s{0,3}(?:#{1,6}\s+(?P<hash>.+)"          # markdown ATX
-    r"|(?P<num>\d+(?:\.\d+)*\.?\s+[A-Z].{0,80})"  # "4.2 Shutdown Procedure"
+    r"|(?P<num>\d+(?:\.\d+)*\.?[ \t]+[A-Z].{0,80})"  # "4.2 Shutdown Procedure"
     r"|(?P<caps>[A-Z][A-Z0-9 \-/&]{6,80}))\s*$",  # SHOUTED HEADING
     re.MULTILINE,
 )
@@ -171,8 +171,10 @@ def _headings(text: str) -> list[tuple[int, str]]:
     found = []
     for match in _HEADING.finditer(text):
         title = match.group("hash") or match.group("num") or match.group("caps")
+        # A contents line that survived as a heading: drop its dot leader and page number.
+        title = re.sub(r"[ \t]*(?:\.[ \t]?){3,}[ \t]*\d*[ \t]*$", "", title or "").strip()
         if title:
-            found.append((match.start(), title.strip()))
+            found.append((match.start(), title))
     return found
 
 
@@ -286,6 +288,27 @@ def _split_fixed(text: str, size: int, overlap: int) -> list[tuple[int, str]]:
     return pieces
 
 
+def _merge_small(pieces: list[tuple[int, str]], text: str, size: int) -> list[tuple[int, str]]:
+    """Fold a piece under a quarter of `size` into the one before it.
+
+    The splitter leaves short tails — the last line of a section, a lone list
+    item — and overlap then prepends up to `overlap` characters of the previous
+    chunk, so the result is mostly a copy of its neighbour: a near-duplicate
+    that takes a top-k slot from a real passage. Merged from the source text, so
+    offsets stay exact; allowed to overrun `size` by a quarter, never more.
+    """
+    out: list[tuple[int, str]] = []
+    for start, body in pieces:
+        if out and len(body.strip()) < size // 4:
+            prev_start, _ = out[-1]
+            merged = text[prev_start:start + len(body)]
+            if len(merged) <= size + size // 4:
+                out[-1] = (prev_start, merged)
+                continue
+        out.append((start, body))
+    return out
+
+
 def _with_overlap(pieces: list[tuple[int, str]], text: str, overlap: int) -> list[tuple[int, str]]:
     """Extend each piece backwards so boundaries are covered twice.
 
@@ -343,9 +366,9 @@ def chunk_text(
     if strategy == "fixed":
         pieces = _split_fixed(text, size, overlap)
     elif strategy == "paragraph":
-        pieces = _with_overlap(_split_paragraph(text, size), text, overlap)
+        pieces = _with_overlap(_merge_small(_split_paragraph(text, size), text, size), text, overlap)
     else:
-        pieces = _with_overlap(_split_recursive(text, size), text, overlap)
+        pieces = _with_overlap(_merge_small(_split_recursive(text, size), text, size), text, overlap)
 
     headings = _headings(text)
     breaks = page_breaks or []

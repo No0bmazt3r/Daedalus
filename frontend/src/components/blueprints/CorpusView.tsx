@@ -346,7 +346,7 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
                 <span className="block truncate text-xs theme-text">{d.filename}</span>
                 <span className="mt-0.5 block text-[10px] theme-text-muted">
                   {d.source_type}
-                  {d.document_version ? ` · v${d.document_version}` : ''}
+                  {d.document_version ? ` · ${d.document_version}` : ''}
                   {d.page_count ? ` · ${d.page_count}p` : ''}
                   {' · '}{d.chunk_count} chunks, {d.embedded_count} embedded
                 </span>
@@ -387,6 +387,12 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
                   </div>
                 )
               })()}
+              {(() => {
+                const doc = documents.find((d) => d.document_id === selected)
+                return doc?.page_count ? (
+                  <PageRanges key={doc.document_id} doc={doc} onSaved={reload} onError={setActionError} />
+                ) : null
+              })()}
               {actionError && (
                 <p className="flex items-start gap-1.5 text-[11px] text-rose-400">
                   <AlertCircle size={12} className="mt-0.5 shrink-0" /> {actionError}
@@ -419,6 +425,54 @@ export function CorpusView({ onBuild }: { onBuild?: () => void }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+
+/**
+ * Which pages of a PDF to read. For a long manual that is mostly irrelevant
+ * here, so its useful sections are ingested without the rest outnumbering the
+ * corpus. Read at extraction, so it applies on the next re-ingest.
+ */
+function PageRanges({ doc, onSaved, onError }: {
+  doc: CorpusDocument
+  onSaved: () => void
+  onError: (message: string | null) => void
+}) {
+  const [value, setValue] = useState(doc.page_ranges ?? '')
+  const [saving, setSaving] = useState(false)
+  const dirty = value.trim() !== (doc.page_ranges ?? '')
+  const save = async () => {
+    setSaving(true)
+    onError(null)
+    try {
+      await updateDocument(doc.document_id, { page_ranges: value.trim() || null })
+      onSaved()
+    } catch (e) {
+      onError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px] theme-text-muted">
+      <span>Pages read</span>
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={`all ${doc.page_count}`}
+        aria-label="Pages to read, like 11-12, 71-92"
+        className="w-40 rounded-md border theme-border theme-surface px-2 py-0.5 theme-text outline-none placeholder:opacity-50"
+      />
+      <button
+        onClick={() => void save()}
+        disabled={!dirty || saving}
+        className="rounded-md border theme-border px-2 py-0.5 theme-text disabled:opacity-40"
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <span className="opacity-70">Applies on the next re-ingest.</span>
     </div>
   )
 }

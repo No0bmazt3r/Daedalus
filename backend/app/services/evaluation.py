@@ -310,6 +310,47 @@ def _ask(question: str) -> dict[str, Any]:
     return {"result": result, "error": error, "wall_ms": wall_ms, "still_running": not ended}
 
 
+def _retrieve(question: str) -> dict[str, Any]:
+    """Retrieval only: the tool the planner would call for this arm, with its arguments, and no model.
+
+    For ablations, where only retrieval changes: precision, recall and MRR need
+    the retrieved set, not an answer, and skipping the chat model turns an
+    hour-long CPU run into minutes. The query is normalised exactly as the chat
+    path normalises a first question, so both modes search for the same string.
+    Track 2's agent mode still calls the local model for its hops — that is
+    retrieval in that arm.
+    """
+    from . import agent_tools, query_pipeline, rag_config  # noqa: PLC0415
+    from .orchestration import planner  # noqa: PLC0415
+
+    query = query_pipeline.normalise(question).text
+    track = rag_config.resolve()
+    tool = planner.retrieval_tool(track)
+    arguments = ({"query": query, "limit": planner.GRAPH_LIMIT} if track == "graph"
+                 else {"query": query, "top_k": rag_config.retrieval_settings()["top_k"]})
+    query_id = "evalr_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S%f")
+    started = time.perf_counter()
+    envelope = agent_tools.call(tool, arguments, query_id=query_id)
+    return {
+        "result": {"query_id": query_id},
+        "error": None if envelope.get("ok") else str(envelope.get("detail") or "retrieval failed"),
+        "wall_ms": int((time.perf_counter() - started) * 1000),
+        "still_running": False,
+    }
+
+
+def score_retrieval(query: dict[str, Any], asked: dict[str, Any], trace: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """The retrieval metrics alone — answer metrics stay empty, never zero."""
+    rag = (trace.get("rag_logs") or [None])[-1]
+    out: dict[str, Any] = {
+        "id": query["id"], "category": query["category"], "question": query["question"],
+        "query_id": (asked.get("result") or {}).get("query_id"), "error": asked.get("error"),
+    }
+    if rag:
+        out.update(_retrieval(rag, query["expect"]))
+    return out
+
+
 def _json(value: Any, default: Any) -> Any:
     if value in (None, ""):
         return default
@@ -589,8 +630,13 @@ def run(
     rerun_reason: str | None = None,
     query_ids: list[str] | None = None,
     on_progress: Callable[[Progress], None] | None = None,
+    retrieval_only: bool = False,
 ) -> dict[str, Any]:
-    """Ask every question once per arm, score it, and write the run to disk."""
+    """Ask every question once per arm, score it, and write the run to disk.
+
+    `retrieval_only` runs each arm's retrieval without the chat model (see
+    `_retrieve`). Always a practice run: it measures half the system.
+    """
     from . import rag_config  # noqa: PLC0415
 
     arms = arms or list(ARMS)
@@ -604,6 +650,7 @@ def run(
             raise EvalError("none of those question ids are in the query set")
     query_sha = _sha(QUERY_PATH.read_bytes())
 
+    practice = practice or retrieval_only
     frozen = rag_config.read()["frozen"]
     if not frozen and not practice:
         raise EvalError(
@@ -634,6 +681,7 @@ def run(
             "official": official,
             "practice": practice or not frozen,
             "partial": bool(query_ids),
+            "retrieval_only": retrieval_only,
             "rerun_reason": rerun_reason,
             "arms": arms,
             "query_sha": query_sha,
@@ -653,10 +701,10 @@ def run(
                         progress.current = f"{arm} · {q['id']}"
                         if on_progress:
                             on_progress(progress)
-                        asked = _ask(q["question"])
+                        asked = _retrieve(q["question"]) if retrieval_only else _ask(q["question"])
                         qid = (asked.get("result") or {}).get("query_id")
                         trace = audit_store.trace(qid) if qid else {}
-                        scored = score(q, asked, trace)
+                        scored = (score_retrieval if retrieval_only else score)(q, asked, trace)
                         record["results"][arm].append(scored)
                         if scored.get("error"):
                             progress.errors.append(f"{arm} {q['id']}: {scored['error']}")
@@ -802,6 +850,9 @@ def report_markdown(record: dict[str, Any]) -> str:
                   "> run as practice. PROJECT.md §5: freeze both tracks, then run once.", ""]
     if record.get("partial"):
         lines += ["> **Partial run** — a subset of the query set. Not citable.", ""]
+    if record.get("retrieval_only"):
+        lines += ["> **Retrieval only** — no answers were generated, so only the retrieval metrics",
+                  "> (precision, recall, MRR, node recall, retrieval latency) are filled in.", ""]
     if record.get("rerun_reason"):
         lines += [f"> **Re-run.** Reason given: {record['rerun_reason']}", ""]
     snap = record.get("snapshot") or {}
@@ -887,7 +938,11 @@ def _recipe(snap: dict[str, Any]) -> str:
     recipes = snap.get("chunking") or []
     if not recipes:
         return "not recorded"
-    return " + ".join(f"{r['strategy']} {r['chunk_size']}/{r['chunk_overlap']} ({r['chunks']} chunks)" for r in recipes)
+    return " + ".join(
+        f"{r['strategy']} {r['chunk_size']}/{r['chunk_overlap']}"
+        f"{' with context header' if r.get('context_header') else ''} ({r['chunks']} chunks)"
+        for r in recipes
+    )
 
 
 # The headline metrics, in the order the ablation table shows them.
@@ -913,7 +968,7 @@ def compare_markdown(records: list[dict[str, Any]]) -> str:
     snaps = [r.get("snapshot") or {} for r in records]
     lines = ["# Run comparison", ""]
     for r, snap in zip(records, snaps):
-        kind = "practice" if r.get("practice") else "official"
+        kind = ("retrieval-only " if r.get("retrieval_only") else "") + ("practice" if r.get("practice") else "official")
         lines.append(f"- `{r['run_id']}` ({kind}) — chunking: {_recipe(snap)}")
     if len({r.get("query_sha") for r in records}) > 1:
         lines += ["", "> **Different query sets** — these runs did not ask the same questions."]

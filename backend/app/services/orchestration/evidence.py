@@ -242,9 +242,11 @@ class _Builder:
             text += f": {' '.join(str(node['description']).split())}"
         if attrs:
             text += f" ({attrs})"
+        # `page` where the node was authored from a page of its document, so a
+        # Track 2 citation can point at the page the way a Track 1 passage does.
         return self.add("G", "graph", tool, text, {"type": "graph", "node_id": node.get("id"),
                                                    "node_type": node.get("type"), "name": node.get("label"),
-                                                   "origin": origin})
+                                                   "origin": origin, "page": node.get("page")})
 
     def search_graph(self, data: dict[str, Any]) -> list[str]:
         return [self._node(n, "search_graph") for n in data.get("entries") or []]

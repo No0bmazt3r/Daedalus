@@ -7,6 +7,7 @@
     python -m app.cli_eval run --arms vector --ids Q01,Q02 --practice
     python -m app.cli_eval list
     python -m app.cli_eval report eval_20261001_120000
+    python -m app.cli_eval run --retrieval-only     # retrieval metrics only, no chat model
     python -m app.cli_eval compare eval_A eval_B     # e.g. the chunking ablation
 
 A terminal rather than a button because an official run is long — every
@@ -46,6 +47,7 @@ def _run(args: argparse.Namespace) -> int:
             rerun_reason=args.rerun_reason,
             query_ids=args.ids.split(",") if args.ids else None,
             on_progress=show,
+            retrieval_only=args.retrieval_only,
         )
     except evaluation.EvalError as exc:
         print(f"\n{exc}")
@@ -68,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--practice", action="store_true", help="run unfrozen; the report is marked not citable")
     run.add_argument("--ids", help="comma-separated question ids — a partial, never-citable run")
     run.add_argument("--rerun-reason", help="required to repeat an official run; written into the report")
+    run.add_argument("--retrieval-only", action="store_true",
+                     help="retrieval metrics only, no chat model — minutes, for ablations; always practice")
     sub.add_parser("list", help="saved runs")
     report = sub.add_parser("report", help="print a saved run's report")
     report.add_argument("run_id")

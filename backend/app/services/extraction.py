@@ -39,6 +39,7 @@ boundaries in a manual are an artefact of typesetting.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -137,6 +138,84 @@ def _unshift(text: str) -> str:
     )
 
 
+# A word on a font-shifted page with no space in it carries no 0x03 marker, so
+# `_unshift` cannot see it — section titles are the usual case ("FDOLEUDWLRQ" for
+# "calibration"). Such a word is decoded only when decoding makes it markedly
+# more like English by letter frequency, so a real capitalised word ("CAUTION",
+# "ZERO") on the same page is left alone.
+_SHIFTED_WORD = re.compile(r"(?<![^\s(])[$-\]]{5,}(?![^\s).,:;])")
+_LETTER_FREQ = dict(zip(
+    "etaoinshrdlcumwfgypbvkjxqz",
+    (12.7, 9.1, 8.2, 7.5, 7.0, 6.7, 6.3, 6.1, 6.0, 4.3, 4.0, 2.8, 2.8, 2.4, 2.4, 2.2, 2.0, 2.0,
+     1.9, 1.5, 1.0, 0.8, 0.15, 0.15, 0.1, 0.07),
+))
+
+
+def _englishness(word: str) -> float:
+    letters = [c for c in word.lower() if c.isalpha()]
+    if not letters:
+        return -99.0
+    return sum(math.log(_LETTER_FREQ.get(c, 0.05)) for c in letters) / len(letters)
+
+
+def _unshift_words(text: str) -> str:
+    def fix(m: re.Match[str]) -> str:
+        word = m.group(0)
+        decoded = "".join(chr(ord(c) + _SHIFT) for c in word)
+        if not decoded[1:].isalpha() or not decoded[1:].islower():
+            return word
+        return decoded if _englishness(decoded) - _englishness(word) > 0.4 else word
+    return _SHIFTED_WORD.sub(fix, text)
+
+
+# Repeated page furniture: the same header or footer line on most pages, and
+# bare page numbers. Compared with digits folded, since "Page 3 of 13" differs
+# on every page. Only lines near the top or bottom of a page are candidates.
+_EDGE_LINES = 2
+_PAGE_NUMBER = re.compile(r"^\s*(?:page\s*)?\d{1,4}(?:\s*(?:of|/)\s*\d{1,4})?\s*$", re.IGNORECASE)
+# A contents page: dot leaders, or "contents" with most lines ending in a page number.
+_DOT_LEADER = re.compile(r"(?:\.\s?){4,}\s*\d{1,4}\s*$")
+_ENDS_IN_NUMBER = re.compile(r"\s\d{1,4}\s*$")
+
+
+def _fold(line: str) -> str:
+    return re.sub(r"\d+", "#", " ".join(line.split()).lower())
+
+
+def _strip_furniture(pages: list[str]) -> tuple[list[str], int]:
+    """Drop repeated headers/footers and bare page numbers. Returns the pages and lines dropped."""
+    counts: dict[str, int] = {}
+    for page in pages:
+        lines = [line for line in page.split("\n") if line.strip()]
+        for line in {_fold(x) for x in lines[:_EDGE_LINES] + lines[-_EDGE_LINES:]}:
+            counts[line] = counts.get(line, 0) + 1
+    read = sum(1 for page in pages if page.strip())
+    repeated = {line for line, n in counts.items() if read >= 4 and n >= read / 2 and len(line) > 3}
+    dropped = 0
+    out = []
+    for page in pages:
+        lines = page.split("\n")
+        real = [i for i, line in enumerate(lines) if line.strip()]
+        edge = set(real[:_EDGE_LINES] + real[-_EDGE_LINES:])
+        kept = []
+        for i, line in enumerate(lines):
+            if i in edge and (_fold(line) in repeated or _PAGE_NUMBER.match(line)):
+                dropped += 1
+                continue
+            kept.append(line)
+        out.append("\n".join(kept).strip())
+    return out, dropped
+
+
+def _is_contents(page: str) -> bool:
+    lines = [line for line in page.split("\n") if line.strip()]
+    if len(lines) < 5:
+        return False
+    leaders = sum(bool(_DOT_LEADER.search(line)) for line in lines)
+    numbered = sum(bool(_ENDS_IN_NUMBER.search(line)) for line in lines)
+    return leaders >= len(lines) * 0.4 or ("contents" in page.lower() and numbered >= len(lines) * 0.5)
+
+
 def _normalise(text: str) -> str:
     """Line endings, and the ligatures a PDF text layer leaves behind.
 
@@ -149,6 +228,10 @@ def _normalise(text: str) -> str:
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     for bad, good in (("ﬁ", "fi"), ("ﬂ", "fl"), (" ", " "), ("’", "'")):
         text = text.replace(bad, good)
+    # Some manuals map the fi/fl ligatures to ¿ and À (the Fuji ZRE: "¿re",
+    # "Àow"). Only before a lower-case letter, where neither is plausible text.
+    text = re.sub(r"¿(?=[a-z])", "fi", text)
+    text = re.sub(r"À(?=[a-z])", "fl", text)
     # Three or more blank lines carry no information the chunker can use and
     # inflate every offset after them.
     return re.sub(r"\n{3,}", "\n\n", text).strip()
@@ -188,7 +271,23 @@ _NEEDS_CRYPTO = (
 )
 
 
-def _extract_pdf(raw: bytes, filename: str) -> Extracted:
+def parse_pages(spec: str | None) -> set[int] | None:
+    """`"1-5, 80-120, 130"` → those page numbers, 1-based. None or empty → every page."""
+    if not spec or not spec.strip():
+        return None
+    pages: set[int] = set()
+    for part in spec.split(","):
+        m = re.fullmatch(r"\s*(\d+)\s*(?:-\s*(\d+))?\s*", part)
+        if not m:
+            raise ExtractionError(f"page range {part.strip()!r} is not like '12' or '80-120'")
+        low, high = int(m.group(1)), int(m.group(2) or m.group(1))
+        if low < 1 or high < low:
+            raise ExtractionError(f"page range {part.strip()!r} is empty or starts below page 1")
+        pages.update(range(low, high + 1))
+    return pages
+
+
+def _extract_pdf(raw: bytes, filename: str, pages_wanted: set[int] | None = None) -> Extracted:
     ok, why = pdf_available()
     if not ok:
         raise ExtractionError(why)
@@ -231,20 +330,48 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
     except Exception as exc:  # noqa: BLE001 — a broken page tree is a document problem
         raise ExtractionError(f"pypdf could not read this file's pages: {exc}") from exc
 
-    parts: list[str] = []
-    breaks: list[int] = []
+    bodies: list[str] = []
     warnings: list[str] = []
-    cursor = 0
+    shifted_doc = False
     for number, page in enumerate(pages, start=1):
+        if pages_wanted is not None and number not in pages_wanted:
+            bodies.append("")
+            continue
         try:
-            body = _unshift(page.extract_text() or "")
+            raw_text = page.extract_text() or ""
         except pypdf.errors.DependencyError as exc:
             # Not one bad page: every page will fail the same way.
             raise ExtractionError(_NEEDS_CRYPTO) from exc
         except Exception as exc:  # noqa: BLE001 — one bad page is not a bad document
-            body = ""
+            raw_text = ""
             warnings.append(f"page {number} could not be read: {exc}")
-        body = body.strip()
+        shifted_doc = shifted_doc or "\x03" in raw_text
+        bodies.append(_unshift(raw_text))
+    # A shifted font is a property of the document, not the page: a title page
+    # with no spaces carries no 0x03 marker but is encoded the same way.
+    if shifted_doc:
+        bodies = [_unshift_words(body) for body in bodies]
+
+    bodies, dropped = _strip_furniture(bodies)
+    contents = [n for n, body in enumerate(bodies, start=1) if body and _is_contents(body)]
+    for n in contents:
+        bodies[n - 1] = ""
+    if dropped:
+        warnings.append(f"removed {dropped} repeated header/footer or page-number line(s)")
+    if contents:
+        warnings.append(f"skipped contents page(s) {', '.join(map(str, contents))}")
+    if pages_wanted is not None:
+        kept = len(pages_wanted & set(range(1, len(pages) + 1)))
+        warnings.append(f"read {kept} of {len(pages)} pages (page range set on the document)")
+
+    # Each page is normalised on its own, *before* its offset is recorded.
+    # Normalising the joined text afterwards removed characters and collapsed
+    # blank lines, which moved every later page break and mis-paged citations.
+    parts: list[str] = []
+    breaks: list[int] = []
+    cursor = 0
+    for body in bodies:
+        body = _normalise(body)
         breaks.append(cursor)
         if body:
             parts.append(body)
@@ -252,7 +379,7 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
         # A page with no text still gets a break, so page numbers stay aligned
         # with the document rather than with the pages that happened to parse.
 
-    text = _normalise("\n\n".join(parts))
+    text = "\n\n".join(parts)
     page_count = len(pages)
 
     if len(text) < _EMPTY_THRESHOLD:
@@ -270,7 +397,7 @@ def _extract_pdf(raw: bytes, filename: str) -> Extracted:
     )
 
 
-def extract(raw: bytes, filename: str) -> Extracted:
+def extract(raw: bytes, filename: str, *, pages: set[int] | None = None) -> Extracted:
     """Bytes to text. Raises `ExtractionError` with something worth reading.
 
     The caller records the failure against the document rather than discarding
@@ -282,7 +409,7 @@ def extract(raw: bytes, filename: str) -> Extracted:
 
     suffix = _suffix(filename)
     if suffix in PDF_TYPES:
-        return _extract_pdf(raw, filename)
+        return _extract_pdf(raw, filename, pages)
     if suffix in TEXT_TYPES:
         extracted = _extract_text(raw, filename)
         if len(extracted.text) < _EMPTY_THRESHOLD:

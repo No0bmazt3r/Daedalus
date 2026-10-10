@@ -150,6 +150,38 @@ function QueryPicker({
   )
 }
 
+/**
+ * A real question, as a draft entry for `config/eval/queries.yaml`. The
+ * retrieved documents are offered as `relevant_documents` *candidates* only:
+ * the labels are ground truth and must be checked by hand — copying what the
+ * system found and calling it correct would grade Track 1 against itself.
+ */
+function CopyAsQuestion({ question, files }: { question: string; files: string[] }) {
+  const [copied, setCopied] = useState(false)
+  const yaml = [
+    '- id: QXX',
+    '  category: single_hop_factual  # TODO: single_hop_procedural | multi_hop_causal | ambiguous | out_of_corpus',
+    `  question: ${JSON.stringify(question)}`,
+    '  language: en',
+    '  rig_specific: false  # TODO',
+    '  expect:',
+    '    answerable: true',
+    '    key_facts: []  # TODO: what a correct answer must state',
+    `    relevant_documents: []  # TODO, check by hand. Retrieved: ${[...new Set(files)].join(', ') || 'none'}`,
+    '    relevant_nodes: []',
+    '  notes: drafted from a real query in Blueprints → Replay',
+  ].join('\n')
+  return (
+    <button
+      onClick={() => void navigator.clipboard.writeText(yaml).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500) })}
+      title="Copy this question as a draft entry for config/eval/queries.yaml. The labels are left for you to write."
+      className="ml-auto rounded-md border theme-border px-1.5 py-0.5 theme-text-muted hover:theme-text"
+    >
+      {copied ? 'Copied' : 'Copy as eval question'}
+    </button>
+  )
+}
+
 function Detail({ queryId }: { queryId: string | null }) {
   // Tagged with the query it describes, so the detail for the *previous*
   // selection cannot render against the current one — and so clearing it does
@@ -213,6 +245,7 @@ function Detail({ queryId }: { queryId: string | null }) {
             <Timer size={10} /> {data.retrieval_latency_ms ?? '-'}ms retrieval
           </span>
           {data.collection && <code className="theme-text-muted">{data.collection}</code>}
+          <CopyAsQuestion question={data.query_text} files={data.chunks.map((c) => c.source_file).filter((f): f is string => !!f)} />
         </div>
       </div>
 

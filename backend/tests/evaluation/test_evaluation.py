@@ -271,6 +271,29 @@ class RunTest(unittest.TestCase):
         self.assertEqual(saved["status"], "aborted")
         self.assertIn("still running", saved["abort_reason"])
 
+    def test_retrieval_only_calls_the_arms_tool_and_never_the_model(self) -> None:
+        from app.db import audit_store  # noqa: PLC0415
+        from app.services import agent_tools  # noqa: PLC0415
+
+        called: list[tuple[str, dict]] = []
+
+        def fake_call(name: str, arguments: dict, query_id: str | None = None, **_: object) -> dict:
+            called.append((name, arguments))
+            audit_store.log("rag_logs", query_id=query_id, track="vector",
+                            retrieved_chunk_ids=json.dumps([]), retrieval_latency_ms=7)
+            return {"ok": True}
+
+        with mock.patch.object(agent_tools, "call", side_effect=fake_call), \
+                mock.patch.object(evaluation, "_ask", side_effect=AssertionError("the model was asked")):
+            record = evaluation.run(arms=["vector"], retrieval_only=True)
+        self.assertTrue(record["practice"])  # never official, even unasked
+        self.assertEqual(called[0][0], "search_corpus")
+        self.assertIn("top_k", called[0][1])
+        row = record["results"]["vector"][0]
+        self.assertEqual(row["retrieval_ms"], 7)
+        self.assertNotIn("correct", row)
+        self.assertIn("Retrieval only", evaluation.report_markdown(record))
+
     def test_ctrl_c_saves_and_still_interrupts(self) -> None:
         with mock.patch.object(evaluation, "_ask", side_effect=KeyboardInterrupt), \
                 self.assertRaises(KeyboardInterrupt):
