@@ -14,6 +14,7 @@ import { CapabilityBadges } from '../ui/capability-badges'
 import { ModelArchitecture } from '../ui/model-architecture'
 import { EmbeddingModelsPane } from './EmbeddingModelsPane'
 import { RerankersPane } from './RerankersPane'
+import { BenchmarkTable } from './BenchmarkTable'
 import { fetchRagConfig } from '../../lib/blueprintsClient'
 import { CloudModelsView } from './CloudModelsView'
 import { SkeletonList } from '../ui/skeleton'
@@ -595,6 +596,9 @@ export function InstalledModelsView({
                     </EmptyNote>
                   )}
                 </div>
+                {rows.length > 0 && (
+                  <BenchmarkTable models={rows.map((r) => r.tag)} refreshKey={result?.query_id} />
+                )}
               </>
             )}
           </>

@@ -130,6 +130,15 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
             "source_type": (meta or {}).get("source_type"),
         })
 
+    # The ablation's cut-off, before re-ranking: a passage the embedder
+    # already judged too far away is not one the cross-encoder should rescue.
+    threshold = rag_config.retrieval_settings()["similarity_threshold"]
+    dropped = 0
+    if threshold is not None:
+        kept = [c for c in chunks if c["distance"] is None or 1 - c["distance"] >= threshold]
+        dropped = len(chunks) - len(kept)
+        chunks = kept
+
     rerank: dict[str, Any] = {"enabled": settings["enabled"], "model": None,
                               "candidates": len(chunks), "latency_ms": None, "reason": None}
     if settings["enabled"] and chunks:
@@ -158,12 +167,14 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         c["origin"] = origins.get(c.get("chunk_id"), "reference")
 
     if not chunks:
-        detail = "no passage matched"
+        detail = "no passage matched" + (f" above similarity {threshold:g}" if dropped else "")
     elif rerank["model"]:
         detail = (f"{len(chunks)} passages from {state['collection']}, re-ranked from "
                   f"{rerank['candidates']} by {rerank['model']}")
     else:
         detail = f"{len(chunks)} passages from {state['collection']} (vector order: {rerank['reason']})"
+    if chunks and dropped:
+        detail += f"; {dropped} below similarity {threshold:g} dropped"
 
     return {
         # `collection` travels with the result so the dispatch boundary can
@@ -171,7 +182,7 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         # resolving the collection separately is how a log ends up naming one
         # index while the query read another.
         "data": {"chunks": chunks, "track": "vector", "collection": state["collection"],
-                 "rerank": rerank},
+                 "rerank": rerank, "similarity_threshold": threshold, "below_threshold": dropped},
         "detail": detail,
     }
 

@@ -574,6 +574,25 @@ def events(run_id: str, *, level: str | None = None, limit: int = 500) -> list[d
     return out
 
 
+def chunk_recipes() -> list[dict[str, Any]]:
+    """How the chunks now in the manifest were cut — strategy, size, overlap — with counts.
+
+    Read from the runs that wrote them rather than from the current settings,
+    which may have changed since: this is what retrieval is actually searching.
+    One row means the corpus was chunked one way; more means a mix.
+    """
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.strategy, r.chunk_size, r.chunk_overlap, COUNT(*) AS chunks
+              FROM chunks c JOIN ingest_runs r ON r.run_id = c.run_id
+             GROUP BY r.strategy, r.chunk_size, r.chunk_overlap
+             ORDER BY chunks DESC
+            """
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def stats() -> dict[str, Any]:
     """Corpus totals — for Settings → System → Storage health and the pipeline header."""
     try:

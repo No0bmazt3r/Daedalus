@@ -88,7 +88,7 @@ The stack itself, each under its own permissive licence:
 | [thinking-orbs](https://www.npmjs.com/package/thinking-orbs) | The animated indicator while a model is thinking | MIT |
 | [Lucide](https://lucide.dev/) | Icons | ISC |
 | [Monocraft](https://github.com/IdreesInc/Monocraft) | The Minecraft typeface — the UI's default face, bundled at `frontend/src/assets/fonts/` | SIL OFL 1.1 |
-| [Geist](https://vercel.com/font) · [OpenDyslexic](https://opendyslexic.org/) | Alternative faces in the Font selector | SIL OFL 1.1 |
+| [Geist](https://vercel.com/font) · [Fira Code](https://github.com/tonsky/FiraCode) · [OpenDyslexic](https://opendyslexic.org/) | Alternative faces in the Font selector; Fira Code and OpenDyslexic bundled from `@fontsource` | SIL OFL 1.1 |
 
 The CO₂ sorption reactor and its SCADA software (CO2SorptionDT) are
 pre-existing; Daedalus is a standalone chat application that reads their data

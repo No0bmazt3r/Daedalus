@@ -38,6 +38,7 @@ from logging.handlers import RotatingFileHandler
 from typing import Any, Final
 
 from ..db import paths
+from ..db.audit_store import scrub
 
 LOG_FILE: Final = paths.LOG_DIR / "daedalus.log"
 
@@ -63,6 +64,13 @@ _LINE = re.compile(
 _installed = False
 
 
+class _ScrubbingFormatter(logging.Formatter):
+    """The whole formatted record, traceback included, through `audit_store.scrub`."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return scrub(super().format(record))
+
+
 def install() -> None:
     """Add the file handler to the root logger. Idempotent.
 
@@ -86,7 +94,7 @@ def install() -> None:
         # is true and is a better outcome than refusing to start.
         return
 
-    handler.setFormatter(logging.Formatter(FORMAT, DATE_FORMAT))
+    handler.setFormatter(_ScrubbingFormatter(FORMAT, DATE_FORMAT))
     handler.setLevel(logging.INFO)
 
     root = logging.getLogger()

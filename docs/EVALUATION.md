@@ -172,10 +172,37 @@ across the audit tables.
 
 ---
 
-## 7. Not built
+## 7. Ablations — one variable, two runs, one table
+
+Supplementary to the official comparison, never instead of it: ablation runs are
+**practice** runs, so none of them is citable as the headline result.
+
+Every run's snapshot records the chunk recipe the corpus was actually cut with
+(`strategy chunk_size/overlap`, from the ingest runs that wrote the chunks),
+along with Track 1's `retrieval` settings (`top_k`, `similarity_threshold`) in
+`rag_config`. `compare` puts runs side by side, per arm, and says when they differ
+in anything besides the variable under test.
+
+**Chunk size**
+
+1. `python -m app.cli_eval run --practice --arms vector` at the current size (A).
+2. Blueprints → Track 1 → Build: set the second chunk size, re-chunk and re-embed
+   every document.
+3. Run step 1 again (B).
+4. `python -m app.cli_eval compare <A> <B>`. Paste the table into the report.
+5. Put the chunk size back, re-chunk, and confirm `report` shows the original
+   recipe before any official run.
+
+**`top_k` / similarity cut-off:** the same, changing Settings → Vector RAG →
+Retrieval depth between the runs instead of re-chunking. Both are frozen with the
+track, so unfreeze first and freeze again afterwards.
+
+---
+
+## 8. Not built
 
 - A dashboard surface. Running from the terminal is deliberate: an official run
   is long and is started once, on purpose.
 - Per-stage latency beyond first token and retrieval (planning, validation).
-- An enforceable check for prompt rule 9 (rig-specific facts backed only by
-  references). See `TODO.md` M2.
+- Two chunkings live at once. An ablation re-chunks between runs rather than
+  keeping a second index, because the manifest holds one chunking per document.

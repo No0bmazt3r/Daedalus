@@ -82,6 +82,14 @@ CANDIDATE_RANGE = (5, 50)
 # past it the agent answers from what it has gathered. Four steps is the most
 # the schema's longest chain (Sensor → Threshold → AnomalyType → SOP → steps)
 # needs, so a fifth could only revisit.
+# Track 1's retrieval depth and cut-off, for the ablation table. `top_k` is how
+# many passages reach the prompt (10 is `search_corpus`'s ceiling: an SLM at
+# num_ctx 4096 cannot afford more). `similarity_threshold` drops a passage whose
+# cosine similarity (1 − Chroma's distance) is below it, before re-ranking;
+# `None` keeps every candidate. Frozen with the track, like re-ranking.
+TOP_K_RANGE = (1, 10)
+THRESHOLD_RANGE = (0.0, 1.0)
+
 GRAPH_MODES = ("agent", "walk")
 BUDGET_RANGE = (1.0, 30.0)
 STEPS_RANGE = (1, 4)
@@ -92,7 +100,25 @@ DEFAULT: dict[str, Any] = {
     "note": "Track 1 (vector) is the baseline/control arm. See PROJECT.md §5.",
     "rerank": {"enabled": True, "model": "ms-marco-minilm-l6", "candidates": DEFAULT_CANDIDATES},
     "graph": {"mode": "agent", "budget_s": 6.0, "max_steps": 4},
+    "retrieval": {"top_k": 5, "similarity_threshold": None},
 }
+
+
+def _number(raw: Any) -> bool:
+    return isinstance(raw, (int, float)) and not isinstance(raw, bool)
+
+
+def _retrieval(raw: Any) -> dict[str, Any]:
+    out = dict(DEFAULT["retrieval"])
+    if not isinstance(raw, dict):
+        return out
+    k = raw.get("top_k")
+    if isinstance(k, int) and not isinstance(k, bool) and TOP_K_RANGE[0] <= k <= TOP_K_RANGE[1]:
+        out["top_k"] = k
+    t = raw.get("similarity_threshold")
+    if _number(t) and THRESHOLD_RANGE[0] <= t <= THRESHOLD_RANGE[1]:
+        out["similarity_threshold"] = float(t)
+    return out
 
 
 def _graph(raw: Any) -> dict[str, Any]:
@@ -141,7 +167,7 @@ def read() -> dict[str, Any]:
     try:
         raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {**DEFAULT, "rerank": _rerank(None), "graph": _graph(None)}
+        return {**DEFAULT, "rerank": _rerank(None), "graph": _graph(None), "retrieval": _retrieval(None)}
 
     track = raw.get("track")
     if track not in TRACKS:
@@ -150,6 +176,7 @@ def read() -> dict[str, Any]:
             **DEFAULT,
             "rerank": _rerank(raw.get("rerank") if valid else None),
             "graph": _graph(raw.get("graph") if valid else None),
+            "retrieval": _retrieval(raw.get("retrieval") if valid else None),
         }
     return {
         "track": track,
@@ -157,6 +184,7 @@ def read() -> dict[str, Any]:
         "note": raw.get("note", DEFAULT["note"]),
         "rerank": _rerank(raw.get("rerank")),
         "graph": _graph(raw.get("graph")),
+        "retrieval": _retrieval(raw.get("retrieval")),
     }
 
 
@@ -166,8 +194,9 @@ def write(
     note: str | None = None,
     rerank: dict[str, Any] | None = None,
     graph: dict[str, Any] | None = None,
+    retrieval: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Commit a track choice, Track 1's re-ranking and/or Track 2's retrieval mode.
+    """Commit a track choice, Track 1's re-ranking and depth, and/or Track 2's retrieval mode.
 
     Refuses while frozen.
     """
@@ -177,6 +206,8 @@ def write(
         _validate_rerank(rerank)
     if graph is not None:
         _validate_graph(graph)
+    if retrieval is not None:
+        _validate_retrieval(retrieval)
 
     with _lock:
         current = read()
@@ -191,6 +222,7 @@ def write(
             "note": note or current.get("note") or DEFAULT["note"],
             "rerank": _rerank({**current["rerank"], **(rerank or {})}),
             "graph": _graph({**current["graph"], **(graph or {})}),
+            "retrieval": _retrieval({**current["retrieval"], **(retrieval or {})}),
         }
         # Written the same way `model_config` writes: temp file, fsync, atomic
         # rename. This is read on the chat path, and a half-written config read
@@ -225,6 +257,19 @@ def _validate_rerank(raw: dict[str, Any]) -> None:
         low, high = CANDIDATE_RANGE
         if not isinstance(n, int) or isinstance(n, bool) or not low <= n <= high:
             raise ValueError(f"rerank.candidates must be a whole number from {low} to {high}")
+
+
+def _validate_retrieval(raw: dict[str, Any]) -> None:
+    if "top_k" in raw:
+        k = raw["top_k"]
+        low, high = TOP_K_RANGE
+        if not isinstance(k, int) or isinstance(k, bool) or not low <= k <= high:
+            raise ValueError(f"retrieval.top_k must be a whole number from {low} to {high}")
+    if "similarity_threshold" in raw:
+        t = raw["similarity_threshold"]
+        low, high = THRESHOLD_RANGE
+        if t is not None and (not _number(t) or not low <= t <= high):
+            raise ValueError(f"retrieval.similarity_threshold must be empty or a number from {low:g} to {high:g}")
 
 
 def _validate_graph(raw: dict[str, Any]) -> None:
@@ -280,6 +325,11 @@ def graph_settings() -> dict[str, Any]:
     if override and override["graph_mode"]:
         settings = {**settings, "mode": override["graph_mode"]}
     return settings
+
+
+def retrieval_settings() -> dict[str, Any]:
+    """Track 1's `top_k` and similarity cut-off, read on every query."""
+    return read()["retrieval"]
 
 
 def rerank_settings() -> dict[str, Any]:

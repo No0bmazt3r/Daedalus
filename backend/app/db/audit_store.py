@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import re
 import sqlite3
 import threading
 import traceback
@@ -61,8 +62,32 @@ _TEXT_FIELDS = frozenset({
     "query_text", "tool_input_json", "tool_output_summary",
 })
 # Parts of the validator's verdict that quote the answer.
-_VALIDATION_TEXT = ("control_claim", "uncited_causes")
+_VALIDATION_TEXT = ("control_claim", "uncited_causes", "uncaveated_reference")
 _redact: contextvars.ContextVar[bool] = contextvars.ContextVar("audit_redact", default=False)
+
+# Never log a secret or a personal identifier (M7). Applied to every audit row
+# and, through `app_logs`, every line of the process log — tracebacks included,
+# which is where a key in a failed request's URL would otherwise land. Shapes,
+# not meaning: provider key prefixes, bearer tokens, `key=`/`password=` values,
+# email addresses and Malaysian IC numbers. Phone numbers are deliberately not
+# matched — a digit-run pattern would also eat sensor readings, and the numbers
+# in a turn are the evaluation's evidence.
+_SCRUB = (
+    (re.compile(r"\b(?:sk-(?:ant-)?|tvly-|hf_|gh[pousr]_|xox[abprs]-|AIza)[A-Za-z0-9_\-]{16,}"), "[secret]"),
+    (re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/=\-]{12,}"), r"\1[secret]"),
+    (re.compile(r"(?i)\b(api[_-]?key|apikey|x-api-key|access[_-]?token|auth[_-]?token|client[_-]?secret"
+                r"|secret|password|passwd)(\s*[=:]\s*[\"']?)[^\s\"'&,;]{4,}"), r"\1\2[secret]"),
+    (re.compile(r"(?i)([?&](?:key|token|sig|signature)=)[^\s&\"']{6,}"), r"\1[secret]"),
+    (re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), "[email]"),
+    (re.compile(r"\b\d{6}-\d{2}-\d{4}\b"), "[ic-number]"),
+)
+
+
+def scrub(text: str) -> str:
+    """`text` with secrets and personal identifiers replaced by a marker."""
+    for pattern, marker in _SCRUB:
+        text = pattern.sub(marker, text)
+    return text
 
 
 def redact_this_context() -> None:
@@ -119,6 +144,7 @@ def log(table: str, **fields: Any) -> None:
         k: (json.dumps(v, separators=(",", ":")) if isinstance(v, (dict, list)) else v)
         for k, v in fields.items()
     }
+    payload = {k: scrub(v) if isinstance(v, str) else v for k, v in payload.items()}
     columns = ", ".join(payload)
     placeholders = ", ".join("?" for _ in payload)
 

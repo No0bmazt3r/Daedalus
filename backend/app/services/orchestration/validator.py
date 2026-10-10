@@ -11,6 +11,7 @@
 | reading citations | a sentence cites `[S1]` but states nothing on S1's line | `citation_mismatch` |
 | times and dates | a clock time or date nowhere in the evidence, question or history | `unsupported_time` |
 | causes | "because…", "caused by…" with no cited source that itself states a cause | `uncited_cause` |
+| rule 9 | a rig-specific sentence cited only to `[REFERENCE]` evidence, with no caveat | `uncaveated_reference` |
 
 A failed answer is replaced by §7.1's fixed fallback — *"I could not generate a
 grounded answer from the available data."* — and the model's text is kept in
@@ -65,6 +66,19 @@ This is lexical, not semantic, and says so: a cited SOP that states *some*
 cause sharing a word with the claim passes even if it is a different cause.
 It closes the observed failure — a cause stitched together from lines that
 state none — without pretending to read meaning.
+
+## Rig specifics from another installation must say so
+
+Prompt rule 9: a setpoint, limit, step, valve or sequence supported only by
+another installation's documents is *general guidance*, to be confirmed against
+this lab's own procedure. So a sentence that reads as rig-specific — one of
+those words, a valve-style tag (`ABV-1`), or a measurement with a unit — and
+cites only `D`/`G` lines marked `[REFERENCE]` fails unless the answer somewhere
+says so ("general guidance", "another installation", "confirm against…").
+The caveat is looked for in the whole answer, not the sentence: a model that
+says it once, up front, for a list of steps has followed the rule. A sentence
+citing any `[THIS RIG]` line or any reading is exempt — readings are the rig's.
+Lexical, like the cause check: it catches the missing caveat, not a wrong one.
 
 ## What is tolerated, and why
 
@@ -144,6 +158,7 @@ class Validation:
     control_claim: str | None = None
     unsupported_times: list[str] = field(default_factory=list)
     uncited_causes: list[str] = field(default_factory=list)
+    uncaveated_reference: list[str] = field(default_factory=list)
 
     @property
     def hallucination(self) -> bool:
@@ -165,6 +180,7 @@ class Validation:
             "control_claim": self.control_claim,
             "unsupported_times": self.unsupported_times,
             "uncited_causes": self.uncited_causes,
+            "uncaveated_reference": self.uncaveated_reference,
         }
 
 
@@ -224,8 +240,46 @@ def validate(
     if v.uncited_causes:
         v.reasons.append("uncited_cause")
 
+    v.uncaveated_reference = _uncaveated_reference(text, pack)
+    if v.uncaveated_reference:
+        v.reasons.append("uncaveated_reference")
+
     v.passed = not v.reasons
     return v
+
+
+_RIG_SPECIFIC_RE = re.compile(
+    r"\b(?:set\s?points?|limits?|thresholds?|alarms?|interlocks?|valves?|steps?|procedures?|sequences?"
+    r"|had|langkah|injap|prosedur|urutan)\b|\b[A-Z]{2,}-\d+\b",
+    re.IGNORECASE,
+)
+_CAVEAT_RE = re.compile(
+    r"\b(?:general\s+guidance|another\s+(?:installation|plant|site)|other\s+(?:installations?|plants?|sites?)"
+    r"|confirm|verify|check\s+(?:it\s+|this\s+)?(?:against|with)|lab'?s\s+own|this\s+lab'?s"
+    r"|panduan\s+umum|pemasangan\s+lain|sahkan)\b",
+    re.IGNORECASE,
+)
+
+
+def _uncaveated_reference(text: str, pack: EvidencePack) -> list[str]:
+    if _CAVEAT_RE.search(text):
+        return []
+    origin = {i.label: ("rig" if i.kind == "sensor" else i.citation.get("origin") or "reference") for i in pack.items}
+    sentences = [s for s in _SENTENCE_RE.split(text) if s.strip()]
+    bad: list[str] = []
+    for index, sentence in enumerate(sentences):
+        labels = _labels_in(sentence)
+        following = sentences[index + 1] if index + 1 < len(sentences) else ""
+        lead = re.match(r"\s*((?:\[[^\]]+\]\s*)+)", following)
+        if lead:
+            labels |= _labels_in(lead.group(1))
+        known = [origin[label] for label in labels if label in origin]
+        if not known or "rig" in known:
+            continue
+        specific = _RIG_SPECIFIC_RE.search(sentence) or any(n.unit for n in numbers.extract(sentence))
+        if specific:
+            bad.append(" ".join(sentence.split())[:160])
+    return bad
 
 
 def _unsupported_moments(text: str, pack: EvidencePack, context: str) -> list[str]:

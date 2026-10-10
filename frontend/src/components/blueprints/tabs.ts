@@ -23,7 +23,7 @@
 // |            | Track 1     | Track 2    |
 // |------------|-------------|------------|
 // | inventory  | Corpus      | Graph      |
-// | gaps       | —           | Coverage   |
+// | gaps       | Usage       | Coverage   |
 // | trace      | Replay      | Replay     |
 // | authoring  | Build       | Build      |
 //
@@ -36,6 +36,7 @@ import type { RagTrack } from '../../lib/blueprintsClient';
 export type BlueprintsTab =
   | 'corpus'
   | 'retrieval'
+  | 'usage'
   | 'ingest'
   | 'logs'
   | 'graph'
@@ -66,6 +67,10 @@ export const BLUEPRINT_TABS: readonly {
   {
     id: 'retrieval', label: 'Replay', track: 'vector',
     keywords: 'retrieval chunks distances trace grounded evidence which passages vector',
+  },
+  {
+    id: 'usage', label: 'Usage', track: 'vector',
+    keywords: 'documents retrieved cited earn their place never used noise which documents',
   },
   {
     id: 'authoring', label: 'Build', track: 'graph',

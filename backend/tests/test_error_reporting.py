@@ -23,5 +23,16 @@ class ErrorReportingTest(unittest.TestCase):
         self.assertIn(body["error_id"], logs.output[0])
 
 
+class DevSeedGateTest(unittest.TestCase):
+    def test_seeders_refuse_unless_opted_in(self) -> None:
+        client = TestClient(app)
+        with mock.patch.dict("os.environ", {"DAEDALUS_ALLOW_DEMO_SEED": "0"}):
+            for method, url in (("post", "/api/system/seed-demo"), ("post", "/api/system/seed-graph-traces"),
+                                ("delete", "/api/system/seed-graph-traces")):
+                res = getattr(client, method)(url)
+                self.assertEqual(res.status_code, 403, url)
+                self.assertIn("DAEDALUS_ALLOW_DEMO_SEED", res.json()["detail"])
+
+
 if __name__ == "__main__":
     unittest.main()

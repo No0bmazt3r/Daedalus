@@ -56,7 +56,7 @@ app/
 python -m unittest discover -s tests -t .
 ```
 
-232 tests, grouped by area — `chat/`, `tools/`, `retrieval/`, `models/`,
+243 tests, grouped by area — `chat/`, `tools/`, `retrieval/`, `models/`,
 `evaluation/`, `thread/`, plus `test_error_reporting.py` — with an index of
 every file in `tests/README.md`. Keep `-t .`: the test packages import each
 other relatively, and without it ten of them fail to import.

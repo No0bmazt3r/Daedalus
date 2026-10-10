@@ -293,7 +293,7 @@ the tooltip every hint uses (`components/ui/title-tooltips.tsx`), shortcuts
 
 | Where | Run | Covers |
 |---|---|---|
-| `backend/tests/` | `python -m unittest discover -s tests -t .` (from `backend/`) | 232 tests in `chat/`, `tools/`, `retrieval/`, `models/`, `evaluation/`, `thread/`, plus `test_error_reporting.py`; index in `backend/tests/README.md` |
+| `backend/tests/` | `python -m unittest discover -s tests -t .` (from `backend/`) | 243 tests in `chat/`, `tools/`, `retrieval/`, `models/`, `evaluation/`, `thread/`, plus `test_error_reporting.py`; index in `backend/tests/README.md` |
 | `frontend/tests/` | `pnpm test` (from `frontend/`) | 9 tests: the Thread's pure logic, and PDF passage re-joining |
 
 Backend tests run against throwaway databases and a fake Ollama, so they never

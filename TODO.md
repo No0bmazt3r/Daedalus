@@ -35,10 +35,10 @@ is nice-to-have; the `[-]` items are cut.
 4. **Evaluate (M8):** write and label 30–50 questions → practice runs (and
    measure the embedding prefixes) → freeze → one official run → failure
    analysis → human panel and Method B.
-5. **Before the report:** close or state the validator gaps (M5, and rule 9 in
-   M2), verify the MMLU figures (M10, the Forge), clear the bogus
-   `embedding_config.json` record (Known issues), and do the privacy items (M7
-   secrets, M10 ephemeral logs, gating `seed-demo`).
+5. **Before the report:** verify the MMLU figures (M10, the Forge). The
+   validator gaps, rule 9, the bogus `embedding_config.json` record and the
+   privacy items (secrets, ephemeral logs, gating `seed-demo`) are done
+   *(2026-10-10)*.
 
 ---
 
@@ -91,9 +91,12 @@ Offline pipeline. Never runs during a live query.
       say `[THIS RIG]` / `[REFERENCE: another installation]`; prompt rule 9 makes
       a rig-specific fact backed only by references say so. Logged per retrieval
       in `rag_logs.retrieved_origins` (audit migration 009). 11 tests
-  - [ ] No validator check for rule 9 yet — it is a prompt rule only. A lexical
-        check (rig-specific sentence citing only REFERENCE labels, with no
-        "general guidance" wording) would make it enforceable
+  - [x] Rule 9 is checked *(2026-10-10)*: a sentence that reads as rig-specific
+        (setpoint, limit, step, valve, sequence, a tag like `ABV-1`, or a
+        measurement with a unit) and cites only `[REFERENCE]` lines fails as
+        `uncaveated_reference`, unless the answer says it is general guidance or
+        to confirm it against the lab's own procedure. Lexical, like the cause
+        check. 2 tests
 - [x] **Settings → Search**, the setup surface for finding that corpus. Six
       providers (SearXNG · DuckDuckGo · Brave · Google PSE · Tavily · Serper)
       with an ordered fallback chain, per-provider credentials, a Test probe and
@@ -272,9 +275,11 @@ the Forge while M5 was in flight.
       attributed: a run that wrote vectors stamps the collection with its model
       and records it (`ingestion.py`), and a failed stamp is logged rather than
       left silently `stale`
-- [ ] Warn when a chunk exceeds the selected model's context window. The UI
+- [x] Warn when a chunk exceeds the selected model's context window. The UI
       flags a narrow window against M2's 300-500 token chunks, but only
-      ingestion can know whether a chunk actually overran
+      ingestion can know whether a chunk actually overran. *(2026-10-10)* The
+      embed stage reads the window from Ollama (else the catalogue) and logs a
+      `warn` event naming the chunks the embedder will truncate. 1 test
 
 ## M3 — Deterministic tool layer  ▸ Layer 8
 
@@ -520,12 +525,14 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       questions about control are allowed · a response containing an invented
       number is caught and replaced · a stale number replayed from history is
       caught · the whole turn lands on one `query_id`
-- [ ] **Known validator gaps**, stated rather than hidden: clock times and dates
-      are not checked (a model can misstate *when*); integers 0–10 are tolerated
-      so step numbers and small counts pass; rule 8 (no uncited cause) is a
-      prompt rule only — nothing checks a causal claim semantically. qwen3:1.7b
-      was seen attributing a CO₂ spike to NDIR calibration when the evidence
-      only listed both
+- [x] **Known validator gaps**, stated rather than hidden. Closed: clock times
+      and dates are checked (`unsupported_time`), rule 8 is checked lexically
+      (`uncited_cause` — a causal claim must cite a non-reading line that itself
+      states a cause sharing a word with it; the qwen3:1.7b "spike caused by NDIR
+      calibration" case is caught), and rule 9 (`uncaveated_reference`, M2).
+      **Still open, to state in the report:** bare integers 0–10 are tolerated so
+      step numbers and small counts pass, and the cause and rule 9 checks are
+      lexical — a cited line stating a *different* cause that shares a word passes
 - [x] Citations in the chat UI (`components/Citations.tsx`) — `[S1]` labels in an
       answer become chips that show their evidence line on hover, and a
       collapsible *Sources* list sits under each answer: what it cited, what was
@@ -591,7 +598,11 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
   - Track 1 is deliberately a **plain baseline with cross-encoder re-ranking**.
     The report must say so, so that the four cut techniques read as a scoping
     decision rather than as a handicap that tilts the comparison towards Track 2
-- [ ] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
+- [x] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
+      *(2026-10-10)*. `top_k` (1–10) and `similarity_threshold` (cosine, applied
+      before re-ranking; empty = off) in `rag_config.json` → `retrieval`, frozen
+      with the track, in Settings → Vector RAG → Retrieval depth; the planner
+      reads `top_k` from there. `chunk_size` was already corpus config. 1 test
 
 ### Track 2 — Agentic GraphRAG
 - [~] Finalise the node/edge schema against the **real** corpus (§5). Checked
@@ -664,7 +675,11 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       `grounded_flag`, `hallucination_flag`, `validation_json`), `tool_logs` per
       call, `rag_logs` per retrieval and `model_logs` per model call
 - [-] Async logging via `BackgroundTasks` — must never block a response *(cut from FYP2, 2026-10-01)*
-- [ ] Never log secrets or personal identifiers
+- [x] Never log secrets or personal identifiers *(2026-10-10)*. `audit_store.scrub`
+      runs on every audit row and every process-log line (tracebacks included):
+      provider key shapes, bearer tokens, `key=`/`password=` values, emails and
+      Malaysian IC numbers. Phone numbers are deliberately not matched — the
+      pattern would eat sensor readings. 3 tests
 - [-] Streamlit log viewer: history, filters, per-query trace, error dashboard, evaluation view *(cut from FYP2, 2026-10-01)*
 - [-] Metrics + container logs on their own port — Prometheus scraping the app,
       Grafana over it, and the compose logs for each service in one place. The
@@ -1437,25 +1452,27 @@ Layer 9 below for the per-step detail.
       Settings panel, Data stores and the Thread; the backend being down is the
       full-screen 503. Load failures that used to look like empty lists or a
       skeleton that never resolved now say so. Slow loads show skeletons
-- [ ] **Review of the Forge and Blueprints (2026-10-07)** — what would most help
-      the report, in order. None blocks anything:
-  - [ ] **Forge: export the benchmark table** (CSV/Markdown: model, quant,
-        TTFT, prefill/generation tok/s, measured vs estimated memory, machine) —
-        the evidence table Objective 3 asks for, without copying numbers by hand
-  - [ ] **Forge: two models side by side** — the same benchmark prompt, both
-        results in one view, so "which model on this machine" is read off rather
-        than remembered across tabs
-  - [ ] **Blueprints: which documents earn their place** — per document, how
-        often it was retrieved and how often cited, from `rag_logs` and the
-        stored evidence. Retrieved-but-never-cited and never-retrieved documents
-        are what to look at once the real corpus is in
-  - [ ] **Blueprints: a chunking ablation** — ingest the same corpus at a second
-        chunk size into its own collection and run the evaluation against each.
-        Every chunk already records its run's strategy, size and overlap, so the
-        Thread shows which one an answer used; this is the "expose chunk_size,
-        top_k, similarity_threshold" item in M6, done as two indexes rather than
-        a live knob
-  - [ ] **Blueprints: the ingestion graph-gap check** (already above) is the one
+- [x] **Review of the Forge and Blueprints (2026-10-07)** — what would most help
+      the report, in order. All built *(2026-10-10)*:
+  - [x] **Forge: export the benchmark table** — Forge → Installed → Chat models →
+        Benchmark results, CSV or Markdown (`GET /api/forge/benchmarks/export`):
+        model, where, TTFT, prefill/generation tok/s from the engine's counters,
+        estimated tok/s and memory, machine. *Measured* memory is not in it:
+        Ollama does not report a run's peak footprint. 1 test
+  - [x] **Forge: two models side by side** — under the same table; "Benchmark
+        both" runs the pair back to back so they share a prompt, and a pair of
+        older runs with different prompt sizes says so
+  - [x] **Blueprints: which documents earn their place** — Blueprints → Track 1 →
+        Usage (`GET /api/corpus/usage`): per document, retrievals per track from
+        `rag_logs` and citations from the labels each stored answer used.
+        Never-retrieved and retrieved-but-never-cited first. 1 test
+  - [x] **Blueprints: a chunking ablation** — done sequentially rather than as
+        two live indexes: every evaluation run now records the chunk recipe the
+        manifest was cut with (in the fingerprint, so runs at two sizes are
+        distinguishable), and `python -m app.cli_eval compare A B` prints the
+        ablation table and flags anything else that differs. Procedure in
+        `docs/EVALUATION.md`. 1 test
+  - [x] **Blueprints: the ingestion graph-gap check** (already above) is the one
         that keeps the comparison fair, and the first of these to do
 - [ ] **Voice-to-text in the composer** *(later scope, low priority)* — the mic
       button is disabled ("coming soon"); nothing is transcribed.
@@ -1668,12 +1685,14 @@ CLI that works the same on Windows, macOS and Linux.
       `config/embedding_config.json` (happened 2026-10-10 00:59, during the doc
       audit). `sync.sh` reports them; they are not deleted for you. A guard that
       makes a test refuse to run when the isolation in `tests/__init__.py` has
-      not been applied would stop the config rewrite
-- [ ] Tests are not in CI. The backend has 232 `unittest` cases (all passing
+      not been applied would stop the config rewrite. *Cleared 2026-10-10*; the
+      guard is still to do, so they can come back
+- [ ] Tests are not in CI. The backend has 243 `unittest` cases (all passing
       2026-10-10); the frontend has 9 logic tests (`pnpm test`, Node's runner)
       and no component tests, and the **migration runner** still has no test —
       it is the piece that can quietly break every other store
-- [ ] **Four duplicate PDFs in `data/corpus/`** — byte-identical copies of the
+- [x] **Four duplicate PDFs in `data/corpus/`** — deleted 2026-10-10 (hashes checked
+      against the manifest first). Byte-identical copies of the
       two ingested documents (`doc_20261002_040929…`, `doc_20261009_152229…`,
       `…_152247…`, `…_153121…`), from re-uploads; no `documents` row points at
       them. Safe to delete. Worth checking whether deleting or re-uploading a
@@ -1681,8 +1700,8 @@ CLI that works the same on Windows, macOS and Linux.
 - [ ] **The demo `sensor_readings.db` predates the anomaly removal** — it still
       has an `anomaly_status` column and an `anomaly_records` table (1 row).
       Nothing reads them; `reset.sh --sensor` reseeds it with the current schema
-- [ ] Dead CSS: the `Accordion` block in `frontend/src/index.css` (~line 886)
-      styles `components/ui/accordion.tsx`, removed in the audit
+- [x] Dead CSS: the `Accordion` block in `frontend/src/index.css` (~line 886)
+      styles `components/ui/accordion.tsx`, removed in the audit — deleted 2026-10-10
 - [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container
 - [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**
       SearXNG volume gets. An instance that has already booted keeps its own
@@ -1696,14 +1715,17 @@ CLI that works the same on Windows, macOS and Linux.
       2026-10-07.* `requirements.txt` has shipped full `chromadb` since the move
       off Docker, so embedded mode is the only mode, and the HTTP server mode
       that the old note relied on has been removed (audit B1)
-- [ ] **`config/embedding_config.json` carries a `verified` record that cannot
+- [x] *(Cleared 2026-10-10: the `nomic-embed-text` record is removed.)*
+      **`config/embedding_config.json` carries a `verified` record that cannot
       be real:** `nomic-embed-text` at 512 dimensions with `elapsed_ms: 0`, and
       `indexed_at` set while `indexed_with` is null. Nomic is 768, no embedding
       model is installed, and `record_index()` cannot produce that pair — it
       looks seeded. Since a verified width outranks a declared one it now shows
       as "512d (verified)" in Settings → Vector RAG. Clear the block, or
       re-verify once an embedder is pulled
-- [ ] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment
+- [x] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment.
+      *Gated 2026-10-10*, with both graph-trace seeders: they answer 403 unless
+      `.env` sets `DAEDALUS_ALLOW_DEMO_SEED=1` (default 0). `reset.sh` is unaffected. 1 test
 - [ ] Search results are read by a person, not ingested. There is no "save this
       result to the corpus" path, so sourcing is still copy-a-URL-and-download
       by hand. Worth building with M2's extractor rather than before it, since
@@ -1878,7 +1900,8 @@ CLI that works the same on Windows, macOS and Linux.
       and `tool_policy.unlocked_at` is what lets a reviewer check afterwards
 - [x] ~~`render_for_prompt()` has no consumer yet~~ — resolved: the evidence
       pack fences every tool's block through it (`orchestration/evidence.py`)
-- [ ] Two Font selector options are not actually bundled — `mono` names Fira Code
+- [x] *(Fixed 2026-10-10: both bundled from `@fontsource`, 400 and 700, served locally.)*
+      Two Font selector options are not actually bundled — `mono` names Fira Code
       and `opendyslexic` names OpenDyslexic, but only Monocraft and Geist ship
       with the app, so both silently fall back (to the system monospace and to
       Comic Sans respectively). Pre-existing; the OpenDyslexic one matters most,

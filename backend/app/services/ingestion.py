@@ -445,6 +445,26 @@ def _run(
     return corpus_store.get_run(run_id) or {}
 
 
+def _context_window(model: str) -> int | None:
+    """The embedder's context in tokens: measured from Ollama, else the catalogue's figure."""
+    try:
+        measured = ollama_client.show(model).get("context_length")
+        if measured:
+            return int(measured)
+    except Exception:  # noqa: BLE001 — no window known is a reason to skip the check, not the run
+        pass
+    tag = embedding_models.normalise_tag(model)
+    known = next((m for m in embedding_models.catalogue() if m.get("tag") == tag), {})
+    return known.get("max_tokens")
+
+
+def overlong(rows: list[dict[str, Any]], window: int | None) -> list[int]:
+    """Ordinals of chunks estimated longer than `window` tokens (4 chars a token)."""
+    if not window:
+        return []
+    return [int(r["ordinal"]) for r in rows if len(r["text"]) // embedding_models.CHARS_PER_TOKEN > window]
+
+
 def _embed_document(
     run_id: str, document_id: str, name: str, rows: list[dict[str, Any]],
     *, model: str, collection_name: str,
@@ -464,6 +484,20 @@ def _embed_document(
             level="error", document_id=document_id,
         )
         return 0
+
+    # Only ingestion knows whether a chunk actually overran: the embedder
+    # truncates silently, so the tail of such a chunk is stored but never searched.
+    window = _context_window(model)
+    over = overlong(rows, window)
+    if over:
+        shown = ", ".join(map(str, over[:10])) + (" …" if len(over) > 10 else "")
+        corpus_store.log(
+            run_id, "embed",
+            f"{name}: {len(over)} chunk(s) longer than {model}'s {window}-token window "
+            f"(estimated at {embedding_models.CHARS_PER_TOKEN} chars a token), so the embedder truncates "
+            f"them and their ends are not searchable. Chunks {shown}. Lower the chunk size and re-chunk.",
+            level="warn", document_id=document_id,
+        )
 
     document = corpus_store.get_document(document_id) or {}
     landed = 0

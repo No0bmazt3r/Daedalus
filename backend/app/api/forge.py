@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from ..services import benchmark as benchmark_service
 from ..services import (
@@ -206,6 +206,23 @@ def delete_model(tag: str) -> dict[str, Any]:
 
 
 # ── step 5: benchmark ────────────────────────────────────────────────────────
+
+
+@router.get("/benchmarks")
+def benchmark_history() -> dict[str, Any]:
+    """Every successful benchmark beside the estimate for its model."""
+    return {"rows": benchmark_service.history()}
+
+
+@router.get("/benchmarks/export")
+def export_benchmarks(fmt: str = Query("csv", alias="format", pattern="^(csv|md)$")) -> Response:
+    """The benchmark table as a file for the report — CSV or Markdown."""
+    media = "text/csv" if fmt == "csv" else "text/markdown"
+    return Response(
+        benchmark_service.export(fmt),
+        media_type=f"{media}; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="daedalus-benchmarks.{fmt}"'},
+    )
 
 
 @router.post("/benchmark")

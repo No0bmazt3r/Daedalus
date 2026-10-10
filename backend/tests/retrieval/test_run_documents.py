@@ -54,5 +54,14 @@ class RunDocumentsTest(unittest.TestCase):
         self.assertEqual((row["filename"], row["runs"]), ("guide.pdf", 1))
 
 
+class OverlongChunkTest(unittest.TestCase):
+    def test_only_chunks_past_the_window_are_named(self) -> None:
+        from app.services import ingestion  # noqa: PLC0415
+
+        rows = [{"ordinal": 0, "text": "x" * 400}, {"ordinal": 1, "text": "x" * 4000}]
+        self.assertEqual(ingestion.overlong(rows, 512), [1])  # 1000 estimated tokens > 512
+        self.assertEqual(ingestion.overlong(rows, None), [])  # window unknown: no claim either way
+
+
 if __name__ == "__main__":
     unittest.main()

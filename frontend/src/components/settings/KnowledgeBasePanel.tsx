@@ -8,8 +8,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import {
-  fetchRagConfig, setGraphSettings, setRagTrack, setRerank,
-  type GraphSettings, type RagConfig, type RagTrack, type RerankSettings,
+  fetchRagConfig, setGraphSettings, setRagTrack, setRerank, setRetrieval,
+  type GraphSettings, type RagConfig, type RagTrack, type RerankSettings, type RetrievalSettings,
   type TrackStatus,
 } from '../../lib/blueprintsClient'
 import { Switch } from '../ui/switch'
@@ -186,6 +186,9 @@ export function VectorRagPanel({ onOpenForge }: { onOpenForge?: (tab: ForgeTab) 
           onOpenForge={onOpenForge ? () => onOpenForge('rerankers') : undefined}
         />
       </div>
+      <div className="border-t theme-border pt-4">
+        <RetrievalSection config={config} onChange={setConfig} />
+      </div>
       {/* Which model builds Track 1's index, and whether the index matches it.
           Choosing is behaviour and is frozen with the comparison, so it lives
           here; pulling, verifying and deleting are the Forge's. */}
@@ -284,6 +287,11 @@ export function KnowledgeBasePanel() {
 
 
 const CANDIDATE_OPTIONS = [10, 20, 30, 50].map((n) => ({ value: String(n), label: `${n} candidates` }))
+const TOP_K_OPTIONS = [3, 5, 8, 10].map((n) => ({ value: String(n), label: `top ${n} passages` }))
+const THRESHOLD_OPTIONS = [
+  { value: '', label: 'No similarity cut-off' },
+  ...[0.3, 0.4, 0.5, 0.6, 0.7].map((t) => ({ value: String(t), label: `similarity ≥ ${t}` })),
+]
 const BUDGET_OPTIONS = [3, 6, 10, 20].map((n) => ({ value: String(n), label: `${n} s budget` }))
 const STEP_OPTIONS = [1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} step${n === 1 ? '' : 's'}` }))
 
@@ -508,6 +516,71 @@ function RerankSection({
         Recorded per query in <code className="theme-text">rag_logs.rerank_model</code> and{' '}
         <code className="theme-text">rerank_scores</code>. The weights are downloaded and deleted in The
         Forge → Re-rankers, with every other model on this machine; this panel only chooses.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Track 1's depth and cut-off — the knobs the ablation table varies. Frozen
+ * with the track for the same reason as re-ranking.
+ */
+function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (config: RagConfig) => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const { top_k, similarity_threshold } = config.retrieval
+  const locked = config.frozen || busy
+  const withCurrent = (options: { value: string; label: string }[], value: string, label: string) =>
+    options.some((o) => o.value === value) ? options : [...options, { value, label }]
+
+  const save = async (patch: Partial<RetrievalSettings>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      onChange(await setRetrieval(patch))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="flex items-center gap-1.5 text-sm theme-text">
+        <ListOrdered size={14} className="theme-text-muted" /> Retrieval depth
+        <span className="rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">Track 1</span>
+      </h3>
+      <p className="text-xs leading-relaxed theme-text-muted">
+        How many passages reach the prompt, and how close a passage must be to the question to count at
+        all. Vary these for the ablation table, then freeze.
+      </p>
+      <div className={`flex flex-wrap items-center gap-3 ${locked ? 'pointer-events-none opacity-50' : ''}`}>
+        <ThemeSelect
+          value={String(top_k)}
+          onChange={(v) => void save({ top_k: Number(v) })}
+          options={withCurrent(TOP_K_OPTIONS, String(top_k), `top ${top_k} passages`)}
+          ariaLabel="Passages per answer"
+          size="sm"
+          className="w-44"
+        />
+        <ThemeSelect
+          value={similarity_threshold === null ? '' : String(similarity_threshold)}
+          onChange={(v) => void save({ similarity_threshold: v === '' ? null : Number(v) })}
+          options={withCurrent(THRESHOLD_OPTIONS, String(similarity_threshold ?? ''), `similarity ≥ ${similarity_threshold}`)}
+          ariaLabel="Similarity cut-off"
+          size="sm"
+          className="w-52"
+        />
+      </div>
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5 text-[11px] theme-text">
+          <AlertCircle size={13} className="shrink-0 text-rose-400" /> {error}
+        </div>
+      )}
+      <p className="text-[11px] leading-relaxed theme-text-muted">
+        Stored in <code className="theme-text">config/rag_config.json</code> → <code className="theme-text">retrieval</code>;
+        each query's <code className="theme-text">top_k</code> is in <code className="theme-text">rag_logs</code>.
       </p>
     </div>
   )

@@ -533,6 +533,9 @@ def snapshot() -> dict[str, Any]:
         from ..db import corpus_store  # noqa: PLC0415
 
         snap["corpus"] = corpus_store.stats()
+        # The chunking ablation's variable: two runs that differ only here are
+        # the ablation table's two columns (`compare_markdown`).
+        snap["chunking"] = corpus_store.chunk_recipes()
     except Exception as exc:  # noqa: BLE001
         snap["corpus"] = {"error": str(exc)}
     try:
@@ -561,7 +564,7 @@ def snapshot() -> dict[str, Any]:
     # What makes two official runs "the same": the frozen choices and the inputs.
     # The assistant settings join only when customised, so runs on the defaults
     # keep the fingerprint they had before these settings existed.
-    keys = ("rag_config", "embedding", "chat_model", "graph") + (("assistant",) if customised else ())
+    keys = ("rag_config", "embedding", "chat_model", "graph", "chunking") + (("assistant",) if customised else ())
     fingerprint = json.dumps({k: snap.get(k) for k in keys}, sort_keys=True, default=str)
     snap["fingerprint"] = _sha(fingerprint.encode())
     return snap
@@ -809,6 +812,7 @@ def report_markdown(record: dict[str, Any]) -> str:
         f"- Chat model: `{(snap.get('chat_model') or {}).get('tag')}` · embedding: "
         f"`{(snap.get('embedding') or {}).get('model')}` ({(snap.get('embedding') or {}).get('index_state')}) · "
         f"graph: {(snap.get('graph') or {}).get('nodes')} nodes",
+        f"- Chunking: {_recipe(snap)}",
         f"- Machine: {(snap.get('machine') or {}).get('cpu')}",
         "",
         "## Comparison",
@@ -877,6 +881,60 @@ def report_markdown(record: dict[str, Any]) -> str:
               "Metric definitions: docs/EVALUATION.md. Correctness here is lexical (key facts by pattern);",
               "the LLM-judge and human-panel scores come from `judge.jsonl` and `results.csv`, offline.", ""]
     return "\n".join(lines)
+
+
+def _recipe(snap: dict[str, Any]) -> str:
+    recipes = snap.get("chunking") or []
+    if not recipes:
+        return "not recorded"
+    return " + ".join(f"{r['strategy']} {r['chunk_size']}/{r['chunk_overlap']} ({r['chunks']} chunks)" for r in recipes)
+
+
+# The headline metrics, in the order the ablation table shows them.
+_COMPARE_METRICS: tuple[tuple[str, str, Callable[[float | None], str]], ...] = (
+    ("Correct", "correct", _pct),
+    ("Fact recall", "fact_recall", _num),
+    ("Hallucination", "hallucination", _pct),
+    ("Grounded", "grounded", _pct),
+    ("Precision@5", "precision_at_5", _num),
+    ("Recall@5", "recall_at_5", _num),
+    ("MRR", "mrr", _num),
+    ("Node recall", "node_recall", _num),
+)
+
+
+def compare_markdown(records: list[dict[str, Any]]) -> str:
+    """Runs side by side, per arm — the ablation table.
+
+    Meant for runs that differ in one thing (the chunking, for the chunking
+    ablation). Says so when they also differ in anything else the fingerprint
+    covers, or in the query set, because then the columns are not an ablation.
+    """
+    snaps = [r.get("snapshot") or {} for r in records]
+    lines = ["# Run comparison", ""]
+    for r, snap in zip(records, snaps):
+        kind = "practice" if r.get("practice") else "official"
+        lines.append(f"- `{r['run_id']}` ({kind}) — chunking: {_recipe(snap)}")
+    if len({r.get("query_sha") for r in records}) > 1:
+        lines += ["", "> **Different query sets** — these runs did not ask the same questions."]
+    others = ("rag_config", "embedding", "chat_model", "graph")
+    differing = [k for k in others if len({json.dumps(s.get(k), sort_keys=True, default=str) for s in snaps}) > 1]
+    if differing:
+        lines += ["", f"> **Not a clean ablation** — these also differ: {', '.join(differing)}."]
+    lines.append("")
+
+    arms = [a for a in ARMS if all(a in r["arms"] for r in records)]
+    header = "| Metric | " + " | ".join(r["run_id"] for r in records) + " |"
+    for arm in arms:
+        lines += [f"## {arm}", "", header, "|---|" + "---|" * len(records)]
+        for label, key, fmt in _COMPARE_METRICS:
+            cells = [fmt(((r.get("summary") or summary_of(r)).get(arm) or {}).get("overall", {}).get(key))
+                     for r in records]
+            lines.append(f"| {label} | " + " | ".join(cells) + " |")
+        lines.append("")
+    if not arms:
+        lines.append("These runs share no arm, so there is nothing to compare.")
+    return "\n".join(lines) + "\n"
 
 
 _CSV_FIELDS = (

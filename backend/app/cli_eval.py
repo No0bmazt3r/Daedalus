@@ -7,6 +7,7 @@
     python -m app.cli_eval run --arms vector --ids Q01,Q02 --practice
     python -m app.cli_eval list
     python -m app.cli_eval report eval_20261001_120000
+    python -m app.cli_eval compare eval_A eval_B     # e.g. the chunking ablation
 
 A terminal rather than a button because an official run is long — every
 question once per arm, through the real model — and is run once, deliberately.
@@ -70,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("list", help="saved runs")
     report = sub.add_parser("report", help="print a saved run's report")
     report.add_argument("run_id")
+    compare = sub.add_parser("compare", help="saved runs side by side, per arm — e.g. a chunking ablation")
+    compare.add_argument("run_ids", nargs="+")
     args = parser.parse_args(argv)
 
     migrations.migrate_all()
@@ -85,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"    aborted: {r['abort_reason']}")
         return 0
     try:
+        if args.command == "compare":
+            print(evaluation.compare_markdown([evaluation.get_run(r) for r in args.run_ids]))
+            return 0
         print(evaluation.report_markdown(evaluation.get_run(args.run_id)))
     except evaluation.EvalError as exc:
         print(exc)

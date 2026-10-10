@@ -14,6 +14,7 @@ import {
 import { Skeleton } from '../ui/skeleton'
 import { GraphView } from './GraphView'
 import { CoverageView } from './CoverageView'
+import { UsageView } from './UsageView'
 import { TraversalView } from './TraversalView'
 import { CorpusView } from './CorpusView'
 import { IngestView } from './IngestView'
@@ -486,6 +487,7 @@ export function BlueprintsWindow({
               <>
                     {tab === 'corpus' && <CorpusView onBuild={() => setTab('ingest')} />}
                     {tab === 'retrieval' && <RetrievalView />}
+                    {tab === 'usage' && <UsageView />}
                     {tab === 'ingest' && <IngestView onOpenForge={onOpenForge} onShowCorpus={() => setTab('corpus')} onShowLogs={() => setTab('logs')} />}
                     {tab === 'logs' && <IngestLogsView />}
                     {tab === 'authoring' && <AuthoringView />}

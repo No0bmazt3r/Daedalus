@@ -380,6 +380,28 @@ export function runBenchmark(
   };
 }
 
+/** One successful benchmark beside the Forge's estimate for its model — a row of the report's table. */
+export interface BenchmarkRow {
+  at: string;
+  model: string;
+  where: 'local' | 'cloud';
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  ttft_ms: number | null;
+  total_ms: number | null;
+  prefill_tok_s: number | null;
+  generation_tok_s: number | null;
+  estimated_tok_s: number | null;
+  estimated_memory_gb: number | null;
+  warm_load_ms: number | null;
+  machine: string;
+}
+
+export const benchmarkHistory = () => request<{ rows: BenchmarkRow[] }>('/api/forge/benchmarks');
+
+/** A download link for the benchmark table, as CSV or Markdown. */
+export const benchmarkExportUrl = (format: 'csv' | 'md') => `/api/forge/benchmarks/export?format=${format}`;
+
 // ── inspect one arbitrary tag ────────────────────────────────────────────────
 
 interface InspectResult {

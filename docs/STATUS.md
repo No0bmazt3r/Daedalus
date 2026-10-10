@@ -20,7 +20,7 @@ the lab's own knowledge, and nothing has been evaluated:
 - both retrieval tracks run, but rig-specific answers rest on drafts,
 - the evaluation harness is built, but the evaluation has not started.
 
-All 232 backend tests and 9 frontend tests pass, and the frontend type-checks
+All 243 backend tests and 9 frontend tests pass, and the frontend type-checks
 and lints clean.
 
 **What Daedalus is.** A fully local, read-only **standalone chat application**
@@ -60,15 +60,15 @@ left out).
 | Milestone | Layer | Done | % | Honest read |
 |---|---|---|---|---|
 | M1 Sensor data layer | 3 | 4 / 5 | 80% | Works on demo data |
-| M2 Knowledge ingestion | 4 | 38 / 43 | 88%\* | Pipeline built, with categories and rig/reference origin; **all 17 collected documents ingested** (887 chunks); the lab's own documents TBC |
+| M2 Knowledge ingestion | 4 | 40 / 43 | 93%\* | Pipeline built, with categories and rig/reference origin; **all 17 collected documents ingested** (887 chunks); the lab's own documents TBC |
 | M3 Deterministic tool layer | 8 | 31 / 31 | 100% | Sensor tools, both tracks' retrieval, effect/track/argument gates |
 | M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested |
-| M5 Orchestration | 7 | 22 / 23 | 96% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers |
-| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 16 / 20 | 80% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
-| M7 Observability | 10 | 5 / 6 | 83% | Every turn fully logged on one `query_id`; read back in Ariadne's Thread |
+| M5 Orchestration | 7 | 23 / 23 | 100% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers (numbers, times, causes, rule 9) |
+| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 17 / 20 | 85% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
+| M7 Observability | 10 | 6 / 6 | 100% | Every turn fully logged on one `query_id`, secrets and identifiers scrubbed; read back in Ariadne's Thread |
 | M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** The query set, labels and runs wait on the corpus |
 | M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |
-| M10 Dashboard | 9B | 115 / 124 | 93%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
+| M10 Dashboard | 9B | 121 / 124 | 98%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
 | M11 Cross-platform installer CLI | — | 0 / 5 | 0% | Not started — optional; `daedalus.sh` works on Linux/WSL/macOS |
 
 \* **Inflated.** Many ticked boxes in M2 and M10 are small setup or UI
@@ -538,8 +538,7 @@ Save all images to `docs/screenshots/`.
 | Knowledge | The lab's own documents (TBC) — then ingest them, swap the draft rig SOPs' filenames, extend the graph and finalise its schema | M2 · M6 |
 | Evaluation | 30–50 question golden set and its hand labels, three comparison runs (Track 1 · Track 2 walk · Track 2 agent), failure analysis, Method B (LLM-as-judge over exported logs), human panel | M8 |
 | Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); recalibrate the estimators and re-check re-ranker fit on the machine that runs the evaluation; verify inference with networking disabled | M4 · M2 · M6 |
-| Validator | A check for prompt rule 9 (rig-specific facts backed only by references); clock times and dates are not yet checked | M5 · M2 |
-| Before the report | Verify the six MMLU figures in the Forge catalogue; clear the bogus `verified` record in `config/embedding_config.json`; gate `seed-demo`; confirm no secrets are logged | M10 · M7 |
+| Before the report | Verify the six MMLU figures in the Forge catalogue | M10 |
 | Installer | A cross-platform `doctor`/`setup` CLI (Windows without bash) — optional | M11 |
 
 **Cut from FYP2 (2026-10-01), to be stated in the report as scope:** Track 1's

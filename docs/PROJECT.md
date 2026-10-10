@@ -834,7 +834,7 @@ Trust comes from visible reasoning, not a black box:
 | **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit — for chat models, embedders and re-rankers |
 | **Frontend** | React dashboard: chat, The Forge, Labyrinth Blueprints (ingest, corpus, graph, coverage, authoring, proposals, replay), Ariadne's Thread, theming, settings, store browser, full-tab error pages |
 | **Deployment** | Runs on the host: `./daedalus.sh setup` then `dev` or `start`; no Docker except the optional SearXNG |
-| **Tests** | 232 backend `unittest` cases and 9 frontend logic tests, all passing; not in CI |
+| **Tests** | 243 backend `unittest` cases and 9 frontend logic tests, all passing; not in CI |
 
 ### Not built
 

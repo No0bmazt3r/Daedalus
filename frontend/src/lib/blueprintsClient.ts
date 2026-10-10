@@ -204,6 +204,21 @@ export const fetchNode = (id: string) =>
 
 export const fetchCoverage = () => request<Coverage>('/api/graph/coverage');
 
+/** Per document: how often each track retrieved it, and how often an answer cited it. */
+export interface DocumentUsage {
+  document_id: string;
+  filename: string;
+  source_type: string | null;
+  origin: string | null;
+  chunks: number | null;
+  retrieved_vector: number;
+  retrieved_graph: number;
+  cited: number;
+  verdict: 'never_retrieved' | 'never_cited' | 'cited';
+}
+
+export const fetchDocumentUsage = () => request<{ documents: DocumentUsage[] }>('/api/corpus/usage');
+
 export interface TraversalSummary {
   query_id: string;
   timestamp: string;
@@ -272,6 +287,15 @@ export interface RagConfig {
   rerank_fit: RerankFitSummary;
   /** Track 2's retrieval mode — frozen with the track. */
   graph: GraphSettings;
+  /** Track 1's depth and cut-off, for the ablation table — frozen with the track. */
+  retrieval: RetrievalSettings;
+}
+
+export interface RetrievalSettings {
+  /** Passages that reach the prompt, 1–10. */
+  top_k: number;
+  /** Drop a passage whose cosine similarity is below this, before re-ranking; null keeps all. */
+  similarity_threshold: number | null;
 }
 
 export type GraphMode = 'agent' | 'walk';
@@ -349,6 +373,9 @@ export const fetchRagConfig = () => request<RagConfig>('/api/rag/config');
 
 export const setRerank = (rerank: Partial<RerankSettings>) =>
   request<RagConfig>('/api/rag/config', { method: 'PUT', body: JSON.stringify({ rerank }) });
+
+export const setRetrieval = (retrieval: Partial<RetrievalSettings>) =>
+  request<RagConfig>('/api/rag/config', { method: 'PUT', body: JSON.stringify({ retrieval }) });
 
 export const setGraphSettings = (graph: Partial<GraphSettings>) =>
   request<RagConfig>('/api/rag/config', { method: 'PUT', body: JSON.stringify({ graph }) });

@@ -272,6 +272,86 @@ def _is_remote(tag: str) -> bool:
     return False
 
 
+EXPORT_COLUMNS = (
+    "at", "model", "where", "prompt_tokens", "completion_tokens", "ttft_ms", "total_ms",
+    "prefill_tok_s", "generation_tok_s", "estimated_tok_s", "estimated_memory_gb", "warm_load_ms", "machine",
+)
+
+
+def history(limit: int = 500) -> list[dict[str, Any]]:
+    """Every successful benchmark, newest first, beside the Forge's estimate for its model.
+
+    The evidence table Objective 3 asks for. Rates come from the engine's own
+    counters, as in `run_stream`. Memory is the estimate only: Ollama does not
+    report a run's peak footprint, so there is no measured figure to put beside it.
+    """
+    from . import forge, hardware  # noqa: PLC0415 — forge imports this module
+
+    audit_store.init_db()
+    with sqlite_util.connect(AUDIT_DB) as conn:
+        rows = conn.execute(
+            "SELECT * FROM model_logs WHERE source IN ('benchmark', 'benchmark_cloud') AND status = 'ok' "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    try:
+        estimates = {r["tag"]: r for r in forge.models()["rows"]}
+    except Exception:  # noqa: BLE001 — a table without estimates is still the measurements
+        estimates = {}
+    profile = hardware.profile()
+    gpus = ", ".join(d.get("name") or "GPU" for d in (profile.get("gpu") or {}).get("devices") or [])
+    ram = (profile.get("memory") or {}).get("total_bytes")
+    machine = "; ".join(filter(None, [
+        (profile.get("cpu") or {}).get("model"),
+        f"{ram / 1024**3:.0f} GB RAM" if ram else None,
+        gpus or "no GPU",
+    ]))
+
+    def rate(tokens: Any, ms: Any) -> float | None:
+        return round(tokens / (ms / 1000.0), 1) if tokens and ms else None
+
+    out = []
+    for row in rows:
+        estimate = estimates.get(row["model_name"]) or {}
+        memory = (estimate.get("estimate") or {}).get("total_bytes")
+        cloud = row["source"] == "benchmark_cloud"
+        out.append({
+            "at": row["timestamp"],
+            "model": row["model_name"],
+            "where": "cloud" if cloud else "local",
+            "prompt_tokens": row["prompt_token_count"],
+            "completion_tokens": row["completion_token_count"],
+            "ttft_ms": row["time_to_first_token_ms"],
+            "total_ms": row["total_inference_ms"],
+            "prefill_tok_s": rate(row["prompt_token_count"], row["prefill_ms"]),
+            "generation_tok_s": rate(row["completion_token_count"], row["generation_ms"]),
+            "estimated_tok_s": None if cloud else (estimate.get("speed") or {}).get("tokens_per_sec"),
+            "estimated_memory_gb": None if cloud or not memory else round(memory / 1024**3, 2),
+            "warm_load_ms": row["load_ms"],
+            # A cloud row measured ollama.com's hardware, not this machine's.
+            "machine": "ollama.com" if cloud else machine,
+        })
+    return out
+
+
+def export(fmt: str) -> str:
+    """`history()` as CSV or a Markdown table, ready for the report."""
+    rows = history()
+    if fmt == "csv":
+        import csv  # noqa: PLC0415
+        import io  # noqa: PLC0415
+
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=EXPORT_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+        return buffer.getvalue()
+    cell = lambda v: "" if v is None else str(v).replace("|", "\\|")  # noqa: E731
+    lines = ["| " + " | ".join(EXPORT_COLUMNS) + " |", "|" + "---|" * len(EXPORT_COLUMNS)]
+    lines += ["| " + " | ".join(cell(r[c]) for c in EXPORT_COLUMNS) + " |" for r in rows]
+    return "\n".join(lines) + "\n"
+
+
 def run_stream(
     tag: str,
     *,

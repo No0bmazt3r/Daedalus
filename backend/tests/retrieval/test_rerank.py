@@ -100,6 +100,21 @@ class RerankTest(unittest.TestCase):
         finally:
             fixtures.set_track("vector")
 
+    def test_similarity_threshold_cuts_before_ranking(self) -> None:
+        # Distances run 0.10, 0.11, … so similarities run 0.90, 0.89, …
+        with self.assertRaises(ValueError):
+            rag_config.write(retrieval={"similarity_threshold": 1.5})
+        with self.assertRaises(ValueError):
+            rag_config.write(retrieval={"top_k": 50})
+        rag_config.write(rerank={"enabled": False}, retrieval={"similarity_threshold": 0.875, "top_k": 3})
+        try:
+            env = self.search()
+            self.assertEqual([c["chunk_id"] for c in env["data"]["chunks"]], ["c0", "c1", "c2"])
+            self.assertEqual(env["data"]["below_threshold"], 2)
+            self.assertEqual(rag_config.retrieval_settings()["top_k"], 3)
+        finally:
+            rag_config.write(rerank={"enabled": True}, retrieval={"similarity_threshold": None, "top_k": 5})
+
     def test_not_downloaded_is_a_stated_unavailability(self) -> None:
         with self.assertRaises(reranker.RerankUnavailable) as caught:
             reranker.score("q", ["p"], model_id="ms-marco-minilm-l6")

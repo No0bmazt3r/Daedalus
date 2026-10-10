@@ -36,6 +36,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from ..db import corpus_store
 from ..services import chunking, corpus_config, extraction, ingestion, retrieval_replay
+from ..services import document_usage as document_usage_service
 
 router = APIRouter(prefix="/api/corpus", tags=["corpus"])
 
@@ -79,6 +80,12 @@ def list_documents() -> dict[str, Any]:
         "total": len(documents),
         "extraction": extraction.status(),
     }
+
+
+@router.get("/usage")
+def document_usage() -> dict[str, Any]:
+    """Per document: retrieved by each track, and cited by answers — which earn their place."""
+    return {"documents": document_usage_service.usage()}
 
 
 @router.post("/documents")

@@ -239,7 +239,30 @@ class EvidenceAndValidatorTest(unittest.TestCase):
                 self.assertIn("control_claim", self.validate(text).reasons)
 
     def test_describing_a_procedure_is_not_a_control_claim(self) -> None:
-        self.assertTrue(self.validate("The operator should close the isolation valve first [D1].").passed)
+        v = self.validate("The operator should close the isolation valve first [D1].")
+        self.assertNotIn("control_claim", v.reasons)
+
+    def _passage(self, origin: str) -> object:
+        return orchestration.evidence.build([{
+            "tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus", "citable": True,
+            "data": {"track": "vector", "chunks": [{
+                "chunk_id": "c1", "source_file": "SOP.pdf", "origin": origin,
+                "text": "Close the isolation valve first, then vent the sample line.",
+            }]},
+        }])
+
+    def test_rig_step_from_a_reference_needs_a_caveat(self) -> None:
+        answer = "Close the isolation valve first [D1]."
+        v = validator.validate(answer, self._passage("reference"))
+        self.assertIn("uncaveated_reference", v.reasons)
+        self.assertFalse(v.hallucination)
+        caveated = answer + " This is general guidance from another installation; confirm it against this lab's own procedure."
+        self.assertTrue(validator.validate(caveated, self._passage("reference")).passed)
+        self.assertTrue(validator.validate(answer, self._passage("rig")).passed)
+
+    def test_a_concept_from_a_reference_needs_no_caveat(self) -> None:
+        v = validator.validate("Venting removes trapped gas from the line [D1].", self._passage("reference"))
+        self.assertNotIn("uncaveated_reference", v.reasons)
 
     def test_empty_answer_fails(self) -> None:
         self.assertEqual(self.validate("   ").reasons, ["empty"])

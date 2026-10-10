@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource/fira-code/400.css";
+@import "@fontsource/fira-code/700.css";
+@import "@fontsource/opendyslexic/400.css";
+@import "@fontsource/opendyslexic/700.css";
 
 /* ── Monocraft — the Minecraft typeface, and the app's default face ─────────
    Self-hosted rather than pulled from a font CDN: rule 1 of the project is
@@ -881,30 +885,6 @@ input[type='color']::-webkit-color-swatch {
   .snap-settling {
     transition-duration: 0.01ms;
   }
-}
-
-/* ── Accordion — the same cascade, over Base UI's height animation ──────────
-   `components/ui/accordion.tsx` sets `data-domino` on the panel's contents from
-   the panel's own state, so the rules above apply to it unchanged. What is left
-   is the timing: the height animation defaults to 0.2s, which finishes before
-   the outbound cascade does and takes the last rows off screen mid-fall. These
-   two are the durations of the cascades themselves, so the panel is still there
-   for the length of the motion it is showing.
-
-   Unlayered on purpose. `animate-accordion-down` is a Tailwind utility, and an
-   unlayered declaration beats a layered one whatever the specificity — which is
-   the point here, since the utility sets the same property through a variable
-   we would otherwise have to reach into.
-
-   Two durations, not one: the inbound cascade is longer than the outbound, and
-   a single compromise value means a panel that either lingers empty on open or
-   truncates on close. */
-[data-slot='accordion-content'][data-open]:not([data-ending-style]) {
-  animation-duration: 0.42s;
-}
-[data-slot='accordion-content'][data-ending-style],
-[data-slot='accordion-content'][data-closed] {
-  animation-duration: 0.3s;
 }
 
 /* ── The pipeline stepper ────────────────────────────────────────────────────

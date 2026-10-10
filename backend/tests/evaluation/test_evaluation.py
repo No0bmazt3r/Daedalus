@@ -285,6 +285,21 @@ class RunTest(unittest.TestCase):
         self.assertIn("Incomplete — running", report)
         self.assertIn("100%", report)
 
+    def test_compare_is_an_ablation_table_and_flags_other_differences(self) -> None:
+        def record(run_id: str, size: int, correct: bool, model: str = "m") -> dict:
+            return {"run_id": run_id, "arms": ["vector"], "query_sha": "q", "practice": True,
+                    "snapshot": {"chat_model": {"tag": model},
+                                 "chunking": [{"strategy": "recursive", "chunk_size": size,
+                                               "chunk_overlap": 200, "chunks": 10}]},
+                    "results": {"vector": [{"id": "Q", "category": "single_hop_factual", "correct": correct}]}}
+
+        table = evaluation.compare_markdown([record("A", 1500, True), record("B", 800, False)])
+        self.assertIn("recursive 1500/200", table)
+        self.assertIn("| Correct | 100% | 0% |", table)
+        self.assertNotIn("Not a clean ablation", table)
+        dirty = evaluation.compare_markdown([record("A", 1500, True), record("B", 800, False, model="other")])
+        self.assertIn("these also differ: chat_model", dirty)
+
 
 if __name__ == "__main__":
     unittest.main()

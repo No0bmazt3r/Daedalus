@@ -171,12 +171,24 @@ def databases() -> dict[str, Any]:
     }
 
 
+def _dev_seeding_allowed() -> None:
+    """The seeders write — to the sensor file and the audit log — and take no
+    login, so they are off unless this machine opted in. `reset.sh` seeds through
+    Python directly and is unaffected."""
+    if os.environ.get("DAEDALUS_ALLOW_DEMO_SEED", "0") != "1":
+        raise HTTPException(
+            status_code=403,
+            detail="Demo seeding is off. Set DAEDALUS_ALLOW_DEMO_SEED=1 in .env and restart to allow it.",
+        )
+
+
 @router.post("/seed-demo")
 def seed_demo() -> dict[str, Any]:
     """Populate the sensor DB with a demo run — development only.
 
     Refuses when data already exists, so it can never overwrite a real run.
     """
+    _dev_seeding_allowed()
     try:
         inserted = sensor_store.seed_demo()
     except Exception as exc:  # noqa: BLE001
@@ -198,6 +210,7 @@ def seed_graph_traces(force: bool = False) -> dict[str, Any]:
     actually write. Rows are marked `vector_db_used = 'seed'` and must be
     excluded from every reported metric.
     """
+    _dev_seeding_allowed()
     try:
         return {"ok": True, **graph_seed.seed(force=force)}
     except Exception as exc:  # noqa: BLE001
@@ -207,6 +220,7 @@ def seed_graph_traces(force: bool = False) -> dict[str, Any]:
 @router.delete("/seed-graph-traces")
 def clear_graph_traces() -> dict[str, Any]:
     """Remove seeded traversals, leaving any real ones untouched."""
+    _dev_seeding_allowed()
     return {"ok": True, "deleted": graph_seed.clear()}
 
 

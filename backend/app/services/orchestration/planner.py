@@ -88,7 +88,6 @@ def answering_tools() -> dict[str, Any]:
 
 # Enough to answer, few enough to fit an SLM's context next to the history.
 MAX_SENSORS = 4
-RETRIEVAL_TOP_K = 5
 GRAPH_LIMIT = 6
 
 DEFAULT_TREND_WINDOW = timedelta(hours=1)
@@ -197,7 +196,7 @@ def plan(understood: Understanding, *, now: datetime | None = None) -> Plan:
             ))
         else:
             p.calls.append(PlannedCall(
-                RETRIEVAL_TOOLS["vector"], {"query": understood.standalone, "top_k": RETRIEVAL_TOP_K},
+                RETRIEVAL_TOOLS["vector"], {"query": understood.standalone, "top_k": rag_config.retrieval_settings()["top_k"]},
                 "Track 1 is selected: find the corpus passages nearest the question",
             ))
 
