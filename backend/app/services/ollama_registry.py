@@ -162,8 +162,3 @@ def verify_many(tags: list[str]) -> dict[str, dict[str, Any]]:
         for tag, result in zip(pending, pool.map(manifest, pending)):
             results[tag] = result
     return results
-
-
-def clear_cache() -> None:
-    with _lock:
-        _cache.clear()

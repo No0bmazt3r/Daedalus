@@ -39,7 +39,7 @@ from __future__ import annotations
 from typing import Any
 
 from .. import graph_tools, knowledge_graph
-from .registry import Effect, Integrity, Param, ToolError, register
+from .registry import Effect, Param, ToolError, register
 
 
 @register(

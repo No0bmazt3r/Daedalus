@@ -7,18 +7,9 @@
 // loops can call it unconditionally.
 
 import { pointerFor, influence } from './pointerField';
-import { THEME_CHANGE_EVENT } from './themes';
+import { THEME_CHANGE_EVENT, hexToRgb } from './themes';
 
-export function hexToRgb(hex: string) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null;
-}
-
-export function rgba(hex: string, a: number) {
+function rgba(hex: string, a: number) {
   const c = hexToRgb(hex);
   return c ? `rgba(${c.r},${c.g},${c.b},${a})` : `rgba(0,0,0,${a})`;
 }
@@ -628,10 +619,6 @@ export function initEmbers(canvas: HTMLCanvasElement, cancelToken: { cancelled: 
   const _onResize = () => resize();
   window.addEventListener('resize', _onResize);
   function getColor() { return effectColor(); }
-  function rgba(hex, a) {
-    const { r, g, b } = hexToRgb(hex) || { r: 0, g: 0, b: 0 };
-    return `rgba(${r},${g},${b},${a})`;
-  }
   function draw() {
     if (cancelToken.cancelled) { window.removeEventListener("resize", _onResize); return; }
     nextFrame(draw);

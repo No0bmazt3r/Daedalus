@@ -27,7 +27,6 @@ from ..models.chat import (
     SessionCreate,
     SessionDetail,
     SessionListOut,
-    SessionOut,
     SessionUpdate,
 )
 from ..services import background_models, chat_service, session_titles

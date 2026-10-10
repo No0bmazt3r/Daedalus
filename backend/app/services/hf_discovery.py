@@ -182,11 +182,6 @@ def ollama_tag(repo: str, quant: str | None) -> str:
     return f"hf.co/{repo}:{quant}" if quant else f"hf.co/{repo}"
 
 
-def clear_cache() -> None:
-    with _cache_lock:
-        _cache.clear()
-
-
 def detail(repo: str) -> dict[str, Any]:
     """One repository, for a tag somebody typed rather than picked from a search.
 

@@ -35,7 +35,6 @@ from __future__ import annotations
 import logging
 import re
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from typing import Any, Final
 
 from ..db import paths
