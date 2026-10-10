@@ -9,17 +9,18 @@ something is only designed, it says so.*
 ## 1. Summary
 
 The software is **built end to end**: it answers questions from demo telemetry,
-a placeholder knowledge graph and the first two reference documents, and every
+all 17 collected documents and a knowledge graph authored from them, and every
 answer can be traced in Ariadne's Thread. What it cannot do yet is answer from
 the lab's own knowledge, and nothing has been evaluated:
 
-- **2 of the 17 collected reference documents are ingested** (162 chunks), and
-  none of the lab's own documents are in hand yet,
-- the knowledge graph is placeholder data, and the sensor database holds demo data,
-- both retrieval tracks run, but on too little real knowledge to measure,
+- **all 17 collected documents are ingested** (887 chunks: 12 public references
+  and 5 draft rig SOPs); **the lab's own documents are TBC** — not received yet,
+- the graph is 62 nodes: placeholder rig data plus procedures authored from the
+  references; the sensor database holds demo data,
+- both retrieval tracks run, but rig-specific answers rest on drafts,
 - the evaluation harness is built, but the evaluation has not started.
 
-All 231 backend tests and 9 frontend tests pass, and the frontend type-checks
+All 232 backend tests and 9 frontend tests pass, and the frontend type-checks
 and lints clean.
 
 **What Daedalus is.** A fully local, read-only **standalone chat application**
@@ -59,15 +60,15 @@ left out).
 | Milestone | Layer | Done | % | Honest read |
 |---|---|---|---|---|
 | M1 Sensor data layer | 3 | 4 / 5 | 80% | Works on demo data |
-| M2 Knowledge ingestion | 4 | 37 / 43 | 86%\* | Pipeline built, with categories and rig/reference origin; **2 documents ingested** |
+| M2 Knowledge ingestion | 4 | 38 / 43 | 88%\* | Pipeline built, with categories and rig/reference origin; **all 17 collected documents ingested** (887 chunks); the lab's own documents TBC |
 | M3 Deterministic tool layer | 8 | 31 / 31 | 100% | Sensor tools, both tracks' retrieval, effect/track/argument gates |
-| M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested and the lab machine unconfirmed |
+| M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested |
 | M5 Orchestration | 7 | 22 / 23 | 96% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers |
 | M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 16 / 20 | 80% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
 | M7 Observability | 10 | 5 / 6 | 83% | Every turn fully logged on one `query_id`; read back in Ariadne's Thread |
 | M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** The query set, labels and runs wait on the corpus |
 | M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |
-| M10 Dashboard | 9B | 114 / 124 | 92%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
+| M10 Dashboard | 9B | 115 / 124 | 93%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
 | M11 Cross-platform installer CLI | — | 0 / 5 | 0% | Not started — optional; `daedalus.sh` works on Linux/WSL/macOS |
 
 \* **Inflated.** Many ticked boxes in M2 and M10 are small setup or UI
@@ -77,8 +78,9 @@ sub-tasks, and M8's ticks are the *tooling*, not the evaluation.
 is built; the research *result* — the evaluation over real knowledge — has not
 started, and it is what the project is assessed on.
 
-Critical path now: **real corpus → ingest and rebuild the graph from it → choose
-the model the lab machine allows → freeze both tracks → evaluate once.**
+Critical path now: **choose the model → write and label the query set → freeze
+both tracks → evaluate once.** The lab's own documents (TBC) are ingested and
+added to the graph whenever they arrive, before the freeze.
 
 ---
 
@@ -118,8 +120,9 @@ pack only, and a validator replaces it with a fallback if it states a number, a
 time or a cause the evidence does not. Citation chips show the evidence behind
 each claim.
 
-**Current limitation.** It answers from demo telemetry, a placeholder graph and
-two reference documents, so knowledge answers are not yet meaningful.
+**Current limitation.** It answers from demo telemetry and from public
+reference documents plus draft rig SOPs; the lab's own documents are TBC, so
+rig-specific answers are not yet authoritative.
 
 ![Chat interface](screenshots/01-chat.png)
 
@@ -166,7 +169,7 @@ mode, which picks the best-scoring installed model for whichever machine it runs
 on. Every model call is logged with its timings.
 
 **Why it matters.** This is Rule 1 — no cloud in the production path. Auto mode
-means moving from the development laptop to the lab machine needs no code change.
+means moving to any other machine needs no code change.
 
 **Current limitation.** Only `qwen3:1.7b` (and once `llama3.2`) has been run
 locally. Phi-3 Mini and Gemma 3 1B are not yet tested.
@@ -225,8 +228,8 @@ Embedding models has a catalogue of 16 models, each figure read from the model
 file itself, with English / Multilingual filters and a box to pull any other model
 by name.
 
-**Why it matters.** Model choice depends on the lab machine, whose specs are still
-unconfirmed. The Forge makes that choice measurable and repeatable on any machine.
+**Why it matters.** Daedalus runs on any hardware, so the model choice cannot be
+fixed in advance. The Forge makes it measurable and repeatable on any machine.
 On the laptop the estimator predicted 28.9 tokens/s against 27.9 measured.
 
 ![Forge hardware](screenshots/07-forge-hardware.png)
@@ -287,10 +290,9 @@ passage accordingly, and a rig-specific fact backed only by references must be
 called general guidance from another installation. The origin can be corrected
 at any time without re-ingesting.
 
-**Current limitation.** **2 documents ingested** (162 chunks): the BRE
-heat-stable-salts paper and the Fuji ZRE NDIR analyser manual, both references.
-15 more public documents are collected in `data/corpus_sources/`, along with 5
-placeholder rig SOPs; the lab's own manuals and SOPs are still needed.
+**Current limitation.** All 17 collected documents are ingested (887 chunks):
+12 public references and 5 draft rig SOPs written to shape. The lab's own
+manuals and SOPs are TBC.
 
 ![Ingest view](screenshots/10-ingest.png)
 
@@ -374,10 +376,12 @@ Track 2 retrieves in one of two modes, switched in Settings → Graph RAG:
 modes isolate whether the *agent's choices* help, separately from whether a
 graph helps at all.
 
-**Current limitation.** The graph is 34 nodes of placeholder data until the real
-corpus arrives. On the development machine qwen3:1.7b takes 1–7 s per hop and
-often walks to the wrong part of the graph — a finding about the model, to
-revisit once the lab machine's model is chosen.
+**Current limitation.** The graph is 62 nodes: 34 of placeholder rig data and
+28 authored from the reference procedures (NDIR, pH, compressed gas). The
+literature documents have no node type, so Coverage lists them as Track-1-only.
+On the development machine qwen3:1.7b takes 1–7 s per hop and often walks to the
+wrong part of the graph — a finding about the model, to revisit once the chat
+model is chosen.
 
 ![Graph view](screenshots/14-graph.png)
 
@@ -464,8 +468,9 @@ both tracks are frozen, and keeps every answer if a run is interrupted.
 same way for every arm.
 
 **Current limitation.** The query set holds 5 example questions written against
-the placeholder graph. The real 30–50 question set is written once the corpus
-is in. Method in `docs/EVALUATION.md`.
+the placeholder graph. The real 30–50 question set can be written now for the
+reference documents; rig-specific questions wait on the lab's own documents
+(TBC). Method in `docs/EVALUATION.md`.
 
 ---
 
@@ -484,7 +489,7 @@ is in. Method in `docs/EVALUATION.md`.
 - **Usability:** command palette, keyboard shortcuts, theming, and a searchable
   settings window.
 
-**Why it matters.** The system has to be installable on the lab machine by someone
+**Why it matters.** The system has to be installable on any machine by someone
 other than the author.
 
 ![Command palette](screenshots/18-command-palette.png)
@@ -530,10 +535,9 @@ Save all images to `docs/screenshots/`.
 
 | Area | What's missing | Milestone |
 |---|---|---|
-| Knowledge | The lab's own documents; ingesting the other 15 collected references; the graph rebuilt from the real corpus; the placeholder SOP filenames reconciled | M2 · M6 |
+| Knowledge | The lab's own documents (TBC) — then ingest them, swap the draft rig SOPs' filenames, extend the graph and finalise its schema | M2 · M6 |
 | Evaluation | 30–50 question golden set and its hand labels, three comparison runs (Track 1 · Track 2 walk · Track 2 agent), failure analysis, Method B (LLM-as-judge over exported logs), human panel | M8 |
-| Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); recalibrate the estimators and re-check re-ranker fit on the lab machine; verify inference with networking disabled | M4 · M2 · M6 |
-| Fairness check | Ingestion flags documents that have no graph node, so Track 1 does not get knowledge Track 2 lacks | M10 |
+| Models | Pull and test the SLM tier (Qwen3 1.7B, Phi-3 Mini 3.8B, Gemma 3 1B); recalibrate the estimators and re-check re-ranker fit on the machine that runs the evaluation; verify inference with networking disabled | M4 · M2 · M6 |
 | Validator | A check for prompt rule 9 (rig-specific facts backed only by references); clock times and dates are not yet checked | M5 · M2 |
 | Before the report | Verify the six MMLU figures in the Forge catalogue; clear the bogus `verified` record in `config/embedding_config.json`; gate `seed-demo`; confirm no secrets are logged | M10 · M7 |
 | Installer | A cross-platform `doctor`/`setup` CLI (Windows without bash) — optional | M11 |
@@ -598,13 +602,9 @@ What this shows so far:
 
 ### Blocked
 
-- **Document corpus** — the lab's own manuals and SOPs, plus reference
-  literature. Nothing meaningful can be retrieved without it, which blocks both
-  tracks' real answers and the whole evaluation. Public documents are being
-  collected; the lab's own documents are still needed for rig-specific answers
-  and for ground truth.
-- **Lab machine RAM / GPU** — gates the final model choice (M4), which also
-  decides how well Track 2's agent can drive.
+- **The lab's own documents — TBC.** Not received yet. The 12 public references
+  are ingested; the rig's own manuals and SOPs are needed for rig-specific
+  answers and for their ground truth.
 
 ### Scope decisions — settled
 
@@ -615,8 +615,8 @@ What this shows so far:
 
 ### Schedule risk
 
-The remaining work is mostly knowledge and measurement, not code: collect and
-ingest the corpus, rebuild the graph from it, choose the model, then freeze both
+The remaining work is mostly knowledge and measurement, not code: ingest the
+lab's documents when they arrive, extend the graph, choose the model, then freeze both
 tracks and run the evaluation **once**. Tuning after seeing results invalidates
 the comparison, so the evaluation cannot start until everything before it is
 done.
@@ -627,7 +627,7 @@ done.
 
 - **Current week and sprint:** _week ___, Sprint ___ — on schedule / behind by ___
 - **Goal of the meeting:** sign-off to proceed / help with a blocker / checkpoint
-- **Main ask (suggested):** the lab's own manuals and SOPs for the rig, and the
-  lab machine's specs — those unblock the evaluation.
+- **Main ask (suggested):** the lab's own manuals and SOPs for the rig — they
+  unblock the rig-specific half of the evaluation.
 - **Decisions to confirm with the advisor:** PyQt5 tab and vector-DB bake-off
   both moved to Phase 2; Track 1 kept as a plain baseline with re-ranking.

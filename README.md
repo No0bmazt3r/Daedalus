@@ -297,7 +297,7 @@ Plain-language progress: [`docs/STATUS.md`](docs/STATUS.md). Item by item:
 | **Dashboard** | React 19 · Vite 8 · TanStack Router · Tailwind v4 · shadcn/base-ui. Floating windows with Peek, minimize and edge snapping; command palette; 11 rebindable shortcuts; registry-driven, searchable Settings |
 | **Theming** | 16 themes, live per-zone colours, import/export, all floored to WCAG AA on every text role; Monocraft as the default face; 13 background effects; pixel or smooth loading skeletons |
 | **Deployment** | Runs on the host — one uvicorn process with embedded Chroma — via `./daedalus.sh`; `sync.sh` after a pull, `reset.sh` to rebuild |
-| **Tests** | 231 backend `unittest` cases and 9 frontend logic tests |
+| **Tests** | 232 backend `unittest` cases and 9 frontend logic tests |
 
 ### Retrieval
 
@@ -310,12 +310,13 @@ Plain-language progress: [`docs/STATUS.md`](docs/STATUS.md). Item by item:
 
 ### Not done yet
 
-- **The real knowledge.** 2 reference documents are ingested (162 chunks); the
-  lab's own documents are still needed, and the graph is placeholder data.
+- **The lab's own documents — TBC.** All 17 collected documents are ingested
+  (887 chunks) and the graph is authored from the reference procedures; the
+  rig's own documents have not been received.
 - **Evaluation** — the 30–50 question set and its labels, and the three
   comparison runs.
-- **Model choice** — the small-model tier is untested and the lab machine's
-  specs are unconfirmed.
+- **Model choice** — the small-model tier is untested. Daedalus runs on any
+  hardware; the Forge checks fit on whatever machine it is on.
 
 ---
 

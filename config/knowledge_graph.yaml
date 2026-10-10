@@ -1,0 +1,760 @@
+nodes:
+- id: Sensor:co2_ppm
+  type: Sensor
+  label: CO₂ concentration
+  aliases:
+  - co2
+  - co2_ppm
+  - carbon dioxide
+  - CO2 sensor
+  - ppm
+  - gas concentration
+  unit: ppm
+  column: co2_ppm
+  description: NDIR CO₂ concentration at the absorber outlet.
+- id: Sensor:temp_c
+  type: Sensor
+  label: Reactor temperature
+  aliases:
+  - temp
+  - temperature
+  - temp_c
+  - reactor temp
+  - thermal
+  - degrees
+  unit: °C
+  column: temp_c
+  description: Bulk solvent temperature in the reactor vessel.
+- id: Sensor:pressure_barg
+  type: Sensor
+  label: Vessel pressure
+  aliases:
+  - pressure
+  - pressure_barg
+  - barg
+  - vessel pressure
+  - head pressure
+  unit: barg
+  column: pressure_barg
+  description: Gauge pressure in the reactor headspace.
+- id: Sensor:ph
+  type: Sensor
+  label: Solvent pH
+  aliases:
+  - ph
+  - pH
+  - acidity
+  - alkalinity
+  - solvent ph
+  unit: pH
+  column: ph
+  description: pH of the circulating amine solvent.
+- id: Sensor:level_pct
+  type: Sensor
+  label: Solvent level
+  aliases:
+  - level_pct
+  - tank level
+  - solvent level
+  - fill level
+  - liquid level
+  - solvent inventory
+  unit: '%'
+  column: level_pct
+  description: Solvent inventory as a percentage of working volume.
+- id: OperatingMode:Absorption
+  type: OperatingMode
+  label: Absorption
+  aliases:
+  - absorption
+  - absorbing
+  - capture mode
+  - loading
+  description: Lean solvent contacts flue gas; CO₂ is captured into solution.
+- id: OperatingMode:Desorption
+  type: OperatingMode
+  label: Desorption
+  aliases:
+  - desorption
+  - regeneration
+  - stripping
+  - release mode
+  description: Rich solvent is heated to release CO₂ and regenerate the amine.
+- id: OperatingMode:Manual
+  type: OperatingMode
+  label: Manual
+  aliases:
+  - manual
+  - manual mode
+  - maintenance mode
+  - operator control
+  description: Operator-driven; automatic interlocks relaxed for maintenance.
+- id: Threshold:co2_high_absorption
+  type: Threshold
+  label: CO₂ > 600 ppm (Absorption)
+  aliases:
+  - co2 limit
+  - co2 high
+  - breakthrough limit
+  operator: '>'
+  value: 600
+  unit: ppm
+  applies_mode: Absorption
+  description: 'Outlet CO₂ above 600 ppm during Absorption indicates the solvent is no longer capturing
+    — the absorber is approaching breakthrough.
+
+    '
+- id: Threshold:temp_high
+  type: Threshold
+  label: Temperature > 45 °C
+  aliases:
+  - temp limit
+  - overheating
+  - high temperature
+  operator: '>'
+  value: 45
+  unit: °C
+  applies_mode: null
+  description: Above 45 °C amine degradation accelerates sharply.
+- id: Threshold:pressure_high
+  type: Threshold
+  label: Pressure > 2.5 barg
+  aliases:
+  - pressure limit
+  - overpressure limit
+  - high pressure
+  operator: '>'
+  value: 2.5
+  unit: barg
+  applies_mode: null
+  description: Design limit of the reactor headspace before relief actuates.
+- id: Threshold:ph_low
+  type: Threshold
+  label: pH < 6.0
+  aliases:
+  - ph low
+  - acidic
+  - ph limit
+  operator: <
+  value: 6.0
+  unit: pH
+  applies_mode: null
+  description: 'Falling pH indicates oxidative degradation of the amine into heat-stable salts, which
+    do not regenerate.
+
+    '
+- id: Threshold:level_low
+  type: Threshold
+  label: Level < 20 %
+  aliases:
+  - low level
+  - level limit
+  - running dry
+  operator: <
+  value: 20
+  unit: '%'
+  applies_mode: null
+  description: Below 20 % the circulation pump risks cavitation.
+- id: AnomalyType:co2_breakthrough
+  type: AnomalyType
+  label: CO₂ breakthrough
+  aliases:
+  - breakthrough
+  - co2 spike
+  - high co2
+  - capture failure
+  severity: medium
+  description: 'Outlet CO₂ rises because the solvent has lost capacity — either loaded, degraded, or too
+    hot to absorb.
+
+    '
+- id: AnomalyType:thermal_runaway_risk
+  type: AnomalyType
+  label: Thermal runaway risk
+  aliases:
+  - thermal runaway
+  - overheating
+  - runaway
+  - exotherm
+  severity: high
+  description: 'Temperature and pressure rising together: the exotherm is outpacing cooling, and vapour
+    pressure follows temperature.
+
+    '
+- id: AnomalyType:solvent_degradation
+  type: AnomalyType
+  label: Solvent degradation
+  aliases:
+  - degradation
+  - amine degradation
+  - heat stable salts
+  - solvent spent
+  severity: medium
+  description: Irreversible loss of amine capacity, visible as falling pH.
+- id: AnomalyType:overpressure
+  type: AnomalyType
+  label: Overpressure
+  aliases:
+  - overpressure
+  - pressure excursion
+  - relief event
+  severity: high
+  description: Headspace pressure above the vessel design limit.
+- id: AnomalyType:low_solvent_inventory
+  type: AnomalyType
+  label: Low solvent inventory
+  aliases:
+  - low level
+  - empty tank
+  - pump cavitation
+  - low inventory
+  severity: low
+  description: Solvent inventory too low to sustain circulation.
+- id: SOPDocument:NDIR_Calibration
+  type: SOPDocument
+  label: SOP — NDIR Analyser Calibration
+  aliases:
+  - ndir calibration
+  - calibrate analyser
+  - co2 sensor calibration
+  filename: SOP_NDIR_Calibration.md
+  version: '2.1'
+  description: Zero and span calibration of the NDIR CO₂ analyser.
+- id: SOPStep:ndir_1
+  type: SOPStep
+  label: Isolate the analyser from process gas
+  step_number: 1
+  description: Close the sample isolation valve and vent the sample line.
+- id: SOPStep:ndir_2
+  type: SOPStep
+  label: Zero with nitrogen
+  step_number: 2
+  description: Flow 99.999 % N₂ at 1.0 L/min until the reading is stable; zero.
+- id: SOPStep:ndir_3
+  type: SOPStep
+  label: Span with certified gas
+  step_number: 3
+  description: Flow certified 1000 ppm CO₂; span the analyser; record the drift.
+- id: SOPDocument:Emergency_Cooldown
+  type: SOPDocument
+  label: SOP — Emergency Cooldown
+  aliases:
+  - emergency cooldown
+  - cooldown
+  - cool down
+  - emergency cooling
+  filename: SOP_Emergency_Cooldown.md
+  version: '3.0'
+  description: Controlled cooling when reactor temperature exceeds safe limits.
+- id: SOPStep:cooldown_1
+  type: SOPStep
+  label: Switch reactor to Manual
+  step_number: 1
+  description: Take the reactor off automatic sequencing before intervening.
+- id: SOPStep:cooldown_2
+  type: SOPStep
+  label: Increase cooling water flow to maximum
+  step_number: 2
+  description: Open the cooling water control valve fully; confirm flow.
+- id: SOPStep:cooldown_3
+  type: SOPStep
+  label: Stop solvent regeneration heating
+  step_number: 3
+  description: Isolate the reboiler steam supply to remove the heat input.
+- id: SOPStep:cooldown_4
+  type: SOPStep
+  label: Monitor until below 40 °C
+  step_number: 4
+  description: Hold on Manual until bulk temperature is under 40 °C for 10 min.
+- id: SOPDocument:Solvent_Management
+  type: SOPDocument
+  label: SOP — Solvent Sampling and Replacement
+  aliases:
+  - solvent management
+  - replace solvent
+  - solvent sampling
+  - top up
+  filename: SOP_Solvent_Management.md
+  version: '1.4'
+  description: Sampling, titration and replacement of degraded amine solvent.
+- id: SOPStep:solvent_1
+  type: SOPStep
+  label: Draw a sample from the circulation loop
+  step_number: 1
+  description: Take 250 mL from the sample point with the pump running.
+- id: SOPStep:solvent_2
+  type: SOPStep
+  label: Titrate for amine concentration and heat-stable salts
+  step_number: 2
+  description: Report HSS as a percentage of total alkalinity.
+- id: SOPStep:solvent_3
+  type: SOPStep
+  label: Replace charge if HSS exceeds 15 %
+  step_number: 3
+  description: Drain to the spent-solvent drum and recharge with fresh amine.
+- id: SOPDocument:Pressure_Relief
+  type: SOPDocument
+  label: SOP — Pressure Relief and Recovery
+  aliases:
+  - pressure relief
+  - relief valve
+  - depressurise
+  - overpressure procedure
+  filename: SOP_Pressure_Relief.md
+  version: '2.0'
+  description: Response to a headspace overpressure excursion.
+- id: SOPStep:relief_1
+  type: SOPStep
+  label: Confirm the relief path is clear
+  step_number: 1
+  description: Verify the vent line isolation valve is open before venting.
+- id: SOPStep:relief_2
+  type: SOPStep
+  label: Reduce gas feed rate
+  step_number: 2
+  description: Throttle the blower to lower the pressure rise rate.
+- id: AnomalyType:ndir_drift
+  type: AnomalyType
+  label: NDIR reading drift
+  severity: low
+  origin: reference
+  aliases:
+  - ndir drift
+  - ndir reading drifts
+  - analyser drift
+  - analyzer drift
+  - co2 reading drift
+  - co2 sensor drift
+  - zero drift
+  - span drift
+  - co2 reading wrong
+  - ndir fault
+  description: The NDIR indication has moved off its zero or span point, or reads high or low. Dust or
+    water in the sampling cell, or air leaking into the sample line, are the usual causes (Fuji ZRE manual
+    §7.2–7.3, p64–65).
+- id: SOPDocument:Fuji_NDIR_Maintenance
+  type: SOPDocument
+  label: Fuji ZRE NDIR analyser — calibration and maintenance (manual §6.8, §7)
+  filename: Fuji_ZRE3_NDIR_Analyzer_Manual.pdf
+  aliases:
+  - ndir maintenance
+  - analyser maintenance
+  - analyzer maintenance
+  - sampling cell cleaning
+  - fuji zre
+  - ndir manual
+  - zero and span calibration
+  description: 'The analyser manufacturer''s zero/span procedure and daily and weekly checks. Another
+    installation''s instrument: confirm against the rig''s own analyser before relying on specifics.'
+  origin: reference
+- id: SOPStep:fuji_ndir_maintenance_1
+  type: SOPStep
+  label: Zero calibration with zero gas
+  step_number: 1
+  description: Press ZERO, select the channel and press ENT to supply zero gas; once the indication is
+    stable, press ENT (§6.8.1, p62).
+  origin: reference
+- id: SOPStep:fuji_ndir_maintenance_2
+  type: SOPStep
+  label: Span calibration with standard gas
+  step_number: 2
+  description: Press SPAN and supply standard gas at 90 % or more of the range value; once stable, press
+    ENT (§6.8.2, p63). Zero first, then span; repeat weekly (§7.1, p64).
+  origin: reference
+- id: SOPStep:fuji_ndir_maintenance_3
+  type: SOPStep
+  label: Check the sample and purge flows
+  step_number: 3
+  description: Sampling gas 0.5 ± 0.2 L/min, purge about 1 L/min; outside 0.3–0.7 L/min, adjust the flow
+    meter's needle valve (§7.1–7.2, p64).
+  origin: reference
+- id: SOPStep:fuji_ndir_maintenance_4
+  type: SOPStep
+  label: Clean the sampling cell if readings are off
+  step_number: 4
+  description: 'Low or high readings with dust in the cell: clean the cell and check the sampling devices,
+    especially the gas filter (§7.2–7.3, p64–65).'
+  origin: reference
+- id: SOPStep:fuji_ndir_maintenance_5
+  type: SOPStep
+  label: Find and repair air leaks in the sample line
+  step_number: 5
+  description: Air drawn in midway along the sampling pipe dilutes the sample; find the leak and repair
+    it (§7.2, p64).
+  origin: reference
+- id: AnomalyType:ph_electrode_fault
+  type: AnomalyType
+  label: pH electrode out of calibration
+  severity: low
+  origin: reference
+  aliases:
+  - ph drift
+  - ph electrode
+  - ph probe
+  - ph calibration failed
+  - slope out of range
+  - ph sensor fault
+  - electrode slope
+  - ph reading wrong
+  - ph meter calibration
+  description: The pH electrode's calibration slope is outside 95–105 % (EPA SOP EQ-01-09 §12.6, p12);
+    ThermoFisher gives 92–102 % slope and ±59 mV offset as ideal (p1). An unreliable pH reading can look
+    like solvent degradation.
+- id: SOPDocument:EPA_pH_Calibration
+  type: SOPDocument
+  label: EPA SOP EQ-01-09 — pH meter calibration and corrective actions
+  filename: EPA_pH_Meter_Calibration_SOP.pdf
+  aliases:
+  - ph calibration
+  - ph meter calibration
+  - calibrate ph
+  - two-point calibration
+  - epa ph sop
+  description: Two-point pH calibration and, when the slope fails, corrective actions in order (§12.1,
+    §12.6, §12.8). Written for laboratory pH meters, not this rig's inline probe.
+  origin: reference
+- id: SOPStep:epa_ph_calibration_1
+  type: SOPStep
+  label: Two-point calibration with pH 7 then pH 4 or 10
+  step_number: 1
+  description: Rinse with de-ionised water and blot dry (do not wipe) between buffers; use each buffer
+    once (§12, §12.1, p6–8).
+  origin: reference
+- id: SOPStep:epa_ph_calibration_2
+  type: SOPStep
+  label: Check the slope and confirm with pH 7
+  step_number: 2
+  description: Slope must be 95–105 %; confirm by re-reading the pH 7 buffer (§12.1h–i, p8).
+  origin: reference
+- id: SOPStep:epa_ph_calibration_3
+  type: SOPStep
+  label: 'Corrective action 1: fresh buffers'
+  step_number: 3
+  description: Change the standard buffers and recalibrate (§12.6b, p12).
+  origin: reference
+- id: SOPStep:epa_ph_calibration_4
+  type: SOPStep
+  label: 'Corrective action 2: fill solution'
+  step_number: 4
+  description: Change the 3M KCl fill solution or bring it up to volume, then recalibrate (§12.6c, p12–13).
+  origin: reference
+- id: SOPStep:epa_ph_calibration_5
+  type: SOPStep
+  label: 'Corrective action 3: clean the electrode'
+  step_number: 5
+  description: Soak the tip in electrode cleaning solution for 1–2 h, rinse, soak in pH 7 buffer until
+    stable (§12.6d, §12.8c, p13).
+  origin: reference
+- id: SOPStep:epa_ph_calibration_6
+  type: SOPStep
+  label: 'If it still fails: replace the junction or call the manufacturer'
+  step_number: 6
+  description: Replace a clogged junction and refill with 3M KCl; if the problem persists, call the manufacturer
+    (§12.6e, §12.8e, p13).
+  origin: reference
+- id: SOPDocument:ThermoFisher_pH_Electrode
+  type: SOPDocument
+  label: ThermoFisher — pH electrode preparation and maintenance
+  filename: ThermoFisher_pH_Electrode_Maintenance.pdf
+  aliases:
+  - ph electrode maintenance
+  - electrode cleaning
+  - electrode storage
+  - recondition electrode
+  description: Preparing, checking and storing a pH electrode (p1).
+  origin: reference
+- id: SOPStep:thermofisher_ph_electrode_1
+  type: SOPStep
+  label: Remove the storage bottle and rinse
+  step_number: 1
+  description: Unscrew the storage bottle and rinse the electrode with distilled water to remove salt
+    precipitate (p1).
+  origin: reference
+- id: SOPStep:thermofisher_ph_electrode_2
+  type: SOPStep
+  label: Refill if refillable
+  step_number: 2
+  description: Open the fill hole, drain the chamber and refill with the appropriate fill solution (p1).
+  origin: reference
+- id: SOPStep:thermofisher_ph_electrode_3
+  type: SOPStep
+  label: Calibrate with fresh pH 4.01 and 7.00 buffers
+  step_number: 3
+  description: Ideal slope 92–102 %, ideal offset ±59 mV at pH 7 (p1).
+  origin: reference
+- id: SOPStep:thermofisher_ph_electrode_4
+  type: SOPStep
+  label: 'Out of range: clean, then fresh buffers, then replace'
+  step_number: 4
+  description: Clean and recondition the electrode; if it still fails, use fresh unopened buffers; if
+    that fails, replace the electrode (p1).
+  origin: reference
+- id: SOPStep:thermofisher_ph_electrode_5
+  type: SOPStep
+  label: Never store it dry
+  step_number: 5
+  description: Keep the bulb and junction wet; store in electrode storage solution (p1).
+  origin: reference
+- id: AnomalyType:gas_cylinder_hazard
+  type: AnomalyType
+  label: Compressed gas leak or unsafe cylinder
+  severity: high
+  origin: reference
+  aliases:
+  - gas leak
+  - cylinder leak
+  - gas cylinder
+  - compressed gas
+  - nitrogen cylinder
+  - calibration gas cylinder
+  - oxygen deficiency
+  - cylinder handling
+  description: Released gas expands greatly and can make a poorly ventilated room oxygen-deficient (Waterloo
+    compressed gases SOP, p1). The rig's zero (N₂) and span (CO₂) gases are supplied from cylinders.
+- id: SOPDocument:Waterloo_Compressed_Gases
+  type: SOPDocument
+  label: Waterloo — compressed gas cylinder SOP
+  filename: Waterloo_Compressed_Gases_SOP.pdf
+  aliases:
+  - compressed gas sop
+  - cylinder safety
+  - gas cylinder handling
+  - cylinder storage
+  description: General safe handling of compressed gas cylinders (p1–3).
+  origin: reference
+- id: SOPStep:waterloo_compressed_gases_1
+  type: SOPStep
+  label: Leak-check connections and hoses
+  step_number: 1
+  description: Check regularly with a monitoring instrument or soapy water (p1).
+  origin: reference
+- id: SOPStep:waterloo_compressed_gases_2
+  type: SOPStep
+  label: Secure cylinders with two chains
+  step_number: 2
+  description: Cylinders over 26″ tall to an anchored rack at 1/3 and 2/3 height; at most two cylinders
+    per pair of chains (p2).
+  origin: reference
+- id: SOPStep:waterloo_compressed_gases_3
+  type: SOPStep
+  label: Move cylinders only on a hand truck, capped
+  step_number: 3
+  description: Never transport an unsecured cylinder; replace valve caps before moving; never ride in
+    a lift with one (p1–2).
+  origin: reference
+- id: SOPStep:waterloo_compressed_gases_4
+  type: SOPStep
+  label: Store and segregate correctly
+  step_number: 4
+  description: Away from heat and oil or grease; mark full and empty ("MT") cylinders; separate flammable
+    and oxidising gases (p2–3).
+  origin: reference
+- id: SOPStep:waterloo_compressed_gases_5
+  type: SOPStep
+  label: Ventilation
+  step_number: 5
+  description: Under 6 air changes per hour, ask the safety office about an oxygen-deficiency monitor
+    (p2).
+  origin: reference
+edges:
+- from: Sensor:co2_ppm
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:co2_ppm
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:temp_c
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:temp_c
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:temp_c
+  type: MONITORED_IN
+  to: OperatingMode:Manual
+- from: Sensor:pressure_barg
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:pressure_barg
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:pressure_barg
+  type: MONITORED_IN
+  to: OperatingMode:Manual
+- from: Sensor:ph
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:level_pct
+  type: MONITORED_IN
+  to: OperatingMode:Absorption
+- from: Sensor:level_pct
+  type: MONITORED_IN
+  to: OperatingMode:Desorption
+- from: Sensor:co2_ppm
+  type: HAS_THRESHOLD
+  to: Threshold:co2_high_absorption
+- from: Sensor:temp_c
+  type: HAS_THRESHOLD
+  to: Threshold:temp_high
+- from: Sensor:pressure_barg
+  type: HAS_THRESHOLD
+  to: Threshold:pressure_high
+- from: Sensor:ph
+  type: HAS_THRESHOLD
+  to: Threshold:ph_low
+- from: Sensor:level_pct
+  type: HAS_THRESHOLD
+  to: Threshold:level_low
+- from: Threshold:co2_high_absorption
+  type: TRIGGERS
+  to: AnomalyType:co2_breakthrough
+- from: Threshold:temp_high
+  type: TRIGGERS
+  to: AnomalyType:thermal_runaway_risk
+- from: Threshold:pressure_high
+  type: TRIGGERS
+  to: AnomalyType:thermal_runaway_risk
+- from: Threshold:temp_high
+  type: TRIGGERS
+  to: AnomalyType:co2_breakthrough
+- from: Threshold:pressure_high
+  type: TRIGGERS
+  to: AnomalyType:overpressure
+- from: Threshold:ph_low
+  type: TRIGGERS
+  to: AnomalyType:solvent_degradation
+- from: Threshold:level_low
+  type: TRIGGERS
+  to: AnomalyType:low_solvent_inventory
+- from: AnomalyType:co2_breakthrough
+  type: RESOLVED_BY
+  to: SOPDocument:NDIR_Calibration
+- from: AnomalyType:co2_breakthrough
+  type: RESOLVED_BY
+  to: SOPDocument:Solvent_Management
+- from: AnomalyType:thermal_runaway_risk
+  type: RESOLVED_BY
+  to: SOPDocument:Emergency_Cooldown
+- from: AnomalyType:solvent_degradation
+  type: RESOLVED_BY
+  to: SOPDocument:Solvent_Management
+- from: AnomalyType:overpressure
+  type: RESOLVED_BY
+  to: SOPDocument:Pressure_Relief
+- from: SOPDocument:NDIR_Calibration
+  type: CONTAINS
+  to: SOPStep:ndir_1
+- from: SOPDocument:NDIR_Calibration
+  type: CONTAINS
+  to: SOPStep:ndir_2
+- from: SOPDocument:NDIR_Calibration
+  type: CONTAINS
+  to: SOPStep:ndir_3
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_1
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_2
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_3
+- from: SOPDocument:Emergency_Cooldown
+  type: CONTAINS
+  to: SOPStep:cooldown_4
+- from: SOPDocument:Solvent_Management
+  type: CONTAINS
+  to: SOPStep:solvent_1
+- from: SOPDocument:Solvent_Management
+  type: CONTAINS
+  to: SOPStep:solvent_2
+- from: SOPDocument:Solvent_Management
+  type: CONTAINS
+  to: SOPStep:solvent_3
+- from: SOPDocument:Pressure_Relief
+  type: CONTAINS
+  to: SOPStep:relief_1
+- from: SOPDocument:Pressure_Relief
+  type: CONTAINS
+  to: SOPStep:relief_2
+- from: SOPDocument:Fuji_NDIR_Maintenance
+  type: CONTAINS
+  to: SOPStep:fuji_ndir_maintenance_1
+- from: SOPDocument:Fuji_NDIR_Maintenance
+  type: CONTAINS
+  to: SOPStep:fuji_ndir_maintenance_2
+- from: SOPDocument:Fuji_NDIR_Maintenance
+  type: CONTAINS
+  to: SOPStep:fuji_ndir_maintenance_3
+- from: SOPDocument:Fuji_NDIR_Maintenance
+  type: CONTAINS
+  to: SOPStep:fuji_ndir_maintenance_4
+- from: SOPDocument:Fuji_NDIR_Maintenance
+  type: CONTAINS
+  to: SOPStep:fuji_ndir_maintenance_5
+- from: SOPDocument:EPA_pH_Calibration
+  type: CONTAINS
+  to: SOPStep:epa_ph_calibration_1
+- from: SOPDocument:EPA_pH_Calibration
+  type: CONTAINS
+  to: SOPStep:epa_ph_calibration_2
+- from: SOPDocument:EPA_pH_Calibration
+  type: CONTAINS
+  to: SOPStep:epa_ph_calibration_3
+- from: SOPDocument:EPA_pH_Calibration
+  type: CONTAINS
+  to: SOPStep:epa_ph_calibration_4
+- from: SOPDocument:EPA_pH_Calibration
+  type: CONTAINS
+  to: SOPStep:epa_ph_calibration_5
+- from: SOPDocument:EPA_pH_Calibration
+  type: CONTAINS
+  to: SOPStep:epa_ph_calibration_6
+- from: SOPDocument:ThermoFisher_pH_Electrode
+  type: CONTAINS
+  to: SOPStep:thermofisher_ph_electrode_1
+- from: SOPDocument:ThermoFisher_pH_Electrode
+  type: CONTAINS
+  to: SOPStep:thermofisher_ph_electrode_2
+- from: SOPDocument:ThermoFisher_pH_Electrode
+  type: CONTAINS
+  to: SOPStep:thermofisher_ph_electrode_3
+- from: SOPDocument:ThermoFisher_pH_Electrode
+  type: CONTAINS
+  to: SOPStep:thermofisher_ph_electrode_4
+- from: SOPDocument:ThermoFisher_pH_Electrode
+  type: CONTAINS
+  to: SOPStep:thermofisher_ph_electrode_5
+- from: SOPDocument:Waterloo_Compressed_Gases
+  type: CONTAINS
+  to: SOPStep:waterloo_compressed_gases_1
+- from: SOPDocument:Waterloo_Compressed_Gases
+  type: CONTAINS
+  to: SOPStep:waterloo_compressed_gases_2
+- from: SOPDocument:Waterloo_Compressed_Gases
+  type: CONTAINS
+  to: SOPStep:waterloo_compressed_gases_3
+- from: SOPDocument:Waterloo_Compressed_Gases
+  type: CONTAINS
+  to: SOPStep:waterloo_compressed_gases_4
+- from: SOPDocument:Waterloo_Compressed_Gases
+  type: CONTAINS
+  to: SOPStep:waterloo_compressed_gases_5
+- from: AnomalyType:ndir_drift
+  type: RESOLVED_BY
+  to: SOPDocument:NDIR_Calibration
+- from: AnomalyType:ndir_drift
+  type: RESOLVED_BY
+  to: SOPDocument:Fuji_NDIR_Maintenance
+- from: AnomalyType:ph_electrode_fault
+  type: RESOLVED_BY
+  to: SOPDocument:EPA_pH_Calibration
+- from: AnomalyType:ph_electrode_fault
+  type: RESOLVED_BY
+  to: SOPDocument:ThermoFisher_pH_Electrode
+- from: AnomalyType:gas_cylinder_hazard
+  type: RESOLVED_BY
+  to: SOPDocument:Waterloo_Compressed_Gases
+- from: AnomalyType:low_solvent_inventory
+  type: RESOLVED_BY
+  to: SOPDocument:Solvent_Management

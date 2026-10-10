@@ -58,7 +58,7 @@ new safety engineers.
    answers the SLR's gap: no existing study compares vector retrieval with
    graph-based retrieval for an offline, local industrial deployment.
 2. **Hardware-aware model selection** — operationalises **Objective 3** (SLM
-   suitability): measure which quantized models the lab machine can run before
+   suitability): measure which quantized models the machine at hand can run before
    committing to benchmarking.
 3. **Safety by construction** — the read-only boundary and the
    no-invented-numbers rule enforced below the prompt.

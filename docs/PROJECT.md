@@ -81,7 +81,7 @@ This is not "add a chatbot". Three pillars make it a defensible FYP:
    set with an identical model — isolating the *retrieval architecture* as the
    only variable. (§5)
 2. **A hardware-aware model selection methodology.** A purpose-built profiler
-   scores candidate quantized SLMs against the actual lab machine before
+   scores candidate quantized SLMs against whatever machine it runs on before
    committing to benchmarking, replacing guesswork with evidence. (§8)
 3. **A safety architecture enforced by construction, not by prompting.** The
    read-only boundary and the no-hallucinated-numbers rule are enforced at the
@@ -133,10 +133,8 @@ These are consistent across both sets and are **settled**; treat them as fixed:
 - [x] **Is the vector-DB bake-off (6 candidates) still in scope?** No — the
   dual-track comparison is the one benchmark study; the bake-off is deferred to
   Phase 2.
-- [ ] **Confirm the lab machine's actual specs** (RAM/GPU) — this gates the
-  entire model-tier decision.
-- [ ] **Get the lab's own documents** — rig-specific answers and their ground
-  truth can only come from `rig` documents.
+- [ ] **TBC — the lab's own documents** (not received yet) — rig-specific
+  answers and their ground truth can only come from `rig` documents.
 
 ---
 
@@ -836,19 +834,19 @@ Trust comes from visible reasoning, not a black box:
 | **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit — for chat models, embedders and re-rankers |
 | **Frontend** | React dashboard: chat, The Forge, Labyrinth Blueprints (ingest, corpus, graph, coverage, authoring, proposals, replay), Ariadne's Thread, theming, settings, store browser, full-tab error pages |
 | **Deployment** | Runs on the host: `./daedalus.sh setup` then `dev` or `start`; no Docker except the optional SearXNG |
-| **Tests** | 231 backend `unittest` cases and 9 frontend logic tests, all passing; not in CI |
+| **Tests** | 232 backend `unittest` cases and 9 frontend logic tests, all passing; not in CI |
 
 ### Not built
 
-- **Real knowledge.** 2 of 17 collected reference documents are ingested, the
-  lab's own documents are not yet in hand, and the graph is placeholder data —
-  this blocks meaningful answers from either track and the whole evaluation.
+- **The lab's own knowledge — TBC.** All 17 collected documents are ingested
+  and the graph is authored from the reference procedures, but the rig's own
+  documents have not been received, so rig-specific answers rest on drafts.
 - **Evaluation (§9):** the 30–50 question golden set and its hand labels, the
   three comparison runs, failure analysis, Method B and the human panel.
-- **Model choice (§8):** the SLM tier is not smoke-tested, the lab machine's
-  specs are unconfirmed, and qwen3:1.7b drives Track 2's agent poorly.
+- **Model choice (§8):** the SLM tier is not smoke-tested, and qwen3:1.7b
+  drives Track 2's agent poorly. There is no target machine: Daedalus runs on
+  any hardware, and the Forge measures fit on the machine it is on.
 - A validator check for prompt rule 9 (reference-only rig specifics).
-- The ingestion graph-gap check (Blueprints), which keeps the comparison fair to Track 2.
 
 **Cut from FYP2 (2026-10-01), stated as scope:** Track 1's hybrid BM25 search,
 query expansion, contextual compression and multi-hop re-retrieval; the
@@ -856,16 +854,16 @@ query expansion, contextual compression and multi-hop re-retrieval; the
 Prometheus/Grafana metrics stack; the separate source-badge row.
 
 > **Honest framing:** the pipeline is built end to end and runs on demo
-> telemetry, a placeholder graph and two reference documents. What is missing is
-> the lab's real documents, the evaluation that measures the two tracks, and the
-> model choice the lab machine allows.
+> telemetry, 17 ingested documents (12 public references, 5 draft rig SOPs) and
+> a graph authored from them. What is missing is the lab's real documents (TBC),
+> the evaluation that measures the two tracks, and the model choice.
 
 ---
 
 ## 12. Deployment
 
-**Target:** one command brings up the dashboard and the API together, on the
-lab machine itself.
+**Target:** one command brings up the dashboard and the API together, on any
+machine — there is no fixed target hardware.
 
 ```bash
 ./daedalus.sh setup   # one-time: prerequisites, .env, dependencies, migrations

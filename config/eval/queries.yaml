@@ -34,7 +34,7 @@
   expect:
     answerable: true
     key_facts: ["cool", "step"]
-    relevant_documents: ["SOP_Emergency_Cooldown.pdf"]
+    relevant_documents: ["SOP_Emergency_Cooldown.md"]
     relevant_nodes: ["SOPDocument:Emergency_Cooldown", "SOPStep:cooldown_1"]
   notes: EXAMPLE — placeholder graph
 
@@ -58,7 +58,7 @@
   expect:
     answerable: true
     key_facts: ["cool|relief|vent"]
-    relevant_documents: ["SOP_Emergency_Cooldown.pdf", "SOP_Pressure_Relief.pdf"]
+    relevant_documents: ["SOP_Emergency_Cooldown.md", "SOP_Pressure_Relief.md"]
     relevant_nodes: ["AnomalyType:thermal_runaway_risk", "SOPDocument:Emergency_Cooldown", "SOPDocument:Pressure_Relief"]
   notes: EXAMPLE — placeholder graph
 

@@ -112,7 +112,7 @@ constants:
   passages. The first attempt used single paragraphs and ran 2–3× faster than
   real chunks; passage length matters for a cross-encoder.
 
-**Recalibrate** on the lab machine before the evaluation: benchmark two models
+**Recalibrate** on the machine that runs the evaluation, before it: benchmark two models
 of different sizes, put the numbers in the constants and in the comment beside
 them, and update this section.
 

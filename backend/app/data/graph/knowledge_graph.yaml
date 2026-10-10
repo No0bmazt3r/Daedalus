@@ -217,7 +217,7 @@ nodes:
   - ndir calibration
   - calibrate analyser
   - co2 sensor calibration
-  filename: SOP_NDIR_Calibration.pdf
+  filename: SOP_NDIR_Calibration.md
   version: '2.1'
   description: Zero and span calibration of the NDIR CO₂ analyser.
 - id: SOPStep:ndir_1
@@ -243,7 +243,7 @@ nodes:
   - cooldown
   - cool down
   - emergency cooling
-  filename: SOP_Emergency_Cooldown.pdf
+  filename: SOP_Emergency_Cooldown.md
   version: '3.0'
   description: Controlled cooling when reactor temperature exceeds safe limits.
 - id: SOPStep:cooldown_1
@@ -274,7 +274,7 @@ nodes:
   - replace solvent
   - solvent sampling
   - top up
-  filename: SOP_Solvent_Management.pdf
+  filename: SOP_Solvent_Management.md
   version: '1.4'
   description: Sampling, titration and replacement of degraded amine solvent.
 - id: SOPStep:solvent_1
@@ -300,7 +300,7 @@ nodes:
   - relief valve
   - depressurise
   - overpressure procedure
-  filename: SOP_Pressure_Relief.pdf
+  filename: SOP_Pressure_Relief.md
   version: '2.0'
   description: Response to a headspace overpressure excursion.
 - id: SOPStep:relief_1

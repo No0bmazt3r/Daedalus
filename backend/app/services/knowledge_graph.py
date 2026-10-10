@@ -128,6 +128,11 @@ class Coverage:
     sensors_without_thresholds: list[dict[str, Any]] = field(default_factory=list)
     thresholds_without_triggers: list[dict[str, Any]] = field(default_factory=list)
     empty_sops: list[dict[str, Any]] = field(default_factory=list)
+    # The join with Track 1's corpus, on `filename` ↔ the manifest's filename.
+    # A document no node names is searchable by Track 1 only, which quietly
+    # tilts the comparison; a node naming no document cites nothing, silently.
+    unlinked_documents: list[dict[str, Any]] = field(default_factory=list)
+    missing_documents: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -136,12 +141,16 @@ class Coverage:
             "sensors_without_thresholds": self.sensors_without_thresholds,
             "thresholds_without_triggers": self.thresholds_without_triggers,
             "empty_sops": self.empty_sops,
+            "unlinked_documents": self.unlinked_documents,
+            "missing_documents": self.missing_documents,
             "total_gaps": (
                 len(self.orphans)
                 + len(self.unresolved_anomaly_types)
                 + len(self.sensors_without_thresholds)
                 + len(self.thresholds_without_triggers)
                 + len(self.empty_sops)
+                + len(self.unlinked_documents)
+                + len(self.missing_documents)
             ),
         }
 
@@ -335,7 +344,34 @@ def coverage() -> Coverage:
         elif kind == "SOPDocument" and "CONTAINS" not in out_types:
             result.empty_sops.append(brief(node_id))
 
+    _link_corpus(graph, result, brief)
     return result
+
+
+def _link_corpus(graph: Any, result: Coverage, brief: Any) -> None:
+    """Fill the two corpus-join rows. Skipped when the corpus cannot be read:
+    the graph's own gaps are still worth reporting without it."""
+    from ..db import corpus_store  # noqa: PLC0415 — only when coverage is asked for
+
+    try:
+        documents = corpus_store.list_documents()
+    except Exception:  # noqa: BLE001
+        return
+    named = {
+        str(attrs["filename"]).lower(): node_id
+        for node_id, attrs in graph.nodes(data=True)
+        if attrs.get("filename")
+    }
+    in_corpus = {d["filename"].lower() for d in documents}
+    for d in documents:
+        if d["filename"].lower() not in named:
+            result.unlinked_documents.append(
+                {"id": d["document_id"], "label": d["filename"],
+                 "source_type": d.get("source_type"), "origin": d.get("origin")}
+            )
+    for filename, node_id in sorted(named.items()):
+        if filename not in in_corpus:
+            result.missing_documents.append(brief(node_id))
 
 
 def _main() -> int:
@@ -365,7 +401,7 @@ def _main() -> int:
     print(f"\ncoverage gaps: {gaps.pop('total_gaps')}")
     for name, items in gaps.items():
         for item in items:
-            print(f"  {name:<28} {item['id']}")
+            print(f"  {name:<28} {item['label'] if name == 'unlinked_documents' else item['id']}")
     return 0
 
 

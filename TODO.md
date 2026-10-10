@@ -13,23 +13,25 @@ Blocking or scope-shaping — these change what gets built.
 
 - [x] **Is the PyQt5 tab still a deliverable?** No: the web dashboard replaces it for FYP2, and the tab is in Deferred — Phase 2
 - [x] **Is the 6-candidate vector-DB bake-off still in scope?** No: the dual-track comparison is the one benchmark study, and the bake-off is in Deferred — Phase 2
-- [ ] **Confirm the lab machine's RAM/GPU** *(gates the entire model-tier decision — M4 can't finish without it)*
-- [ ] **Get the real document corpus** — manuals, SOPs, troubleshooting/incident literature, safety (UAUC) documents, background *(blocks M2 entirely)*
+- [ ] **TBC — the lab's own documents.** Not received yet; stays open until Sharvin says otherwise. The 12 public reference documents are collected and ingested; what is missing is the rig's own SOPs, limits and incident records (the 5 `rig/` files are drafts written to shape)
 
 ### Path to completion
 
 Everything left that the result depends on, in order. Everything else open below
 is nice-to-have; the `[-]` items are cut.
 
-1. **Get the corpus and confirm the lab machine** (above). Nearly everything
-   below waits on one of these two.
-2. **Ingest and author:** ingest the corpus (≥80 chunks), finalise the graph
-   schema against it, author the graph, reconcile the placeholder SOP filenames,
-   and build the ingestion graph-gap check (M10, Labyrinth Blueprints), which
-   keeps the comparison fair to Track 2.
-3. **On the lab machine:** smoke-test the SLM tier and choose the chat model
-   (M4), recalibrate the embedding and re-ranker estimators, re-check
-   re-ranker fit (M2/M6), and verify inference with networking disabled.
+1. **The lab's own documents — TBC** (above). Everything that is rig-specific
+   waits on them; nothing about hardware does.
+2. **Ingest and author** — done for everything collected *(2026-10-10)*: all 17
+   documents ingested (887 chunks), the graph authored from the reference
+   procedures (62 nodes), the SOP filenames reconciled with the drafts, and the
+   ingestion graph-gap check built. **Redo when the lab's documents land:**
+   ingest them, swap the rig drafts' filenames, extend the graph, and finalise
+   the schema (M6).
+3. **Models:** smoke-test the SLM tier and choose the chat model (M4),
+   recalibrate the embedding and re-ranker estimators and re-check re-ranker fit
+   on the machine that runs the evaluation (M2/M6), and verify inference with
+   networking disabled.
 4. **Evaluate (M8):** write and label 30–50 questions → practice runs (and
    measure the embedding prefixes) → freeze → one official run → failure
    analysis → human panel and Method B.
@@ -74,13 +76,12 @@ Offline pipeline. Never runs during a live query.
   - [ ] Measure the prefixes' effect on the evaluation set — a 3-passage spot
         check with qwen3-embedding:0.6b was inconclusive (off-topic passage
         pushed from 0.576 to 0.442; same-topic margin 0.168 → 0.166)
-  - [ ] Recalibrate both estimators on the lab machine (`MODEL_FIT.md` §4)
+  - [ ] Recalibrate both estimators on the machine that runs the evaluation (`MODEL_FIT.md` §4)
 - [~] Collect the corpus into `data/corpus_sources/` — `rig/` for the lab's own,
       `reference/<category>/` for everything else, each source listed in
-      `data/corpus_sources/README.md`. **17 collected** (12 public reference PDFs,
-      5 placeholder rig SOPs written to shape); **2 ingested** (the BRE HSAS paper
-      and the Fuji ZRE NDIR manual, 162 chunks). The lab's own documents are still
-      needed
+      `data/corpus_sources/README.md`. **17 collected and all 17 ingested** (12
+      public reference PDFs, 5 draft rig SOPs written to shape; 887 chunks, all
+      embedded with qwen3-embedding:0.6b). **TBC: the lab's own documents**
 - [x] **Document origin — this rig vs reference.** Every document is `rig` (this
       lab's own) or `reference` (another installation's; the default). Chosen at
       upload in Blueprints → Corpus, flippable from the badge, read from the
@@ -165,8 +166,8 @@ Offline pipeline. Never runs during a live query.
         manifest, and the graph track joins to it by `source_file`. No frozen
         `corpus_chunks.json`: the manifest **is** the freeze, it is queryable,
         and every run records the recipe that produced it on the run row
-  - [ ] Target ≥80 chunks (200+ is stronger) — 162 now, all from two reference
-        documents; the target is meant over the real, mixed corpus
+  - [x] Target ≥80 chunks (200+ is stronger) — 887 over 17 documents, reference
+        and draft rig mixed. The lab's own documents (TBC) add to it
 
 ### Embedding model selection  ▸ Layer 4 prerequisite
 
@@ -584,7 +585,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
         irrelevant ones ~0. bge-reranker-base / v2-m3 not run here — estimated
         6–16 s, i.e. offline-evaluation only on this machine
   - [ ] Only MiniLM-L6 fits the 1 s budget on the dev laptop; every Malay-capable
-        model is `marginal`. Re-check on the lab machine before freezing
+        model is `marginal`. Re-check on the machine that runs the evaluation before freezing
 - [-] Contextual compression *(cut from FYP2, 2026-10-01)*
 - [-] Multi-hop re-retrieval loop *(cut from FYP2, 2026-10-01)*
   - Track 1 is deliberately a **plain baseline with cross-encoder re-ranking**.
@@ -593,9 +594,18 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [ ] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
 
 ### Track 2 — Agentic GraphRAG
-- [ ] Finalise the node/edge schema against the **real** corpus (§5)
+- [~] Finalise the node/edge schema against the **real** corpus (§5). Checked
+      against the 12 references *(2026-10-10)*: procedures and instrument faults
+      fit (`SOPDocument`/`SOPStep`/`AnomalyType`); literature does not — the
+      foaming, HSAS and degradation papers, the SDS, the IEAGHG report and the
+      background reviews have no node type, so Blueprints → Coverage lists them
+      as Track-1-only. Decide whether to add one once the lab's documents (TBC) are in
 - [x] Build the graph — manual authoring first: a 34-node hand-authored seed
-      (placeholder data until the real corpus lands), editable in Blueprints and
+      (placeholder data until the real corpus lands), plus 28 nodes authored from
+      the reference procedures *(2026-10-10)* — NDIR drift (Fuji manual §6.8, §7),
+      pH electrode faults (EPA EQ-01-09, ThermoFisher), compressed gas (Waterloo),
+      each step citing its page; 62 nodes, 67 edges. **Review the diff of
+      `config/knowledge_graph.yaml` before the freeze.** Editable in Blueprints and
       saved to `config/knowledge_graph.yaml`. LLM-assisted extraction exists as
       a reviewed proposal queue (see M10), still without its precision check
 - [x] NetworkX store + persistence — the YAML file is the store, loaded into
@@ -613,7 +623,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
   - [ ] **qwen3:1.7b drives it poorly on the dev machine.** 1–7 s per step, and
         it often walks `MONITORED_IN` (sensor → mode) for "what do I do?"
         questions or judges a complete set insufficient. Expected for a 1.7B
-        model — revisit once the lab machine's model is chosen (M4), not by
+        model — revisit once the chat model is chosen (M4), not by
         tuning the prompt against a handful of questions
 - [x] Fixed walk follows the schema's whole causal chain — sensor →
       `HAS_THRESHOLD` → `TRIGGERS` → `RESOLVED_BY` → `CONTAINS` — so the baseline
@@ -1067,16 +1077,21 @@ Layer 9 below for the per-step detail.
           *because the embedding model was never pulled*" are different answers.
           Verified against the real failure: 60 chunks written, 0 vectors, and
           the reason named in the log
-    - [ ] **Ingestion must report graph gaps.** Dropping a document in gives
+    - [x] **Ingestion must report graph gaps.** Dropping a document in gives
           Track 1 a searchable document for free while Track 2 stays blind until
           nodes are hand-authored — which quietly tilts the comparison.
-          Ingestion should flag documents with no matching `SOPDocument` node as
-          another Coverage row. Both pipelines now exist, so this is a join
-          between them rather than a thing waiting on one of them
-    - [ ] **Reconcile the placeholder SOP filenames** against the real corpus
-          when it lands. The four `filename:` values are authored to shape, not
-          to any file that exists; `filename` is the join into `source_file`, so
-          one that matches nothing retrieves nothing, silently
+          *(2026-10-10)* `knowledge_graph.coverage()` joins the graph to the
+          corpus manifest on `filename` both ways: **documents the graph never
+          names** (Track 1 only) and **nodes naming a document that is not
+          ingested** (they cite nothing). Two new rows in Blueprints → Coverage
+          and in `python -m app.services.knowledge_graph`. 1 test
+    - [~] **Reconcile the placeholder SOP filenames** against the real corpus
+          when it lands. `filename` is the join into `source_file`, so one that
+          matches nothing retrieves nothing, silently — and it did: all four
+          said `.pdf` while the rig drafts are `.md`, so every Track 2 answer
+          logged no source document and would have scored zero document recall.
+          Fixed in the seed and in `config/eval/queries.yaml` *(2026-10-10)*.
+          **Redo when the lab's own documents (TBC) replace the drafts**
     - [x] Force-directed canvas (MODULES.md §3.6) — `d3-force` from npm,
           bundled by Vite, never CDN (Rule 1). SVG not canvas at this size, and
           the simulation runs 300 ticks then **stops** rather than idling. Two
@@ -1654,7 +1669,7 @@ CLI that works the same on Windows, macOS and Linux.
       audit). `sync.sh` reports them; they are not deleted for you. A guard that
       makes a test refuse to run when the isolation in `tests/__init__.py` has
       not been applied would stop the config rewrite
-- [ ] Tests are not in CI. The backend has 231 `unittest` cases (all passing
+- [ ] Tests are not in CI. The backend has 232 `unittest` cases (all passing
       2026-10-10); the frontend has 9 logic tests (`pnpm test`, Node's runner)
       and no component tests, and the **migration runner** still has no test —
       it is the piece that can quietly break every other store

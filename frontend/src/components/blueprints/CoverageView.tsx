@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
-import { fetchCoverage, type Coverage, type GraphNode } from '../../lib/blueprintsClient'
+import { fetchCoverage, type Coverage, type CoverageDocument, type GraphNode } from '../../lib/blueprintsClient'
 import { Skeleton } from '../ui/skeleton'
 import { NodeChip } from './nodeStyles'
 
@@ -52,6 +52,16 @@ const SECTIONS: { key: keyof Coverage; title: string; consequence: string }[] = 
     title: 'SOPs with no steps',
     consequence: 'The document is named but its procedure is not authored, so the answer can cite it without being able to quote it.',
   },
+  {
+    key: 'missing_documents',
+    title: 'Nodes naming a document that is not ingested',
+    consequence: 'The filename joins to nothing in the corpus, so Track 2 retrieves the node but cites no document. Fix the filename or ingest the file.',
+  },
+  {
+    key: 'unlinked_documents',
+    title: 'Documents the graph never names',
+    consequence: 'Ingested for Track 1, but no node points at them, so Track 2 cannot reach them. Every one tilts the comparison towards Track 1.',
+  },
 ]
 
 export function CoverageView() {
@@ -96,7 +106,7 @@ export function CoverageView() {
 
       {!data && <Skeleton className="h-48 w-full" />}
       {data && SECTIONS.map(({ key, title, consequence }) => {
-        const items = (data[key] as GraphNode[]) ?? []
+        const items = (data[key] as (GraphNode | CoverageDocument)[]) ?? []
         return (
           <section key={key} className="rounded-lg border theme-border theme-card p-3">
             <div className="flex items-center gap-2">
@@ -111,9 +121,19 @@ export function CoverageView() {
             <p className="mt-1.5 pl-5 text-[11px] leading-relaxed theme-text-muted">{consequence}</p>
             {items.length > 0 && (
               <div className="mt-2.5 flex flex-wrap gap-1.5 pl-5">
-                {items.map((n) => (
-                  <NodeChip key={n.id} node={n} />
-                ))}
+                {items.map((n) =>
+                  'type' in n ? (
+                    <NodeChip key={n.id} node={n} />
+                  ) : (
+                    <span
+                      key={n.id}
+                      title={[n.source_type, n.origin].filter(Boolean).join(' · ')}
+                      className="inline-flex items-center rounded-md border theme-border px-2 py-1 text-xs theme-text"
+                    >
+                      {n.label}
+                    </span>
+                  ),
+                )}
               </div>
             )}
           </section>
@@ -122,7 +142,7 @@ export function CoverageView() {
 
       <p className="text-[11px] leading-relaxed theme-text-muted">
         Authored in{' '}
-        <code className="theme-text">backend/app/data/graph/knowledge_graph.yaml</code>. Run{' '}
+        <code className="theme-text">config/knowledge_graph.yaml</code> (the packaged seed until the first edit). Run{' '}
         <code className="theme-text">python -m app.services.knowledge_graph</code> for the same
         report in the terminal while editing.
       </p>

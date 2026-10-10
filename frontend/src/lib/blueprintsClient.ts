@@ -112,7 +112,18 @@ export interface Coverage {
   sensors_without_thresholds: GraphNode[];
   thresholds_without_triggers: GraphNode[];
   empty_sops: GraphNode[];
+  /** Corpus documents no node's `filename` names — Track 1 can reach them, Track 2 cannot. */
+  unlinked_documents: CoverageDocument[];
+  /** Nodes whose `filename` matches no ingested document, so they cite nothing. */
+  missing_documents: GraphNode[];
   total_gaps: number;
+}
+
+export interface CoverageDocument {
+  id: string;
+  label: string;
+  source_type: string | null;
+  origin: string | null;
 }
 
 export interface Hop {
