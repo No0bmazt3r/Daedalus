@@ -1,20 +1,38 @@
 <div align="center">
 
-<img src=".github/readme/banner.svg" alt="Daedalus — fully local, read-only, grounded answers" width="860">
+<img src=".github/readme/banner.svg" alt="Daedalus terminal banner: a labyrinth with Ariadne's thread, the word DAEDALUS, and boot checks — read-only sensor db, local Ollama model, two retrieval tracks, 33 deterministic tools" width="860">
 
-**A fully local, read-only chat assistant for a lab-scale CO₂ sorption reactor.**
+**A local-first, read-only chat assistant for a lab-scale CO₂ sorption reactor.**
 
-<a href="#run-it"><img src="https://img.shields.io/badge/runs-100%25_local-7aa9e8?style=for-the-badge&labelColor=161b22" alt="runs: 100% local"></a>
+<a href="#run-it"><img src="https://img.shields.io/badge/runs-local_by_default-7aa9e8?style=for-the-badge&labelColor=161b22" alt="runs: local by default"></a>
 <a href="#tests"><img src="https://img.shields.io/badge/tests-265_passing-3fb950?style=for-the-badge&labelColor=161b22" alt="tests: 265 passing"></a>
 <a href="#license"><img src="https://img.shields.io/badge/license-MIT-d2a8ff?style=for-the-badge&labelColor=161b22" alt="license: MIT"></a>
+
+<sub><samp>built with</samp></sub><br>
+<img src="https://img.shields.io/badge/Ollama-000000?style=flat-square&logo=ollama&logoColor=white" alt="Ollama">
+<img src="https://img.shields.io/badge/Hugging_Face-FFD21E?style=flat-square&logo=huggingface&logoColor=black" alt="Hugging Face">
+<img src="https://img.shields.io/badge/ChromaDB-FF6446?style=flat-square" alt="ChromaDB">
+<img src="https://img.shields.io/badge/NetworkX-2C5BB4?style=flat-square" alt="NetworkX">
+<img src="https://img.shields.io/badge/ONNX_Runtime-005CED?style=flat-square&logo=onnx&logoColor=white" alt="ONNX Runtime"><br>
+<img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+<img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI">
+<img src="https://img.shields.io/badge/Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white" alt="Pydantic">
+<img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
+<img src="https://img.shields.io/badge/Uvicorn-499848?style=flat-square" alt="Uvicorn"><br>
+<img src="https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React 19">
+<img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+<img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite">
+<img src="https://img.shields.io/badge/TanStack_Router-FF4154?style=flat-square&logo=reactquery&logoColor=white" alt="TanStack Router">
+<img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+<img src="https://img.shields.io/badge/pnpm-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm">
 
 </div>
 
 ```text
 you@daedalus:~$ cat ./about
 ask a reactor plain-language questions. get answers traceable to the exact
-database row, document page or graph node they came from. no cloud, no
-invented sensor values, no write path to the plant.
+database row, document page or graph node they came from. local by
+default, no invented sensor values, no write path to the plant.
 
 you@daedalus:~$ cat ./status
 software: built end to end.   evaluation: harness ready, not yet run.
@@ -55,9 +73,12 @@ Answer + citations + full tool trace
 
 ## Why
 
-- **Fully local.** No cloud API in the production path. A cloud model can
-  answer one turn only when explicitly picked, and that turn is logged
-  `chat_cloud` and excluded from every latency figure.
+- **Local by default.** Out of the box every answer comes from a model on
+  your machine via Ollama. Cloud models are supported as an opt-in
+  comparison baseline: none is set up initially, you add one in
+  **The Forge → Installed → Cloud endpoints**, it answers only the turn you
+  pick it for, and that turn is logged `chat_cloud` and kept out of every
+  latency figure.
 - **Read-only toward the plant — enforced, not prompted.** The sensor DB is
   opened `mode=ro` by the SQLite driver; `INSERT`/`UPDATE`/`DELETE` raise.
   A control request like *"open valve ABV-1"* is refused at the safety guard,
@@ -116,6 +137,35 @@ Method and caveats: [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
 Everything that is built, in detail: [`docs/FEATURES.md`](docs/FEATURES.md).
 
+## Screenshots
+
+<table>
+  <tr>
+    <th width="50%">Chat</th>
+    <th width="50%">Ariadne's Thread</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-chat.png" alt="Chat answering a reactor question, with citation chips and a Sources list"><br><sub><samp>grounded answer with citation chips</samp></sub></td>
+    <td align="center"><img src="docs/screenshots/20-thread.png" alt="Ariadne's Thread showing one turn's intent, tools, retrieval, evidence and validation"><br><sub><samp>every step of one turn, every number checked</samp></sub></td>
+  </tr>
+  <tr>
+    <th width="50%">The Forge · Hardware</th>
+    <th width="50%">The Forge · Benchmark</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/07-forge-hardware.png" alt="The Forge hardware tab showing the detected CPU, RAM and GPU"><br><sub><samp>this machine's memory pools, scored for fit</samp></sub></td>
+    <td align="center"><img src="docs/screenshots/09-benchmark.png" alt="A finished Forge benchmark with time-to-first-token and throughput"><br><sub><samp>TTFT on a ~2k-token RAG prompt</samp></sub></td>
+  </tr>
+  <tr>
+    <th width="50%">Labyrinth Blueprints</th>
+    <th width="50%">Storage Health</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/14-graph.png" alt="Labyrinth Blueprints showing the Track 2 knowledge graph as a diagram"><br><sub><samp>the 62-node knowledge graph</samp></sub></td>
+    <td align="center"><img src="docs/screenshots/03-databases.png" alt="Storage Health panel listing all five databases, sensor marked read-only"><br><sub><samp>five stores, sensor read-only</samp></sub></td>
+  </tr>
+</table>
+
 ## Run it
 
 **Requirements:** Python 3.11+, Node 20+ with pnpm. Ollama is optional (the
@@ -151,7 +201,8 @@ Every command, flag and safeguard: [`docs/SCRIPTS.md`](docs/SCRIPTS.md).
 ### Configuration
 
 Everything lives in `.env`, created from [`.env.example`](.env.example) by
-`setup`. It holds no secrets — nothing calls a cloud API.
+`setup`. It holds no secrets — nothing calls a cloud API until you add a
+cloud endpoint in The Forge.
 
 | Setting | Default |
 |:--|:--|
@@ -241,5 +292,14 @@ and the React code was written from scratch. Full attribution:
 ## License
 
 [MIT](LICENSE) © 2026 Sharvin A/L Kanesan
+
+## Star history
+
+<a href="https://star-history.com/#No0bmazt3r/Daedalus&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=No0bmazt3r/Daedalus&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=No0bmazt3r/Daedalus&type=Date" alt="Star history chart for No0bmazt3r/Daedalus" width="600">
+  </picture>
+</a>
 
 <sub>Banner generated by <code>python3 .github/readme/build.py</code>.</sub>
