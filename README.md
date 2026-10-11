@@ -57,6 +57,15 @@ or controlling it — so an operator can ask:
 > *"Why did the CO₂ reading spike at 10:00?"*
 > *"What do I do if the NDIR reading drifts?"*
 
+### How it works
+
+One real turn, step by step, as Ariadne's Thread recorded it:
+
+<p align="center"><img src=".github/readme/pipeline.svg" width="860" alt="How one question is answered: 01 question 'what is the current co2 concentration and reactor temperature?'; 02 intent live_status; 03 safety guard, not a control request (a request like 'open valve ABV-1' would be refused here with no tool and no model call); 04 tools, get_live_reading twice, co2_ppm 488.5 and temp_c 31.74; 05 evidence pack, two labelled lines S1 and S2; 06 model qwen3:1.7b via Ollama on this machine, 38.3 s; 07 validator, every number found in the evidence, grounded; 08 answer, co2 is 488.5 ppm [S1], temperature 31.74 °C [S2]"></p>
+
+<details>
+<summary>The same flow as text, with the retrieval branches</summary>
+
 ```
 User question
      ↓
@@ -70,6 +79,8 @@ Evidence pack → Ollama (local SLM) → response validator
      ↓
 Answer + citations + full tool trace
 ```
+
+</details>
 
 ## Why
 
@@ -111,18 +122,6 @@ multi-hop success and refusal correctness.
 
 How a run works: [`docs/EVALUATION.md`](docs/EVALUATION.md).
 
-### Measured so far
-
-Latency on the dev machine (RTX 3050 Laptop, 4 GB VRAM), `qwen3:1.7b`.
-The benchmark uses a RAG-sized prompt because a bare question flatters TTFT:
-
-| prompt | TTFT | prefill |
-|:--|--:|--:|
-| 91 tokens (bare question) | 3,399 ms | 152 ms |
-| 2,321 tokens (evidence pack) | 1,123 ms | 890 ms |
-
-Method and caveats: [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
-
 ## Features
 
 | | |
@@ -136,6 +135,35 @@ Method and caveats: [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 | **Dashboard** | Floating windows, command palette, 16 themes floored to WCAG AA |
 
 Everything that is built, in detail: [`docs/FEATURES.md`](docs/FEATURES.md).
+
+## Benchmarks
+
+Latency of `qwen3:1.7b` on the dev machine (RTX 3050 Laptop, 4 GB VRAM),
+read from the audit log. **These are not the evaluation result** — that run
+has not happened yet — but they are honest about where things stand.
+
+<p align="center"><img src=".github/readme/ttft.svg" width="860" alt="Time to first token for qwen3:1.7b. Benchmark runs with a 2.2k-token prompt: n=5, median 1.1 s, all under the 3 s target. Live chat turns: n=13, median 13.4 s, range 3.4 to 31.5 s, all over the target."></p>
+
+<p align="center"><img src=".github/readme/phases.svg" width="860" alt="Mean time per phase. Benchmark: load 0.1 s, prefill 1.2 s, generation 5.8 s, total 7.2 s. Live chat: load 1.1 s, prefill 0.8 s, generation 20.0 s, total 21.9 s."></p>
+
+| | runs | TTFT median | TTFT range | load | prefill | generation |
+|:--|--:|--:|--:|--:|--:|--:|
+| Benchmark, ~2.2k-token prompt, 128 tokens out | 5 | 1.1 s | 0.8 – 2.4 s | 0.1 s | 1.2 s | 5.8 s |
+| Live chat turns | 13 | 13.4 s | 3.4 – 31.5 s | 1.1 s | 0.8 s | 20.0 s |
+
+<sub>Phase columns are means. Live chat excludes cloud-baseline turns, as every latency figure does.</sub>
+
+**Reading it:**
+- **Prefill is not the bottleneck.** Even with a full evidence pack it averages
+  about a second; a bare question would flatter TTFT, so the benchmark uses a
+  RAG-sized prompt on purpose.
+- **Generation is.** Live chat spends ~20 s generating, against the
+  benchmark's fixed 128 tokens, and live TTFT misses the **< 3 s** target by a
+  wide margin. Closing that gap is open work, measured against this baseline.
+
+Regenerate both charts from your own audit log with
+`python3 .github/readme/build.py`. Method and caveats:
+[`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
 ## Screenshots
 
@@ -198,6 +226,9 @@ seeds a plausible run offline.
 
 Every command, flag and safeguard: [`docs/SCRIPTS.md`](docs/SCRIPTS.md).
 
+While the app runs, FastAPI serves interactive API docs at
+**<http://localhost:8000/docs>** — every endpoint, with a *Try it out* button.
+
 ### Configuration
 
 Everything lives in `.env`, created from [`.env.example`](.env.example) by
@@ -213,6 +244,17 @@ cloud endpoint in The Forge.
 
 To point Daedalus at a **real reactor database**, put it (or a symlink) at
 `data/sqlite/sensor_readings.db`. It is opened read-only regardless.
+
+### Troubleshooting
+
+| Symptom | Fix |
+|:--|:--|
+| Chat can't answer, or the model picker is empty | Ollama isn't running or has no chat model: `ollama serve`, then `ollama pull qwen3:1.7b`. The rest of the dashboard works without it |
+| `address already in use` on start | Something else holds the port. Set `BACKEND_PORT` / `FRONTEND_PORT` (for `dev`) or `DAEDALUS_PORT` (for `start`) in `.env` |
+| `pnpm is not installed` during setup | `setup` tries corepack first; if that's unavailable, `npm i -g pnpm` and re-run `./daedalus.sh setup` |
+| Sensor answers say there's no data | The sensor DB is empty. Settings → System → Storage Health → *Generate demo data* |
+| Broken after a `git pull` | `./sync.sh` — installs new deps, backfills `.env`, applies migrations |
+| `reset.sh` refuses to run | Daedalus is still running. Stop it (Ctrl-C) first — deleting a live SQLite file corrupts it |
 
 ## Architecture
 
@@ -281,6 +323,15 @@ Plain-language progress: [`docs/STATUS.md`](docs/STATUS.md) · item by item: [`T
 **Out of scope, deliberately:** cloud LLMs in production · any write path to
 the plant · anomaly detection · auth/multi-tenancy · fine-tuning.
 
+## Author
+
+| | |
+|:--|:--|
+| **Author** | Sharvin A/L Kanesan |
+| **Supervisor** | Ts. Dr Yew Kwang Hooi |
+| **Programme** | Bachelor of Computer Science (Hons), Universiti Teknologi PETRONAS |
+| **Project** | Final Year Project, 2026 |
+
 ## Credits
 
 The dashboard's theme engine, settings shell and prefs API were modelled on
@@ -293,13 +344,4 @@ and the React code was written from scratch. Full attribution:
 
 [MIT](LICENSE) © 2026 Sharvin A/L Kanesan
 
-## Star history
-
-<a href="https://star-history.com/#No0bmazt3r/Daedalus&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=No0bmazt3r/Daedalus&type=Date&theme=dark">
-    <img src="https://api.star-history.com/svg?repos=No0bmazt3r/Daedalus&type=Date" alt="Star history chart for No0bmazt3r/Daedalus" width="600">
-  </picture>
-</a>
-
-<sub>Banner generated by <code>python3 .github/readme/build.py</code>.</sub>
+<sub>Banner, pipeline animation and charts generated by <code>python3 .github/readme/build.py</code>.</sub>
