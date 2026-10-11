@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="150" viewBox="0 0 860 150" role="img" aria-label="The Forge: detect this machine's hardware, estimate each model's memory, score its fit, pull it through Ollama, benchmark it on a RAG-sized prompt, and commit the choice">
+<defs><filter id="pglow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="3"/></filter></defs>
+<rect width="860" height="150" rx="10" fill="#0d1117"/>
+<path d="M0 10a10 10 0 0 1 10-10h840a10 10 0 0 1 10 10v20H0z" fill="#161b22"/>
+<circle cx="20" cy="15" r="5.5" fill="#ff5f57"/>
+<circle cx="38" cy="15" r="5.5" fill="#febc2e"/>
+<circle cx="56" cy="15" r="5.5" fill="#28c840"/>
+<text x="430" y="19" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" text-anchor="middle">the forge — hardware &amp; model console</text>
+<polyline points="146.0,72.0 162.0,72.0" fill="none" stroke="#30363d" stroke-width="1.5"/>
+<polyline points="284.0,72.0 300.0,72.0" fill="none" stroke="#30363d" stroke-width="1.5"/>
+<polyline points="422.0,72.0 438.0,72.0" fill="none" stroke="#30363d" stroke-width="1.5"/>
+<polyline points="560.0,72.0 576.0,72.0" fill="none" stroke="#30363d" stroke-width="1.5"/>
+<polyline points="698.0,72.0 714.0,72.0" fill="none" stroke="#30363d" stroke-width="1.5"/>
+<path d="M85.0 72.0 L146.0 72.0 L162.0 72.0 L223.0 72.0 L284.0 72.0 L300.0 72.0 L361.0 72.0 L422.0 72.0 L438.0 72.0 L499.0 72.0 L560.0 72.0 L576.0 72.0 L637.0 72.0 L698.0 72.0 L714.0 72.0 L775.0 72.0" fill="none" stroke="#3fb950" stroke-width="2" stroke-dasharray="690.0" stroke-dashoffset="690.0" opacity=".55"><animate attributeName="stroke-dashoffset" values="690.0;690.0;690.0;552.0;552.0;414.0;414.0;276.0;276.0;138.0;138.0;0.0;0.0;0" keyTimes="0;0.0545;0.1589;0.1936;0.2980;0.3328;0.4372;0.4720;0.5764;0.6112;0.7156;0.7504;0.8548;1" dur="11.02s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.0009;0.9455" dur="11.02s" repeatCount="indefinite"/></path>
+<rect x="24" y="52" width="122" height="40" rx="6" fill="#161b22" stroke="#30363d"/>
+<rect x="24" y="52" width="122" height="40" rx="6" fill="#12261a" stroke="#3fb950" opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.0545;0.9455" dur="11.02s" repeatCount="indefinite"/></rect>
+<text x="34" y="69" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#c9d1d9">detect</text>
+<text x="34" y="84" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8b949e">cpu · ram · vram</text>
+<rect x="162" y="52" width="122" height="40" rx="6" fill="#161b22" stroke="#30363d"/>
+<rect x="162" y="52" width="122" height="40" rx="6" fill="#12261a" stroke="#3fb950" opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.1936;0.9455" dur="11.02s" repeatCount="indefinite"/></rect>
+<text x="172" y="69" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#c9d1d9">estimate</text>
+<text x="172" y="84" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8b949e">model × quant</text>
+<rect x="300" y="52" width="122" height="40" rx="6" fill="#161b22" stroke="#30363d"/>
+<rect x="300" y="52" width="122" height="40" rx="6" fill="#12261a" stroke="#3fb950" opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.3328;0.9455" dur="11.02s" repeatCount="indefinite"/></rect>
+<text x="310" y="69" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#c9d1d9">fit verdict</text>
+<text x="310" y="84" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8b949e">both memory pools</text>
+<rect x="438" y="52" width="122" height="40" rx="6" fill="#161b22" stroke="#30363d"/>
+<rect x="438" y="52" width="122" height="40" rx="6" fill="#12261a" stroke="#3fb950" opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.4720;0.9455" dur="11.02s" repeatCount="indefinite"/></rect>
+<text x="448" y="69" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#c9d1d9">pull</text>
+<text x="448" y="84" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8b949e">via ollama</text>
+<rect x="576" y="52" width="122" height="40" rx="6" fill="#161b22" stroke="#30363d"/>
+<rect x="576" y="52" width="122" height="40" rx="6" fill="#12261a" stroke="#3fb950" opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.6112;0.9455" dur="11.02s" repeatCount="indefinite"/></rect>
+<text x="586" y="69" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#c9d1d9">benchmark</text>
+<text x="586" y="84" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8b949e">~2k-token prompt</text>
+<rect x="714" y="52" width="122" height="40" rx="6" fill="#161b22" stroke="#30363d"/>
+<rect x="714" y="52" width="122" height="40" rx="6" fill="#12261a" stroke="#3fb950" opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.7504;0.9455" dur="11.02s" repeatCount="indefinite"/></rect>
+<text x="724" y="69" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#c9d1d9">commit</text>
+<text x="724" y="84" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8b949e">model_config.json</text>
+<g><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.0009;0.9455" dur="11.02s" repeatCount="indefinite"/><circle r="7" fill="#3fb950" opacity=".6" filter="url(#pglow)"><animateMotion path="M85.0 72.0 L146.0 72.0 L162.0 72.0 L223.0 72.0 L284.0 72.0 L300.0 72.0 L361.0 72.0 L422.0 72.0 L438.0 72.0 L499.0 72.0 L560.0 72.0 L576.0 72.0 L637.0 72.0 L698.0 72.0 L714.0 72.0 L775.0 72.0" keyPoints="0;0.0000;0.0000;0.2000;0.2000;0.4000;0.4000;0.6000;0.6000;0.8000;0.8000;1.0000;1.0000;1" keyTimes="0;0.0545;0.1589;0.1936;0.2980;0.3328;0.4372;0.4720;0.5764;0.6112;0.7156;0.7504;0.8548;1" calcMode="linear" dur="11.02s" repeatCount="indefinite"/></circle><circle r="4" fill="#d2ffd8"><animateMotion path="M85.0 72.0 L146.0 72.0 L162.0 72.0 L223.0 72.0 L284.0 72.0 L300.0 72.0 L361.0 72.0 L422.0 72.0 L438.0 72.0 L499.0 72.0 L560.0 72.0 L576.0 72.0 L637.0 72.0 L698.0 72.0 L714.0 72.0 L775.0 72.0" keyPoints="0;0.0000;0.0000;0.2000;0.2000;0.4000;0.4000;0.6000;0.6000;0.8000;0.8000;1.0000;1.0000;1" keyTimes="0;0.0545;0.1589;0.1936;0.2980;0.3328;0.4372;0.4720;0.5764;0.6112;0.7156;0.7504;0.8548;1" calcMode="linear" dur="11.02s" repeatCount="indefinite"/></circle></g>
+<text x="24" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#8b949e">forge:~$</text>
+<g opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.0545;0.1936" dur="11.02s" repeatCount="indefinite"/><text x="88.8" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3fb950">i5-11400H · 7.8 GB RAM · RTX 3050, 4 GB VRAM</text></g>
+<g opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.1936;0.3328" dur="11.02s" repeatCount="indefinite"/><text x="88.8" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3fb950">qwen3:1.7b · Q4_K_M · 1.3 GB on disk</text></g>
+<g opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.3328;0.4720" dur="11.02s" repeatCount="indefinite"/><text x="88.8" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3fb950">verdict: safe   (safe / marginal / will_not_fit)</text></g>
+<g opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.4720;0.6112" dur="11.02s" repeatCount="indefinite"/><text x="88.8" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3fb950">ollama pull qwen3:1.7b</text></g>
+<g opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.6112;0.7504" dur="11.02s" repeatCount="indefinite"/><text x="88.8" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3fb950">TTFT median 1.1 s over 5 runs</text></g>
+<g opacity="0"><animate attributeName="opacity" values="0;1;0" calcMode="discrete" keyTimes="0;0.7504;0.9455" dur="11.02s" repeatCount="indefinite"/><text x="88.8" y="124" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3fb950">committed — chat now answers with qwen3:1.7b</text></g>
+</svg>

@@ -2,7 +2,9 @@
 
 - banner.svg    animated terminal boot: a block labyrinth, Ariadne's thread,
                 DAEDALUS in ANSI Shadow, then boot checks
-- pipeline.svg  animated walk of one real chat turn through the pipeline
+- architecture.svg  a packet carries one real question through every component
+- retrieval.svg     track 1 and track 2 searching the knowledge base, side by side
+- forge.svg, ingest.svg  the forge's model flow and blueprints' corpus build
 - ttft.svg      time to first token, benchmark vs live chat   } read from
 - phases.svg    where an answer's time goes                    } logs/ai_logs.db
 
@@ -209,74 +211,304 @@ def build():
     Path(__file__).with_name("banner.svg").write_text("\n".join(s) + "\n", encoding="utf-8")
 
 
-# ── pipeline.svg ─────────────────────────────────────────────────────────────
-# One real turn, copied from Ariadne's Thread (q_20261011_111807373513).
-STAGES = [
-    ("question", "what is the current co2 concentration and reactor temperature?"),
-    ("intent", "live_status"),
-    ("safety guard", "not a control request → continue"),
-    ("tools", "get_live_reading ×2 → co2_ppm 488.5 · temp_c 31.74  (1 ms)"),
-    ("evidence pack", "2 labelled lines: [S1] co2_ppm  [S2] temp_c"),
-    ("model", "qwen3:1.7b via ollama, on this machine · 38.3 s"),
-    ("validator", "every number found in the evidence → grounded"),
-    ("answer", "co2 is 488.5 ppm [S1], temperature 31.74 °C [S2]"),
-]
-TEXT, MUTED = "#c9d1d9", "#8b949e"
+# ── animated flows ───────────────────────────────────────────────────────────
+# One engine: boxes, edges, and a packet that travels a route through them,
+# lighting each box as it arrives while a caption line narrates the real values.
+TEXT, MUTED, EDGE, LIT = "#c9d1d9", "#8b949e", "#30363d", "#12261a"
+SPEED, HOLD = 360, 1.15            # px/s along an edge; seconds parked on a box
 
 
-def card(w, h, title):
+def card(w, h, title, heading):
     return [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
-            f'role="img" aria-label="{title}">',
+            f'role="img" aria-label="{esc(title)}">',
+            '<defs><filter id="pglow" x="-200%" y="-200%" width="500%" height="500%">'
+            '<feGaussianBlur stdDeviation="3"/></filter></defs>',
             f'<rect width="{w}" height="{h}" rx="10" fill="{BG}"/>',
             f'<path d="M0 10a10 10 0 0 1 10-10h{w - 20}a10 10 0 0 1 10 10v20H0z" fill="{BAR}"/>',
             *[f'<circle cx="{20 + i * 18}" cy="15" r="5.5" fill="{c}"/>'
-              for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"])]]
+              for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"])],
+            f'<text x="{w // 2}" y="19" fill="{MUTED}" {FONT} font-size="12" text-anchor="middle">{esc(heading)}</text>']
 
 
-def pulse(at, cycle, hold=0.3):
-    """Opacity that switches on at `at`, holds, and resets before the loop repeats."""
-    k = [0, at / cycle, (at + hold) / cycle, (cycle - 0.8) / cycle, 1]
-    return (f'<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="{";".join(f"{x:.3f}" for x in k)}" '
-            f'dur="{cycle}s" repeatCount="indefinite"/>')
+def window(on, off, cycle):
+    """Discrete opacity: hidden, shown from `on` to `off`, hidden again; loops."""
+    return (f'<animate attributeName="opacity" values="0;1;0" calcMode="discrete" '
+            f'keyTimes="0;{on / cycle:.4f};{off / cycle:.4f}" dur="{cycle:.2f}s" repeatCount="indefinite"/>')
 
 
-def pipeline():
-    row, top, step = 44, 92, 1.3
-    cycle = 2 + len(STAGES) * step + 3
-    H = top + len(STAGES) * row + 56
-    s = card(W, H, "How Daedalus answers: a question passes intent, a safety guard, deterministic tools, "
-                   "an evidence pack, the local model and a validator before the cited answer is shown")
-    s.append(f'<text x="{W // 2}" y="19" fill="{MUTED}" {FONT} font-size="12" text-anchor="middle">'
-             'daedalus — how one question is answered</text>')
-    s.append(f'<text x="24" y="62" {FONT} font-size="14" fill="{MUTED}">you@daedalus:~$ '
-             f'<tspan fill="{GREEN}">trace q_20261011_111807373513</tspan></text>')
-    # rail behind the stage boxes, and a packet riding it
-    x_box, w_box = 24, 196
-    rail_x = x_box + 14
-    s.append(f'<line x1="{rail_x}" y1="{top + 17}" x2="{rail_x}" y2="{top + (len(STAGES) - 1) * row + 17}" '
-             f'stroke="#30363d" stroke-width="2"/>')
-    for i, (name, detail) in enumerate(STAGES):
-        y = top + i * row
-        at = 1 + i * step
-        s.append(f'<rect x="{x_box}" y="{y}" width="{w_box}" height="34" rx="6" fill="{BAR}" stroke="#30363d"/>')
-        s.append(f'<rect x="{x_box}" y="{y}" width="{w_box}" height="34" rx="6" fill="#12261a" '
-                 f'stroke="{GREEN}" opacity="0">{pulse(at, cycle)}</rect>')
-        s.append(f'<circle cx="{rail_x}" cy="{y + 17}" r="4" fill="#30363d"/>')
-        s.append(f'<circle cx="{rail_x}" cy="{y + 17}" r="4" fill="{GREEN}" opacity="0">{pulse(at, cycle)}</circle>')
-        s.append(f'<text x="{rail_x + 16}" y="{y + 22}" {FONT} font-size="13" fill="{TEXT}">'
-                 f'<tspan fill="{MUTED}">{i + 1:02d}</tspan>  {name}</text>')
-        fill = GREEN if i == len(STAGES) - 1 else TEXT
-        s.append(f'<g opacity="0">{pulse(at + 0.25, cycle)}'
-                 f'<text x="{x_box + w_box + 28}" y="{y + 22}" {FONT} font-size="13" fill="{MUTED}">&gt; '
-                 f'<tspan fill="{fill}">{detail}</tspan></text></g>')
-    # the branch a control request takes
-    y = top + 2 * row
-    s.append(f'<g opacity="0">{pulse(1 + 2 * step + 0.6, cycle)}<text x="{x_box + w_box + 28}" y="{y + 36}" '
-             f'{FONT} font-size="11" fill="{THREAD}">  "open valve ABV-1" would stop here: refused, no tool, no model call</text></g>')
-    s.append(f'<text x="24" y="{H - 22}" {FONT} font-size="12" fill="{MUTED}">every step is logged on one '
-             'query_id and replayable in ariadne\'s thread</text>')
+def esc(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+class Flow:
+    def __init__(self, w, h, title, heading, bw=182, bh=40):
+        self.w, self.h, self.bw, self.bh = w, h, bw, bh
+        self.s = card(w, h, title, heading)
+        self.nodes, self.edges = {}, {}
+
+    def box(self, key, x, y, name, sub, tone=None):
+        self.nodes[key] = (x, y, name, sub, tone)
+
+    def c(self, k):
+        x, y, *_ = self.nodes[k]
+        return x + self.bw / 2, y + self.bh / 2
+
+    def edge(self, a, b, pts=None, tone=None):
+        if pts is None:
+            (ax, ay, *_), (bx, by, *_) = self.nodes[a], self.nodes[b]
+            (acx, acy), (bcx, bcy) = self.c(a), self.c(b)
+            if ay == by:                                   # same row
+                pts = [(ax + self.bw, acy), (bx, bcy)] if bx > ax else [(ax, acy), (bx + self.bw, bcy)]
+            elif ax == bx:                                 # same column
+                pts = [(acx, ay + self.bh), (bcx, by)] if by > ay else [(acx, ay), (bcx, by + self.bh)]
+            else:                                          # elbow through the gap between columns
+                mx = (ax + self.bw + bx) / 2
+                pts = [(ax + self.bw, acy), (mx, acy), (mx, bcy), (bx, bcy)]
+        self.edges[(a, b)] = (pts, tone)
+
+    def render(self, route, captions, cap_y, prompt="you@daedalus:~$"):
+        s = self.s
+        for (pts, tone) in self.edges.values():
+            col, dash = (THREAD, ' stroke-dasharray="4 4"') if tone == "bad" else (EDGE, "")
+            s.append(f'<polyline points="{" ".join(f"{x:.1f},{y:.1f}" for x, y in pts)}" fill="none" '
+                     f'stroke="{col}" stroke-width="1.5"{dash}/>')
+        # schedule: arrive/depart times per stop, and the packet's path through them
+        path, at, t, length, stops = [], [], 0.6, 0.0, []
+        for i, k in enumerate(route):
+            if i == 0:
+                path.append(self.c(k))
+            else:
+                pts = self.edges[(route[i - 1], k)][0]
+                seg = [path[-1], *pts, self.c(k)]
+                for p, q in zip(seg, seg[1:]):
+                    length += abs(q[0] - p[0]) + abs(q[1] - p[1])
+                path += seg[1:]
+                t += max(0.35, (sum(abs(q[0] - p[0]) + abs(q[1] - p[1]) for p, q in zip(seg, seg[1:]))) / SPEED)
+            stops.append((t, length))
+            t += HOLD
+        cycle = t + 1.6
+        # trail of where the packet has been
+        d = "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in path)
+        kt, kv = ["0"], [f"{length:.1f}"]
+        for (a, l) in stops:
+            kt += [f"{a / cycle:.4f}", f"{min(a + HOLD, cycle - 1) / cycle:.4f}"]
+            kv += [f"{length - l:.1f}"] * 2
+        kt.append("1"); kv.append("0")
+        s.append(f'<path d="{d}" fill="none" stroke="{GREEN}" stroke-width="2" stroke-dasharray="{length:.1f}" '
+                 f'stroke-dashoffset="{length:.1f}" opacity=".55"><animate attributeName="stroke-dashoffset" '
+                 f'values="{";".join(kv)}" keyTimes="{";".join(kt)}" dur="{cycle:.2f}s" repeatCount="indefinite"/>'
+                 f'{window(0.01, cycle - 0.6, cycle)}</path>')
+        # boxes, lit on arrival
+        arrive = {k: stops[i][0] for i, k in enumerate(route)}
+        for k, (x, y, name, sub, tone) in self.nodes.items():
+            stroke = THREAD if tone == "bad" else EDGE
+            s.append(f'<rect x="{x}" y="{y}" width="{self.bw}" height="{self.bh}" rx="6" fill="{BAR}" stroke="{stroke}"/>')
+            if k in arrive:
+                s.append(f'<rect x="{x}" y="{y}" width="{self.bw}" height="{self.bh}" rx="6" fill="{LIT}" '
+                         f'stroke="{GREEN}" opacity="0">{window(arrive[k], cycle - 0.6, cycle)}</rect>')
+            s.append(f'<text x="{x + 10}" y="{y + 17}" {FONT} font-size="12" '
+                     f'fill="{THREAD if tone == "bad" else TEXT}">{esc(name)}</text>')
+            s.append(f'<text x="{x + 10}" y="{y + 32}" {FONT} font-size="10" fill="{MUTED}">{esc(sub)}</text>')
+        # the packet
+        kp = ["0"]
+        for (a, l) in stops:
+            kp += [f"{l / length:.4f}"] * 2
+        kp.append("1")
+        motion = (f'<animateMotion path="{d}" keyPoints="{";".join(kp)}" keyTimes="{";".join(kt)}" '
+                  f'calcMode="linear" dur="{cycle:.2f}s" repeatCount="indefinite"/>')
+        s.append(f'<g>{window(0.01, cycle - 0.6, cycle)}'
+                 f'<circle r="7" fill="{GREEN}" opacity=".6" filter="url(#pglow)">{motion}</circle>'
+                 f'<circle r="4" fill="#d2ffd8">{motion}</circle></g>')
+        # caption line narrating each stop
+        s.append(f'<text x="24" y="{cap_y}" {FONT} font-size="12" fill="{MUTED}">{prompt}</text>')
+        for i, cap in enumerate(captions):
+            on = stops[i][0]
+            off = stops[i + 1][0] if i + 1 < len(stops) else cycle - 0.6
+            s.append(f'<g opacity="0">{window(on, off, cycle)}<text x="{24 + (len(prompt) + 1) * 7.2:.1f}" '
+                     f'y="{cap_y}" {FONT} font-size="12" fill="{GREEN}">{esc(cap)}</text></g>')
+        s.append('</svg>')
+        return "\n".join(s) + "\n"
+
+
+def write(name, svg):
+    Path(__file__).with_name(name).write_text(svg, encoding="utf-8")
+
+
+def architecture():
+    X = [24, 234, 444, 654]
+    f = Flow(W, 372, "How Daedalus answers a question: the dashboard sends it to FastAPI, intent is classified, "
+                     "a safety guard refuses control requests, deterministic tools read the read-only sensor "
+                     "database (or Track 1 / Track 2 search the knowledge base), an evidence pack goes to the "
+                     "local Ollama model, a validator checks every number, and a cited answer streams back",
+             "daedalus — how one question is answered")
+    f.box("you", X[0], 52, "01 you", "type in the dashboard")
+    f.box("api", X[1], 52, "02 fastapi", "POST /api/chat")
+    f.box("intent", X[2], 52, "03 intent", "live · trend · procedure")
+    f.box("guard", X[3], 52, "04 safety guard", "control? → refuse")
+    f.box("refused", X[3], 132, "refused", "no tool · no model call", tone="bad")
+    f.box("tools", X[0], 132, "05 sensor tools", "deterministic, 33 total")
+    f.box("sqlite", X[1], 132, "06 sqlite", "sensor db · mode=ro")
+    f.box("t1", X[0], 186, "track 1 · vector", "embed → top-k → re-rank")
+    f.box("chroma", X[1], 186, "chromadb", "887 chunks")
+    f.box("t2", X[0], 240, "track 2 · graph", "alias entry → hops")
+    f.box("graph", X[1], 240, "knowledge graph", "62 nodes")
+    f.box("evidence", X[2], 186, "07 evidence pack", "labelled [S1] [S2] …")
+    f.box("ollama", X[3], 186, "08 ollama", "qwen3:1.7b · local")
+    f.box("validator", X[3], 260, "09 validator", "every number in evidence?")
+    f.box("answer", X[2], 260, "10 answer", "cited, streamed back")
+    for a, b in [("you", "api"), ("api", "intent"), ("intent", "guard"), ("tools", "sqlite"),
+                 ("t1", "chroma"), ("t2", "graph"), ("sqlite", "evidence"), ("chroma", "evidence"),
+                 ("graph", "evidence"), ("evidence", "ollama"), ("ollama", "validator"), ("validator", "answer")]:
+        f.edge(a, b)
+    f.edge("guard", "refused", tone="bad")
+    gx = X[3] + f.bw / 2
+    for k in ("tools", "t1", "t2"):        # a trunk down the left margin feeds all three routes
+        f.edge("guard", k, [(gx, 92), (gx, 114), (12, 114), (12, f.c(k)[1]), (X[0], f.c(k)[1])])
+    svg = f.render(
+        ["you", "api", "intent", "guard", "tools", "sqlite", "evidence", "ollama", "validator", "answer"],
+        ['"what is the current co2 concentration and reactor temperature?"',
+         "POST /api/chat · query_id q_20261011_111807373513",
+         "intent = live_status → sensor tools, not the knowledge base",
+         'not a control request → continue  ("open valve ABV-1" stops here)',
+         "get_live_reading ×2 · 1 ms",
+         "co2_ppm 488.5 · temp_c 31.74 · read-only connection",
+         "[S1] co2_ppm 488.5 ppm   [S2] temp_c 31.74 °C",
+         "qwen3:1.7b phrases only the evidence · 38.3 s on an RTX 3050",
+         "488.5 ✓  31.74 ✓  → grounded",
+         "co2 is 488.5 ppm [S1], temperature 31.74 °C [S2]"],
+        cap_y=338)
+    write("architecture.svg", svg)
+
+
+def strip(name, heading, title, stages, captions, prompt):
+    n = len(stages)
+    bw, gap = 122, 16
+    x0 = (W - (n * bw + (n - 1) * gap)) // 2
+    f = Flow(W, 150, title, heading, bw=bw)
+    for i, (nm, sub) in enumerate(stages):
+        f.box(i, x0 + i * (bw + gap), 52, nm, sub)
+    for i in range(n - 1):
+        f.edge(i, i + 1)
+    write(name, f.render(list(range(n)), captions, cap_y=124, prompt=prompt))
+
+
+def forge():
+    strip("forge.svg", "the forge — hardware & model console",
+          "The Forge: detect this machine's hardware, estimate each model's memory, score its fit, "
+          "pull it through Ollama, benchmark it on a RAG-sized prompt, and commit the choice",
+          [("detect", "cpu · ram · vram"), ("estimate", "model × quant"), ("fit verdict", "both memory pools"),
+           ("pull", "via ollama"), ("benchmark", "~2k-token prompt"), ("commit", "model_config.json")],
+          ["i5-11400H · 7.8 GB RAM · RTX 3050, 4 GB VRAM",
+           "qwen3:1.7b · Q4_K_M · 1.3 GB on disk",
+           "verdict: safe   (safe / marginal / will_not_fit)",
+           "ollama pull qwen3:1.7b",
+           "TTFT median 1.1 s over 5 runs",
+           "committed — chat now answers with qwen3:1.7b"],
+          "forge:~$")
+
+
+def ingest():
+    strip("ingest.svg", "labyrinth blueprints — build the corpus",
+          "Labyrinth Blueprints, Track 1 build: upload a document, extract its text, chunk it, embed the "
+          "chunks with a local model, and store them in ChromaDB with each document's category and origin",
+          [("upload", "pdf · category"), ("extract", "pypdf, locked too"), ("chunk", "1,500 chars"),
+           ("embed", "local model"), ("store", "chromadb"), ("record", "corpus.db")],
+          ["Fuji_ZRE3_NDIR_Analyzer_Manual.pdf · manual · reference · 85 pages",
+           "text out, including AES-locked and font-shifted PDFs",
+           "recursive split · 1,500 chars · 200 overlap · context header",
+           "qwen3-embedding:0.6b → 1,024-d vectors",
+           "vectors into chromadb, embedded in the API process",
+           "17 documents · 887 chunks · every run replayable"],
+          "blueprints:~$")
+
+
+def retrieval():
+    """Both tracks searching for the same question, side by side."""
+    H, cycle = 420, 13.0
+    s = card(W, H, "Searching the knowledge base. Track 1 embeds the question, pulls 20 candidate chunks from "
+                   "ChromaDB and re-ranks them to keep the best 5. Track 2 enters the graph by alias at "
+                   "'NDIR reading drift', hops RESOLVED_BY to the NDIR calibration SOP and CONTAINS to its "
+                   "three steps, under a 6 second, 4 step budget",
+             "daedalus — searching the knowledge base")
+    s.append(f'<text x="24" y="58" {FONT} font-size="13" fill="{MUTED}">q: '
+             f'<tspan fill="{TEXT}">"what do i do if the ndir reading drifts?"</tspan></text>')
+    mid = W // 2
+    s.append(f'<line x1="{mid}" y1="76" x2="{mid}" y2="{H - 20}" stroke="{EDGE}"/>')
+    # ── track 1 ──
+    lx = 24
+    s.append(f'<text x="{lx}" y="96" {FONT} font-size="13" fill="{TEXT}">track 1 · vector rag</text>')
+    steps1 = [(0.6, "embed   qwen3-embedding:0.6b → 1,024-d"),
+              (2.4, "search  chromadb · 887 chunks → 20 candidates"),
+              (5.6, "re-rank ms-marco-minilm-l6 → keep top 5"),
+              (8.6, "→ evidence pack, each chunk cited")]
+    for i, (t, txt) in enumerate(steps1):
+        s.append(f'<g opacity="0">{window(t, cycle - 0.5, cycle)}<text x="{lx}" y="{120 + i * 18}" {FONT} '
+                 f'font-size="11" fill="{MUTED}">{esc(txt)}</text></g>')
+    # the query vector: a strip of cells
+    rng = random.Random(3)
+    for j in range(32):
+        shade = rng.choice(["#1f6f2b", "#2ea043", "#3fb950", "#238636", "#196c2e"])
+        s.append(f'<rect x="{lx + j * 11}" y="200" width="9" height="9" rx="1" fill="{shade}" opacity="0">'
+                 f'{window(0.8 + j * 0.03, cycle - 0.5, cycle)}</rect>')
+    # 20 candidates: first-pass scores, then re-ranked scores
+    first = sorted((rng.uniform(.45, .9) for _ in range(20)), reverse=True)
+    rerank = [rng.uniform(.05, .5) for _ in range(20)]
+    for j in rng.sample(range(20), 5):
+        rerank[j] = rng.uniform(.75, .98)
+    top = set(sorted(range(20), key=lambda j: -rerank[j])[:5])
+    for j in range(20):
+        y = 224 + j * 8
+        w1, w2 = first[j] * 300, rerank[j] * 300
+        col = GREEN if j in top else "#30363d"
+        s.append(f'<rect x="{lx}" y="{y}" height="5" rx="2" width="{w1:.1f}" fill="#484f58" opacity="0">'
+                 f'{window(2.6 + j * 0.05, cycle - 0.5, cycle)}'
+                 f'<animate attributeName="width" values="{w1:.1f};{w1:.1f};{w2:.1f};{w2:.1f}" '
+                 f'keyTimes="0;{5.8 / cycle:.4f};{6.8 / cycle:.4f};1" dur="{cycle}s" repeatCount="indefinite"/>'
+                 f'<animate attributeName="fill" values="#484f58;{col}" calcMode="discrete" '
+                 f'keyTimes="0;{6.9 / cycle:.4f}" dur="{cycle}s" repeatCount="indefinite"/></rect>')
+    s.append(f'<text x="{lx}" y="{H - 18}" {FONT} font-size="10" fill="{MUTED}">bar = relevance score, illustrative</text>')
+    # ── track 2 ──
+    rx = mid + 24
+    s.append(f'<text x="{rx}" y="96" {FONT} font-size="13" fill="{TEXT}">track 2 · agentic graphrag</text>')
+    steps2 = [(0.6, 'entry   alias "ndir reading drifts" → AnomalyType'),
+              (3.0, "hop 1   RESOLVED_BY → SOP: NDIR calibration"),
+              (5.6, "hop 2   CONTAINS → 3 steps"),
+              (8.6, "model: enough → stop  (budget 4 steps, 6 s)")]
+    for i, (t, txt) in enumerate(steps2):
+        s.append(f'<g opacity="0">{window(t, cycle - 0.5, cycle)}<text x="{rx}" y="{120 + i * 18}" {FONT} '
+                 f'font-size="11" fill="{MUTED}">{esc(txt)}</text></g>')
+    gn = {  # node: (x, y, label, lit_at or None)
+        "drift": (rx + 10, 290, "NDIR reading drift", 1.0),
+        "cal": (rx + 120, 236, "SOP · NDIR calibration", 3.4),
+        "fuji": (rx + 120, 340, "SOP · Fuji NDIR maint.", None),
+        "s1": (rx + 255, 214, "isolate analyser", 6.0),
+        "s2": (rx + 255, 258, "zero with N₂", 6.3),
+        "s3": (rx + 255, 302, "span with gas", 6.6),
+        "co2": (rx + 10, 200, "Sensor: co2_ppm", None),
+        "brk": (rx + 10, 372, "co2 breakthrough", None),
+    }
+    links = [("drift", "cal", 3.0), ("drift", "fuji", None), ("cal", "s1", 5.6), ("cal", "s2", 5.6),
+             ("cal", "s3", 5.6), ("brk", "cal", None)]
+    for a, b, t in links:
+        (ax, ay, *_), (bx, by, *_) = gn[a], gn[b]
+        s.append(f'<line x1="{ax + 4}" y1="{ay}" x2="{bx - 4}" y2="{by}" stroke="{EDGE}" stroke-width="1.5"/>')
+        if t is not None:
+            ln = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+            s.append(f'<line x1="{ax + 4}" y1="{ay}" x2="{bx - 4}" y2="{by}" stroke="{GREEN}" stroke-width="2" '
+                     f'stroke-dasharray="{ln:.1f}" stroke-dashoffset="{ln:.1f}">'
+                     f'<animate attributeName="stroke-dashoffset" values="{ln:.1f};{ln:.1f};0;0" '
+                     f'keyTimes="0;{t / cycle:.4f};{(t + 0.5) / cycle:.4f};1" dur="{cycle}s" repeatCount="indefinite"/>'
+                     f'</line>')
+    for k, (x, y, label, t) in gn.items():
+        s.append(f'<circle cx="{x}" cy="{y}" r="5" fill="#30363d"/>')
+        if t is not None:
+            s.append(f'<circle cx="{x}" cy="{y}" r="6" fill="{GREEN}" opacity="0">{window(t, cycle - 0.5, cycle)}</circle>')
+        ly = y + 18 if k in ("cal", "fuji") else y + 4      # sop labels sit under their node, clear of the edges
+        lx = x - 30 if k in ("cal", "fuji") else x + 10
+        s.append(f'<text x="{lx}" y="{ly}" {FONT} font-size="10" fill="{TEXT if t else MUTED}">{esc(label)}</text>')
+    s.append(f'<text x="{rx}" y="{H - 18}" {FONT} font-size="10" fill="{MUTED}">real nodes and edges from knowledge_graph.yaml · walk illustrative</text>')
     s.append('</svg>')
-    Path(__file__).with_name("pipeline.svg").write_text("\n".join(s) + "\n", encoding="utf-8")
+    write("retrieval.svg", "\n".join(s) + "\n")
 
 
 # ── latency charts ───────────────────────────────────────────────────────────
@@ -298,8 +530,7 @@ def ttft_chart(data):
     w, h, x0, x1 = W, 250, 250, W - 40
     vmax = 35
     sx = lambda ms: x0 + (ms / 1000) / vmax * (x1 - x0)
-    s = card(w, h, f"Time to first token for {MODEL}: benchmark runs vs live chat turns, against the 3 second target")
-    s.append(f'<text x="{W // 2}" y="19" fill="{MUTED}" {FONT} font-size="12" text-anchor="middle">daedalus — latency</text>')
+    s = card(w, h, f"Time to first token for {MODEL}: benchmark runs vs live chat turns, against the 3 second target", "daedalus — latency")
     s.append(f'<text x="24" y="60" {FONT} font-size="14" fill="{TEXT}">time to first token · {MODEL} · '
              'RTX 3050 Laptop, 4 GB VRAM</text>')
     base = 196
@@ -339,8 +570,7 @@ def phases_chart(data):
     means = {k: [statistics.mean(r[j] for r in data[k]) for j in (1, 2, 3)] for k in data}
     vmax = 25
     scale = (x1 - x0) / (vmax * 1000)
-    s = card(w, h, "Mean time per phase for one answer, benchmark vs live chat: generation dominates, prefill stays small")
-    s.append(f'<text x="{W // 2}" y="19" fill="{MUTED}" {FONT} font-size="12" text-anchor="middle">daedalus — latency</text>')
+    s = card(w, h, "Mean time per phase for one answer, benchmark vs live chat: generation dominates, prefill stays small", "daedalus — latency")
     s.append(f'<text x="24" y="60" {FONT} font-size="14" fill="{TEXT}">where an answer\'s time goes · mean per phase</text>')
     lx = 24
     for name, col in SERIES:   # legend, one row above the plot
@@ -372,7 +602,10 @@ def phases_chart(data):
 
 if __name__ == "__main__":
     build()
-    pipeline()
+    architecture()
+    retrieval()
+    forge()
+    ingest()
     if DB.exists():
         data = runs()
         ttft_chart(data)
