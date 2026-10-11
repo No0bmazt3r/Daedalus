@@ -85,12 +85,14 @@ Answer + citations + full tool trace
 
 ## Why
 
-- **Local by default.** Out of the box every answer comes from a model on
-  your machine via Ollama. Cloud models are supported as an opt-in
-  comparison baseline: none is set up initially, you add one in
-  **The Forge → Installed → Cloud endpoints**, it answers only the turn you
-  pick it for, and that turn is logged `chat_cloud` and kept out of every
-  latency figure.
+- **Local by default — one switch.** Settings → General → **Simple** (the
+  default) is local-only, enforced by the backend: answers come from a model
+  on your machine via Ollama, and cloud models, web search, MCP servers and
+  the extra agent tools are all off. **Advanced** unlocks them. Cloud models
+  are then an opt-in comparison baseline: none is set up initially, you add
+  one in **The Forge → Installed → Cloud endpoints**, it answers only the
+  turn you pick it for, and that turn is logged `chat_cloud` and kept out of
+  every latency figure.
 - **Read-only toward the plant — enforced, not prompted.** The sensor DB is
   opened `mode=ro` by the SQLite driver; `INSERT`/`UPDATE`/`DELETE` raise.
   A control request like *"open valve ABV-1"* is refused at the safety guard,
@@ -137,7 +139,7 @@ How a run works: [`docs/EVALUATION.md`](docs/EVALUATION.md).
 | **Ariadne's Thread** | Per-turn trace of every step, human labels for evaluation, Markdown export |
 | **Labyrinth Blueprints** | Track 1: upload → extract → chunk → embed, browse, replay a retrieval. Track 2: author or review the graph, see it as a diagram, replay a walk hop by hop |
 | **The Forge** | Detects the machine, scores model fit (`safe` / `marginal` / `will_not_fit`), pulls models via Ollama, benchmarks, commits the choice |
-| **Tool policy** | Four capability locks (`network_egress` · `write` · `admin` · `execute_code`) plus per-tool switches |
+| **Simple / Advanced** | One switch in Settings → General. Simple is local-only and hides what it turns off; Advanced opens cloud baselines, web search, MCP and every tool, under four capability locks (`network_egress` · `write` · `admin` · `execute_code`) and per-tool switches |
 | **MCP** | External tool servers over stdio/HTTP; each tool list is pinned and hashed, so drift is refused |
 | **Dashboard** | Floating windows, command palette, 16 themes floored to WCAG AA |
 
@@ -279,6 +281,7 @@ To point Daedalus at a **real reactor database**, put it (or a symlink) at
 | `address already in use` on start | Something else holds the port. Set `BACKEND_PORT` / `FRONTEND_PORT` (for `dev`) or `DAEDALUS_PORT` (for `start`) in `.env` |
 | `pnpm is not installed` during setup | `setup` tries corepack first; if that's unavailable, `npm i -g pnpm` and re-run `./daedalus.sh setup` |
 | Sensor answers say there's no data | The sensor DB is empty. Settings → System → Storage Health → *Generate demo data* |
+| Cloud models, Search or Integrations are missing | You're in Simple mode, the local-only default. Settings → General → **Advanced** |
 | Broken after a `git pull` | `./sync.sh` — installs new deps, backfills `.env`, applies migrations |
 | `reset.sh` refuses to run | Daedalus is still running. Stop it (Ctrl-C) first — deleting a live SQLite file corrupts it |
 
@@ -327,7 +330,7 @@ frontend/      React dashboard — components, contexts, hooks, typed API client
 backend/       FastAPI service — api/, services/, models/, db/, cli_eval.py
 config/        committed choices: model, retrieval track, graph, eval query set
 docs/          all documentation — start at docs/README.md
-scripts/       shared shell helpers
+scripts/       shared shell helpers, and the animated startup banner
 data/ logs/    runtime databases (gitignored)
 daedalus.sh    entry point — setup, dev, start, status, migrate
 sync.sh        get a checkout working after a pull (safe)

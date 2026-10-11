@@ -86,9 +86,9 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
   // `getSettingsPanel` follows redirects, so a removed panel's id (saved, or
   // from an old link) renders the panel it moved to.
   const resolved = shown?.id ?? DEFAULT_SETTINGS_PANEL_ID
-  // Likewise an Advanced-only panel in Simple lands on the mode switch.
-  const hidden = shown && (shown.track ? track && shown.track !== track : shown.advancedOnly && mode === 'simple')
-  const effectiveTab = hidden ? (shown.track ? 'knowledge' : 'tools') : resolved
+  // Likewise an Advanced-only panel in Simple lands on the mode switch, in General.
+  const hidden = shown && (shown.track ? track && shown.track !== track : shown.advancedOnly && mode !== 'advanced')
+  const effectiveTab = hidden ? (shown.track ? 'knowledge' : 'general') : resolved
 
   // Asking for the panel already open is a no-op, which is what makes it safe
   // for the caller to leave the request set rather than having to clear it.

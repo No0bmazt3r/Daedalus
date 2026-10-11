@@ -204,10 +204,7 @@ def _tool_mode() -> str:
     """
     from ...db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
 
-    try:
-        return tool_policy_store.mode()["mode"]
-    except Exception:  # noqa: BLE001 — see above
-        return "simple"
+    return "simple" if tool_policy_store.is_simple() else "advanced"
 
 
 # `planner.SENSOR_TOOLS`, restated so Simple mode still has it when the planner

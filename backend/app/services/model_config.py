@@ -169,12 +169,17 @@ def write(
 
 
 def cloud_allowed() -> bool:
-    """Settings → Cloud Models. On unless turned off; never raises.
+    """Settings → General → Cloud models. Never raises.
 
-    Off means cloud models are not listed and a request naming one gets the
-    local model instead, so the setting holds even for a stale picker or a
+    Off in Simple mode whatever the switch says, and otherwise on unless turned
+    off. Off means cloud models are not listed and a request naming one gets
+    the local model instead, so the setting holds even for a stale picker or a
     scripted call.
     """
+    from ..db import tool_policy_store  # noqa: PLC0415
+
+    if tool_policy_store.is_simple():
+        return False
     try:
         from ..db import prefs_store  # noqa: PLC0415
 

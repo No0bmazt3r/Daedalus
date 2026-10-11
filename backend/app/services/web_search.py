@@ -629,18 +629,11 @@ def provider_chain(config: dict[str, Any] | None = None) -> list[str]:
 
 
 def _refuse_in_simple_mode() -> None:
-    """Simple mode (Settings → Agent Tools) switches web search off entirely.
-
-    Same fail-closed reading as the tool registry: an unreadable mode is Simple.
-    """
+    """Simple mode (Settings → General) switches web search off entirely."""
     from ..db import tool_policy_store  # noqa: PLC0415 — avoids an import cycle at boot
 
-    try:
-        simple = tool_policy_store.mode()["mode"] == "simple"
-    except Exception:  # noqa: BLE001 — see above
-        simple = True
-    if simple:
-        raise SearchDisabled("web search is off in Simple mode; switch Agent Tools to Advanced")
+    if tool_policy_store.is_simple():
+        raise SearchDisabled("web search is off in Simple mode; switch to Advanced in Settings → General")
 
 
 def search(query: str, count: int | None = None) -> dict[str, Any]:

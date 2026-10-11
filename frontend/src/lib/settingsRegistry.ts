@@ -48,7 +48,7 @@ export interface SettingsPanel {
    * until somebody switches — and switching is one click in Retrieval Track.
    */
   track?: 'vector' | 'graph';
-  /** Hidden while Agent Tools is in Simple mode, whose backend refuses what it configures. */
+  /** Hidden in Simple mode (Settings → General), whose backend refuses what it configures. */
   advancedOnly?: boolean;
 }
 
@@ -91,7 +91,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     id: 'general', label: 'General', group: 'general', icon: SlidersHorizontal, implemented: true,
     keywords: [
       'general', 'features', 'toggle', 'enable', 'disable', 'switch', 'cloud', 'hosted', 'remote',
-      'baseline', 'endpoint', 'ollama cloud', 'offline', 'local only',
+      'baseline', 'endpoint', 'ollama cloud', 'offline', 'local only', 'simple', 'advanced', 'mode',
     ],
   }),
   // The knowledge layer: which track answers, then that track's own settings —
@@ -162,7 +162,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     ],
   }),
   panel({
-    id: 'integrations', label: 'Integrations', group: 'connections', icon: LinkIcon, implemented: true,
+    id: 'integrations', label: 'Integrations', group: 'connections', icon: LinkIcon, implemented: true, advancedOnly: true,
     keywords: [
       'integrations', 'connections', 'services', 'mcp', 'server', 'external',
       'model context protocol', 'stdio', 'http', 'tools', 'pin', 'drift',

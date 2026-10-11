@@ -11,6 +11,8 @@ sync.sh        fix it            after a git pull — safe, re-runnable, destroy
 reset.sh       start over        wipe and rebuild the databases — destructive
 scripts/
   common.sh    shared helpers    sourced by all three; never run directly
+  banner.py    startup banner    the animated labyrinth `dev` and `start` print; off when piped,
+                                 too narrow, or with NO_COLOR / DAEDALUS_NO_BANNER=1
 ```
 
 **Which one do I want?**

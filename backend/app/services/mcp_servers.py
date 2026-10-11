@@ -44,6 +44,15 @@ def connect(server_id: str, *, pin: bool = False) -> dict[str, Any]:
     said, which is exactly the state it exists to detect.
     """
     secret = mcp_store.secret_for(server_id)
+    from ..db import tool_policy_store  # noqa: PLC0415
+
+    if tool_policy_store.is_simple():
+        # Not recorded as a failed connection: nothing was attempted.
+        return {
+            "ok": False, "server_id": server_id, "label": secret["label"],
+            "detail": "MCP servers are off in Simple mode; switch to Advanced in Settings → General",
+            "tools": [], "drifted": False,
+        }
     try:
         info = mcp_client.handshake(secret)
     except mcp_client.McpError as exc:

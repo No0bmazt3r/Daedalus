@@ -3,6 +3,8 @@ import { listModels, type SystemModel } from '../lib/systemClient';
 import { activeChatModel, type ActiveChatModel } from '../lib/chatClient';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { loadOnePref, savePref, PREF_CLOUD_MODELS } from '../lib/prefsClient';
+import { useToolMode } from '../hooks/useToolMode';
+import type { ToolMode } from '../lib/toolsClient';
 
 /**
  * Per-session UI state, including which model the composer will use.
@@ -74,9 +76,13 @@ interface SettingsContextType {
   /** Reopen the "add a model first" prompt — e.g. on a send with nothing to answer it. */
   showNoModelPrompt: () => void;
   dismissNoModelPrompt: () => void;
-  /** Settings → Cloud Models. Off hides cloud models everywhere, and the backend refuses them. */
+  /** Cloud models are usable: Advanced mode *and* the switch on. Off hides them everywhere, and the backend refuses them. */
   cloudEnabled: boolean;
+  /** Settings → General → Cloud models, as switched — it only takes effect in Advanced. */
+  cloudSwitch: boolean;
   setCloudEnabled: (on: boolean) => void;
+  /** Settings → General → Simple / Advanced. Null until read; treated as Simple. */
+  appMode: ToolMode | null;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -93,6 +99,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // and this is false, so it appears on its own once the list says so.
   const [noModelDismissed, setNoModelDismissed] = useState(false);
   const [cloudEnabled, setCloudState] = useState(true);
+  const appMode = useToolMode();
   useEffect(() => {
     loadOnePref(PREF_CLOUD_MODELS)
       .then((v) => setCloudState(!(v && typeof v === 'object' && (v as { enabled?: boolean }).enabled === false)))
@@ -175,8 +182,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       noModelPromptOpen: noModel && !noModelDismissed,
       showNoModelPrompt,
       dismissNoModelPrompt,
-      cloudEnabled,
+      // Simple is local-only, so it wins over the switch (as `model_config.cloud_allowed` does).
+      cloudEnabled: cloudEnabled && appMode === 'advanced',
+      cloudSwitch: cloudEnabled,
       setCloudEnabled,
+      appMode,
     }}>
       {children}
     </SettingsContext.Provider>

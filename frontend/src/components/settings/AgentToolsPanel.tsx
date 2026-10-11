@@ -390,12 +390,12 @@ function ToolRow({ tool, onChange }: {
 
 type Mode = ToolMode
 
-function ModeSwitch({ mode, onChange, busy }: { mode: Mode; onChange: (m: Mode) => void; busy?: boolean }) {
+export function ModeSwitch({ mode, onChange, busy }: { mode: Mode; onChange: (m: Mode) => void; busy?: boolean }) {
   return (
     <div
       role="radiogroup"
       aria-label="Agent Tools mode"
-      title="Simple: only the answering tools can run, and web search (Settings → Search) is off. Advanced: every tool, under your switches and locks."
+      title="Simple: local only — the answering tools, no cloud models, web search or MCP servers. Advanced: everything, under your switches and locks."
       className={`inline-flex p-0.5 rounded-lg border theme-border shrink-0 ${busy ? 'opacity-60 pointer-events-none' : ''}`}
     >
       {(['simple', 'advanced'] as const).map((m) => (

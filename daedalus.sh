@@ -137,10 +137,15 @@ after_api_up() {
 # frontend/node_modules as well costs CPU for nothing.
 # --timeout-graceful-shutdown: every open tab holds GET /api/events, and without
 # it a reload waits for those streams to end — which they never do by themselves.
+# The animated labyrinth (scripts/banner.py). Silent when not a terminal, or
+# with NO_COLOR / DAEDALUS_NO_BANNER set; never fails a start.
+banner() { python3 scripts/banner.py 2>/dev/null || true; }
+
 cmd_dev() {
   [ -d frontend/node_modules ] || fail "frontend/node_modules missing — run './daedalus.sh setup' first"
   prepare_host
 
+  banner
   head_ "Starting Daedalus"
   host_uvicorn app.main:app --reload --port "$BACKEND_PORT" --app-dir backend \
     --reload-dir backend/app --timeout-graceful-shutdown 3 &
@@ -168,6 +173,7 @@ cmd_start() {
   (cd frontend && pnpm build >/dev/null) || fail "the frontend build failed — run 'cd frontend && pnpm build' to see why"
   ok "frontend/dist"
 
+  banner
   head_ "Starting Daedalus"
   DAEDALUS_STATIC_DIR="$PWD/frontend/dist" \
     host_uvicorn app.main:app --port "$PORT" --app-dir backend --timeout-graceful-shutdown 3 &

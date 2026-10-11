@@ -13,17 +13,14 @@
 import random
 import sqlite3
 import statistics
-from collections import deque
+import sys
 from pathlib import Path
 
-GLYPHS = {
-    "D": ["██████╗ ", "██╔══██╗", "██║  ██║", "██║  ██║", "██████╔╝", "╚═════╝ "],
-    "A": [" █████╗ ", "██╔══██╗", "███████║", "██╔══██║", "██║  ██║", "╚═╝  ╚═╝"],
-    "E": ["███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝"],
-    "L": ["██╗     ", "██║     ", "██║     ", "██║     ", "███████╗", "╚══════╝"],
-    "U": ["██╗   ██╗", "██║   ██║", "██║   ██║", "██║   ██║", "╚██████╔╝", " ╚═════╝ "],
-    "S": ["███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝"],
-}
+# The glyphs and the labyrinth are shared with the terminal banner, so the README
+# and `./daedalus.sh` always draw the same maze.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from banner import GLYPHS, maze as _maze  # noqa: E402
+
 WORD = "DAEDALUS"
 CMD = "./daedalus.sh"
 BOOT = [  # (status, text) printed after the banner
@@ -50,37 +47,7 @@ SEG = {
 
 
 def maze():
-    """Fixed-seed DFS maze on a (2n+1)² grid, open at the bottom-left, and the
-    BFS route from that opening to the centre room."""
-    g = 2 * MAZE_N + 1
-    wall = [[True] * g for _ in range(g)]
-    rng, stack = random.Random(7), [(0, 0)]
-    wall[1][1] = False
-    while stack:
-        x, y = stack[-1]
-        nxt = [(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-               if 0 <= x + dx < MAZE_N and 0 <= y + dy < MAZE_N and wall[2 * (y + dy) + 1][2 * (x + dx) + 1]]
-        if not nxt:
-            stack.pop()
-            continue
-        nx, ny = rng.choice(nxt)
-        wall[y + ny + 1][x + nx + 1] = wall[2 * ny + 1][2 * nx + 1] = False
-        stack.append((nx, ny))
-    start, goal = (1, g - 1), (MAZE_N, MAZE_N)     # (col, row)
-    wall[g - 1][1] = False
-    prev, q = {start: None}, deque([start])
-    while q:
-        c = q.popleft()
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            n = (c[0] + dx, c[1] + dy)
-            if 0 <= n[0] < g and 0 <= n[1] < g and not wall[n[1]][n[0]] and n not in prev:
-                prev[n] = c
-                q.append(n)
-    route, c = [], goal
-    while c:
-        route.append(c)
-        c = prev[c]
-    return wall, route[::-1]
+    return _maze(MAZE_N, 7)
 
 
 def text(x, y, body, fill, length, extra=""):

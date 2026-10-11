@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 
 from ..db import audit_store, tool_policy_store
-from ..services import agent_tools
+from ..services import agent_tools, live_events
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -181,4 +181,6 @@ def set_tool_mode(mode: str = Body(embed=True)) -> dict[str, Any]:
         tool_policy_store.set_mode(mode)
     except tool_policy_store.ToolPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # The mode decides whether cloud models are offered, so the picker re-reads.
+    live_events.publish("models", source="mode")
     return agent_tools.catalogue()

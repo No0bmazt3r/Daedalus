@@ -230,6 +230,19 @@ def mode() -> dict[str, Any]:
     return {"mode": row["mode"], "changed_at": row["changed_at"]}
 
 
+def is_simple() -> bool:
+    """True unless Advanced is readably chosen. Fails **closed**, to Simple.
+
+    Simple is the local-only, answering-only setup (Settings → General): cloud
+    models, web search, MCP servers and the extended tools are all off. An
+    unreadable mode must never quietly open any of them.
+    """
+    try:
+        return mode()["mode"] != "advanced"
+    except Exception:  # noqa: BLE001 — see above
+        return True
+
+
 def set_mode(value: str) -> dict[str, Any]:
     chosen = (value or "").strip().lower()
     if chosen not in MODES:
