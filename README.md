@@ -83,6 +83,63 @@ Answer + citations + full tool trace
 
 </details>
 
+## Get started
+
+One command checks your machine, offers to install what's missing, and sets
+everything up. It asks before every install and says when one needs `sudo`.
+
+<p align="center"><img src=".github/readme/getstarted.svg" width="860" alt="Example first run of ./daedalus.sh setup: it detects Ubuntu 24.04 on WSL with apt, checks python, node, pnpm, git, curl, ollama, the GPU and the ports, finds pnpm missing, asks before running corepack enable pnpm, installs it, then creates .env, installs node modules and python packages, sets up the embedded chromadb, applies migrations, and prints the dev and start commands."></p>
+
+| Your OS | Start with | Installs missing tools with |
+|:--|:--|:--|
+| **macOS** (Intel or Apple silicon) | `./daedalus.sh setup` | Homebrew |
+| **Linux** (Ubuntu/Debian, Fedora, Arch) | `./daedalus.sh setup` | apt, dnf or pacman; Node via nvm |
+| **Windows** | `.\daedalus.ps1 setup` in PowerShell | Offers to install WSL (Ubuntu) if it's missing, then runs the same `daedalus.sh` inside it, so every command below works as `.\daedalus.ps1 <command>` |
+
+All the logic lives in one script, `daedalus.sh`. No shell ships with all
+three systems (Windows has no bash; macOS and Linux have no PowerShell), so
+`daedalus.ps1` is only a doorway that forwards into WSL.
+
+```bash
+git clone <repo> && cd Daedalus
+./daedalus.sh doctor       # just check: OS, python, node, pnpm, git, curl, ollama, disk, RAM, GPU, ports
+./daedalus.sh setup        # check, offer to install what's missing, then deps, .env, migrations
+./daedalus.sh dev          # run it: API on :8000, UI on http://localhost:5173
+```
+
+**What it checks:** Python 3.11+ with `venv`, Node 20+ (and whether nvm, fnm
+or volta manages it), pnpm (enabled through corepack), git, curl, Ollama
+(installed and running, optional), Docker only with `--with-search`, plus free
+disk, RAM, a GPU, and whether ports 8000 and 5173 are free. Unattended runs
+(CI, a pipe) never install anything; `--yes` accepts every offer.
+
+Then pull a model so it can answer:
+
+```bash
+ollama pull qwen3:1.7b
+```
+
+<sub>Checked on Ubuntu 24.04 (WSL) and the Windows 11 entry point; the macOS,
+Fedora and Arch install paths are written to each tool's documented command but
+not yet run on those systems.</sub>
+
+No telemetry yet? **Settings → System → Storage Health → Generate demo data**
+seeds a plausible run offline.
+
+| Command | Does |
+|:--|:--|
+| `./daedalus.sh start` | Build the UI once and serve it with the API on one port (:8000) |
+| `./daedalus.sh status` | Health of all five databases |
+| `./daedalus.sh migrate` | Apply pending schema migrations |
+| `./daedalus.sh dev --with-search` | Also run SearXNG for sourcing corpus documents |
+| `./sync.sh` | After a `git pull`: deps, `.env` backfill, migrations — safe to re-run |
+| `./reset.sh` | Wipe and rebuild chat, audit and prefs DBs — **destructive**, snapshots first |
+
+Every command, flag and safeguard: [`docs/SCRIPTS.md`](docs/SCRIPTS.md).
+
+While the app runs, FastAPI serves interactive API docs at
+**<http://localhost:8000/docs>** — every endpoint, with a *Try it out* button.
+
 ## Why
 
 - **Local by default — one switch.** Settings → General → **Simple** (the
@@ -222,64 +279,7 @@ Regenerate both charts from your own audit log with
   </tr>
 </table>
 
-## Get started
-
-One command checks your machine, offers to install what's missing, and sets
-everything up. It asks before every install and says when one needs `sudo`.
-
-<p align="center"><img src=".github/readme/getstarted.svg" width="860" alt="Example first run of ./daedalus.sh setup: it detects Ubuntu 24.04 on WSL with apt, checks python, node, pnpm, git, curl, ollama, the GPU and the ports, finds pnpm missing, asks before running corepack enable pnpm, installs it, then creates .env, installs node modules and python packages, sets up the embedded chromadb, applies migrations, and prints the dev and start commands."></p>
-
-| Your OS | Start with | Installs missing tools with |
-|:--|:--|:--|
-| **macOS** (Intel or Apple silicon) | `./daedalus.sh setup` | Homebrew |
-| **Linux** (Ubuntu/Debian, Fedora, Arch) | `./daedalus.sh setup` | apt, dnf or pacman; Node via nvm |
-| **Windows** | `.\daedalus.ps1 setup` in PowerShell | Offers to install WSL (Ubuntu) if it's missing, then runs the same `daedalus.sh` inside it, so every command below works as `.\daedalus.ps1 <command>` |
-
-All the logic lives in one script, `daedalus.sh`. No shell ships with all
-three systems (Windows has no bash; macOS and Linux have no PowerShell), so
-`daedalus.ps1` is only a doorway that forwards into WSL.
-
-```bash
-git clone <repo> && cd Daedalus
-./daedalus.sh doctor       # just check: OS, python, node, pnpm, git, curl, ollama, disk, RAM, GPU, ports
-./daedalus.sh setup        # check, offer to install what's missing, then deps, .env, migrations
-./daedalus.sh dev          # run it: API on :8000, UI on http://localhost:5173
-```
-
-**What it checks:** Python 3.11+ with `venv`, Node 20+ (and whether nvm, fnm
-or volta manages it), pnpm (enabled through corepack), git, curl, Ollama
-(installed and running, optional), Docker only with `--with-search`, plus free
-disk, RAM, a GPU, and whether ports 8000 and 5173 are free. Unattended runs
-(CI, a pipe) never install anything; `--yes` accepts every offer.
-
-Then pull a model so it can answer:
-
-```bash
-ollama pull qwen3:1.7b
-```
-
-<sub>Checked on Ubuntu 24.04 (WSL) and the Windows 11 entry point; the macOS,
-Fedora and Arch install paths are written to each tool's documented command but
-not yet run on those systems.</sub>
-
-No telemetry yet? **Settings → System → Storage Health → Generate demo data**
-seeds a plausible run offline.
-
-| Command | Does |
-|:--|:--|
-| `./daedalus.sh start` | Build the UI once and serve it with the API on one port (:8000) |
-| `./daedalus.sh status` | Health of all five databases |
-| `./daedalus.sh migrate` | Apply pending schema migrations |
-| `./daedalus.sh dev --with-search` | Also run SearXNG for sourcing corpus documents |
-| `./sync.sh` | After a `git pull`: deps, `.env` backfill, migrations — safe to re-run |
-| `./reset.sh` | Wipe and rebuild chat, audit and prefs DBs — **destructive**, snapshots first |
-
-Every command, flag and safeguard: [`docs/SCRIPTS.md`](docs/SCRIPTS.md).
-
-While the app runs, FastAPI serves interactive API docs at
-**<http://localhost:8000/docs>** — every endpoint, with a *Try it out* button.
-
-### Configuration
+## Configuration
 
 Everything lives in `.env`, created from [`.env.example`](.env.example) by
 `setup`. It holds no secrets — nothing calls a cloud API until you add a
@@ -295,7 +295,7 @@ cloud endpoint in The Forge.
 To point Daedalus at a **real reactor database**, put it (or a symlink) at
 `data/sqlite/sensor_readings.db`. It is opened read-only regardless.
 
-### Troubleshooting
+## Troubleshooting
 
 | Symptom | Fix |
 |:--|:--|
