@@ -211,23 +211,41 @@ def build():
     Path(__file__).with_name("banner.svg").write_text("\n".join(s) + "\n", encoding="utf-8")
 
 
-# ── animated flows ───────────────────────────────────────────────────────────
-# One engine: boxes, edges, and a packet that travels a route through them,
-# lighting each box as it arrives while a caption line narrates the real values.
-TEXT, MUTED, EDGE, LIT = "#c9d1d9", "#8b949e", "#30363d", "#12261a"
-SPEED, HOLD = 360, 1.15            # px/s along an edge; seconds parked on a box
+# ── pixel theme (animations + charts) ────────────────────────────────────────
+# Redstone circuit: blocks with a bevel, a lamp per block, dust lines that power
+# up as the signal passes. Text is Monocraft, the dashboard's own default face,
+# embedded so GitHub renders it (SIL OFL 1.1, frontend/src/assets/fonts/).
+import base64
+
+ROOT = Path(__file__).resolve().parents[2]
+_FONT = base64.b64encode((ROOT / "frontend/src/assets/fonts/Monocraft-Regular.woff2").read_bytes()).decode()
+PF = 'font-family="Monocraft, ui-monospace, monospace"'
+
+STONE, STONE_HI, STONE_LO, OUTLINE = "#3b3b43", "#54545e", "#28282e", "#0d0d10"
+DEEP = ["#1b1b20", "#1f1f25", "#18181c", "#1d1d22"]
+INK, INK2 = "#ececf0", "#a9a9b5"
+DUST_OFF, DUST_ON, SIGNAL = "#4a1010", "#ff2b1c", "#ff6a5c"
+LAMP_OFF, LAMP_OFF2, LAMP_ON, LAMP_CORE = "#4b3420", "#33231a", "#ffc94a", "#fff3b8"
+SPEED, HOLD = 360, 1.15                    # px/s along dust; seconds parked on a block
+
+
+def esc(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def card(w, h, title, heading):
+    rng = random.Random(11)
+    tile = "".join(f'<rect x="{x * 4}" y="{y * 4}" width="4" height="4" fill="{rng.choice(DEEP)}"/>'
+                   for y in range(6) for x in range(6))
     return [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
-            f'role="img" aria-label="{esc(title)}">',
-            '<defs><filter id="pglow" x="-200%" y="-200%" width="500%" height="500%">'
-            '<feGaussianBlur stdDeviation="3"/></filter></defs>',
-            f'<rect width="{w}" height="{h}" rx="10" fill="{BG}"/>',
-            f'<path d="M0 10a10 10 0 0 1 10-10h{w - 20}a10 10 0 0 1 10 10v20H0z" fill="{BAR}"/>',
-            *[f'<circle cx="{20 + i * 18}" cy="15" r="5.5" fill="{c}"/>'
-              for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"])],
-            f'<text x="{w // 2}" y="19" fill="{MUTED}" {FONT} font-size="12" text-anchor="middle">{esc(heading)}</text>']
+            f'shape-rendering="crispEdges" role="img" aria-label="{esc(title)}">',
+            f'<defs><style>@font-face{{font-family:Monocraft;src:url(data:font/woff2;base64,{_FONT}) format("woff2")}}</style>'
+            f'<pattern id="deep" width="24" height="24" patternUnits="userSpaceOnUse">{tile}</pattern>'
+            '<filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="2.5" result="b"/>'
+            '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>',
+            f'<rect width="{w}" height="{h}" fill="url(#deep)"/>',
+            f'<rect width="{w}" height="30" fill="#111114"/><rect y="30" width="{w}" height="2" fill="{STONE_LO}"/>',
+            f'<text x="16" y="20" {PF} font-size="12" fill="{INK2}">{esc(heading)}</text>']
 
 
 def window(on, off, cycle):
@@ -236,12 +254,37 @@ def window(on, off, cycle):
             f'keyTimes="0;{on / cycle:.4f};{off / cycle:.4f}" dur="{cycle:.2f}s" repeatCount="indefinite"/>')
 
 
-def esc(s):
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def block(x, y, w, h, face=STONE):
+    """A bevelled pixel block: outline, light top-left edge, dark bottom-right edge."""
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{OUTLINE}"/>'
+            f'<rect x="{x + 2}" y="{y + 2}" width="{w - 4}" height="{h - 4}" fill="{face}"/>'
+            f'<rect x="{x + 2}" y="{y + 2}" width="{w - 4}" height="2" fill="{STONE_HI}"/>'
+            f'<rect x="{x + 2}" y="{y + 2}" width="2" height="{h - 4}" fill="{STONE_HI}"/>'
+            f'<rect x="{x + 2}" y="{y + h - 4}" width="{w - 4}" height="2" fill="{STONE_LO}"/>'
+            f'<rect x="{x + w - 4}" y="{y + 2}" width="2" height="{h - 4}" fill="{STONE_LO}"/>')
+
+
+def lamp(x, y, on=None, off=None, cycle=None, bad=False):
+    """A 16px lamp: dim grid when off, glowing core when lit (between on and off)."""
+    s = (f'<rect x="{x}" y="{y}" width="16" height="16" fill="{OUTLINE}"/>'
+         f'<rect x="{x + 2}" y="{y + 2}" width="12" height="12" fill="{LAMP_OFF}"/>'
+         f'<rect x="{x + 7}" y="{y + 2}" width="2" height="12" fill="{LAMP_OFF2}"/>'
+         f'<rect x="{x + 2}" y="{y + 7}" width="12" height="2" fill="{LAMP_OFF2}"/>')
+    if bad:
+        return s + (f'<rect x="{x + 2}" y="{y + 2}" width="12" height="12" fill="#a3201a"/>'
+                    f'<path d="M{x + 4} {y + 4}l8 8m0 -8l-8 8" stroke="#ffd2cc" stroke-width="2"/>')
+    if on is None:
+        return s
+    return s + (f'<g opacity="0" filter="url(#glow)">{window(on, off, cycle)}'
+                f'<rect x="{x + 2}" y="{y + 2}" width="12" height="12" fill="{LAMP_ON}"/>'
+                f'<rect x="{x + 5}" y="{y + 5}" width="6" height="6" fill="{LAMP_CORE}"/></g>')
 
 
 class Flow:
-    def __init__(self, w, h, title, heading, bw=182, bh=40):
+    """Blocks joined by redstone dust; a signal runs a route, lamps light as it arrives,
+    and a chat line narrates the real value at each stop."""
+
+    def __init__(self, w, h, title, heading, bw=186, bh=40):
         self.w, self.h, self.bw, self.bh = w, h, bw, bh
         self.s = card(w, h, title, heading)
         self.nodes, self.edges = {}, {}
@@ -257,75 +300,69 @@ class Flow:
         if pts is None:
             (ax, ay, *_), (bx, by, *_) = self.nodes[a], self.nodes[b]
             (acx, acy), (bcx, bcy) = self.c(a), self.c(b)
-            if ay == by:                                   # same row
+            if ay == by:
                 pts = [(ax + self.bw, acy), (bx, bcy)] if bx > ax else [(ax, acy), (bx + self.bw, bcy)]
-            elif ax == bx:                                 # same column
+            elif ax == bx:
                 pts = [(acx, ay + self.bh), (bcx, by)] if by > ay else [(acx, ay), (bcx, by + self.bh)]
-            else:                                          # elbow through the gap between columns
+            else:
                 mx = (ax + self.bw + bx) / 2
                 pts = [(ax + self.bw, acy), (mx, acy), (mx, bcy), (bx, bcy)]
         self.edges[(a, b)] = (pts, tone)
 
-    def render(self, route, captions, cap_y, prompt="you@daedalus:~$"):
+    def render(self, route, captions, cap_y, who="daedalus"):
         s = self.s
         for (pts, tone) in self.edges.values():
-            col, dash = (THREAD, ' stroke-dasharray="4 4"') if tone == "bad" else (EDGE, "")
-            s.append(f'<polyline points="{" ".join(f"{x:.1f},{y:.1f}" for x, y in pts)}" fill="none" '
-                     f'stroke="{col}" stroke-width="1.5"{dash}/>')
-        # schedule: arrive/depart times per stop, and the packet's path through them
-        path, at, t, length, stops = [], [], 0.6, 0.0, []
+            dash = ' stroke-dasharray="4 4"' if tone == "bad" else ""
+            s.append(f'<polyline points="{" ".join(f"{x:.0f},{y:.0f}" for x, y in pts)}" fill="none" '
+                     f'stroke="{DUST_OFF}" stroke-width="4" stroke-linejoin="miter"{dash}/>')
+        path, t, length, stops = [], 0.6, 0.0, []
         for i, k in enumerate(route):
             if i == 0:
                 path.append(self.c(k))
             else:
-                pts = self.edges[(route[i - 1], k)][0]
-                seg = [path[-1], *pts, self.c(k)]
-                for p, q in zip(seg, seg[1:]):
-                    length += abs(q[0] - p[0]) + abs(q[1] - p[1])
+                seg = [path[-1], *self.edges[(route[i - 1], k)][0], self.c(k)]
+                d = sum(abs(q[0] - p[0]) + abs(q[1] - p[1]) for p, q in zip(seg, seg[1:]))
+                length += d
                 path += seg[1:]
-                t += max(0.35, (sum(abs(q[0] - p[0]) + abs(q[1] - p[1]) for p, q in zip(seg, seg[1:]))) / SPEED)
+                t += max(0.35, d / SPEED)
             stops.append((t, length))
             t += HOLD
         cycle = t + 1.6
-        # trail of where the packet has been
-        d = "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in path)
-        kt, kv = ["0"], [f"{length:.1f}"]
+        d = "M" + " L".join(f"{x:.0f} {y:.0f}" for x, y in path)
+        kt, kv, kp = ["0"], [f"{length:.1f}"], ["0"]
         for (a, l) in stops:
             kt += [f"{a / cycle:.4f}", f"{min(a + HOLD, cycle - 1) / cycle:.4f}"]
             kv += [f"{length - l:.1f}"] * 2
-        kt.append("1"); kv.append("0")
-        s.append(f'<path d="{d}" fill="none" stroke="{GREEN}" stroke-width="2" stroke-dasharray="{length:.1f}" '
-                 f'stroke-dashoffset="{length:.1f}" opacity=".55"><animate attributeName="stroke-dashoffset" '
-                 f'values="{";".join(kv)}" keyTimes="{";".join(kt)}" dur="{cycle:.2f}s" repeatCount="indefinite"/>'
-                 f'{window(0.01, cycle - 0.6, cycle)}</path>')
-        # boxes, lit on arrival
+            kp += [f"{l / length:.4f}"] * 2
+        kt.append("1"); kv.append("0"); kp.append("1")
+        # dust powers up behind the signal
+        s.append(f'<path d="{d}" fill="none" stroke="{DUST_ON}" stroke-width="4" filter="url(#glow)" '
+                 f'stroke-dasharray="{length:.1f}" stroke-dashoffset="{length:.1f}">'
+                 f'<animate attributeName="stroke-dashoffset" values="{";".join(kv)}" keyTimes="{";".join(kt)}" '
+                 f'dur="{cycle:.2f}s" repeatCount="indefinite"/>{window(0.01, cycle - 0.6, cycle)}</path>')
         arrive = {k: stops[i][0] for i, k in enumerate(route)}
         for k, (x, y, name, sub, tone) in self.nodes.items():
-            stroke = THREAD if tone == "bad" else EDGE
-            s.append(f'<rect x="{x}" y="{y}" width="{self.bw}" height="{self.bh}" rx="6" fill="{BAR}" stroke="{stroke}"/>')
+            bad = tone == "bad"
+            s.append(block(x, y, self.bw, self.bh, "#4a2424" if bad else STONE))
             if k in arrive:
-                s.append(f'<rect x="{x}" y="{y}" width="{self.bw}" height="{self.bh}" rx="6" fill="{LIT}" '
-                         f'stroke="{GREEN}" opacity="0">{window(arrive[k], cycle - 0.6, cycle)}</rect>')
-            s.append(f'<text x="{x + 10}" y="{y + 17}" {FONT} font-size="12" '
-                     f'fill="{THREAD if tone == "bad" else TEXT}">{esc(name)}</text>')
-            s.append(f'<text x="{x + 10}" y="{y + 32}" {FONT} font-size="10" fill="{MUTED}">{esc(sub)}</text>')
-        # the packet
-        kp = ["0"]
-        for (a, l) in stops:
-            kp += [f"{l / length:.4f}"] * 2
-        kp.append("1")
+                s.append(f'<rect x="{x}" y="{y}" width="{self.bw}" height="{self.bh}" fill="none" '
+                         f'stroke="{LAMP_ON}" stroke-width="2" opacity="0">{window(arrive[k], cycle - 0.6, cycle)}</rect>')
+            s.append(lamp(x + self.bw - 24, y + 12, *((arrive[k], cycle - 0.6, cycle) if k in arrive else ()), bad=bad))
+            s.append(f'<text x="{x + 10}" y="{y + 18}" {PF} font-size="12" fill="{"#ffb4ab" if bad else INK}">{esc(name)}</text>')
+            s.append(f'<text x="{x + 10}" y="{y + 32}" {PF} font-size="9" fill="{INK2}">{esc(sub)}</text>')
         motion = (f'<animateMotion path="{d}" keyPoints="{";".join(kp)}" keyTimes="{";".join(kt)}" '
                   f'calcMode="linear" dur="{cycle:.2f}s" repeatCount="indefinite"/>')
-        s.append(f'<g>{window(0.01, cycle - 0.6, cycle)}'
-                 f'<circle r="7" fill="{GREEN}" opacity=".6" filter="url(#pglow)">{motion}</circle>'
-                 f'<circle r="4" fill="#d2ffd8">{motion}</circle></g>')
-        # caption line narrating each stop
-        s.append(f'<text x="24" y="{cap_y}" {FONT} font-size="12" fill="{MUTED}">{prompt}</text>')
+        s.append(f'<g filter="url(#glow)">{window(0.01, cycle - 0.6, cycle)}'
+                 f'<rect x="-5" y="-5" width="10" height="10" fill="{SIGNAL}">{motion}</rect></g>')
+        # a chat line narrating each stop
+        s.append(f'<rect x="16" y="{cap_y - 16}" width="{self.w - 32}" height="24" fill="#000" opacity=".55"/>')
+        s.append(f'<text x="24" y="{cap_y}" {PF} font-size="12" fill="{INK2}">&lt;{who}&gt;</text>')
         for i, cap in enumerate(captions):
             on = stops[i][0]
             off = stops[i + 1][0] if i + 1 < len(stops) else cycle - 0.6
-            s.append(f'<g opacity="0">{window(on, off, cycle)}<text x="{24 + (len(prompt) + 1) * 7.2:.1f}" '
-                     f'y="{cap_y}" {FONT} font-size="12" fill="{GREEN}">{esc(cap)}</text></g>')
+            # an invisible copy of the prefix keeps the caption aligned in any font
+            s.append(f'<g opacity="0">{window(on, off, cycle)}<text x="24" y="{cap_y}" {PF} font-size="12" '
+                     f'fill="{INK}" xml:space="preserve"><tspan fill-opacity="0">&lt;{who}&gt; </tspan>{esc(cap)}</text></g>')
         s.append('</svg>')
         return "\n".join(s) + "\n"
 
@@ -336,26 +373,26 @@ def write(name, svg):
 
 def architecture():
     X = [24, 234, 444, 654]
-    f = Flow(W, 372, "How Daedalus answers a question: the dashboard sends it to FastAPI, intent is classified, "
+    f = Flow(W, 376, "How Daedalus answers a question: the dashboard sends it to FastAPI, intent is classified, "
                      "a safety guard refuses control requests, deterministic tools read the read-only sensor "
                      "database (or Track 1 / Track 2 search the knowledge base), an evidence pack goes to the "
                      "local Ollama model, a validator checks every number, and a cited answer streams back",
-             "daedalus — how one question is answered")
+             "daedalus · how one question is answered")
     f.box("you", X[0], 52, "01 you", "type in the dashboard")
     f.box("api", X[1], 52, "02 fastapi", "POST /api/chat")
     f.box("intent", X[2], 52, "03 intent", "live · trend · procedure")
     f.box("guard", X[3], 52, "04 safety guard", "control? → refuse")
     f.box("refused", X[3], 132, "refused", "no tool · no model call", tone="bad")
-    f.box("tools", X[0], 132, "05 sensor tools", "deterministic, 33 total")
+    f.box("tools", X[0], 132, "05 sensor tools", "deterministic · 33")
     f.box("sqlite", X[1], 132, "06 sqlite", "sensor db · mode=ro")
-    f.box("t1", X[0], 186, "track 1 · vector", "embed → top-k → re-rank")
+    f.box("t1", X[0], 186, "track 1 · vector", "embed → top-k → rerank")
     f.box("chroma", X[1], 186, "chromadb", "887 chunks")
     f.box("t2", X[0], 240, "track 2 · graph", "alias entry → hops")
     f.box("graph", X[1], 240, "knowledge graph", "62 nodes")
-    f.box("evidence", X[2], 186, "07 evidence pack", "labelled [S1] [S2] …")
+    f.box("evidence", X[2], 186, "07 evidence", "labelled [S1] [S2]")
     f.box("ollama", X[3], 186, "08 ollama", "qwen3:1.7b · local")
-    f.box("validator", X[3], 260, "09 validator", "every number in evidence?")
-    f.box("answer", X[2], 260, "10 answer", "cited, streamed back")
+    f.box("validator", X[3], 264, "09 validator", "numbers in evidence?")
+    f.box("answer", X[2], 264, "10 answer", "cited, streamed back")
     for a, b in [("you", "api"), ("api", "intent"), ("intent", "guard"), ("tools", "sqlite"),
                  ("t1", "chroma"), ("t2", "graph"), ("sqlite", "evidence"), ("chroma", "evidence"),
                  ("graph", "evidence"), ("evidence", "ollama"), ("ollama", "validator"), ("validator", "answer")]:
@@ -364,239 +401,238 @@ def architecture():
     gx = X[3] + f.bw / 2
     for k in ("tools", "t1", "t2"):        # a trunk down the left margin feeds all three routes
         f.edge("guard", k, [(gx, 92), (gx, 114), (12, 114), (12, f.c(k)[1]), (X[0], f.c(k)[1])])
-    svg = f.render(
+    write("architecture.svg", f.render(
         ["you", "api", "intent", "guard", "tools", "sqlite", "evidence", "ollama", "validator", "answer"],
-        ['"what is the current co2 concentration and reactor temperature?"',
+        ['what is the current co2 concentration and reactor temperature?',
          "POST /api/chat · query_id q_20261011_111807373513",
          "intent = live_status → sensor tools, not the knowledge base",
-         'not a control request → continue  ("open valve ABV-1" stops here)',
+         'not a control request → go on  ("open valve ABV-1" stops here)',
          "get_live_reading ×2 · 1 ms",
          "co2_ppm 488.5 · temp_c 31.74 · read-only connection",
          "[S1] co2_ppm 488.5 ppm   [S2] temp_c 31.74 °C",
-         "qwen3:1.7b phrases only the evidence · 38.3 s on an RTX 3050",
+         "qwen3:1.7b phrases only the evidence · 38.3 s",
          "488.5 ✓  31.74 ✓  → grounded",
          "co2 is 488.5 ppm [S1], temperature 31.74 °C [S2]"],
-        cap_y=338)
-    write("architecture.svg", svg)
+        cap_y=346, who="you"))
 
 
-def strip(name, heading, title, stages, captions, prompt):
-    n = len(stages)
-    bw, gap = 122, 16
+def strip(name, heading, title, stages, captions, who):
+    n, bw, gap = len(stages), 124, 14
     x0 = (W - (n * bw + (n - 1) * gap)) // 2
-    f = Flow(W, 150, title, heading, bw=bw)
+    f = Flow(W, 160, title, heading, bw=bw)
     for i, (nm, sub) in enumerate(stages):
         f.box(i, x0 + i * (bw + gap), 52, nm, sub)
     for i in range(n - 1):
         f.edge(i, i + 1)
-    write(name, f.render(list(range(n)), captions, cap_y=124, prompt=prompt))
+    write(name, f.render(list(range(n)), captions, cap_y=132, who=who))
 
 
 def forge():
-    strip("forge.svg", "the forge — hardware & model console",
+    strip("forge.svg", "the forge · hardware & model console",
           "The Forge: detect this machine's hardware, estimate each model's memory, score its fit, "
           "pull it through Ollama, benchmark it on a RAG-sized prompt, and commit the choice",
-          [("detect", "cpu · ram · vram"), ("estimate", "model × quant"), ("fit verdict", "both memory pools"),
-           ("pull", "via ollama"), ("benchmark", "~2k-token prompt"), ("commit", "model_config.json")],
+          [("detect", "cpu · ram · vram"), ("estimate", "model × quant"), ("fit", "2 memory pools"),
+           ("pull", "via ollama"), ("benchmark", "~2k-token prompt"), ("commit", "model_config")],
           ["i5-11400H · 7.8 GB RAM · RTX 3050, 4 GB VRAM",
            "qwen3:1.7b · Q4_K_M · 1.3 GB on disk",
            "verdict: safe   (safe / marginal / will_not_fit)",
            "ollama pull qwen3:1.7b",
            "TTFT median 1.1 s over 5 runs",
            "committed — chat now answers with qwen3:1.7b"],
-          "forge:~$")
+          "forge")
 
 
 def ingest():
-    strip("ingest.svg", "labyrinth blueprints — build the corpus",
+    strip("ingest.svg", "labyrinth blueprints · build the corpus",
           "Labyrinth Blueprints, Track 1 build: upload a document, extract its text, chunk it, embed the "
           "chunks with a local model, and store them in ChromaDB with each document's category and origin",
           [("upload", "pdf · category"), ("extract", "pypdf, locked too"), ("chunk", "1,500 chars"),
            ("embed", "local model"), ("store", "chromadb"), ("record", "corpus.db")],
-          ["Fuji_ZRE3_NDIR_Analyzer_Manual.pdf · manual · reference · 85 pages",
+          ["Fuji_ZRE3_NDIR_Analyzer_Manual.pdf · manual · reference",
            "text out, including AES-locked and font-shifted PDFs",
-           "recursive split · 1,500 chars · 200 overlap · context header",
+           "recursive split · 1,500 chars · 200 overlap",
            "qwen3-embedding:0.6b → 1,024-d vectors",
            "vectors into chromadb, embedded in the API process",
            "17 documents · 887 chunks · every run replayable"],
-          "blueprints:~$")
+          "blueprints")
 
 
 def retrieval():
     """Both tracks searching for the same question, side by side."""
-    H, cycle = 420, 13.0
+    H, cycle = 432, 13.0
     s = card(W, H, "Searching the knowledge base. Track 1 embeds the question, pulls 20 candidate chunks from "
                    "ChromaDB and re-ranks them to keep the best 5. Track 2 enters the graph by alias at "
                    "'NDIR reading drift', hops RESOLVED_BY to the NDIR calibration SOP and CONTAINS to its "
-                   "three steps, under a 6 second, 4 step budget",
-             "daedalus — searching the knowledge base")
-    s.append(f'<text x="24" y="58" {FONT} font-size="13" fill="{MUTED}">q: '
-             f'<tspan fill="{TEXT}">"what do i do if the ndir reading drifts?"</tspan></text>')
+                   "three steps, under a 6 second, 4 step budget. Nodes and edges are real; the walk is illustrative",
+             "daedalus · searching the knowledge base")
+    s.append(f'<rect x="16" y="42" width="{W - 32}" height="24" fill="#000" opacity=".55"/>')
+    s.append(f'<text x="24" y="58" {PF} font-size="12" fill="{INK2}">&lt;you&gt; '
+             f'<tspan fill="{INK}">what do i do if the ndir reading drifts?</tspan></text>')
     mid = W // 2
-    s.append(f'<line x1="{mid}" y1="76" x2="{mid}" y2="{H - 20}" stroke="{EDGE}"/>')
+    s.append(f'<rect x="{mid - 1}" y="80" width="2" height="{H - 100}" fill="{STONE_LO}"/>')
     # ── track 1 ──
     lx = 24
-    s.append(f'<text x="{lx}" y="96" {FONT} font-size="13" fill="{TEXT}">track 1 · vector rag</text>')
-    steps1 = [(0.6, "embed   qwen3-embedding:0.6b → 1,024-d"),
-              (2.4, "search  chromadb · 887 chunks → 20 candidates"),
-              (5.6, "re-rank ms-marco-minilm-l6 → keep top 5"),
+    s.append(f'<text x="{lx}" y="98" {PF} font-size="12" fill="{INK}">track 1 · vector rag</text>')
+    steps1 = [(0.6, "embed  qwen3-embedding:0.6b → 1,024-d"),
+              (2.4, "search chromadb · 887 → 20 candidates"),
+              (5.6, "rerank ms-marco-minilm-l6 → top 5"),
               (8.6, "→ evidence pack, each chunk cited")]
     for i, (t, txt) in enumerate(steps1):
-        s.append(f'<g opacity="0">{window(t, cycle - 0.5, cycle)}<text x="{lx}" y="{120 + i * 18}" {FONT} '
-                 f'font-size="11" fill="{MUTED}">{esc(txt)}</text></g>')
-    # the query vector: a strip of cells
+        s.append(f'<g opacity="0">{window(t, cycle - 0.5, cycle)}<text x="{lx}" y="{122 + i * 18}" {PF} '
+                 f'font-size="10" fill="{INK2}">{esc(txt)}</text></g>')
     rng = random.Random(3)
-    for j in range(32):
-        shade = rng.choice(["#1f6f2b", "#2ea043", "#3fb950", "#238636", "#196c2e"])
-        s.append(f'<rect x="{lx + j * 11}" y="200" width="9" height="9" rx="1" fill="{shade}" opacity="0">'
+    for j in range(32):                               # the query vector, as emerald cells
+        shade = rng.choice(["#0f5c2e", "#17a34a", "#22c55e", "#15803d", "#86efac"])
+        s.append(f'<rect x="{lx + j * 11}" y="200" width="9" height="9" fill="{shade}" opacity="0">'
                  f'{window(0.8 + j * 0.03, cycle - 0.5, cycle)}</rect>')
-    # 20 candidates: first-pass scores, then re-ranked scores
     first = sorted((rng.uniform(.45, .9) for _ in range(20)), reverse=True)
     rerank = [rng.uniform(.05, .5) for _ in range(20)]
     for j in rng.sample(range(20), 5):
         rerank[j] = rng.uniform(.75, .98)
     top = set(sorted(range(20), key=lambda j: -rerank[j])[:5])
-    for j in range(20):
-        y = 224 + j * 8
-        w1, w2 = first[j] * 300, rerank[j] * 300
-        col = GREEN if j in top else "#30363d"
-        s.append(f'<rect x="{lx}" y="{y}" height="5" rx="2" width="{w1:.1f}" fill="#484f58" opacity="0">'
+    for j in range(20):                               # 20 candidates, then re-ranked
+        y = 226 + j * 8
+        w1, w2 = round(first[j] * 75) * 4, round(rerank[j] * 75) * 4
+        col = LAMP_ON if j in top else "#3a3a42"
+        s.append(f'<rect x="{lx}" y="{y}" height="6" width="{w1}" fill="#6b6b78" opacity="0">'
                  f'{window(2.6 + j * 0.05, cycle - 0.5, cycle)}'
-                 f'<animate attributeName="width" values="{w1:.1f};{w1:.1f};{w2:.1f};{w2:.1f}" '
+                 f'<animate attributeName="width" values="{w1};{w1};{w2};{w2}" '
                  f'keyTimes="0;{5.8 / cycle:.4f};{6.8 / cycle:.4f};1" dur="{cycle}s" repeatCount="indefinite"/>'
-                 f'<animate attributeName="fill" values="#484f58;{col}" calcMode="discrete" '
+                 f'<animate attributeName="fill" values="#6b6b78;{col}" calcMode="discrete" '
                  f'keyTimes="0;{6.9 / cycle:.4f}" dur="{cycle}s" repeatCount="indefinite"/></rect>')
-    s.append(f'<text x="{lx}" y="{H - 18}" {FONT} font-size="10" fill="{MUTED}">bar = relevance score, illustrative</text>')
+    s.append(f'<text x="{lx}" y="{H - 16}" {PF} font-size="9" fill="{INK2}">bar = relevance score, illustrative</text>')
     # ── track 2 ──
     rx = mid + 24
-    s.append(f'<text x="{rx}" y="96" {FONT} font-size="13" fill="{TEXT}">track 2 · agentic graphrag</text>')
-    steps2 = [(0.6, 'entry   alias "ndir reading drifts" → AnomalyType'),
-              (3.0, "hop 1   RESOLVED_BY → SOP: NDIR calibration"),
-              (5.6, "hop 2   CONTAINS → 3 steps"),
-              (8.6, "model: enough → stop  (budget 4 steps, 6 s)")]
+    s.append(f'<text x="{rx}" y="98" {PF} font-size="12" fill="{INK}">track 2 · agentic graphrag</text>')
+    steps2 = [(0.6, 'entry  alias "ndir reading drifts"'),
+              (3.0, "hop 1  RESOLVED_BY → NDIR calibration SOP"),
+              (5.6, "hop 2  CONTAINS → its 3 steps"),
+              (8.6, "model: enough → stop (budget 4 steps, 6 s)")]
     for i, (t, txt) in enumerate(steps2):
-        s.append(f'<g opacity="0">{window(t, cycle - 0.5, cycle)}<text x="{rx}" y="{120 + i * 18}" {FONT} '
-                 f'font-size="11" fill="{MUTED}">{esc(txt)}</text></g>')
-    gn = {  # node: (x, y, label, lit_at or None)
-        "drift": (rx + 10, 290, "NDIR reading drift", 1.0),
-        "cal": (rx + 120, 236, "SOP · NDIR calibration", 3.4),
-        "fuji": (rx + 120, 340, "SOP · Fuji NDIR maint.", None),
-        "s1": (rx + 255, 214, "isolate analyser", 6.0),
-        "s2": (rx + 255, 258, "zero with N₂", 6.3),
-        "s3": (rx + 255, 302, "span with gas", 6.6),
-        "co2": (rx + 10, 200, "Sensor: co2_ppm", None),
-        "brk": (rx + 10, 372, "co2 breakthrough", None),
+        s.append(f'<g opacity="0">{window(t, cycle - 0.5, cycle)}<text x="{rx}" y="{122 + i * 18}" {PF} '
+                 f'font-size="10" fill="{INK2}">{esc(txt)}</text></g>')
+    gn = {  # node: (x, y, label, lit_at)
+        "co2": (rx + 10, 206, "sensor co2_ppm", None),
+        "drift": (rx + 10, 296, "ndir reading drift", 1.0),
+        "brk": (rx + 10, 386, "co2 breakthrough", None),
+        "cal": (rx + 130, 244, "sop ndir calibration", 3.4),
+        "fuji": (rx + 130, 350, "sop fuji ndir maint.", None),
+        "s1": (rx + 262, 216, "isolate analyser", 6.0),
+        "s2": (rx + 262, 262, "zero with N₂", 6.3),
+        "s3": (rx + 262, 308, "span with gas", 6.6),
     }
     links = [("drift", "cal", 3.0), ("drift", "fuji", None), ("cal", "s1", 5.6), ("cal", "s2", 5.6),
              ("cal", "s3", 5.6), ("brk", "cal", None)]
-    for a, b, t in links:
+    for a, b, t in links:                              # dust between nodes, elbowed like a circuit
         (ax, ay, *_), (bx, by, *_) = gn[a], gn[b]
-        s.append(f'<line x1="{ax + 4}" y1="{ay}" x2="{bx - 4}" y2="{by}" stroke="{EDGE}" stroke-width="1.5"/>')
+        mx = (ax + bx) // 2
+        pts = f"{ax},{ay} {mx},{ay} {mx},{by} {bx},{by}"
+        s.append(f'<polyline points="{pts}" fill="none" stroke="{DUST_OFF}" stroke-width="3"/>')
         if t is not None:
-            ln = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
-            s.append(f'<line x1="{ax + 4}" y1="{ay}" x2="{bx - 4}" y2="{by}" stroke="{GREEN}" stroke-width="2" '
-                     f'stroke-dasharray="{ln:.1f}" stroke-dashoffset="{ln:.1f}">'
-                     f'<animate attributeName="stroke-dashoffset" values="{ln:.1f};{ln:.1f};0;0" '
+            ln = abs(bx - ax) + abs(by - ay)
+            s.append(f'<polyline points="{pts}" fill="none" stroke="{DUST_ON}" stroke-width="3" filter="url(#glow)" '
+                     f'stroke-dasharray="{ln}" stroke-dashoffset="{ln}">'
+                     f'<animate attributeName="stroke-dashoffset" values="{ln};{ln};0;0" '
                      f'keyTimes="0;{t / cycle:.4f};{(t + 0.5) / cycle:.4f};1" dur="{cycle}s" repeatCount="indefinite"/>'
-                     f'</line>')
+                     f'{window(0.01, cycle - 0.5, cycle)}</polyline>')
     for k, (x, y, label, t) in gn.items():
-        s.append(f'<circle cx="{x}" cy="{y}" r="5" fill="#30363d"/>')
+        s.append(block(x - 8, y - 8, 16, 16))
         if t is not None:
-            s.append(f'<circle cx="{x}" cy="{y}" r="6" fill="{GREEN}" opacity="0">{window(t, cycle - 0.5, cycle)}</circle>')
-        ly = y + 18 if k in ("cal", "fuji") else y + 4      # sop labels sit under their node, clear of the edges
-        lx = x - 30 if k in ("cal", "fuji") else x + 10
-        s.append(f'<text x="{lx}" y="{ly}" {FONT} font-size="10" fill="{TEXT if t else MUTED}">{esc(label)}</text>')
-    s.append(f'<text x="{rx}" y="{H - 18}" {FONT} font-size="10" fill="{MUTED}">real nodes and edges from knowledge_graph.yaml · walk illustrative</text>')
+            s.append(f'<g opacity="0" filter="url(#glow)">{window(t, cycle - 0.5, cycle)}'
+                     f'<rect x="{x - 6}" y="{y - 6}" width="12" height="12" fill="{LAMP_ON}"/>'
+                     f'<rect x="{x - 3}" y="{y - 3}" width="6" height="6" fill="{LAMP_CORE}"/></g>')
+        ly = y + 20 if k in ("cal", "fuji") else y + 4
+        lx2 = x - 40 if k in ("cal", "fuji") else x + 14
+        s.append(f'<text x="{lx2}" y="{ly}" {PF} font-size="9" fill="{INK if t else INK2}">{esc(label)}</text>')
+    s.append(f'<text x="{rx}" y="{H - 16}" {PF} font-size="9" fill="{INK2}">real nodes and edges from knowledge_graph.yaml · walk illustrative</text>')
     s.append('</svg>')
     write("retrieval.svg", "\n".join(s) + "\n")
 
 
 # ── latency charts ───────────────────────────────────────────────────────────
-DB = Path(__file__).resolve().parents[2] / "logs" / "ai_logs.db"
-MODEL = "qwen3:1.7b"
-SERIES = [("load", "#3987e5"), ("prefill", "#d95926"), ("generation", "#199e70")]  # validated on BG
-GRID = "#21262d"
+DB = ROOT / "logs" / "ai_logs.db"
+MODEL, CLOUD = "qwen3:1.7b", "gpt-oss:120b-cloud"
+SERIES = [("load", "#3987e5"), ("prefill", "#d95926"), ("generation", "#199e70")]  # validated on DEEP[0]
+GRID = "#2c2c33"
 
 
 def runs():
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-    q = ("select time_to_first_token_ms, load_ms, prefill_ms, generation_ms, prompt_token_count "
-         "from model_logs where model_name=? and source=? and status='ok' and time_to_first_token_ms is not null "
-         "and load_ms is not null")
-    return {src: con.execute(q, (MODEL, src)).fetchall() for src in ("benchmark", "chat")}
+    q = ("select time_to_first_token_ms, load_ms, prefill_ms, generation_ms, completion_token_count "
+         "from model_logs where model_name=? and source=? and status='ok' and time_to_first_token_ms is not null")
+    out = {src: [r for r in con.execute(q, (MODEL, src)) if r[1] is not None] for src in ("benchmark", "chat")}
+    out["cloud"] = con.execute(q, (CLOUD, "benchmark_cloud")).fetchall()
+    return out
+
+
+def axis(s, x0, x1, top, base, vmax, step, unit):
+    for v in range(0, vmax + 1, step):
+        x = x0 + v / vmax * (x1 - x0)
+        s.append(f'<rect x="{x:.0f}" y="{top}" width="1" height="{base - top}" fill="{GRID}"/>')
+        s.append(f'<text x="{x:.0f}" y="{base + 18}" {PF} font-size="10" fill="{INK2}" text-anchor="middle">{v}{unit}</text>')
 
 
 def ttft_chart(data):
-    w, h, x0, x1 = W, 250, 250, W - 40
-    vmax = 35
+    h, x0, x1, vmax = 290, 270, W - 40, 35
     sx = lambda ms: x0 + (ms / 1000) / vmax * (x1 - x0)
-    s = card(w, h, f"Time to first token for {MODEL}: benchmark runs vs live chat turns, against the 3 second target", "daedalus — latency")
-    s.append(f'<text x="24" y="60" {FONT} font-size="14" fill="{TEXT}">time to first token · {MODEL} · '
-             'RTX 3050 Laptop, 4 GB VRAM</text>')
-    base = 196
-    for v in range(0, vmax + 1, 5):
-        x = sx(v * 1000)
-        s.append(f'<line x1="{x:.1f}" y1="82" x2="{x:.1f}" y2="{base}" stroke="{GRID}"/>')
-        s.append(f'<text x="{x:.1f}" y="{base + 18}" {FONT} font-size="11" fill="{MUTED}" text-anchor="middle">{v} s</text>')
+    s = card(W, h, f"Time to first token: {MODEL} benchmark runs and live chat turns, and the {CLOUD} "
+                   "cloud baseline, against the 3 second target", "daedalus · latency")
+    s.append(f'<text x="24" y="58" {PF} font-size="13" fill="{INK}">time to first token · RTX 3050 Laptop, 4 GB</text>')
+    base = 234
+    axis(s, x0, x1, 80, base, vmax, 5, " s")
     tx = sx(3000)
-    s.append(f'<line x1="{tx:.1f}" y1="78" x2="{tx:.1f}" y2="{base}" stroke="{TEXT}" stroke-dasharray="4 4"/>')
-    s.append(f'<text x="{tx + 6:.1f}" y="88" {FONT} font-size="11" fill="{TEXT}">target &lt; 3 s</text>')
-    rows = [("benchmark", "benchmark, ~2.2k-token prompt"), ("chat", "live chat turns")]
-    for i, (key, label) in enumerate(rows):
-        y = 118 + i * 52
+    s.append(f'<line x1="{tx:.0f}" y1="76" x2="{tx:.0f}" y2="{base}" stroke="{INK}" stroke-dasharray="4 4"/>')
+    s.append(f'<text x="{tx + 6:.0f}" y="88" {PF} font-size="10" fill="{INK}">target &lt; 3 s</text>')
+    rows = [("benchmark", f"{MODEL} · benchmark", False),
+            ("chat", f"{MODEL} · live chat", False),
+            ("cloud", "cloud baseline · 120b", True)]
+    for i, (key, label, hollow) in enumerate(rows):
+        y = 112 + i * 46
         vals = sorted(r[0] for r in data[key])
         med = statistics.median(vals)
-        s.append(f'<text x="24" y="{y + 4}" {FONT} font-size="12" fill="{TEXT}">{label}</text>')
-        s.append(f'<text x="24" y="{y + 20}" {FONT} font-size="11" fill="{MUTED}">n={len(vals)} · median {med / 1000:.1f} s</text>')
+        s.append(f'<text x="24" y="{y + 4}" {PF} font-size="11" fill="{INK}">{label}</text>')
+        s.append(f'<text x="24" y="{y + 19}" {PF} font-size="10" fill="{INK2}">n={len(vals)} · median {med / 1000:.1f} s</text>')
         for v in vals:
-            s.append(f'<circle cx="{sx(v):.1f}" cy="{y}" r="5" fill="{GREEN}" fill-opacity=".85" stroke="{BG}" stroke-width="2"/>')
-        s.append(f'<line x1="{sx(med):.1f}" y1="{y - 12}" x2="{sx(med):.1f}" y2="{y + 12}" stroke="{TEXT}" stroke-width="2"/>')
-    s.append(f'<text x="24" y="{h - 14}" {FONT} font-size="11" fill="{MUTED}">each dot is one run · '
-             'white tick = median · source: model_logs in the audit db</text>')
+            x = sx(v)
+            if hollow:   # a different marker, so the baseline is never told apart by colour alone
+                s.append(f'<rect x="{x - 4:.0f}" y="{y - 4}" width="8" height="8" fill="none" stroke="{LAMP_ON}" stroke-width="2"/>')
+            else:
+                s.append(f'<rect x="{x - 5:.0f}" y="{y - 5}" width="10" height="10" fill="{OUTLINE}"/>'
+                         f'<rect x="{x - 4:.0f}" y="{y - 4}" width="8" height="8" fill="{LAMP_ON}"/>')
+        s.append(f'<rect x="{sx(med) - 1:.0f}" y="{y - 12}" width="2" height="24" fill="{INK}"/>')
+    s.append(f'<text x="24" y="{h - 14}" {PF} font-size="9" fill="{INK2}">each block is one run · white bar = median · '
+             'hollow = cloud baseline, not production · source: audit db</text>')
     s.append('</svg>')
-    Path(__file__).with_name("ttft.svg").write_text("\n".join(s) + "\n", encoding="utf-8")
-
-
-def bar(x, y, w, h, fill, round_right):
-    if not round_right or w < 8:
-        return f'<rect x="{x:.1f}" y="{y}" width="{max(w, 0):.1f}" height="{h}" fill="{fill}"/>'
-    r = 4
-    return (f'<path d="M{x:.1f} {y}h{w - r:.1f}a{r} {r} 0 0 1 {r} {r}v{h - 2 * r}a{r} {r} 0 0 1 -{r} {r}'
-            f'h-{w - r:.1f}z" fill="{fill}"/>')
+    write("ttft.svg", "\n".join(s) + "\n")
 
 
 def phases_chart(data):
-    w, h, x0, x1 = W, 230, 250, W - 40
-    means = {k: [statistics.mean(r[j] for r in data[k]) for j in (1, 2, 3)] for k in data}
-    vmax = 25
+    h, x0, x1, vmax = 236, 270, W - 40, 25
+    means = {k: [statistics.mean(r[j] for r in data[k]) for j in (1, 2, 3)] for k in ("benchmark", "chat")}
     scale = (x1 - x0) / (vmax * 1000)
-    s = card(w, h, "Mean time per phase for one answer, benchmark vs live chat: generation dominates, prefill stays small", "daedalus — latency")
-    s.append(f'<text x="24" y="60" {FONT} font-size="14" fill="{TEXT}">where an answer\'s time goes · mean per phase</text>')
+    s = card(W, h, "Mean time per phase for one answer, benchmark vs live chat: generation dominates, prefill stays small",
+             "daedalus · latency")
+    s.append(f'<text x="24" y="58" {PF} font-size="13" fill="{INK}">where an answer\'s time goes · mean per phase</text>')
     lx = 24
     for name, col in SERIES:   # legend, one row above the plot
-        s.append(f'<rect x="{lx}" y="76" width="10" height="10" rx="2" fill="{col}"/>')
-        s.append(f'<text x="{lx + 16}" y="85" {FONT} font-size="11" fill="{TEXT}">{name}</text>')
-        lx += 16 + len(name) * 7 + 22
-    base = 182
-    for v in range(0, vmax + 1, 5):
-        x = x0 + v * 1000 * scale
-        s.append(f'<line x1="{x:.1f}" y1="100" x2="{x:.1f}" y2="{base}" stroke="{GRID}"/>')
-        s.append(f'<text x="{x:.1f}" y="{base + 18}" {FONT} font-size="11" fill="{MUTED}" text-anchor="middle">{v} s</text>')
-    for i, (key, label) in enumerate([("benchmark", "benchmark (128 tokens out)"), ("chat", "live chat turns")]):
+        s.append(f'<rect x="{lx}" y="74" width="10" height="10" fill="{col}"/>')
+        s.append(f'<text x="{lx + 16}" y="83" {PF} font-size="10" fill="{INK}">{name}</text>')
+        lx += 16 + len(name) * 6 + 22
+    base = 184
+    axis(s, x0, x1, 100, base, vmax, 5, " s")
+    for i, (key, label) in enumerate([("benchmark", "benchmark · 128 out"), ("chat", "live chat")]):
         y = 112 + i * 36
-        s.append(f'<text x="24" y="{y + 15}" {FONT} font-size="12" fill="{TEXT}">{label}</text>')
+        s.append(f'<text x="24" y="{y + 15}" {PF} font-size="11" fill="{INK}">{label}</text>')
         x = x0
-        parts = means[key]
-        for j, ((name, col), ms) in enumerate(zip(SERIES, parts)):
+        for j, ((name, col), ms) in enumerate(zip(SERIES, means[key])):
             wd = ms * scale
-            s.append(bar(x, y, wd - (2 if j < 2 else 0), 22, col, j == 2))
+            s.append(f'<rect x="{x:.0f}" y="{y}" width="{max(wd - 2, 1):.0f}" height="22" fill="{col}"/>')
             x += wd
-        s.append(f'<text x="{x + 8:.1f}" y="{y + 15}" {FONT} font-size="11" fill="{TEXT}">'
-                 f'{sum(parts) / 1000:.1f} s</text>')
-    s.append(f'<text x="24" y="{h - 14}" {FONT} font-size="11" fill="{MUTED}">generation includes every output token; '
-             'chat answers are longer than the benchmark\'s fixed 128</text>')
+        s.append(f'<text x="{x + 8:.0f}" y="{y + 15}" {PF} font-size="10" fill="{INK}">{sum(means[key]) / 1000:.1f} s</text>')
+    s.append(f'<text x="24" y="{h - 14}" {PF} font-size="9" fill="{INK2}">generation includes every output token; '
+             'chat answers run longer than the benchmark\'s 128</text>')
     s.append('</svg>')
-    Path(__file__).with_name("phases.svg").write_text("\n".join(s) + "\n", encoding="utf-8")
+    write("phases.svg", "\n".join(s) + "\n")
     return means
 
 
@@ -612,7 +648,9 @@ if __name__ == "__main__":
         means = phases_chart(data)
         for k, rows in data.items():   # numbers for the README's table view
             v = sorted(r[0] for r in rows)
-            print(f"{k}: n={len(v)} ttft median={statistics.median(v):.0f} min={v[0]} max={v[-1]} "
-                  f"phase means(load,prefill,gen)={[round(m) for m in means[k]]}")
+            gen = sorted(r[4] / (r[3] / 1000) for r in rows if r[3] and r[4])
+            extra = f" phase means(load,prefill,gen)={[round(m) for m in means[k]]}" if k in means else ""
+            print(f"{k}: n={len(v)} ttft median={statistics.median(v):.0f} min={v[0]} max={v[-1]}"
+                  + (f" gen tok/s median={statistics.median(gen):.1f}" if gen else "") + extra)
     else:
         print(f"skipped charts: {DB} not found")
