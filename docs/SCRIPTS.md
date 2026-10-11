@@ -5,12 +5,14 @@ Every command Daedalus ships, what it does, and when to reach for it.
 Three entry points at the repo root, sharing one helper library:
 
 ```
-daedalus.sh    run it            setup · dev · start · stop · status · migrate
-               flags             --with-search
+daedalus.sh    run it            doctor · setup · dev · start · stop · status · migrate
+               flags             --with-search · --yes
+daedalus.ps1   windows           a doorway: offers WSL if missing, then forwards any command to daedalus.sh
 sync.sh        fix it            after a git pull — safe, re-runnable, destroys nothing
 reset.sh       start over        wipe and rebuild the databases — destructive
 scripts/
   common.sh    shared helpers    sourced by all three; never run directly
+  doctor.sh    prerequisites     OS detection, the check table, installs (asks first)
   banner.py    startup banner    the animated labyrinth `dev` and `start` print; off when piped,
                                  too narrow, or with NO_COLOR / DAEDALUS_NO_BANNER=1
 ```

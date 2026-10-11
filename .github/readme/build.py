@@ -603,12 +603,97 @@ def phases_chart(data):
     return means
 
 
+# ── getstarted.svg ───────────────────────────────────────────────────────────
+# A first `./daedalus.sh setup`, as the terminal prints it. Real wording and
+# this machine's real check results, except pnpm, shown missing so the install
+# step has something to do; the window title says it is an example.
+OK_, BAD, WARN_, CMDC, WHITE = GREEN, "#ff7b72", "#d29922", "#79c0ff", "#c9d1d9"
+SESSION = [  # (pause before the line, [(text, colour), ...]); "$ " lines are typed
+    (0.0, "$ ./daedalus.sh setup"),
+    (0.5, [("Checking this machine", WHITE)]),
+    (0.3, [("  Ubuntu 24.04.4 LTS · x64 · WSL · apt-get", DIM)]),
+    (0.25, [("  ✓ ", OK_), ("python     3.12.3", WHITE)]),
+    (0.12, [("  ✓ ", OK_), ("node       24.13.0 (nvm)", WHITE)]),
+    (0.12, [("  ✗ ", BAD), ("pnpm       not enabled", WHITE)]),
+    (0.12, [("  ✓ ", OK_), ("git        2.43.0", WHITE)]),
+    (0.12, [("  ✓ ", OK_), ("curl       8.5.0", WHITE)]),
+    (0.12, [("  ✓ ", OK_), ("ollama     0.13.5, running", WHITE)]),
+    (0.12, [("  · ", DIM), ("gpu        NVIDIA GeForce RTX 3050 Laptop GPU, 4096 MiB", WHITE)]),
+    (0.12, [("  ✓ ", OK_), ("port 8000  free", WHITE)]),
+    (0.5, [("Installing what's missing", WHITE)]),
+    (0.3, [("    $ corepack enable pnpm", CMDC)]),
+    (0.4, [("    Install pnpm? [y/N] ", WHITE), ("y", OK_)]),
+    (0.6, [("  ✓ ", OK_), ("pnpm installed", WHITE)]),
+    (0.5, [("  ✓ ", OK_), (".env present and complete", WHITE)]),
+    (0.4, [("  ✓ ", OK_), ("node modules installed", WHITE)]),
+    (0.6, [("  ✓ ", OK_), ("python packages installed", WHITE)]),
+    (0.3, [("  ✓ ", OK_), ("chromadb  embedded  (data/chroma)", WHITE)]),
+    (0.3, [("  ✓ ", OK_), ("migrations: prefs · audit · chat · corpus up to date", WHITE)]),
+    (0.4, [("Done", WHITE)]),
+    (0.2, [("  Hot reload:  ", DIM), ("./daedalus.sh dev", CMDC)]),
+    (0.1, [("  One port:    ", DIM), ("./daedalus.sh start", CMDC)]),
+]
+
+
+def getstarted():
+    lh, top, step = 18, 62, 0.06
+    H = top + len(SESSION) * lh + 40
+    # schedule
+    t, times = 0.6, []
+    for pause, line in SESSION:
+        t += pause
+        times.append(t)
+        if isinstance(line, str):
+            t += len(line) * step
+    cycle = t + 3.5
+    s = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" '
+         'role="img" aria-label="Example first run of ./daedalus.sh setup: it detects Ubuntu 24.04 on WSL with apt, '
+         'checks python, node, pnpm, git, curl, ollama, the GPU and ports, finds pnpm missing, asks before running '
+         'corepack enable pnpm, installs it, then creates .env, installs node modules and python packages, sets up '
+         'the embedded chromadb, applies migrations, and prints the dev and start commands">',
+         f'<rect width="{W}" height="{H}" rx="10" fill="{BG}"/>',
+         f'<path d="M0 10a10 10 0 0 1 10-10h{W - 20}a10 10 0 0 1 10 10v20H0z" fill="{BAR}"/>',
+         *[f'<circle cx="{20 + i * 18}" cy="15" r="5.5" fill="{c}"/>'
+           for i, c in enumerate(["#ff5f57", "#febc2e", "#28c840"])],
+         f'<text x="{W // 2}" y="19" fill="{DIM}" {FONT} font-size="12" text-anchor="middle">'
+         'daedalus — bash — first run (example)</text>']
+    end = cycle - 0.5
+    for i, ((pause, line), at) in enumerate(zip(SESSION, times)):
+        y = top + i * lh
+        if isinstance(line, str):                    # a typed command, with its prompt
+            cmd = line[2:]
+            s.append(f'<g opacity="0">{window(at, end, cycle)}<text x="24" y="{y}" {FONT} font-size="13" '
+                     f'fill="{DIM}">you@daedalus:~$</text></g>')
+            cx = 24 + 16 * 7.8
+            cid = f"gs{i}"
+            ws = ";".join(f"{k * 7.8:.1f}" for k in range(len(cmd) + 1))
+            kt = ";".join(f"{(at + k * step) / cycle:.4f}" for k in range(len(cmd) + 1))
+            s.append(f'<clipPath id="{cid}"><rect x="{cx}" y="{y - 14}" height="20" width="0">'
+                     f'<animate attributeName="width" values="0;{ws};0" calcMode="discrete" '
+                     f'keyTimes="0;{kt};{end / cycle:.4f}" dur="{cycle:.2f}s" repeatCount="indefinite"/></rect></clipPath>')
+            s.append(f'<text x="{cx}" y="{y}" {FONT} font-size="13" fill="{GREEN}" textLength="{len(cmd) * 7.8:.1f}" '
+                     f'clip-path="url(#{cid})">{esc(cmd)}</text>')
+        else:
+            spans = "".join(f'<tspan fill="{c}">{esc(txt)}</tspan>' for txt, c in line)
+            bold = ' font-weight="bold"' if not line[0][0].startswith(" ") else ""
+            s.append(f'<g opacity="0">{window(at, end, cycle)}<text x="24" y="{y}" {FONT} font-size="13"'
+                     f'{bold} xml:space="preserve">{spans}</text></g>')
+    y = top + len(SESSION) * lh + 8
+    s.append(f'<g opacity="0">{window(times[-1] + 0.4, end, cycle)}<text x="24" y="{y}" {FONT} font-size="13" '
+             f'fill="{DIM}">you@daedalus:~$</text><rect x="{24 + 16 * 7.8:.1f}" y="{y - 12}" width="8" height="15" '
+             f'fill="{GREEN}"><animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.5;.5;1" dur="1s" '
+             'repeatCount="indefinite"/></rect></g>')
+    s.append('</svg>')
+    write("getstarted.svg", "\n".join(s) + "\n")
+
+
 if __name__ == "__main__":
     build()
     architecture()
     retrieval()
     forge()
     ingest()
+    getstarted()
     if DB.exists():
         data = runs()
         ttft_chart(data)

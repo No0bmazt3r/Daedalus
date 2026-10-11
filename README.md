@@ -4,7 +4,7 @@
 
 **A local-first, read-only chat assistant for a lab-scale CO₂ sorption reactor.**
 
-<a href="#run-it"><img src="https://img.shields.io/badge/runs-local_by_default-7aa9e8?style=for-the-badge&labelColor=161b22" alt="runs: local by default"></a>
+<a href="#get-started"><img src="https://img.shields.io/badge/runs-local_by_default-7aa9e8?style=for-the-badge&labelColor=161b22" alt="runs: local by default"></a>
 <a href="#tests"><img src="https://img.shields.io/badge/tests-265_passing-3fb950?style=for-the-badge&labelColor=161b22" alt="tests: 265 passing"></a>
 <a href="#license"><img src="https://img.shields.io/badge/license-MIT-d2a8ff?style=for-the-badge&labelColor=161b22" alt="license: MIT"></a>
 
@@ -222,23 +222,45 @@ Regenerate both charts from your own audit log with
   </tr>
 </table>
 
-## Run it
+## Get started
 
-**Requirements:** Python 3.11+, Node 20+ with pnpm. Ollama is optional (the
-dashboard runs without it); Docker is only for optional SearXNG web search.
+One command checks your machine, offers to install what's missing, and sets
+everything up. It asks before every install and says when one needs `sudo`.
+
+<p align="center"><img src=".github/readme/getstarted.svg" width="860" alt="Example first run of ./daedalus.sh setup: it detects Ubuntu 24.04 on WSL with apt, checks python, node, pnpm, git, curl, ollama, the GPU and the ports, finds pnpm missing, asks before running corepack enable pnpm, installs it, then creates .env, installs node modules and python packages, sets up the embedded chromadb, applies migrations, and prints the dev and start commands."></p>
+
+| Your OS | Start with | Installs missing tools with |
+|:--|:--|:--|
+| **macOS** (Intel or Apple silicon) | `./daedalus.sh setup` | Homebrew |
+| **Linux** (Ubuntu/Debian, Fedora, Arch) | `./daedalus.sh setup` | apt, dnf or pacman; Node via nvm |
+| **Windows** | `.\daedalus.ps1 setup` in PowerShell | Offers to install WSL (Ubuntu) if it's missing, then runs the same `daedalus.sh` inside it, so every command below works as `.\daedalus.ps1 <command>` |
+
+All the logic lives in one script, `daedalus.sh`. No shell ships with all
+three systems (Windows has no bash; macOS and Linux have no PowerShell), so
+`daedalus.ps1` is only a doorway that forwards into WSL.
 
 ```bash
 git clone <repo> && cd Daedalus
-./daedalus.sh setup        # one-time: checks tools, installs deps, creates .env
-./daedalus.sh dev          # hot reload: API on :8000, UI on http://localhost:5173
+./daedalus.sh doctor       # just check: OS, python, node, pnpm, git, curl, ollama, disk, RAM, GPU, ports
+./daedalus.sh setup        # check, offer to install what's missing, then deps, .env, migrations
+./daedalus.sh dev          # run it: API on :8000, UI on http://localhost:5173
 ```
 
-Pull a model so it can answer:
+**What it checks:** Python 3.11+ with `venv`, Node 20+ (and whether nvm, fnm
+or volta manages it), pnpm (enabled through corepack), git, curl, Ollama
+(installed and running, optional), Docker only with `--with-search`, plus free
+disk, RAM, a GPU, and whether ports 8000 and 5173 are free. Unattended runs
+(CI, a pipe) never install anything; `--yes` accepts every offer.
+
+Then pull a model so it can answer:
 
 ```bash
-ollama serve
 ollama pull qwen3:1.7b
 ```
+
+<sub>Checked on Ubuntu 24.04 (WSL) and the Windows 11 entry point; the macOS,
+Fedora and Arch install paths are written to each tool's documented command but
+not yet run on those systems.</sub>
 
 No telemetry yet? **Settings → System → Storage Health → Generate demo data**
 seeds a plausible run offline.
@@ -279,7 +301,7 @@ To point Daedalus at a **real reactor database**, put it (or a symlink) at
 |:--|:--|
 | Chat can't answer, or the model picker is empty | Ollama isn't running or has no chat model: `ollama serve`, then `ollama pull qwen3:1.7b`. The rest of the dashboard works without it |
 | `address already in use` on start | Something else holds the port. Set `BACKEND_PORT` / `FRONTEND_PORT` (for `dev`) or `DAEDALUS_PORT` (for `start`) in `.env` |
-| `pnpm is not installed` during setup | `setup` tries corepack first; if that's unavailable, `npm i -g pnpm` and re-run `./daedalus.sh setup` |
+| Not sure what's missing | `./daedalus.sh doctor` — one table, with what to install for each failure |
 | Sensor answers say there's no data | The sensor DB is empty. Settings → System → Storage Health → *Generate demo data* |
 | Cloud models, Search or Integrations are missing | You're in Simple mode, the local-only default. Settings → General → **Advanced** |
 | Broken after a `git pull` | `./sync.sh` — installs new deps, backfills `.env`, applies migrations |

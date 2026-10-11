@@ -1488,25 +1488,25 @@ Layer 9 below for the per-step detail.
 with a three-tool prerequisite check (node, python3, pnpm). Turn it into one
 CLI that works the same on Windows, macOS and Linux.
 
-- [ ] **Detect the OS and architecture** (Windows, macOS, Linux; x64 or arm64;
+- [x] **Detect the OS and architecture** *(2026-10-11: `scripts/doctor.sh`; Windows goes through `daedalus.ps1`, a doorway that forwards every command into WSL, rather than a native port, because the run path is bash)* (Windows, macOS, Linux; x64 or arm64;
       WSL counts as Linux but says so) and pick that platform's install path.
       Windows needs an entry point that does not need bash (PowerShell, or a
       Python/Node CLI that `daedalus.sh` and a `daedalus.ps1` both call)
-- [ ] **A full prerequisite check** — `doctor`: for each tool, found or not,
+- [x] **A full prerequisite check** — `doctor` *(2026-10-11; `npm`/corepack and the Python source are not separate rows)*: for each tool, found or not,
       its version against the minimum, and where it came from. Node (and
       whether nvm, fnm or volta manages it), npm, corepack, pnpm, Python and
       `venv`/pip, git, Ollama (installed and the server reachable), curl, and
       Docker only when `--with-search` is asked for. Plus the things that are
       not tools: free disk, RAM, the ports the app uses, and a GPU if present.
       One table, then a pass or fail with the exact fix for each failure
-- [ ] **Install what is missing, per OS**, only after asking: winget or
+- [x] **Install what is missing, per OS** *(2026-10-11: Homebrew, apt, dnf, pacman, nvm, corepack; asks first, flags sudo, never installs unattended without `--yes`. winget/Chocolatey not used: Windows installs WSL instead)*, only after asking: winget or
       Chocolatey on Windows, Homebrew on macOS, apt, dnf or pacman on Linux;
       nvm (nvm-windows on Windows) for Node when no Node is installed, corepack
       for pnpm. Never `sudo` without saying so first
 - [ ] **Keep the existing commands** — `setup`, `dev`, `start`, `stop`,
       `status`, `migrate` — and fold in `sync.sh` and `reset.sh` as
       subcommands, with `help` listing them all
-- [ ] **Check:** a clean run of `doctor` and `setup` on each of the three
+- [~] **Check:** *(2026-10-11: `doctor` and a simulated missing-node/pnpm `setup` on Ubuntu 24.04 WSL; `daedalus.ps1` on Windows 11. macOS, Fedora, Arch not run yet)* a clean run of `doctor` and `setup` on each of the three
       OSes (a fresh VM or CI runner each), recorded here with the date
 
 ---

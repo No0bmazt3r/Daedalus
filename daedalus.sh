@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Daedalus — single entry point for everything you'd want to run.
 #
-#   ./daedalus.sh setup      one-time: install dependencies
+#   ./daedalus.sh doctor     check this machine: OS, tools, versions, ports, GPU
+#   ./daedalus.sh setup      one-time: check, offer to install what's missing, then install deps
 #   ./daedalus.sh dev        hot-reload: uvicorn + vite on the host (default)
 #   ./daedalus.sh start      build the dashboard once, serve it and the API on one port
 #   ./daedalus.sh stop       stop the optional SearXNG container
@@ -10,6 +11,7 @@
 #
 # Flags:
 #   --with-search            also start SearXNG (corpus sourcing only — needs Docker)
+#   --yes                    setup: install missing tools without asking
 #
 # Related scripts:
 #   ./sync.sh                after a git pull: deps, .env, migrations  (safe)
@@ -28,6 +30,9 @@ cd "$(dirname "$0")"
 # for why each is shared rather than repeated in three scripts.
 # shellcheck source=scripts/common.sh
 . ./scripts/common.sh
+# shellcheck source=scripts/doctor.sh
+. ./scripts/doctor.sh
+use_nvm_node
 
 # The servers do not read .env by themselves, so load it here and let anything
 # already exported win.
@@ -37,7 +42,7 @@ PORT="${DAEDALUS_PORT:-8000}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ── argument parsing ─────────────────────────────────────────────────────────
 CMD="${1:-dev}"
@@ -45,6 +50,7 @@ CMD="${1:-dev}"
 
 MIGRATE_ARGS=()
 WITH_SEARCH=0
+ASSUME_YES=0
 
 # `migrate` forwards its arguments to the Python CLI, which owns their meaning
 # (including its own --help). Every other command accepts only known flags.
@@ -54,6 +60,7 @@ else
   for arg in "$@"; do
     case "$arg" in
       --with-search) WITH_SEARCH=1 ;;
+      -y|--yes)      ASSUME_YES=1 ;;
       -h|--help)     usage; exit 0 ;;
       *) err "unknown option '$arg' (try --help)"; exit 1 ;;
     esac
@@ -62,17 +69,50 @@ fi
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
+# Windows without WSL has no bash to run the rest of this script on.
+require_supported_platform() {
+  detect_platform
+  case "$PLATFORM_OS" in
+    windows) fail "native Windows is not supported — run .\\daedalus.ps1 in PowerShell; it sets up WSL and continues there" ;;
+    unknown) warn "unrecognised OS '$PLATFORM_NAME' — checking anyway" ;;
+  esac
+}
+
+cmd_doctor() {
+  require_supported_platform
+  head_ "This machine"
+  doctor_check
+  doctor_print
+  local blocking; blocking="$(doctor_blocking)"
+  say ""
+  if [ -n "$blocking" ]; then
+    err "missing or too old: ${blocking% } — './daedalus.sh setup' offers to install them"
+    return 1
+  fi
+  ok "ready — './daedalus.sh setup' if you haven't, then './daedalus.sh dev'"
+}
+
 cmd_setup() {
-  head_ "Checking prerequisites"
-  local missing=0
-  if have node; then ok "node $(node --version 2>/dev/null | head -1)"
-  else err "node is not installed"; missing=1; fi
-  have python3 && ok "python3 $(python3 --version 2>&1 | cut -d' ' -f2)" \
-                || { err "python3 is not installed"; missing=1; }
-  if have pnpm; then ok "pnpm $(pnpm --version)"
-  elif have corepack; then warn "pnpm missing — enabling via corepack"; corepack enable || true
-  else err "pnpm is not installed (npm i -g pnpm)"; missing=1; fi
-  [ "$missing" -eq 0 ] || { err "install the missing tools above, then re-run"; exit 1; }
+  require_supported_platform
+  head_ "Checking this machine"
+  doctor_check
+  doctor_print
+  # A second round only if the first installed something: installing node is
+  # what makes pnpm installable.
+  if offerable; then
+    head_ "Installing what's missing"
+    local round
+    for round in 1 2; do
+      offerable || break
+      doctor_install || break
+      doctor_check
+    done
+  fi
+  local blocking; blocking="$(doctor_blocking)"
+  if [ -n "$blocking" ]; then
+    say ""; doctor_print; say ""
+    fail "still missing: ${blocking% } — install it with the command shown above, then re-run setup"
+  fi
 
   head_ "Configuration"
   ensure_env
@@ -240,6 +280,7 @@ for d in rows:
 }
 
 case "$CMD" in
+  doctor)       cmd_doctor ;;
   setup)        cmd_setup ;;
   start|up)     cmd_start ;;
   dev|local)    cmd_dev ;;
