@@ -66,7 +66,7 @@ left out).
 | M5 Orchestration | 7 | 23 / 23 | 100% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers (numbers, times, causes, rule 9) |
 | M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 17 / 20 | 85% | Both tracks answer; Track 2's agent loop built; Track 1 is a hybrid baseline with re-ranking by decision |
 | M7 Observability | 10 | 6 / 6 | 100% | Every turn fully logged on one `query_id`, secrets and identifiers scrubbed; read back in Ariadne's Thread |
-| M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** 39 questions drafted with cited labels, awaiting a hand check; runs wait on that |
+| M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** 49 questions drafted (10 red-team) with cited labels, awaiting a hand check; runs wait on that |
 | M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |
 | M10 Dashboard | 9B | 121 / 124 | 98%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
 | M11 Cross-platform installer CLI | — | 0 / 5 | 0% | Not started — optional; `daedalus.sh` works on Linux/WSL/macOS |
@@ -92,7 +92,7 @@ project, and a **screenshot placeholder** saying exactly what to capture.
 > **Screenshot convention.** Save images to `docs/screenshots/` using the file
 > name given in each placeholder. The `![...]()` line will then show the image
 > automatically. Delete the `[SCREENSHOT: ...]` note once the image is in. A full
-> checklist is at the end of this section (§3.16).
+> checklist is at the end of this section (§3.17).
 >
 > The demo data is synthetic — say so in any caption that shows sensor values.
 
@@ -467,7 +467,7 @@ both tracks are frozen, and keeps every answer if a run is interrupted.
 **Why it matters.** It is how the headline comparison will be measured, the
 same way for every arm.
 
-**Current limitation.** The query set holds 39 drafted questions (2026-10-17),
+**Current limitation.** The query set holds 49 drafted questions (2026-10-17; 10 red-team),
 written from the ingested corpus and graph with each label citing its source
 page. They must be checked by hand before the first practice run, and the
 rig-specific ones relabelled when the lab's own documents arrive (TBC). Method
@@ -505,7 +505,30 @@ dashboard.
 
 ---
 
-### 3.16 Screenshot checklist
+### 3.16 The user persona
+
+**What it is.** Daedalus learns how its user works — the language and answer
+length they prefer, their shorthand for equipment ("the tank" → solvent level),
+the topics they keep returning to, and what kind of user they seem to be. A
+background job proposes each trait with the messages it came from; nothing
+changes until the user accepts it in Settings → Persona, shown as a globe.
+Accepted traits shape how answers are written and spell out the user's
+shorthand before the documents are searched.
+
+**Why it matters.** The assistant improves for its user over time without ever
+being allowed to invent facts: a trait is never evidence, every trait is
+reviewed, and the persona is switched off for evaluation runs so the frozen
+comparison stays valid.
+
+![Persona](screenshots/21-persona.png)
+
+**[SCREENSHOT: `21-persona.png`]** — Settings → Persona with a few accepted
+(green) and proposed (amber) traits on the globe, one selected to show the
+messages it came from.
+
+---
+
+### 3.17 Screenshot checklist
 
 Save all images to `docs/screenshots/`.
 
@@ -529,6 +552,7 @@ Save all images to `docs/screenshots/`.
 - [ ] `18-command-palette.png` — command palette open
 - [ ] `19-start.png` *(optional)* — `./daedalus.sh status` in a terminal
 - [ ] `20-thread.png` — Ariadne's Thread with one turn open
+- [ ] `21-persona.png` — Settings → Persona: the globe with accepted and proposed traits, one selected
 
 ---
 

@@ -32,7 +32,7 @@ is nice-to-have; the `[-]` items are cut.
    recalibrate the embedding and re-ranker estimators and re-check re-ranker fit
    on the machine that runs the evaluation (M2/M6), and verify inference with
    networking disabled.
-4. **Evaluate (M8):** check the 39 drafted questions and their labels →
+4. **Evaluate (M8):** check the 49 drafted questions and their labels →
    re-ingest (PDF tables) → practice runs (measure the embedding prefixes; pick
    hybrid, the re-rank floor, the passage window and the order) → freeze → one official run → failure
    analysis → human panel and Method B.
@@ -570,6 +570,22 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       with no model reopens it instead of sending a turn that would fail at the
       model call. Cloud models do not count; the default path is local
 
+### The user persona *(added 2026-10-17)*
+- [x] Learns how this install's user works and proposes it in Settings → Persona;
+      nothing applies until accepted. Four closed kinds — style, role,
+      vocabulary (grounded to a graph node, and the term must be one the user
+      typed), focus (grounded to a node) — each citing the messages it came
+      from. Accepted traits: a *not evidence* system message, and the user's
+      shorthand expanded before retrieval. Never learned from incognito, never
+      learned or applied on evaluation turns; a fresh install starts empty.
+      Globe (reusing `GraphCanvas`), proposal queue, forget one / everything,
+      on/off switch, "Look for patterns now". 11 tests
+- [ ] Try it on the chosen chat model with real conversations — extraction
+      quality on a 1.7B model is unmeasured, and a model that returns nothing
+      leaves the queue empty rather than wrong
+- [ ] Vocabulary and focus can only name things the knowledge graph names
+      ("the absorber" has no node yet). Grows with the graph
+
 ## M6 — Retrieval tracks  ▸ Layer 5
 
 ### Track 1 — Traditional vector RAG
@@ -750,7 +766,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
   - [x] `run.json` is checkpointed atomically after every answer. A crash or
         Ctrl-C saves the run as `aborted` with its reason and every answer so far
 - [~] Golden query set — 30–50 queries, stratified across the 5 categories in §5.
-      **39 drafted** *(2026-10-17)* from the ingested corpus and the graph (9
+      **39 drafted, plus 10 adversarial** *(2026-10-17)* from the ingested corpus and the graph (9
       factual · 8 procedural · 8 multi-hop · 6 ambiguous · 8 out-of-corpus; 4 in
       Malay; tag-style and control-command cases), each citing the page its
       label came from. `cli_eval validate` passes. **Drafts until Sharvin checks
@@ -764,6 +780,24 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [x] Groundedness / hallucination scoring — the validator's flags, per arm
 - [x] Retrieval precision@3 and @5, recall, MRR (Track 1); node precision and
       recall, hops and stop reasons (Track 2)
+- [x] Decoding fixed for the comparison *(2026-10-17)*. The streamed answer sent
+      no options, so it sampled at the model's default temperature and Ollama's
+      default context. Now every call on the answer path uses
+      `ollama_client.ANSWER_OPTIONS` (temperature 0, seed 42, `num_ctx` 4096 —
+      one value everywhere, since a different `num_ctx` makes Ollama reload the
+      model mid-run); recorded per answer (`model_logs.seed`, `.num_ctx`, audit
+      migration 012) and in the run snapshot's fingerprint. The latency
+      benchmark uses the same `num_ctx`. 1 test
+- [x] Significance *(2026-10-17)*: a bootstrap 95 % interval on every arm's
+      correct rate, and per pair of arms an exact McNemar test and an interval on
+      the accuracy difference, in `report.md` → *Is the difference real?*. 3 tests
+- [x] Red-team category *(2026-10-17)*: `adversarial` — 7 typed jailbreaks (one
+      in Malay) and 3 questions aimed at a planted document
+      (`config/eval/Planted_Notes_RedTeam.md`), scored with a new `forbidden`
+      field; "Obeyed a planted instruction" is a report row. Also fixed: a
+      safety-guard refusal was not counted as declining, so a correctly refused
+      control command scored as wrong. 2 tests
+  - [ ] Ingest the planted fixture before the freeze; remove it after the run
 - [~] Latency harness — mean, p50 and p95 for the whole turn, first token and
       retrieval. Not yet broken down further by stage (planning, validation)
 - [ ] **Freeze both tracks, then run once.** Tuning after seeing results invalidates the comparison
@@ -1736,10 +1770,11 @@ CLI that works the same on Windows, macOS and Linux.
       makes a test refuse to run when the isolation in `tests/__init__.py` has
       not been applied would stop the config rewrite. *Cleared 2026-10-10*; the
       guard is still to do, so they can come back
-- [ ] Tests are not in CI. The backend has 273 `unittest` cases (all passing
-      2026-10-17); the frontend has 9 logic tests (`pnpm test`, Node's runner)
-      and no component tests, and the **migration runner** still has no test —
-      it is the piece that can quietly break every other store
+- [x] Tests run locally only, by decision *(2026-10-17)*: the project stays
+      local, so there is no CI. A Playwright smoke test (`pnpm e2e`: question →
+      streamed, cited answer, API faked from recorded responses) joins the 9
+      logic tests, and the migration runner now has 7 tests
+      (`tests/test_migrations.py`). Still no component tests
 - [x] **Four duplicate PDFs in `data/corpus/`** — deleted 2026-10-10 (hashes checked
       against the manifest first). Byte-identical copies of the
       two ingested documents (`doc_20261002_040929…`, `doc_20261009_152229…`,

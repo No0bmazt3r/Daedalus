@@ -8,9 +8,9 @@
 // Events name a topic and carry no data. A listener re-fetches what it shows,
 // so there is still one source of truth for every list.
 
-export type LiveTopic = 'models' | 'embeddings' | 'endpoints' | 'sessions' | 'rag' | 'corpus' | 'trace'
+export type LiveTopic = 'models' | 'embeddings' | 'endpoints' | 'sessions' | 'rag' | 'corpus' | 'trace' | 'persona'
 
-const TOPICS: LiveTopic[] = ['models', 'embeddings', 'endpoints', 'sessions', 'rag', 'corpus', 'trace']
+const TOPICS: LiveTopic[] = ['models', 'embeddings', 'endpoints', 'sessions', 'rag', 'corpus', 'trace', 'persona']
 
 type Listener = { topics: ReadonlySet<LiveTopic>; fn: () => void }
 

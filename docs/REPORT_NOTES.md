@@ -151,6 +151,13 @@ report should keep:
   scoped out, not forgotten. Hybrid vs vector-only is itself an ablation row
   (`retrieval.hybrid`, logged as `rag_logs.keyword_hits`), as are the re-rank
   score floor, the focused passage window and the evidence order.
+- **Report uncertainty, not just rates.** ~50 questions is a small sample. Quote
+  each correctness figure with its 95 % interval and each arm-vs-arm gap with
+  its McNemar p (`report.md` → *Is the difference real?*). A non-significant gap
+  is "no detectable difference", which is a finding, not a failure.
+- **Decoding was greedy and seeded** (temperature 0, seed 42, `num_ctx` 4096),
+  so a rerun of the same configuration gives the same answers — state it, since
+  it is what makes "run once" defensible.
 - **Say what the model actually read.** Until 2026-10-17 the evidence pack
   showed the first 700 characters of 1,500-character chunks — half of every
   retrieved chunk never reached the model. Whichever `window` the official run

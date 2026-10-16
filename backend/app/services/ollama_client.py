@@ -416,6 +416,16 @@ def embed(name: str, text: str, *, timeout: float = 30.0) -> list[float]:
     raise OllamaError(f"{name} returned no embedding")
 
 
+# Decoding settings for every call on the answer path: the streamed answer
+# (`inference`), the query pipeline's steps and the graph agent (`generate`).
+# Greedy and seeded so the frozen evaluation is not partly a dice roll between
+# arms, and `num_ctx` explicit because Ollama's default changes between
+# versions — and because a call with a different `num_ctx` makes Ollama reload
+# the model, which would show up as latency. Recorded per answer in
+# `model_logs` and in every evaluation snapshot.
+ANSWER_OPTIONS: dict[str, Any] = {"temperature": 0.0, "seed": 42, "num_ctx": 4096}
+
+
 def generate(
     name: str,
     prompt: str,
@@ -459,7 +469,7 @@ def generate(
         "model": name,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": temperature},
+        "options": {**ANSWER_OPTIONS, "temperature": temperature},
     }
     if system:
         payload["system"] = system

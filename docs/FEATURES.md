@@ -37,7 +37,7 @@ against the code on 2026-10-10.
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
 | Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything, fuses the vector ranking with BM25 keyword hits (SQLite FTS5, RRF; `retrieval.hybrid`, on by default; `ABV-1`, `ABV1` and `ABV 1` find each other) and re-ranks with a cross-encoder. Three ablation options, each off by default: a re-rank score floor below which the answer says the documents do not cover it (`min_rerank_score`), a focused passage window that shows the part of a chunk and its neighbours holding the question's terms instead of its first 700 characters (`window`), and best-at-both-ends evidence order (`order`). Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's query expansion and multi-hop re-retrieval are not built |
-| Evaluation harness | Built, run from a terminal (`python -m app.cli_eval`). It asks every question in `config/eval/queries.yaml` once per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores each answer against hand-written labels, and writes a report, a CSV and an LLM-judge input file. It refuses an official run unless the comparison is frozen. The query set holds 39 drafted questions, each citing its source page, awaiting a hand check of their labels. See [`EVALUATION.md`](EVALUATION.md) |
+| Evaluation harness | Built, run from a terminal (`python -m app.cli_eval`). It asks every question in `config/eval/queries.yaml` once per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores each answer against hand-written labels, and writes a report, a CSV and an LLM-judge input file. It refuses an official run unless the comparison is frozen. The query set holds 49 drafted questions (10 of them red-team), each citing its source, awaiting a hand check of their labels. Reports carry bootstrap intervals and pairwise McNemar tests; answers are decoded greedy and seeded. See [`EVALUATION.md`](EVALUATION.md) |
 
 ---
 
@@ -146,6 +146,11 @@ Vite proxies `/api` to it.
 | `DELETE` | `/api/system/wipe/{kind}` | Empty one category, or `everything` |
 | `POST` | `/api/sessions/{id}/title` | Ask the title job to name this chat again, now |
 | `GET`/`POST` | `/api/chat/feedback` | A chat's current ratings, for redrawing the thumbs / rate one answer `+1`, `-1`, or `0` to withdraw |
+| `GET` | `/api/persona` | The persona switch, every trait (with the user messages it cites) and the globe's graph |
+| `PUT` | `/api/persona/settings` | `{"enabled": bool}` — off stops both learning and use |
+| `POST` | `/api/persona/traits/{id}/accept` · `/reject` | Decide a proposal. Accepting a style or role replaces the accepted one with the same key |
+| `DELETE` | `/api/persona/traits/{id}` · `/api/persona` | Forget one trait, or everything learned (chats untouched) |
+| `POST` | `/api/persona/scan` | Scan every chat's unread messages now; returns how many were queued |
 | `GET`/`PUT` | `/api/background-jobs` | The summariser and title jobs: their config, the local models each may use, and what each resolves to now. `PUT` merges |
 | `GET` | `/api/corpus/runs` · `/api/corpus/runs/{id}` | Ingest runs, newest first / one run with its recipe |
 | `GET` | `/api/corpus/logs/documents` · `…/{id}` | Ingest logs grouped by document / one document's whole history across runs |
@@ -1730,6 +1735,33 @@ evaluation run records these settings in its snapshot (`assistant`), and they
 join the configuration fingerprint only when customised, so runs on the defaults
 keep their old fingerprint.
 
+### 6.4 Persona — `components/settings/PersonaPanel.tsx` · `services/persona.py`
+
+What Daedalus has learned about this install's user, as a globe — the same
+`GraphCanvas` Blueprints uses, with **You** at the centre, the four kinds around
+it, and each trait hanging off its kind (green accepted, amber proposed). Below
+it, the proposal queue (Accept / Reject — a rejected trait is never proposed
+again) and the traits in use (Forget), plus **Forget everything** and an on/off
+switch. Clicking a trait shows the user's own messages it came from; a deleted
+chat shows as deleted. *Look for patterns now* scans every chat's unread
+messages instead of waiting for three more questions.
+
+| Kind | What it learns | Kept honest by |
+|---|---|---|
+| Style | language · length · format · technical level | a fixed list per key |
+| Role | operator · student · researcher · engineer · supervisor | a fixed list |
+| Vocabulary | the user's shorthand → what it means | the term must appear in their message; the meaning must resolve to a graph node (`graph_query_natural`) |
+| Focus | topics they keep asking about | must resolve to a graph node |
+
+The model only notices; the statement shown ("Prefers brief answers") is written
+from the fields. The job runs after an answer on its own thread (the summary
+job's model), only in normal chats, every three user messages, one scan at a
+time. Accepted traits become a *not evidence* system message and expand the
+user's shorthand before retrieval. Neither happens on an evaluation turn, nor
+while the switch is off. Stored in `chat.db` (`persona_traits`,
+`persona_scans`, chat migration 005); the switch is the `persona` preference.
+11 tests in `tests/chat/test_persona.py`.
+
 ## 7. Frontend structure
 
 Paths are relative to `frontend/src/`.
@@ -2085,8 +2117,8 @@ Run on 2026-10-10: **backend 243 tests pass**, **frontend 9 tests pass**,
 
 | Area | Covered by |
 |---|---|
-| Backend | **243 `unittest` cases** in 28 files (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/` — the `-t .` matters, the test packages import each other relatively). Grouped by area: `chat/` (safety guard — 28 unsafe phrasings refused and never reaching a model — follow-ups, the chat path end to end with Ollama faked, the summariser, background jobs, titles, assistant settings), `tools/` (registry, sensor tools, planning, evidence and validation, tool mode, track gate), `retrieval/` (re-ranking, embedding prefixes, Track 2's agent loop driven by a scripted model, document origin, replay, per-document ingest history, PDF extraction including the font-shift decoder), `models/` (embedding fit, chat-models-only, the cloud toggle), `evaluation/` (query-set validation, scoring and retrieval metrics, arm scoping, timeouts, aborted runs keeping their answers), `thread/` (Ariadne's Thread end to end) and `test_error_reporting.py` (a crash returns its reason and a logged id). Index in `backend/tests/README.md` |
-| Frontend | **9 logic tests** in 2 files (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation, Markdown export and sensor-line parsing (`threadLogic.test.ts`); re-joining a PDF passage's hard line breaks for display (`passage.test.ts`). No component tests; the rest is verified by hand and by headless-browser screenshots |
+| Backend | **297 `unittest` cases** in 32 files (`backend/tests/`, run with `python -m unittest discover -s tests -t .` from `backend/` — the `-t .` matters, the test packages import each other relatively). Grouped by area: `chat/` (safety guard — 28 unsafe phrasings refused and never reaching a model — follow-ups, the chat path end to end with Ollama faked, the summariser, background jobs, titles, assistant settings), `tools/` (registry, sensor tools, planning, evidence and validation, tool mode, track gate), `retrieval/` (re-ranking, embedding prefixes, Track 2's agent loop driven by a scripted model, document origin, replay, per-document ingest history, PDF extraction including the font-shift decoder), `models/` (embedding fit, chat-models-only, the cloud toggle), `evaluation/` (query-set validation, scoring and retrieval metrics, arm scoping, timeouts, aborted runs keeping their answers), `thread/` (Ariadne's Thread end to end) and `test_error_reporting.py` (a crash returns its reason and a logged id). Index in `backend/tests/README.md` |
+| Frontend | **13 logic tests** in 3 files (`pnpm test`, Node's own runner, no framework): the Thread's chat grouping, ↑/↓ navigation, Markdown export and sensor-line parsing (`threadLogic.test.ts`); re-joining a PDF passage's hard line breaks for display (`passage.test.ts`); the globe layout (`globe.test.ts`). **One browser smoke test** (`pnpm e2e`, Playwright): ask a question → tokens stream → the answer renders with its citation, against the built app with the API faked from responses recorded off a real backend (`tests/e2e/api-fixtures.json`) — no backend or Ollama needed. No component tests |
 | Frontend build | `tsc -b` and `vite build` clean; `oxlint` zero warnings |
 | Theme engine | 92 assertions — hex round-trips, harmony across 4×2 modes, incognito contrast on all 16 themes, state coercion and clamping |
 | Read-only boundary | INSERT/UPDATE/DELETE/DROP all verified to raise |

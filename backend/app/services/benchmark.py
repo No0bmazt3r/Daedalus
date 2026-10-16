@@ -244,7 +244,10 @@ def _warm_up(tag: str) -> bool:
                 "model": tag,
                 "prompt": "ok",
                 "stream": False,
-                "options": {"num_predict": 1, "temperature": 0.0},
+                # The answer path's num_ctx, so the warm-up loads the model
+                # the way answers will and the timed run does not reload it.
+                "options": {"num_predict": 1, "temperature": 0.0,
+                            "num_ctx": ollama_client.ANSWER_OPTIONS["num_ctx"]},
             },
         )
         return True
@@ -425,6 +428,7 @@ def run_stream(
             # Deterministic, so re-running the benchmark measures the machine
             # rather than resampling a different answer of a different length.
             "temperature": 0.0,
+            "num_ctx": ollama_client.ANSWER_OPTIONS["num_ctx"],
         },
     }
 

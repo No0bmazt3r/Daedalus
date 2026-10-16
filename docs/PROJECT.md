@@ -425,7 +425,8 @@ answer, which after any re-ingest is a quietly different claim.
 
 ### Comparison protocol
 
-Hold constant: same model, quantization, temperature; same corpus; same query
+Hold constant: same model, quantization, decoding (temperature 0, a fixed seed,
+an explicit `num_ctx` — `ollama_client.ANSWER_OPTIONS`); same corpus; same query
 set; same machine, run sequentially; same hand-labelled ground truth. **Also
 held constant by construction:** each arm sees only its own retrieval tools
 (§7.2), and both are recorded by one writer at the dispatch boundary.
@@ -445,11 +446,14 @@ Stratify the query set (~30–50 queries, 6–10 per category):
 | **Multi-hop causal** | **GraphRAG wins — the key differentiator** |
 | Ambiguous/underspecified | Unknown — which degrades more gracefully? |
 | Out-of-corpus (must refuse) | Tests groundedness discipline |
+| Adversarial (added 2026-10-17) | Typed jailbreaks must be refused; an instruction planted in a document must not be obeyed. Robustness as a reported number |
 
 Metrics: groundedness/hallucination rate, retrieval precision & recall, mean and
 p95 latency, multi-hop success rate, refusal correctness, hop count — and, for
 the agent, its stop reasons and rejected replies, plus for every run the share
-of retrieved items that were this rig's documents.
+of retrieved items that were this rig's documents. Every correctness figure
+carries a bootstrap 95 % interval, and each pair of arms an exact McNemar test,
+so a gap of a few answers on ~50 questions is not reported as a win.
 
 **Sequencing discipline:** build Track 1 → build Track 2 → **freeze both** → run
 the evaluation once without further tuning. Tweaking a track after seeing its
@@ -708,6 +712,27 @@ identically, and is swept at startup and shutdown. Its content is kept out of
 `conversation_logs` while latency and `grounded_flag` are still recorded — the
 evaluation data survives without storing what was said.
 
+#### The user persona (added 2026-10-17)
+
+Beyond one conversation, Daedalus learns how this install's user works
+(`services/persona.py`, Settings → Persona). A background job reads the user's
+**own** messages every three questions and proposes traits of four closed kinds:
+**style** (language, length, format, technical level — fixed lists), **role**
+(a fixed list), **vocabulary** (a shorthand the user actually typed, grounded to
+a knowledge-graph node) and **focus** (a topic grounded to a node). Every
+proposal cites the messages it came from; one outside the vocabularies, or
+citing nothing, is dropped. **Nothing applies until the user accepts it.**
+
+Accepted traits do two things: a short system message marked *not evidence*
+(it shapes wording, length and how much to explain), and expansion of the
+user's shorthand in the standalone question before retrieval ("the tank" →
+"the tank (Solvent level)"), visible in `standalone_query`. Rules 3 and 4 do
+not bend for it. It never learns from incognito chats, and it is **neither
+learned nor applied on evaluation turns** — a persona that drifts would break
+§5's freeze-then-evaluate. Each install starts with an empty persona; a chat
+deleted later takes its quoted words out of the evidence, and "Forget
+everything" clears it.
+
 ---
 
 ## 8. Model provider & hardware fit
@@ -835,11 +860,11 @@ Trust comes from visible reasoning, not a black box:
 | **Track 2** | Hand-authored 34-node graph (placeholder data until the real corpus), editable in Blueprints with an assisted proposal queue; the agent loop and the fixed walk, switchable; replay of every walk |
 | **Tool layer** | 33 tools in six categories behind effect, track and argument gates; Simple/Advanced mode enforced at dispatch |
 | **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins; Ariadne's Thread reads them back and takes human labels |
-| **Evaluation harness** | `python -m app.cli_eval` — validates the query set, runs it per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores it, refuses an official run unless frozen. The query set holds 39 drafted questions awaiting Sharvin's check of their labels |
+| **Evaluation harness** | `python -m app.cli_eval` — validates the query set, runs it per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores it, refuses an official run unless frozen. The query set holds 49 drafted questions (10 red-team) awaiting Sharvin's check of their labels; reports carry 95 % intervals and McNemar tests |
 | **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit — for chat models, embedders and re-rankers |
 | **Frontend** | React dashboard: chat, The Forge, Labyrinth Blueprints (ingest, corpus, graph, coverage, authoring, proposals, replay), Ariadne's Thread, theming, settings, store browser, full-tab error pages |
 | **Deployment** | Runs on the host: `./daedalus.sh setup` then `dev` or `start`; no Docker except the optional SearXNG |
-| **Tests** | 243 backend `unittest` cases and 9 frontend logic tests, all passing; not in CI |
+| **Tests** | 297 backend `unittest` cases, 13 frontend logic tests and a Playwright smoke test, all passing; run locally (no CI, by decision — the project stays local) |
 
 ### Not built
 

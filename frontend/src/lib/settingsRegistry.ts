@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Wrench,
   SlidersHorizontal,
+  Orbit,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -140,6 +141,14 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: [
       'thread', 'ariadne', 'trace', 'grounded', 'not grounded', 'not checked', 'unchecked', 'label',
       'labels', 'bucket', 'filter', 'citation', 'evidence', 'hallucination', 'provenance', 'groundedness',
+    ],
+  }),
+
+  panel({
+    id: 'persona', label: 'Persona', group: 'assistant', icon: Orbit, implemented: true,
+    keywords: [
+      'persona', 'profile', 'learn', 'learning', 'evolve', 'self', 'habits', 'preferences', 'style',
+      'vocabulary', 'shorthand', 'focus', 'role', 'personalise', 'personalize', 'memory', 'about me',
     ],
   }),
 

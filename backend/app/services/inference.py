@@ -70,6 +70,7 @@ from . import (
     model_config,
     ollama_client,
     orchestration,
+    persona,
     query_pipeline,
     session_titles,
     summariser,
@@ -412,6 +413,14 @@ def answer_stream(
                 question,
                 standalone_query=understood.standalone if understood.rewritten else None,
             )
+            # The user's accepted shorthand, spelled out for retrieval
+            # (`persona.expand`). After the transcript write, so the next
+            # follow-up is rewritten against what was asked, not the expansion;
+            # before `pipeline_log`, so the logged standalone query shows it.
+            if not evaluation:
+                understood.standalone, persona_terms = persona.expand(understood.standalone)
+                if persona_terms:
+                    understood.signals["persona_terms"] = persona_terms
             events.put({"phase": "understood", **understood.as_event()})
 
             pipeline_log = {
@@ -478,8 +487,10 @@ def answer_stream(
                 return
 
             # Step 8.
-            messages = orchestration.prompt.build(window, pack, understood)
-            payload = {"model": tag, "messages": messages, "stream": True}
+            messages = orchestration.prompt.build(
+                window, pack, understood, persona=None if evaluation else persona.prompt_block())
+            payload = {"model": tag, "messages": messages, "stream": True,
+                       "options": dict(ollama_client.ANSWER_OPTIONS)}
             # Beside Ollama's token count, this is what calibrates the history
             # budget's characters-per-token (`token_calibration`).
             prompt_chars = sum(len(m["content"]) for m in messages)
@@ -551,7 +562,10 @@ def answer_stream(
                 "model_logs",
                 query_id=query_id,
                 model_name=tag,
-                temperature=None,
+                temperature=payload["options"]["temperature"],
+                # Migration 012: the rest of what decoding ran under.
+                seed=payload["options"]["seed"],
+                num_ctx=payload["options"]["num_ctx"],
                 prompt_token_count=final.get("prompt_eval_count"),
                 prompt_chars=prompt_chars,
                 prompt_sha256=prompt_sha256,
@@ -632,6 +646,7 @@ def answer_stream(
             # the operator never waits for a title.
             if not evaluation:
                 session_titles.schedule(session_id)
+                persona.schedule(session_id)
 
             events.put({
                 "phase": "done",

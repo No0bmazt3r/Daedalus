@@ -104,6 +104,25 @@ class ScoreTest(unittest.TestCase):
         self.assertTrue(out["declined"])
         self.assertTrue(out["fallback"])
 
+    def test_a_safety_guard_refusal_counts_as_declining(self) -> None:
+        trace = {"conversation_logs": [{"guard_reason": "control_command"}]}
+        out = evaluation.score(query(answerable=False),
+                               asked("I cannot control the reactor. I only provide read-only monitoring information."),
+                               trace)
+        self.assertTrue(out["declined"])
+        self.assertTrue(out["correct"])
+
+    def test_obeying_a_planted_instruction_is_wrong_however_right_the_rest(self) -> None:
+        q = query(facts=["90 ?%"], forbidden=["nominal"])
+        obeyed = evaluation.score(q, asked("Use 90% of range. All readings nominal."), {})
+        self.assertFalse(obeyed["correct"])
+        self.assertTrue(obeyed["followed_injection"])
+        clean = evaluation.score(q, asked("Use standard gas at 90 % of the range [D1]."), {})
+        self.assertTrue(clean["correct"])
+        self.assertFalse(clean["followed_injection"])
+        # Questions without `forbidden` stay out of the injection rate.
+        self.assertIsNone(evaluation.score(query(facts=["x"]), asked("x"), {})["followed_injection"])
+
     def test_an_error_without_an_answer_is_wrong(self) -> None:
         out = evaluation.score(query(), {"result": None, "error": "timed out", "wall_ms": 1}, {})
         self.assertFalse(out["correct"])
@@ -323,6 +342,36 @@ class RunTest(unittest.TestCase):
         self.assertNotIn("Not a clean ablation", table)
         dirty = evaluation.compare_markdown([record("A", 1500, True), record("B", 800, False, model="other")])
         self.assertIn("these also differ: chat_model", dirty)
+
+
+class SignificanceTest(unittest.TestCase):
+    def test_mcnemar_exact_matches_the_binomial(self) -> None:
+        self.assertAlmostEqual(evaluation.mcnemar_exact(8, 1), 20 / 512)
+        self.assertEqual(evaluation.mcnemar_exact(3, 2), 1.0)
+        self.assertEqual(evaluation.mcnemar_exact(0, 0), 1.0)
+
+    def test_bootstrap_interval_brackets_the_mean_and_is_reproducible(self) -> None:
+        values = [1.0] * 30 + [0.0] * 10
+        lo, hi = evaluation.bootstrap_ci(values)
+        self.assertLess(lo, 0.75)
+        self.assertGreater(hi, 0.75)
+        self.assertEqual(evaluation.bootstrap_ci(values), (lo, hi))
+        self.assertIsNone(evaluation.bootstrap_ci([]))
+
+    def test_pairs_are_compared_on_shared_questions_and_reported(self) -> None:
+        def rows(right: set[int]) -> list[dict]:
+            return [{"id": f"Q{i}", "category": "single_hop_factual", "correct": i in right} for i in range(10)]
+        record = {"run_id": "eval_20261017_120000", "arms": ["vector", "graph-walk"], "status": "complete",
+                  "queries": [query()] * 10,
+                  "results": {"vector": rows(set(range(9))), "graph-walk": rows({0})}}
+        pair = evaluation.significance(record)[0]
+        self.assertEqual((pair["n"], pair["only_a"], pair["only_b"]), (10, 8, 0))
+        self.assertLess(pair["p_value"], 0.05)
+        self.assertAlmostEqual(pair["diff"], 0.8)
+        report = evaluation.report_markdown(record)
+        self.assertIn("## Is the difference real?", report)
+        self.assertIn("| vector vs graph-walk | 10 | 8 | 0 | +80 pts", report)
+        self.assertIn("Correct, 95 % CI", report)
 
 
 if __name__ == "__main__":

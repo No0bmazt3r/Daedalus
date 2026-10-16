@@ -33,6 +33,7 @@ from .api import (
     logs,
     maintenance,
     mcp,
+    persona,
     prefs,
     providers,
     search,
@@ -207,6 +208,7 @@ app.include_router(chat.router)
 app.include_router(events.router)
 app.include_router(background_jobs.router)
 app.include_router(assistant.router)
+app.include_router(persona.router)
 
 
 # ── Serve the built dashboard ────────────────────────────────────────────────

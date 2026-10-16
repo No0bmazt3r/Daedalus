@@ -27,6 +27,7 @@ import { GeneralPanel } from './settings/GeneralPanel'
 import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
 import { DatabasesPanel } from './settings/DatabasesPanel'
 import { BackgroundJobsPanel } from './settings/BackgroundJobsPanel'
+import { PersonaPanel } from './settings/PersonaPanel'
 import { DateTimePanel, SafetyPanel, SystemPromptPanel } from './settings/AssistantPanel'
 import { ThreadPanel } from './settings/ThreadPanel'
 import { AppearancePanel } from './settings/AppearancePanel'
@@ -260,6 +261,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
             {effectiveTab === 'assistant-safety' && <SafetyPanel isPeek={isPeek} />}
             {effectiveTab === 'thread' && <ThreadPanel isPeek={isPeek} />}
             {effectiveTab === 'background' && <BackgroundJobsPanel isPeek={isPeek} />}
+            {effectiveTab === 'persona' && <PersonaPanel isPeek={isPeek} />}
             {effectiveTab === 'knowledge' && <KnowledgeBasePanel />}
             {effectiveTab === 'vector-rag' && <VectorRagPanel onOpenForge={onOpenForge} />}
             {effectiveTab === 'graph-rag' && <GraphRagPanel />}

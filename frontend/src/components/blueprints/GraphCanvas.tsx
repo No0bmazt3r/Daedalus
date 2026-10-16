@@ -403,7 +403,7 @@ export function GraphCanvas({
           <g>
             {order.map((n) => {
               const p = placed.get(n.id)!
-              const style = NODE_STYLE[n.type as NodeType]
+              const tint = n.tint ?? NODE_STYLE[n.type as NodeType]?.tint ?? 'theme-text-muted'
               const r = radius(n.degree ?? 0) * p.scale
               const isSelected = n.id === selected
               const label = n.label || shortId(n.id)
@@ -438,7 +438,7 @@ export function GraphCanvas({
                   <g opacity={dim(n.id)} className="transition-opacity duration-200">
                   <circle
                     r={r}
-                    className={style.tint}
+                    className={tint}
                     fill="currentColor"
                     stroke={isSelected ? 'currentColor' : 'none'}
                     strokeOpacity={0.5}

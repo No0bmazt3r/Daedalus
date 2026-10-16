@@ -126,6 +126,15 @@ class ChatPathTest(unittest.TestCase):
         self.assertIn('"chars_per_token"', context["content"])
         self.titled.assert_called_once_with(self.session_id)
 
+    def test_the_answer_is_greedy_seeded_and_sized_and_logged_so(self) -> None:
+        events, fake = self.run_turn("What is the CO2 level now?", f"CO2 is {fixtures.co2(119)} ppm [S1].")
+        sent = fake.payloads[0]["options"]
+        self.assertEqual(sent, ollama_client.ANSWER_OPTIONS)
+        self.assertEqual(sent["temperature"], 0.0)
+        row = audit_store.trace(self.done(events)["query_id"])["model_logs"][0]
+        self.assertEqual((row["temperature"], row["seed"], row["num_ctx"]),
+                         (sent["temperature"], sent["seed"], sent["num_ctx"]))
+
     def test_failed_model_call_writes_an_error_row(self) -> None:
         class _Broken(FakeHttpx):
             @contextlib.contextmanager

@@ -63,6 +63,8 @@ export interface GraphNode {
   origin?: DocumentOrigin;
   /** Set when a recorded traversal crossed a node the graph no longer has. */
   missing?: boolean;
+  /** A colour class for a node that is not one of the six graph types — the persona globe's. */
+  tint?: string;
 }
 
 /** Mirrors `knowledge_graph.origin_of` on the backend. */

@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **273 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **297 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -18,6 +18,7 @@ Shared, at the top of this folder:
 | `fakes.py` | `FakeHttpx`: a fake Ollama that streams a scripted answer, so the chat path runs with no model |
 | `test_error_reporting.py` | 2 tests: an unexpected server error is logged under a short id and answered with its reason, so the UI's error toast can be matched to the Process Log; the demo seeders refuse unless `DAEDALUS_ALLOW_DEMO_SEED=1` |
 | `test_scrub.py` | 3 tests (M7): secrets and personal identifiers never reach an audit row or a process-log line; readings do |
+| `test_migrations.py` | 7 tests: the migration runner applies in order once, rolls a failing file back whole, refuses an edited, deleted or gap-filling file, splits trigger bodies correctly, and every real migration applies to a fresh database |
 
 ### `chat/` — The chat path end to end: the safety guard, the turn itself with Ollama faked, the rolling summary, titles, and Settings → Assistant.
 
@@ -25,7 +26,8 @@ Shared, at the top of this folder:
 |---|---|---|
 | `test_assistant_settings.py` | 5 | Settings → Assistant: timezone precedence, validation, the freeze, custom refusals. |
 | `test_background_jobs.py` | 14 | Background jobs: model-written chat titles, their settings, and the token ratio. |
-| `test_chat_path.py` | 10 | The whole of §7.1 through `inference.answer_stream`, with Ollama faked. |
+| `test_chat_path.py` | 11 | The whole of §7.1 through `inference.answer_stream`, with Ollama faked; the answer is decoded greedy, seeded and with an explicit `num_ctx`, and logged so. |
+| `test_persona.py` | 11 | The user persona: proposals grounded to closed vocabularies and the graph, queued with their evidence, applied only once accepted, single-valued style, rejected stays rejected, incognito never read, deleted chats take their words with them — and never used on an evaluation turn. |
 | `test_follow_ups.py` | 3 | Follow-ups: a spoken opener ("so …") is not a continuation, and "the previous answer" is understood. |
 | `test_safety.py` | 9 | M5: every unsafe phrasing is refused before any tool or model runs. |
 | `test_summariser.py` | 5 | §7.4's rolling summary: folds what fell out of the window, never keeps a value. |
@@ -68,7 +70,7 @@ Shared, at the top of this folder:
 
 | File | Tests | What it pins |
 |---|---|---|
-| `test_evaluation.py` | 22 | The evaluation harness — query-set validation, scoring, arms, timeouts, aborts. |
+| `test_evaluation.py` | 31 | The evaluation harness — query-set validation, scoring (a guard refusal is a decline; obeying a planted instruction is wrong), arms, timeouts, aborts, bootstrap intervals and McNemar between arms. |
 
 ### `thread/` — Ariadne's Thread: traces, the number verdicts, labels, incognito redaction, settings and retrieval detail.
 

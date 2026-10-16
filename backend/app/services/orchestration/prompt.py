@@ -81,6 +81,8 @@ def build(
     window: chat_service.ContextWindow,
     pack: EvidencePack,
     understood: Understanding,
+    *,
+    persona: str | None = None,
 ) -> list[dict[str, str]]:
     # Settings → Assistant can replace the prompt; SYSTEM_PROMPT is the default.
     system = assistant_settings.system_prompt(SYSTEM_PROMPT)
@@ -88,6 +90,10 @@ def build(
         system += "\n" + hint
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    # The learned persona (`services/persona.py`), its own message so it reads
+    # as about the user rather than as one more rule. Never on evaluation turns.
+    if persona:
+        messages.append({"role": "system", "content": persona})
     messages.extend(window.as_prompt_messages())
     messages.append({"role": "system", "content": f"EVIDENCE:\n{pack.render()}"})
     # The standalone form, per §7.4: everything downstream of step 3 runs on
