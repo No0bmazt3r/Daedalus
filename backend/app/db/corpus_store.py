@@ -347,6 +347,25 @@ def origins_for(chunk_ids: list[str]) -> dict[str, str]:
 # A run of word characters, allowing the joiners a tag is written with, so
 # "ABV-1" and "SOP-4.2" stay one term and match as a phrase.
 _TERM = re.compile(r"\w[\w\-./]*")
+_JOINER = re.compile(r"[\-./]")
+_LETTER_DIGIT = re.compile(r"(?<=[^\W\d_])(?=\d)|(?<=\d)(?=[^\W\d_])")
+
+
+def _forms(term: str) -> set[str]:
+    """The ways an operator writes one tag: ABV-1, ABV1 and ABV 1 all find each other.
+
+    The tokenizer splits on joiners, so "ABV-1" is indexed as abv·1 and a
+    quoted "ABV-1" already matches it as a phrase — but "ABV1" is one token and
+    would miss it. Each form is quoted, so this adds recall, never syntax.
+    """
+    forms = {term}
+    if _JOINER.search(term):
+        # Only a tag — letters and digits. "4-20" (a mA range) is not "420".
+        if any(c.isalpha() for c in term):
+            forms.add(_JOINER.sub("", term))
+    elif _LETTER_DIGIT.search(term):
+        forms.add(_LETTER_DIGIT.sub(" ", term))
+    return forms
 
 
 def keyword_search(
@@ -362,7 +381,7 @@ def keyword_search(
     terms = _TERM.findall(query)
     if not terms:
         return []
-    match = " OR ".join('"' + t.replace('"', '""') + '"' for t in terms)
+    match = " OR ".join('"' + f.replace('"', '""') + '"' for t in terms for f in sorted(_forms(t)))
     sql = """
         SELECT c.chunk_id, c.text, c.section_title, c.page_number,
                d.filename AS source_file, d.source_type, bm25(chunks_fts) AS bm25
@@ -379,6 +398,33 @@ def keyword_search(
     args.append(limit)
     with _connect() as conn:
         return [dict(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def neighbours(chunk_ids: list[str]) -> dict[str, dict[int, dict[str, Any]]]:
+    """Each chunk and the chunks either side of it in its document, by offset -1/0/+1.
+
+    For the focused passage window, which reads across a chunk boundary. Offsets
+    are exact (`text == extracted[char_start:char_end]`), so the caller can join
+    neighbours without repeating the overlap.
+    """
+    if not chunk_ids:
+        return {}
+    marks = ",".join("?" * len(chunk_ids))
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT h.chunk_id AS hit, n.ordinal - h.ordinal AS rel, n.text, n.char_start, n.char_end
+              FROM chunks h
+              JOIN chunks n ON n.document_id = h.document_id
+                           AND n.ordinal BETWEEN h.ordinal - 1 AND h.ordinal + 1
+             WHERE h.chunk_id IN ({marks})
+            """,
+            chunk_ids,
+        ).fetchall()
+    out: dict[str, dict[int, dict[str, Any]]] = {}
+    for r in rows:
+        out.setdefault(r["hit"], {})[r["rel"]] = dict(r)
+    return out
 
 
 def all_chunk_ids() -> list[str]:

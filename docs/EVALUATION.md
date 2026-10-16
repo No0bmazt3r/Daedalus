@@ -5,9 +5,12 @@ targets*; this is how to run it. The machinery is `backend/app/services/evaluati
 driven from a terminal by `backend/app/cli_eval.py`. Guarded by
 `backend/tests/evaluation/test_evaluation.py`.
 
-> **Status (2026-10-10):** the harness is built and tested; no run has been
-> made. `queries.yaml` holds 5 `EX…` examples against the placeholder graph —
-> a run against them measures the harness, not Daedalus.
+> **Status (2026-10-17):** the harness is built and tested; no run has been
+> made. `queries.yaml` holds **39 drafted questions** (9 factual · 8 procedural ·
+> 8 multi-hop · 6 ambiguous · 8 out-of-corpus, 4 in Malay) written from the
+> ingested corpus and the graph, each citing its source page in `notes`. They
+> are drafts until every label is checked by hand; the rig entries rest on the
+> draft `rig/` documents.
 
 ---
 
@@ -179,7 +182,8 @@ Supplementary to the official comparison, never instead of it: ablation runs are
 
 Every run's snapshot records the chunk recipe the corpus was actually cut with
 (`strategy chunk_size/overlap`, from the ingest runs that wrote the chunks),
-along with Track 1's `retrieval` settings (`top_k`, `similarity_threshold`, `hybrid`) in
+along with Track 1's `retrieval` settings (`top_k`, `similarity_threshold`, `hybrid`,
+`min_rerank_score`, `window`, `order`) in
 `rag_config`. `compare` puts runs side by side, per arm, and says when they differ
 in anything besides the variable under test.
 

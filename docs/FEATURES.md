@@ -36,8 +36,8 @@ against the code on 2026-10-10.
 | Agent tools | Built — 33 tools in six categories, including the two sensor tools and Track 2's two retrieval modes, `graph_walk` and `graph_agent`. **Simple** (the default, switched in Settings → General) is the app-wide local-only mode, enforced in the backend by `tool_policy_store.is_simple()`, which fails closed: only the tools that answer questions can run (everything else is refused at dispatch), cloud models are off whatever their switch says, web search and MCP connections are refused, and the Search and Integrations panels are hidden. **Advanced** restores everything under the per-tool switches, the locks and the Cloud models switch. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
-| Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything, fuses the vector ranking with BM25 keyword hits (SQLite FTS5, RRF; `retrieval.hybrid`, on by default) and re-ranks with a cross-encoder. Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's query expansion and multi-hop re-retrieval are not built |
-| Evaluation harness | Built, run from a terminal (`python -m app.cli_eval`). It asks every question in `config/eval/queries.yaml` once per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores each answer against hand-written labels, and writes a report, a CSV and an LLM-judge input file. It refuses an official run unless the comparison is frozen. The query set holds 5 examples until the real corpus is ingested. See [`EVALUATION.md`](EVALUATION.md) |
+| Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything, fuses the vector ranking with BM25 keyword hits (SQLite FTS5, RRF; `retrieval.hybrid`, on by default; `ABV-1`, `ABV1` and `ABV 1` find each other) and re-ranks with a cross-encoder. Three ablation options, each off by default: a re-rank score floor below which the answer says the documents do not cover it (`min_rerank_score`), a focused passage window that shows the part of a chunk and its neighbours holding the question's terms instead of its first 700 characters (`window`), and best-at-both-ends evidence order (`order`). Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's query expansion and multi-hop re-retrieval are not built |
+| Evaluation harness | Built, run from a terminal (`python -m app.cli_eval`). It asks every question in `config/eval/queries.yaml` once per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores each answer against hand-written labels, and writes a report, a CSV and an LLM-judge input file. It refuses an official run unless the comparison is frozen. The query set holds 39 drafted questions, each citing its source page, awaiting a hand check of their labels. See [`EVALUATION.md`](EVALUATION.md) |
 
 ---
 
@@ -119,7 +119,7 @@ Vite proxies `/api` to it.
 | `POST` | `/api/graph/proposals/{id}/reject` | Declines one. Kept, not deleted: what the extractor got wrong is the evidence for how well it works |
 | `POST` | `/api/rag/rerankers/{id}/benchmark` | Time re-scoring 20 chunk-sized passages on this machine (median of three, after a warm-up); stored with the weights, it replaces the estimate in the model's verdict |
 | `POST`/`DELETE` | `/api/rag/rerankers/{id}` (`/download` for POST) | Download a re-ranker's pinned weights on a worker thread, or delete them. Called from The Forge → Re-rankers; progress is read back from `/api/rag/config`'s `rerankers` |
-| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`) and depth (`retrieval`: `top_k`, `similarity_threshold`, `hybrid`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
+| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`) and depth (`retrieval`: `top_k`, `similarity_threshold`, `hybrid`, `min_rerank_score`, `window` `head`·`focused`, `order` `rank`·`edges`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it. `PUT` (Settings → Vector RAG) is refused with 409 while the comparison is frozen |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE (`total_bytes`, `completed_bytes`, `percent` per line) |
 | `GET`/`PUT` | `/api/assistant/config` | Settings → Assistant: site timezone, system prompt, refusal wording and extra blocked phrases, with the built-in defaults and rules. A null field resets it. Prompt and safety edits are refused with 409 while the comparison is frozen; the timezone is not |
@@ -672,7 +672,7 @@ the selected one.
 
 ### Text extraction — `services/extraction.py`
 
-TXT, MD, CSV, JSON, YAML and PDF (pypdf). Pure in-memory: bytes in, text and
+TXT, MD, CSV, JSON, YAML and PDF (pypdf, plus pdfplumber for tables). Pure in-memory: bytes in, text and
 page breaks out, so every offset the chunker records describes the string this
 returns. Normalisation (line endings, ligatures, control-character debris,
 runs of blank lines) happens here for the same reason.
@@ -687,6 +687,16 @@ What real PDFs needed, each found by one failing:
 - **AES-locked manuals.** Most "encrypted" manufacturer PDFs only lock
   permissions; the empty password opens them, and AES needs the `cryptography`
   package. Its absence is an `ExtractionError` naming the fix, not a bare 500.
+- **Tables.** pypdf reads a table as a run of cells — "Span gas 400 ppm Zero
+  gas N2 0" — and the row structure that ties a limit to its parameter is gone.
+  `_tables()` asks `pdfplumber` for each page's ruled tables and appends them
+  as Markdown rows (`Table (page N):`) after that page's text, which both the
+  embedder and BM25 can match as one fact. Alongside pypdf's text, not instead:
+  pypdf is what opens the AES and font-shifted manuals. pdfminer reports the
+  Fuji manual's unmapped glyphs as `(cid:N)`, which are the same shifted codes,
+  so they go through `_unshift()` too; a table still unreadable after that is
+  dropped. Optional — without the package the warning says tables were not
+  extracted. Tested in `tests/retrieval/test_pdf_extraction.py`.
 - **Password-protected files** are refused with the reason. Storing the password
   would put a credential in the corpus.
 - **An unreadable document is a document problem**, recorded on the row
@@ -1053,7 +1063,10 @@ run") ends the turn with a clarifying question.
 
 **Evidence is labelled lines, not JSON.** `[S1]` a reading,
 `[D1]` a document passage, `[G1]` a graph node — each tool's block still fenced
-by `render_for_prompt()`. The model must cite labels; the validator checks every
+by `render_for_prompt()`. A passage is at most `PASSAGE_CHARS` (700) characters:
+the chunk's start, or with `retrieval.window: focused` the window `search.focus`
+chose. With `retrieval.order: edges` the passages are labelled best-at-both-ends
+(1, 3, 5, 4, 2) rather than best-first; the logged retrieval keeps rank order. The model must cite labels; the validator checks every
 cited label exists.
 
 **Each passage and node says whose it is.** Document lines carry `[THIS RIG]` or
@@ -1107,7 +1120,7 @@ model call.
 Daedalus can connect to external MCP servers, over **stdio** (a program it
 spawns) or **http** (JSON-RPC, including `text/event-stream` replies). The three
 methods used are `initialize`, `tools/list` and `tools/call`, written here rather
-than pulled from the SDK: `requirements.txt` justifies every line it holds, and
+than pulled from the SDK: every dependency has to justify itself (`backend/README.md` → Dependencies), and
 three JSON-RPC calls over a pipe is not something a dependency would get more
 right. What *would* be got wrong is the process handling, so that is where the
 care went — scrubbed environment, own session so a timeout kills the group,

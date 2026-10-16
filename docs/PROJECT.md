@@ -271,7 +271,10 @@ on top (all from the FYP1 retrieval-layer spec):
 | Query expansion | LLM rewrites the query with lab synonyms before searching | Cut from FYP2 |
 | Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | **Built** (2026-10-17) — SQLite FTS5 BM25 fused with the vector ranking by RRF before re-ranking; on by default, frozen with the track |
 | Cross-encoder re-ranking | Re-score top-N locally before synthesis | **Built** — on by default, frozen with the track |
-| Contextual compression | Strip irrelevant sentences to save context window | Cut from FYP2 |
+| Contextual compression | Strip irrelevant sentences to save context window | Cut from FYP2 — a light extractive form is built: the **focused passage window** (`retrieval.window`) shows the 700 characters of a chunk and its neighbours that hold the question's terms. Off by default |
+| Abstention | Say the documents do not cover it when nothing retrieved is relevant ("sufficient context", ICLR 2025) | **Built** (2026-10-17) — `retrieval.min_rerank_score`, a cross-encoder score floor. Off by default; chosen on the practice runs |
+| Evidence ordering | Strongest passages at the prompt's edges ("lost in the middle") | **Built** (2026-10-17) — `retrieval.order: edges`; prompt only, so rank metrics are unaffected. Off by default |
+| Table-aware extraction | Keep a PDF table's rows whole so a limit stays next to what it limits | **Built** (2026-10-17) — `pdfplumber` adds each page's tables as Markdown rows |
 | Multi-hop | Loop back and re-retrieve if evidence is insufficient | Cut from FYP2 |
 
 **Track 1 is deliberately a hybrid (dense + BM25) baseline with cross-encoder
@@ -832,7 +835,7 @@ Trust comes from visible reasoning, not a black box:
 | **Track 2** | Hand-authored 34-node graph (placeholder data until the real corpus), editable in Blueprints with an assisted proposal queue; the agent loop and the fixed walk, switchable; replay of every walk |
 | **Tool layer** | 33 tools in six categories behind effect, track and argument gates; Simple/Advanced mode enforced at dispatch |
 | **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins; Ariadne's Thread reads them back and takes human labels |
-| **Evaluation harness** | `python -m app.cli_eval` — validates the query set, runs it per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores it, refuses an official run unless frozen. The query set holds 5 examples |
+| **Evaluation harness** | `python -m app.cli_eval` — validates the query set, runs it per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores it, refuses an official run unless frozen. The query set holds 39 drafted questions awaiting Sharvin's check of their labels |
 | **Model console** | The Forge — detect, estimate, score, manage, benchmark, commit — for chat models, embedders and re-rankers |
 | **Frontend** | React dashboard: chat, The Forge, Labyrinth Blueprints (ingest, corpus, graph, coverage, authoring, proposals, replay), Ariadne's Thread, theming, settings, store browser, full-tab error pages |
 | **Deployment** | Runs on the host: `./daedalus.sh setup` then `dev` or `start`; no Docker except the optional SearXNG |

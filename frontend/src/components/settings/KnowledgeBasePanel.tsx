@@ -296,6 +296,18 @@ const HYBRID_OPTIONS = [
   { value: 'on', label: 'Vector + keyword (hybrid)' },
   { value: 'off', label: 'Vector only' },
 ]
+const FLOOR_OPTIONS = [
+  { value: '', label: 'No re-rank floor' },
+  ...[0.01, 0.05, 0.1, 0.2, 0.3].map((t) => ({ value: String(t), label: `re-rank score ≥ ${t}` })),
+]
+const WINDOW_OPTIONS = [
+  { value: 'head', label: 'Passage: chunk start' },
+  { value: 'focused', label: 'Passage: focused on the question' },
+]
+const ORDER_OPTIONS = [
+  { value: 'rank', label: 'Order: best first' },
+  { value: 'edges', label: 'Order: best at both ends' },
+]
 const BUDGET_OPTIONS = [3, 6, 10, 20].map((n) => ({ value: String(n), label: `${n} s budget` }))
 const STEP_OPTIONS = [1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} step${n === 1 ? '' : 's'}` }))
 
@@ -532,7 +544,7 @@ function RerankSection({
 function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (config: RagConfig) => void }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const { top_k, similarity_threshold, hybrid } = config.retrieval
+  const { top_k, similarity_threshold, hybrid, min_rerank_score, window: passageWindow, order } = config.retrieval
   const locked = config.frozen || busy
   const withCurrent = (options: { value: string; label: string }[], value: string, label: string) =>
     options.some((o) => o.value === value) ? options : [...options, { value, label }]
@@ -557,8 +569,9 @@ function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (
       </h3>
       <p className="text-xs leading-relaxed theme-text-muted">
         How many passages reach the prompt, and how close a passage must be to the question to count at
-        all, and whether exact keyword matches (BM25) are fused in alongside vector similarity. Vary these for
-        the ablation table, then freeze.
+        all; whether exact keyword matches (BM25) are fused in alongside vector similarity; how low a re-rank
+        score can be before the answer says the documents do not cover it; which part of each chunk the model
+        reads; and in what order. Vary these for the ablation table, then freeze.
       </p>
       <div className={`flex flex-wrap items-center gap-3 ${locked ? 'pointer-events-none opacity-50' : ''}`}>
         <ThemeSelect
@@ -582,6 +595,30 @@ function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (
           onChange={(v) => void save({ hybrid: v === 'on' })}
           options={HYBRID_OPTIONS}
           ariaLabel="Keyword search"
+          size="sm"
+          className="w-56"
+        />
+        <ThemeSelect
+          value={min_rerank_score == null ? '' : String(min_rerank_score)}
+          onChange={(v) => void save({ min_rerank_score: v === '' ? null : Number(v) })}
+          options={withCurrent(FLOOR_OPTIONS, String(min_rerank_score ?? ''), `re-rank score ≥ ${min_rerank_score}`)}
+          ariaLabel="Re-rank score floor"
+          size="sm"
+          className="w-52"
+        />
+        <ThemeSelect
+          value={passageWindow ?? 'head'}
+          onChange={(v) => void save({ window: v as RetrievalSettings['window'] })}
+          options={WINDOW_OPTIONS}
+          ariaLabel="Passage window"
+          size="sm"
+          className="w-64"
+        />
+        <ThemeSelect
+          value={order ?? 'rank'}
+          onChange={(v) => void save({ order: v as RetrievalSettings['order'] })}
+          options={ORDER_OPTIONS}
+          ariaLabel="Evidence order"
           size="sm"
           className="w-56"
         />

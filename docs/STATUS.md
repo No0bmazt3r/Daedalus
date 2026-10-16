@@ -66,7 +66,7 @@ left out).
 | M5 Orchestration | 7 | 23 / 23 | 100% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers (numbers, times, causes, rule 9) |
 | M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 17 / 20 | 85% | Both tracks answer; Track 2's agent loop built; Track 1 is a hybrid baseline with re-ranking by decision |
 | M7 Observability | 10 | 6 / 6 | 100% | Every turn fully logged on one `query_id`, secrets and identifiers scrubbed; read back in Ariadne's Thread |
-| M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** The query set, labels and runs wait on the corpus |
+| M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** 39 questions drafted with cited labels, awaiting a hand check; runs wait on that |
 | M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |
 | M10 Dashboard | 9B | 121 / 124 | 98%\* | Working — chat, Forge, Blueprints, Ariadne's Thread |
 | M11 Cross-platform installer CLI | — | 0 / 5 | 0% | Not started — optional; `daedalus.sh` works on Linux/WSL/macOS |
@@ -467,10 +467,11 @@ both tracks are frozen, and keeps every answer if a run is interrupted.
 **Why it matters.** It is how the headline comparison will be measured, the
 same way for every arm.
 
-**Current limitation.** The query set holds 5 example questions written against
-the placeholder graph. The real 30–50 question set can be written now for the
-reference documents; rig-specific questions wait on the lab's own documents
-(TBC). Method in `docs/EVALUATION.md`.
+**Current limitation.** The query set holds 39 drafted questions (2026-10-17),
+written from the ingested corpus and graph with each label citing its source
+page. They must be checked by hand before the first practice run, and the
+rig-specific ones relabelled when the lab's own documents arrive (TBC). Method
+in `docs/EVALUATION.md`.
 
 ---
 

@@ -13,9 +13,9 @@ from app.services import extraction, ingestion
 TEXT = "The NDIR analyser measures CO2 by infrared absorption. " * 4
 
 
-def _plain_pdf() -> bytes:
+def _plain_pdf(stream: bytes | None = None) -> bytes:
     """A one-page PDF with a real text layer, written by hand (no PDF library needed)."""
-    stream = f"BT /F1 10 Tf 40 800 Td ({TEXT}) Tj ET".encode()
+    stream = stream or f"BT /F1 10 Tf 40 800 Td ({TEXT}) Tj ET".encode()
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -87,6 +87,43 @@ class UploadNeverCrashesTest(unittest.TestCase):
             doc = ingestion.store_upload(b"%PDF-1.4 not really", "broken.pdf")
         self.assertEqual(doc["extract_status"], "failed")
         self.assertIn("KeyError", doc["extract_error"])
+
+
+
+def _table_pdf() -> bytes:
+    """Prose, then a ruled 2-column limits table: grid lines plus one text run per cell."""
+    rows = [("Parameter", "Limit"), ("CO2 high alarm", "5000 ppm"), ("Bed temperature", "120 C")]
+    ops = [f"BT /F1 10 Tf 40 800 Td ({TEXT}) Tj ET"]
+    top, h, xs = 700, 20, (40, 200, 360)
+    for i in range(len(rows) + 1):
+        ops.append(f"{xs[0]} {top - i * h} m {xs[-1]} {top - i * h} l S")
+    for x in xs:
+        ops.append(f"{x} {top} m {x} {top - len(rows) * h} l S")
+    for i, row in enumerate(rows):
+        for x, cell in zip(xs, row):
+            ops.append(f"BT /F1 10 Tf {x + 4} {top - (i + 1) * h + 6} Td ({cell}) Tj ET")
+    return _plain_pdf("\n".join(ops).encode())
+
+
+class PdfTableTest(unittest.TestCase):
+    def test_a_ruled_table_keeps_each_row_whole(self) -> None:
+        extracted = extraction.extract(_table_pdf(), "limits.pdf")
+        self.assertIn("| CO2 high alarm | 5000 ppm |", extracted.text)
+        self.assertIn("| Parameter | Limit |", extracted.text)
+        self.assertIn("NDIR analyser", extracted.text)  # pypdf's text is kept, not replaced
+        self.assertTrue(any("table(s) kept as rows" in w for w in extracted.warnings))
+
+    def test_without_pdfplumber_the_text_still_ingests(self) -> None:
+        with mock.patch.dict("sys.modules", {"pdfplumber": None}):
+            extracted = extraction.extract(_table_pdf(), "limits.pdf")
+        self.assertNotIn("| CO2 high alarm |", extracted.text)
+        self.assertIn("pdfplumber is not installed", " ".join(extracted.warnings))
+
+    def test_cid_glyphs_decode_like_pypdf_shifted_text(self) -> None:
+        # "Hi there" shifted 29 down, as pdfminer reports the Fuji manual's glyphs.
+        cids = "".join(f"(cid:{ord(c) - 29})" for c in "Hi there")
+        fix = lambda t: extraction._unshift_words(extraction._unshift(t))  # noqa: E731
+        self.assertEqual(fix(extraction._cell(cids)), "Hi there")
 
 
 if __name__ == "__main__":

@@ -78,6 +78,7 @@ The stack itself, each under its own permissive licence:
 | [Ollama](https://ollama.com/) | Local model runtime (Layer 6) | MIT |
 | [NetworkX](https://networkx.org/) · [PyYAML](https://pyyaml.org/) | Track 2's knowledge graph, loaded from YAML (Layer 5) | BSD-3-Clause · MIT |
 | [pypdf](https://github.com/py-pdf/pypdf) | PDF text extraction for ingestion (Layer 4) | BSD-3-Clause |
+| [pdfplumber](https://github.com/jsvine/pdfplumber) · [pdfminer.six](https://github.com/pdfminer/pdfminer.six) | PDF table extraction — each table kept as Markdown rows | MIT |
 | [ONNX Runtime](https://onnxruntime.ai/) · [Tokenizers](https://github.com/huggingface/tokenizers) | Running Track 1's cross-encoder re-rankers locally | MIT · Apache-2.0 |
 | [psutil](https://github.com/giampaolo/psutil) · [nvidia-ml-py](https://pypi.org/project/nvidia-ml-py/) | Hardware detection for The Forge (Layer 11) | BSD-3-Clause · BSD |
 | [httpx](https://www.python-httpx.org/) | Ollama, registry and provider calls | BSD-3-Clause |

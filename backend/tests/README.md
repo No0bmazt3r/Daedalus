@@ -1,6 +1,6 @@
 # Backend tests
 
-Stdlib `unittest`, no extra dependency. **243 tests**, grouped by the part of
+Stdlib `unittest`, no extra dependency. **273 tests**, grouped by the part of
 the system they pin. From `backend/`:
 
 ```bash
@@ -48,9 +48,9 @@ Shared, at the top of this folder:
 | `test_document_usage.py` | 1 | Which documents earn their place: retrieved per track, cited by answers, seeded walks excluded. |
 | `test_embedding_prefixes.py` | 5 | Asymmetric embedders get their query and document prefixes — and the index knows which. |
 | `test_graph_agent.py` | 16 | Track 2's agent loop, driven by a scripted model — no Ollama anywhere. |
-| `test_hybrid.py` | 8 | Track 1's hybrid retrieval: BM25 (FTS5) keyword hits fused with the vector ranking by RRF; the index follows re-chunks and deletes. |
+| `test_hybrid.py` | 16 | Track 1's retrieval options: BM25 (FTS5) keyword hits fused with the vector ranking by RRF, tags found however typed, the re-rank score floor, the focused passage window and edge ordering; the index follows re-chunks and deletes. |
 | `test_origin.py` | 11 | Document origin — this rig's own, or a reference from another installation. |
-| `test_pdf_extraction.py` | 5 | PDF uploads: an AES-locked manual opens, font-shifted text ("WKH" for "the") is decoded, a missing `cryptography` is explained, and no parser error becomes an HTTP 500. |
+| `test_pdf_extraction.py` | 8 | PDF uploads: an AES-locked manual opens, font-shifted text ("WKH" for "the") is decoded, a missing `cryptography` is explained, no parser error becomes an HTTP 500, and a ruled table keeps its rows (with or without pdfplumber). |
 | `test_replay.py` | 2 | Blueprints' Track 1 replay: a recorded vector query read back, never re-run. |
 | `test_rerank.py` | 14 | Track 1's two-stage retrieval: a wide Chroma pool, re-scored by a cross-encoder. |
 | `test_run_documents.py` | 3 | Ingest logs by document: a run names its documents, and a document gets its runs' logs; chunks longer than the embedder's window are named. |

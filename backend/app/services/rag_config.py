@@ -89,8 +89,22 @@ CANDIDATE_RANGE = (5, 50)
 # `None` keeps every candidate. Frozen with the track, like re-ranking.
 # `hybrid` adds a BM25 keyword ranking (FTS5) fused with the vector one by RRF;
 # off is the dense-only baseline for the ablation.
+# `min_rerank_score` is the abstention floor ("sufficient context", Joren et al.,
+# ICLR 2025): after re-ranking, a passage the cross-encoder scores below it is
+# dropped, and when none survive the model is told there are no documents
+# rather than handed five irrelevant ones to guess from. `None` is off; it only
+# applies when re-ranking ran, since a cosine distance is not that kind of score.
+# `window` is what of each chunk the model reads: `head` (its first
+# `PASSAGE_CHARS`, the original behaviour) or `focused` (the stretch of the chunk
+# and its two neighbours that holds the most query terms — an answer at the end
+# of a chunk, or spilling into the next, otherwise never reaches the prompt).
+# `order` is the evidence order: `rank` (best first) or `edges` (best at both
+# ends, "lost in the middle"). Only the prompt is reordered; `rag_logs` keeps
+# rank order so precision@k and MRR stay meaningful.
 TOP_K_RANGE = (1, 10)
 THRESHOLD_RANGE = (0.0, 1.0)
+WINDOWS = ("head", "focused")
+ORDERS = ("rank", "edges")
 
 GRAPH_MODES = ("agent", "walk")
 BUDGET_RANGE = (1.0, 30.0)
@@ -102,7 +116,8 @@ DEFAULT: dict[str, Any] = {
     "note": "Track 1 (vector) is the baseline/control arm. See PROJECT.md §5.",
     "rerank": {"enabled": True, "model": "ms-marco-minilm-l6", "candidates": DEFAULT_CANDIDATES},
     "graph": {"mode": "agent", "budget_s": 6.0, "max_steps": 4},
-    "retrieval": {"top_k": 5, "similarity_threshold": None, "hybrid": True},
+    "retrieval": {"top_k": 5, "similarity_threshold": None, "hybrid": True,
+                  "min_rerank_score": None, "window": "head", "order": "rank"},
 }
 
 
@@ -122,6 +137,13 @@ def _retrieval(raw: Any) -> dict[str, Any]:
         out["similarity_threshold"] = float(t)
     if isinstance(raw.get("hybrid"), bool):
         out["hybrid"] = raw["hybrid"]
+    m = raw.get("min_rerank_score")
+    if _number(m) and THRESHOLD_RANGE[0] <= m <= THRESHOLD_RANGE[1]:
+        out["min_rerank_score"] = float(m)
+    if raw.get("window") in WINDOWS:
+        out["window"] = raw["window"]
+    if raw.get("order") in ORDERS:
+        out["order"] = raw["order"]
     return out
 
 
@@ -276,6 +298,15 @@ def _validate_retrieval(raw: dict[str, Any]) -> None:
             raise ValueError(f"retrieval.similarity_threshold must be empty or a number from {low:g} to {high:g}")
     if "hybrid" in raw and not isinstance(raw["hybrid"], bool):
         raise ValueError("retrieval.hybrid must be true or false")
+    if "min_rerank_score" in raw:
+        m = raw["min_rerank_score"]
+        low, high = THRESHOLD_RANGE
+        if m is not None and (not _number(m) or not low <= m <= high):
+            raise ValueError(f"retrieval.min_rerank_score must be empty or a number from {low:g} to {high:g}")
+    if "window" in raw and raw["window"] not in WINDOWS:
+        raise ValueError(f"retrieval.window must be one of {WINDOWS}")
+    if "order" in raw and raw["order"] not in ORDERS:
+        raise ValueError(f"retrieval.order must be one of {ORDERS}")
 
 
 def _validate_graph(raw: dict[str, Any]) -> None:

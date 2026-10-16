@@ -47,7 +47,7 @@ NO_DOCUMENTS = (
 )
 
 # A passage long enough to carry a procedure, short enough that five fit.
-_PASSAGE_CHARS = 700
+PASSAGE_CHARS = 700
 # How a passage or node says whose it is. Words the model can repeat, in
 # capitals so a small model does not read past them; rule 9 of the prompt says
 # what to do with REFERENCE.
@@ -213,14 +213,23 @@ class _Builder:
         return lines
 
     def search_corpus(self, data: dict[str, Any]) -> list[str]:
+        from .. import rag_config  # noqa: PLC0415
+
         lines = []
-        for c in data.get("chunks") or []:
+        chunks = list(data.get("chunks") or [])
+        if rag_config.retrieval_settings()["order"] == "edges":
+            # Best at both ends, weakest in the middle (1, 3, 5, 4, 2): models
+            # attend least to the middle of a context. Prompt only — the logged
+            # retrieval keeps rank order for precision@k and MRR.
+            chunks = chunks[::2] + chunks[1::2][::-1]
+        for c in chunks:
             where = c.get("source_file") or "unknown document"
             if c.get("page_number"):
                 where += f" p.{c['page_number']}"
             if c.get("section_title"):
                 where += f" §{c['section_title']}"
-            text = " ".join(str(c.get("text") or "").split())[:_PASSAGE_CHARS]
+            # `passage` is the focused window when `retrieval.window` asks for one.
+            text = " ".join(str(c.get("passage") or c.get("text") or "").split())[:PASSAGE_CHARS]
             origin = c.get("origin") or "reference"
             lines.append(self.add("D", "document", "search_corpus", f"{where} {_ORIGIN_MARK[origin]}: {text}", {
                 "type": "document", "chunk_id": c.get("chunk_id"), "source_file": c.get("source_file"),

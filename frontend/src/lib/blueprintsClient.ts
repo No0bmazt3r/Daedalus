@@ -298,6 +298,12 @@ export interface RetrievalSettings {
   similarity_threshold: number | null;
   /** BM25 keyword hits fused (RRF) with the vector ranking; false is the dense-only baseline. */
   hybrid: boolean;
+  /** Abstention floor: after re-ranking, drop passages scored below this (0–1); null is off. */
+  min_rerank_score: number | null;
+  /** What of each chunk the model reads: its first 700 characters, or the stretch holding the query's terms. */
+  window: 'head' | 'focused';
+  /** Evidence order in the prompt: best first, or best at both ends. The log keeps rank order. */
+  order: 'rank' | 'edges';
 }
 
 export type GraphMode = 'agent' | 'walk';

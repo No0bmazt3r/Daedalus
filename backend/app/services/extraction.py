@@ -12,6 +12,7 @@ is diagnosable as a parser problem.
 |---|---|---|
 | `.txt` `.md` `.csv` `.json` `.yaml` | built-in | nothing |
 | `.pdf` | `pypdf` | the package, which is optional |
+| PDF tables | `pdfplumber`, added as Markdown rows after the page's text | optional too; without it tables stay as pypdf's run-on cells |
 
 PDF support is an **optional import**, the same discipline `vector_store` uses
 for Chroma and `hardware` for `pynvml`. A machine without `pypdf` must still
@@ -216,6 +217,71 @@ def _is_contents(page: str) -> bool:
     return leaders >= len(lines) * 0.4 or ("contents" in page.lower() and numbered >= len(lines) * 0.5)
 
 
+# pdfminer writes a glyph with no Unicode mapping as "(cid:N)". In the
+# font-shifted manuals N is the same shifted code pypdf returns as a character,
+# so turning it back into that character lets `_unshift` decode both alike.
+_CID = re.compile(r"\(cid:(\d+)\)")
+
+
+def _cell(value: Any) -> str:
+    text = _CID.sub(lambda m: chr(int(m.group(1))) if int(m.group(1)) < 0x110000 else "", str(value or ""))
+    # Explicit whitespace class, as in `_SHIFTED_RUN`: \s would eat 0x1c-0x1f,
+    # which are shifted letters here.
+    return re.sub(r"[ \t\n\r]+", " ", text).strip().replace("|", "/")
+
+
+def _tables(raw: bytes, wanted: list[int], fix: Any) -> tuple[dict[int, list[str]], str | None]:
+    """Each wanted page's tables as Markdown, by 1-based page number.
+
+    pypdf reads a table as a run of cells with the rows and columns lost — "Span
+    gas 400 ppm Zero gas N2 0" — so a limit and the thing it limits end up
+    unrelated. pdfplumber finds the ruling lines and keeps each row whole, and
+    a Markdown row is what both the embedder and BM25 can match as one fact.
+
+    Added *alongside* pypdf's text, not instead of it: pypdf is what decodes the
+    AES-locked and font-shifted manuals, and a table pdfplumber mis-detects
+    costs a few duplicated cells rather than lost text. `fix` is the same
+    font-shift decoding pypdf's text got. Optional, like pypdf: without the
+    package, or on a file it cannot open, the document still ingests and the
+    second value says why there are no tables.
+    """
+    try:
+        import pdfplumber  # noqa: PLC0415 — optional dependency, probed on demand
+    except ImportError:
+        return {}, "tables not extracted: pdfplumber is not installed"
+    import io as _io  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    # pdfminer logs a warning per odd font ("fontTools is required …") — dozens
+    # per manual, none actionable, all drowning the ingest log.
+    logging.getLogger("pdfminer").setLevel(logging.ERROR)
+    found: dict[int, list[str]] = {}
+    try:
+        with pdfplumber.open(_io.BytesIO(raw), password="") as pdf:
+            for number in wanted:
+                try:
+                    tables = pdf.pages[number - 1].extract_tables()
+                except Exception:  # noqa: BLE001 — one bad page is not a bad document
+                    continue
+                for table in tables:
+                    rows = [[fix(_cell(c)) for c in row] for row in table if any(c for c in row)]
+                    # Still holding control characters after decoding: an
+                    # unmapped font that is not the known shift. Unreadable.
+                    if any(ch < " " for r in rows for c in r for ch in c):
+                        continue
+                    # A 1-column or 1-row "table" is a ruled box around prose.
+                    if len(rows) < 2 or max(len(r) for r in rows) < 2:
+                        continue
+                    width = max(len(r) for r in rows)
+                    rows = [r + [""] * (width - len(r)) for r in rows]
+                    lines = ["| " + " | ".join(rows[0]) + " |", "|" + " --- |" * width]
+                    lines += ["| " + " | ".join(r) + " |" for r in rows[1:]]
+                    found.setdefault(number, []).append("\n".join(lines))
+    except Exception as exc:  # noqa: BLE001 — tables are a bonus; the text is already read
+        return {}, f"tables not extracted: pdfplumber could not open this file ({exc})"
+    return found, None
+
+
 def _normalise(text: str) -> str:
     """Line endings, and the ligatures a PDF text layer leaves behind.
 
@@ -360,6 +426,16 @@ def _extract_pdf(raw: bytes, filename: str, pages_wanted: set[int] | None = None
         warnings.append(f"removed {dropped} repeated header/footer or page-number line(s)")
     if contents:
         warnings.append(f"skipped contents page(s) {', '.join(map(str, contents))}")
+    # After furniture and contents stripping, so a table row is never taken for
+    # a repeated footer and a contents page's dot-leader table is not restored.
+    fix = (lambda t: _unshift_words(_unshift(t))) if shifted_doc else (lambda t: t)
+    tables, why = _tables(raw, [n for n, body in enumerate(bodies, start=1) if body], fix)
+    for n, found in tables.items():
+        bodies[n - 1] += "".join(f"\n\nTable (page {n}):\n{t}" for t in found)
+    if tables:
+        warnings.append(f"{sum(map(len, tables.values()))} table(s) kept as rows, on {len(tables)} page(s)")
+    elif why:
+        warnings.append(why)
     if pages_wanted is not None:
         kept = len(pages_wanted & set(range(1, len(pages) + 1)))
         warnings.append(f"read {kept} of {len(pages)} pages (page range set on the document)")
@@ -422,6 +498,14 @@ def extract(raw: bytes, filename: str, *, pages: set[int] | None = None) -> Extr
     )
 
 
+def _tables_available() -> bool:
+    try:
+        import pdfplumber  # noqa: PLC0415, F401
+    except ImportError:
+        return False
+    return True
+
+
 def status() -> dict[str, Any]:
     """What this machine can currently read — for the upload panel to state up front."""
     ok, why = pdf_available()
@@ -429,6 +513,7 @@ def status() -> dict[str, Any]:
         "extensions": supported_extensions(),
         "pdf_available": ok,
         "pdf_detail": why or "pypdf is installed",
+        "tables": _tables_available(),
         "ocr": False,
         "ocr_detail": (
             "No OCR. A scanned PDF has no text layer and is refused with that reason "

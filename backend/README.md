@@ -24,6 +24,26 @@ back to `backend/data/…` and quietly writes to stores nothing else reads.
 `sync.sh` reports such orphans. The Vite dev server proxies `/api` to
 `http://localhost:8000`, so the frontend needs no extra configuration.
 
+## Dependencies
+
+`requirements.txt` is just the list; this is why each line is there. Nothing is
+added without a reason that fits in a row, and the PDF, GPU and re-ranking
+packages are **optional at runtime**: the API boots without them and the feature
+reports itself unavailable, naming the package.
+
+| Package | For | Why this one |
+|---|---|---|
+| `fastapi`, `uvicorn[standard]` | The API server | — |
+| `chromadb` | The vector store, embedded in the API process (`db/vector_store.py`) | The full package, not `chromadb-client`, which only speaks HTTP to a separate server. The two install the same module and must not coexist; `ensure_embedded_chroma` in `scripts/common.sh` removes the client from old venvs |
+| `httpx` | Ollama, registry and provider calls; the connection test | Arrives via chromadb, but imported directly — a transitive dependency is not a contract |
+| `psutil` | RAM, CPU and disk for the Forge (`services/hardware.py`) | — |
+| `nvidia-ml-py` | GPU detection (`pynvml`) | 13 ms against 613 ms for the `nvidia-smi` subprocess under WSL, which lets VRAM refresh every 30 s. Pure Python; without an NVIDIA driver `nvmlInit()` fails and that reads as "no GPU" |
+| `networkx` | Track 2's graph (`services/knowledge_graph.py`) | A YAML file in git plus NetworkX, rather than a sixth store: tens of hand-edited nodes |
+| `pyyaml` | Reads that graph file and the eval query set | Arrives via chromadb; listed for the same reason as `httpx` |
+| `pypdf[crypto]` | PDF text (`services/extraction.py`) | Pure Python. `[crypto]` brings `cryptography`, needed for the AES-locked manufacturer manuals. No OCR on purpose: a scanned PDF is refused with that reason |
+| `pdfplumber` | PDF tables kept as Markdown rows (`extraction._tables`) | MIT, no model weights (unlike Docling), no network. Without it tables are simply not added |
+| `onnxruntime`, `tokenizers` | Track 1's cross-encoder re-ranking (`services/reranker.py`) | ~80 MB, CPU only, instead of sentence-transformers and its gigabyte of PyTorch for the same model. Weights are downloaded on request, pinned to a commit; without these two, Track 1 keeps Chroma's order |
+
 ## Layout
 
 ```

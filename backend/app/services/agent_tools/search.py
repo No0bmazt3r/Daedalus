@@ -20,6 +20,7 @@ questions with a `search_graph` call available the whole time.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ...db import vector_store
@@ -61,6 +62,54 @@ def fuse(dense: list[dict[str, Any]], lexical: list[dict[str, Any]]) -> list[dic
             entry["rrf_score"] += 1 / (RRF_K + rank)
     # Stable sort: equal scores keep the vector order.
     return sorted(merged.values(), key=lambda c: -c["rrf_score"])
+
+
+# Words that say nothing about where in a chunk the answer is.
+_STOP = frozenset(
+    "the and what how for with does this that are was were which when where who why should from into "
+    "about have has you can there their then than will would could our your its not any all".split()
+)
+
+
+def focus(query: str, around: dict[int, dict[str, Any]], width: int | None = None) -> str:
+    """The `width` characters of a chunk (and its neighbours) holding the most query terms.
+
+    The evidence pack shows each passage's first `PASSAGE_CHARS`, so whatever a
+    1,500-character chunk says after that never reaches the model — and an
+    answer that starts at the end of one chunk continues into the next. This
+    joins the chunk with its neighbours' non-overlapping parts (exact offsets,
+    no repeated text) and picks the sentence-aligned window covering the most
+    distinct query terms, ties going to the one that starts nearest its first
+    match — so what follows the matched words is shown, not cut off. The window must overlap
+    the chunk itself, so the passage is still about what was cited. With no
+    term anywhere, it is the chunk's head — the old behaviour.
+    """
+    from ..orchestration import evidence  # noqa: PLC0415 — the cap lives with the pack
+
+    width = width or evidence.PASSAGE_CHARS
+    core = around.get(0)
+    if not core:
+        return ""
+    prev, nxt = around.get(-1), around.get(1)
+    before = prev["text"][: max(0, core["char_start"] - prev["char_start"])] if prev else ""
+    after = nxt["text"][max(0, core["char_end"] - nxt["char_start"]):] if nxt else ""
+    span = before + core["text"] + after
+    lo, hi = len(before), len(before) + len(core["text"])
+
+    terms = {t.lower() for t in re.findall(r"\w[\w\-./]*", query)
+             if (len(t) >= 3 or not t.islower()) and t.lower() not in _STOP}
+    starts = [lo] + [m.end() for m in re.finditer(r"[.!?:]\s+|\n+", span)]
+    best, best_key = lo, (0, 0)
+    lowered = span.lower()
+    for start in sorted(set(starts)):
+        if start >= hi or start + width <= lo:
+            continue
+        window = lowered[start:start + width]
+        found = [window.find(t) for t in terms if t in window]
+        key = (len(found), -min(found)) if found else (0, 0)
+        if key > best_key:
+            best, best_key = start, key
+    return span[best:best + width].strip()
 
 
 @register(
@@ -203,6 +252,18 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         if not settings["enabled"]:
             rerank["reason"] = "re-ranking is off"
 
+    # Abstention: the cross-encoder judged these passages irrelevant, so none of
+    # them reaches the model — an empty result is what makes the evidence pack
+    # say NO DOCUMENTS FOUND instead of inviting a guess from five bad passages.
+    # Only a cross-encoder score can be judged this way; with re-ranking
+    # unavailable the floor is skipped, and the detail says so.
+    floor = retrieval["min_rerank_score"]
+    abstained = 0
+    if floor is not None and rerank["model"]:
+        kept = [c for c in chunks if c.get("rerank_score", 0) >= floor]
+        abstained = len(chunks) - len(kept)
+        chunks = kept
+
     # Whose document each passage came from — this rig's, or another
     # installation's. From the manifest, not the vector metadata, so a corrected
     # origin applies now; a chunk the manifest has lost counts as a reference.
@@ -215,7 +276,21 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
     for c in chunks:
         c["origin"] = origins.get(c.get("chunk_id"), "reference")
 
-    if not chunks:
+    if retrieval["window"] == "focused" and chunks:
+        try:
+            from ...db import corpus_store  # noqa: PLC0415
+
+            around = corpus_store.neighbours([c["chunk_id"] for c in chunks if c.get("chunk_id")])
+        except Exception:  # noqa: BLE001 — the head of the chunk is still a valid passage
+            around = {}
+        for c in chunks:
+            if c.get("chunk_id") in around:
+                c["passage"] = focus(query, around[c["chunk_id"]])
+
+    if not chunks and abstained:
+        detail = (f"no passage matched: all {abstained} scored below {floor:g} by the re-ranker, "
+                  "so the corpus is treated as not covering this")
+    elif not chunks:
         detail = "no passage matched" + (f" above similarity {threshold:g}" if dropped else "")
     elif rerank["model"]:
         detail = (f"{len(chunks)} passages from {state['collection']}, re-ranked from "
@@ -224,6 +299,10 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         detail = f"{len(chunks)} passages from {state['collection']} (vector order: {rerank['reason']})"
     if chunks and dropped:
         detail += f"; {dropped} below similarity {threshold:g} dropped"
+    if chunks and abstained:
+        detail += f"; {abstained} below re-rank score {floor:g} dropped"
+    if floor is not None and not rerank["model"]:
+        detail += "; re-rank score floor not applied (no re-rank scores)"
     if keyword["enabled"]:
         detail += (f"; hybrid with {keyword['hits']} keyword hits" if keyword["reason"] is None
                    else f"; keyword search failed, vector only: {keyword['reason']}")
@@ -234,7 +313,7 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         # resolving the collection separately is how a log ends up naming one
         # index while the query read another.
         "data": {"chunks": chunks, "track": "vector", "collection": state["collection"],
-                 "rerank": rerank, "keyword": keyword,
+                 "rerank": rerank, "keyword": keyword, "below_min_score": abstained,
                  "similarity_threshold": threshold, "below_threshold": dropped},
         "detail": detail,
     }

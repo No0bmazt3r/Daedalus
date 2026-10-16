@@ -149,7 +149,13 @@ report should keep:
 - **Name the cuts.** Track 1 is a hybrid (dense + BM25) baseline with
   cross-encoder re-ranking by decision; the three other advanced techniques were
   scoped out, not forgotten. Hybrid vs vector-only is itself an ablation row
-  (`retrieval.hybrid`, logged as `rag_logs.keyword_hits`).
+  (`retrieval.hybrid`, logged as `rag_logs.keyword_hits`), as are the re-rank
+  score floor, the focused passage window and the evidence order.
+- **Say what the model actually read.** Until 2026-10-17 the evidence pack
+  showed the first 700 characters of 1,500-character chunks — half of every
+  retrieved chunk never reached the model. Whichever `window` the official run
+  uses, the report should state it, because retrieval metrics score the chunk
+  while the answer only saw the passage.
 - **Two different failure modes.** A graph fails by omission — enumerable, and
   shown in Coverage. A vector index fails by a confident wrong match, which
   cannot be enumerated. The two arms are not equally auditable in principle.

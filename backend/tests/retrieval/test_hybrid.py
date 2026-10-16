@@ -1,4 +1,5 @@
-"""Track 1's hybrid retrieval: BM25 (FTS5) keyword hits fused with the vector ranking by RRF."""
+"""Track 1's retrieval options: hybrid BM25 + vector (RRF), tag variants, the re-rank
+score floor, the focused passage window and edge ordering."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ from unittest import mock
 
 from app.db import corpus_store, migrations, vector_store
 from app.services import embedding_models, ingestion, rag_config, reranker
+from app.services.orchestration import evidence
 from app.services.agent_tools import registry, search
 
 from .. import fixtures
@@ -56,7 +58,7 @@ class HybridTest(unittest.TestCase):
     def tearDown(self) -> None:
         for p in self.patches:
             p.stop()
-        rag_config.write(retrieval={"hybrid": True})
+        rag_config.write(retrieval={"hybrid": True, "min_rerank_score": None, "window": "head", "order": "rank"})
 
     def search(self, query: str) -> dict:
         return registry.call("search_corpus", {"query": query, "top_k": 5})
@@ -115,6 +117,69 @@ class HybridTest(unittest.TestCase):
     def test_rrf(self) -> None:
         fused = search.fuse([{"chunk_id": "a"}, {"chunk_id": "b"}], [{"chunk_id": "b"}, {"chunk_id": "c"}])
         self.assertEqual([c["chunk_id"] for c in fused], ["b", "a", "c"])
+
+
+    def test_a_tag_written_without_its_hyphen_still_matches(self) -> None:
+        for q in ("ABV1", "abv 1", "ABV-1"):
+            ids = {r["chunk_id"] for r in corpus_store.keyword_search(q, collection=COLLECTION, limit=5)}
+            self.assertIn("h-valve", ids, q)
+        # A numeric range is not a tag: "4-20" must not also search "420".
+        self.assertEqual(corpus_store._forms("4-20"), {"4-20"})
+
+    def _scored(self, scores: list[float]):  # noqa: ANN202
+        return mock.patch.object(reranker, "score", side_effect=lambda q, ps, model_id: scores[:len(ps)])
+
+    def test_below_the_floor_nothing_reaches_the_model(self) -> None:
+        rag_config.write(retrieval={"min_rerank_score": 0.2})
+        with self._scored([0.01, 0.02, 0.03]):
+            env = self.search("how do I close ABV-1")
+        self.assertEqual(env["data"]["chunks"], [])
+        self.assertEqual(env["data"]["below_min_score"], 3)
+        self.assertIn("treated as not covering this", env["detail"])
+
+    def test_the_floor_keeps_what_clears_it(self) -> None:
+        rag_config.write(retrieval={"min_rerank_score": 0.2})
+        with self._scored([0.9, 0.01, 0.5]):
+            env = self.search("how do I close ABV-1")
+        self.assertEqual([round(c["rerank_score"], 2) for c in env["data"]["chunks"]], [0.9, 0.5])
+
+    def test_the_floor_is_skipped_without_rerank_scores(self) -> None:
+        rag_config.write(retrieval={"min_rerank_score": 0.2})
+        env = self.search("how do I close ABV-1")  # setUp makes the re-ranker unavailable
+        self.assertTrue(env["data"]["chunks"])
+        self.assertIn("floor not applied", env["detail"])
+
+    def test_focused_window_reaches_past_the_head_and_into_the_next_chunk(self) -> None:
+        filler = "General notes on the column. " * 30  # ~870 chars, past the 700 shown
+        core = {"text": filler + "Purge with nitrogen", "char_start": 0, "char_end": len(filler) + 19}
+        nxt = {"text": "nitrogen for ten minutes before opening.", "char_start": len(filler) + 11,
+               "char_end": len(filler) + 51}
+        out = search.focus("how long to purge with nitrogen", {0: core, 1: nxt})
+        self.assertIn("Purge with nitrogen for ten minutes", out)
+        self.assertLessEqual(len(out), evidence.PASSAGE_CHARS)
+        # No query term anywhere: the chunk's head, as before.
+        self.assertTrue(search.focus("zzz qqq", {0: core, 1: nxt}).startswith("General notes"))
+
+    def test_focused_passage_is_what_the_pack_shows(self) -> None:
+        rag_config.write(retrieval={"window": "focused"})
+        env = self.search("how do I close ABV-1")
+        valve = next(c for c in env["data"]["chunks"] if c["chunk_id"] == "h-valve")
+        self.assertEqual(valve["passage"], "Close ABV-1 before venting the column.")
+
+    def test_edges_order_reorders_the_prompt_not_the_log(self) -> None:
+        chunks = [{"chunk_id": f"c{i}", "text": f"passage {i}", "source_file": "a.pdf"} for i in range(1, 6)]
+        env = {"tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus", "citable": True,
+               "data": {"chunks": chunks}}
+        rag_config.write(retrieval={"order": "edges"})
+        pack = evidence.build([env])
+        shown = [i.citation["chunk_id"] for i in pack.items if i.kind == "document"]
+        self.assertEqual(shown, ["c1", "c3", "c5", "c4", "c2"])
+        self.assertEqual([c["chunk_id"] for c in chunks], ["c1", "c2", "c3", "c4", "c5"])
+
+    def test_options_are_validated(self) -> None:
+        for bad in ({"min_rerank_score": 2}, {"window": "all"}, {"order": "random"}, {"hybrid": "yes"}):
+            with self.assertRaises(ValueError):
+                rag_config.write(retrieval=bad)
 
 
 if __name__ == "__main__":

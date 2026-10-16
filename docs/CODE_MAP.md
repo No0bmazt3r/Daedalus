@@ -149,7 +149,7 @@ arguments valid, read-only) and is logged.
 |---|---|---|
 | Idea | Find the most similar document chunks | Walk a hand-authored knowledge graph |
 | Search | `services/agent_tools/knowledge.py` → Chroma | `services/graph_tools.py`, `graph_agent.py` (the agent picks each hop) |
-| Ranking | BM25 keyword hits (`corpus_store.keyword_search`, FTS5) fused with the vector ranking by RRF (`agent_tools/search.fuse`), then `services/reranker.py` (cross-encoder re-scores the top N) | — |
+| Ranking | BM25 keyword hits (`corpus_store.keyword_search`, FTS5) fused with the vector ranking by RRF (`agent_tools/search.fuse`), then `services/reranker.py` (cross-encoder re-scores the top N), an optional re-rank score floor (abstention) and focused passage window (`search.focus`) | — |
 | Built from | `ingestion.py` → `extraction.py` → `chunking.py` → embeddings (`embedding_models.py`) | `knowledge_graph.py`, authored in Blueprints |
 | Logged as | `rag_logs`: chunk ids, distances, re-rank scores, origins, keyword hits | `rag_logs.traversal_path`: every hop |
 
@@ -333,7 +333,7 @@ mode) left these deliberately in place. Don't re-flag them in a later audit:
 - **`app/cli_eval.py` has no importers** — it is the evaluation CLI entry point
   (`python -m app.cli_eval`).
 - **`nvidia-ml-py` alongside the `nvidia-smi` fallback** — measured 13 ms vs
-  613 ms under WSL (see `backend/requirements.txt`).
+  613 ms under WSL (see `backend/README.md` → Dependencies).
 - **`httpx` and `pyyaml` listed explicitly** although chromadb brings them —
   they are imported directly, and a transitive dependency is not a contract.
 - **`db/vector_store.py` importing `services/embedding_models`** — lazy and

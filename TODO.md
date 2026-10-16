@@ -32,8 +32,9 @@ is nice-to-have; the `[-]` items are cut.
    recalibrate the embedding and re-ranker estimators and re-check re-ranker fit
    on the machine that runs the evaluation (M2/M6), and verify inference with
    networking disabled.
-4. **Evaluate (M8):** write and label 30–50 questions → practice runs (and
-   measure the embedding prefixes) → freeze → one official run → failure
+4. **Evaluate (M8):** check the 39 drafted questions and their labels →
+   re-ingest (PDF tables) → practice runs (measure the embedding prefixes; pick
+   hybrid, the re-rank floor, the passage window and the order) → freeze → one official run → failure
    analysis → human panel and Method B.
 5. **Before the report:** verify the MMLU figures (M10, the Forge). The
    validator gaps, rule 9, the bogus `embedding_config.json` record and the
@@ -77,6 +78,13 @@ Offline pipeline. Never runs during a live query.
         check with qwen3-embedding:0.6b was inconclusive (off-topic passage
         pushed from 0.576 to 0.442; same-topic margin 0.168 → 0.166)
   - [ ] Recalibrate both estimators on the machine that runs the evaluation (`MODEL_FIT.md` §4)
+- [x] PDF tables kept as rows *(2026-10-17)*. pypdf flattens a table into a run
+      of cells, so a limit loses the thing it limits; `pdfplumber` (MIT, optional
+      like pypdf) now adds each page's tables as Markdown after its text,
+      decoding the Fuji manual's shifted glyphs the same way. 239 tables across
+      the 12 reference PDFs; Rosemount's 216 pages take ~80 s. Takes effect on
+      the next re-ingest. 3 tests
+  - [ ] Re-ingest the corpus so the tables are in the index
 - [~] Collect the corpus into `data/corpus_sources/` — `rig/` for the lab's own,
       `reference/<category>/` for everything else, each source listed in
       `data/corpus_sources/README.md`. **17 collected and all 17 ingested** (12
@@ -585,7 +593,34 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       re-ranked as before. `retrieval.hybrid` in `rag_config.json`, on by
       default and frozen with the track; Settings → Vector RAG → Retrieval depth.
       Per query `rag_logs.keyword_hits` (NULL = off). 8 tests (`test_hybrid.py`)
+  - [x] A tag finds itself however it is typed — `ABV-1`, `ABV1` and `ABV 1`
+        (`corpus_store._forms`); a numeric range like `4-20` is left alone
   - [ ] Run the ablation hybrid vs vector-only on the query set before freezing
+- [x] Re-rank score floor — abstention *(2026-10-17)*. `retrieval.min_rerank_score`
+      (0–1, empty = off, the default): after re-ranking, passages scored below it
+      are dropped, and when none survive the evidence pack says NO DOCUMENTS
+      FOUND rather than handing the model five irrelevant passages to guess from
+      (Joren et al., "Sufficient Context", ICLR 2025). Skipped, and said so, when
+      re-ranking did not run. Per query `below_min_score` in the tool result
+  - [ ] Pick the floor on the practice runs (the out-of-corpus questions are what
+        it is for), and check it does not refuse the Malay questions — the
+        default cross-encoder is English-only
+- [x] Focused passage window *(2026-10-17)*. Found while auditing: the evidence
+      pack shows each passage's first 700 characters, but chunks are 1,500, so the
+      second half of every retrieved chunk never reached the model.
+      `retrieval.window: focused` shows the sentence-aligned 700 characters of the
+      chunk plus its neighbours (joined by exact offsets, no repeated overlap)
+      holding the most query terms (`search.focus`); `head`, the default, is the
+      old behaviour. A light, extractive form of the cut contextual compression
+  - [ ] Decide `head` vs `focused` on the practice runs — `head` is the default
+        only so the baseline does not move until it has been measured
+- [x] Evidence order *(2026-10-17)*. `retrieval.order: edges` puts the strongest
+      passages at both ends of the prompt (1, 3, 5, 4, 2) for "lost in the
+      middle"; `rank` (default) is best first. Prompt only — `rag_logs` keeps
+      rank order so precision@k and MRR are unaffected. Effect is contested
+      (a 2026 reproducibility study), so it is an ablation row, not a default
+- [x] All four in Settings → Vector RAG → Retrieval depth, frozen with the track
+      and captured in the evaluation snapshot. 16 tests in `test_hybrid.py`
 - [x] Cross-encoder re-ranking — `reranker.py`, wired into `search_corpus`:
       a wider candidate pool is retrieved and reranked down to `top_k`, and an
       answer built on un-reranked chunks says so. Toggled in `rag_config`.
@@ -714,8 +749,13 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
         next question is timed, and the run stops if it never ends
   - [x] `run.json` is checkpointed atomically after every answer. A crash or
         Ctrl-C saves the run as `aborted` with its reason and every answer so far
-- [ ] Golden query set — 30–50 queries, stratified across the 5 categories in §5.
-      The 5 `EX…` entries are placeholders against the placeholder graph
+- [~] Golden query set — 30–50 queries, stratified across the 5 categories in §5.
+      **39 drafted** *(2026-10-17)* from the ingested corpus and the graph (9
+      factual · 8 procedural · 8 multi-hop · 6 ambiguous · 8 out-of-corpus; 4 in
+      Malay; tag-style and control-command cases), each citing the page its
+      label came from. `cli_eval validate` passes. **Drafts until Sharvin checks
+      every label against its source**; rig entries rest on the draft `rig/`
+      files and get relabelled when the lab's documents land
 - [ ] Hand-label ground-truth answers and relevant-evidence sets — **the answer
       labels have a tool now** (2026-10-07): *Your label* on every trace in
       Ariadne's Thread, stored in `feedback_logs`; the list filters labelled /
@@ -1696,8 +1736,8 @@ CLI that works the same on Windows, macOS and Linux.
       makes a test refuse to run when the isolation in `tests/__init__.py` has
       not been applied would stop the config rewrite. *Cleared 2026-10-10*; the
       guard is still to do, so they can come back
-- [ ] Tests are not in CI. The backend has 243 `unittest` cases (all passing
-      2026-10-10); the frontend has 9 logic tests (`pnpm test`, Node's runner)
+- [ ] Tests are not in CI. The backend has 273 `unittest` cases (all passing
+      2026-10-17); the frontend has 9 logic tests (`pnpm test`, Node's runner)
       and no component tests, and the **migration runner** still has no test —
       it is the piece that can quietly break every other store
 - [x] **Four duplicate PDFs in `data/corpus/`** — deleted 2026-10-10 (hashes checked
