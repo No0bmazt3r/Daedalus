@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Play, RotateCcw, RefreshCw, AlertCircle, AlertTriangle, Eraser, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import {
-  startIngest, resumeIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
+  startIngest, resumeIngest, cancelIngest, clearVectors, fetchRunEvents, type CorpusStatus, type CorpusDocument, type CorpusConfig, type IngestRun, type IngestEvent,
 } from '../../../lib/blueprintsClient'
 import { LEVEL_STYLE, STATUS_BADGE, bytes, isIngested, runTime } from './shared'
 import { useConfirm } from '../../ui/confirm-dialog'
@@ -12,6 +12,7 @@ export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRu
   const [level, setLevel] = useState<string>('')
   const [open, setOpen] = useState(defaultOpen)
   const live = run.status === 'running'
+  const [stopping, setStopping] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -62,6 +63,15 @@ export function RunPanel({ run, onRefresh, defaultOpen = true }: { run: IngestRu
             <span className="theme-text-muted">
               {run.strategy} · {run.chunk_size}/{run.chunk_overlap} · {run.embedding_model ?? 'no model'}
             </span>
+            {live && (
+              <button
+                onClick={() => { setStopping(true); cancelIngest().catch(() => setStopping(false)).finally(onRefresh) }}
+                disabled={stopping}
+                className="rounded border border-rose-500/40 px-1.5 py-0.5 text-rose-400 transition-colors hover:bg-rose-500/10 disabled:opacity-50"
+              >
+                {stopping ? 'stopping…' : 'cancel'}
+              </button>
+            )}
             <span role="group" aria-label="Filter by level" className="ml-auto flex gap-1">
               {['', 'error', 'warn', 'info', 'debug'].map((l) => (
                 <button

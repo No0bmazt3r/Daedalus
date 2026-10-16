@@ -73,6 +73,9 @@ EMBED_PAUSE_S = float(os.environ.get("DAEDALUS_EMBED_PAUSE", "0.5"))
 # longer exist — the one inconsistency this schema cannot detect afterwards.
 _run_lock = threading.Lock()
 _active: dict[str, Any] = {"run_id": None}
+# Checked between documents and between embed batches, so a cancel lands within
+# one batch. Chunks already embedded stay; Resume picks up the rest.
+_cancel = threading.Event()
 
 
 class IngestionError(RuntimeError):
@@ -81,6 +84,32 @@ class IngestionError(RuntimeError):
 
 def active_run() -> str | None:
     return _active["run_id"]
+
+
+class Cancelled(Exception):
+    """The user stopped the run."""
+
+
+def cancel() -> str | None:
+    """Ask the active run to stop. Returns its id, or None when nothing is running."""
+    run_id = _active["run_id"]
+    if run_id:
+        _cancel.set()
+    return run_id
+
+
+def _check_cancel() -> None:
+    if _cancel.is_set():
+        raise Cancelled
+
+
+def _finish_cancelled(run_id: str) -> dict[str, Any]:
+    corpus_store.finish_run(run_id, status="cancelled", error="cancelled by user")
+    corpus_store.log(
+        run_id, "complete",
+        "cancelled. Chunks embedded so far are kept; Resume embeds the rest.", level="warn",
+    )
+    return corpus_store.get_run(run_id) or {}
 
 
 def content_hash(raw: bytes) -> str:
@@ -292,9 +321,12 @@ def ingest(
         )
 
     run_id = corpus_store.new_id("run")
+    _cancel.clear()
     try:
         _active["run_id"] = run_id
         return _run(run_id, document_ids, kind=kind, settings=settings, on_progress=on_progress)
+    except Cancelled:
+        return _finish_cancelled(run_id)
     finally:
         _active["run_id"] = None
         _run_lock.release()
@@ -352,6 +384,7 @@ def _run(
     failures: list[str] = []
 
     for document in documents:
+        _check_cancel()
         document_id = document["document_id"]
         name = document["filename"]
 
@@ -523,6 +556,7 @@ def _embed_document(
     context = corpus_config.read()["context_header"]
     landed = 0
     for start in range(0, len(rows), BATCH):
+        _check_cancel()
         if start and EMBED_PAUSE_S:
             time.sleep(EMBED_PAUSE_S)
         batch = rows[start:start + BATCH]
@@ -598,6 +632,7 @@ def resume(document_id: str | None = None) -> dict[str, Any]:
         raise IngestionError(f"an ingest is already running ({_active['run_id']})")
 
     run_id = corpus_store.new_id("run")
+    _cancel.clear()
     try:
         _active["run_id"] = run_id
         pending = corpus_store.pending_chunks(document_id)
@@ -660,6 +695,8 @@ def resume(document_id: str | None = None) -> dict[str, Any]:
             level="info" if not failures else "warn",
         )
         return corpus_store.get_run(run_id) or {}
+    except Cancelled:
+        return _finish_cancelled(run_id)
     finally:
         _active["run_id"] = None
         _run_lock.release()

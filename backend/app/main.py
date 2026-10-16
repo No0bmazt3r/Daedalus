@@ -41,7 +41,7 @@ from .api import (
     thread,
     tools,
 )
-from .db import migrations, paths, sqlite_util
+from .db import corpus_store, migrations, paths, sqlite_util
 from .services import app_logs, chat_service, hardware, live_events
 
 # Aliased: `api.forge` is already imported above under that name, and the two
@@ -85,6 +85,10 @@ async def lifespan(_app: FastAPI):
     swept = chat_service.purge_ephemeral()
     if swept:
         log.info("swept %d ephemeral session(s) left by a previous run", swept)
+
+    orphaned = corpus_store.fail_orphaned_runs()
+    if orphaned:
+        log.info("marked %d ingest run(s) interrupted by a previous shutdown as failed", orphaned)
 
     # Hardware detection is slow (a subprocess, an HTTP timeout, and under WSL a
     # ~2.5s PowerShell interop call) and was being paid inside the request every

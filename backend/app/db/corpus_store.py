@@ -427,6 +427,21 @@ def finish_run(run_id: str, *, status: str, error: str | None = None) -> None:
         )
 
 
+def fail_orphaned_runs() -> int:
+    """Close runs a previous process left at 'running'. Runs live on an in-process
+    thread, so after a restart nothing will ever finish them. Call only at boot."""
+    with _connect() as conn:
+        return conn.execute(
+            """
+            UPDATE ingest_runs
+               SET status = 'failed', stage = 'failed', finished_at = ?,
+                   error = 'interrupted: the backend stopped before this run finished'
+             WHERE status = 'running'
+            """,
+            (_now(),),
+        ).rowcount
+
+
 # The documents a run touched, by name. Taken from its events, which carry the
 # document id; a document deleted since reads as "(deleted)" rather than vanishing,
 # so the count still matches documents_total.

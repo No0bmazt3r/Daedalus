@@ -322,6 +322,15 @@ def start_ingest(
     return {"run": latest[0] if latest else {}, "note": "still starting. Poll /api/corpus/runs"}
 
 
+@router.post("/cancel")
+def cancel() -> dict[str, Any]:
+    """Stop the active run after its current batch. 409 when nothing is running."""
+    run_id = ingestion.cancel()
+    if not run_id:
+        raise HTTPException(409, "no ingest is running")
+    return {"run_id": run_id}
+
+
 @router.post("/resume")
 def resume(document_id: str | None = Body(None, embed=True)) -> dict[str, Any]:
     """Embed the chunks that have no vector. Does not re-chunk.

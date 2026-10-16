@@ -641,6 +641,9 @@ export const startIngest = (body: { document_ids?: string[] } & Partial<ChunkSet
     timeoutMs: 30_000,
   });
 
+export const cancelIngest = () =>
+  request<{ run_id: string }>('/api/corpus/cancel', { method: 'POST' });
+
 export const resumeIngest = (documentId?: string) =>
   request<{ run: IngestRun }>('/api/corpus/resume', {
     method: 'POST',
