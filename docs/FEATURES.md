@@ -36,7 +36,7 @@ against the code on 2026-10-10.
 | Agent tools | Built — 33 tools in six categories, including the two sensor tools and Track 2's two retrieval modes, `graph_walk` and `graph_agent`. **Simple** (the default, switched in Settings → General) is the app-wide local-only mode, enforced in the backend by `tool_policy_store.is_simple()`, which fails closed: only the tools that answer questions can run (everything else is refused at dispatch), cloud models are off whatever their switch says, web search and MCP connections are refused, and the Search and Integrations panels are hidden. **Advanced** restores everything under the per-tool switches, the locks and the Cloud models switch. Two policy axes (four capability locks and a per-tool switch), every parameter carrying a working example |
 | Ollama integration | Built — client, registry, pull/delete, benchmark, and the serving path |
 | Orchestration | **Built — all 11 steps of §7.1.** Normalise, rewrite follow-ups, classify, guard, plan, run tools, build a labelled evidence pack, prompt, stream, validate, log. An answer with a number the evidence does not contain is replaced by the fallback. Turns that fall out of the history budget are folded into a rolling summary in the background, with every value redacted. Answers show their citations |
-| Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything and re-ranks with a cross-encoder. Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's hybrid search, query expansion and multi-hop re-retrieval are not built |
+| Retrieval (M6) | Both tracks are wired into the chat path through the planner, and each answers alone — the other track's tools are refused. Track 1 needs a current vector index to return anything, fuses the vector ranking with BM25 keyword hits (SQLite FTS5, RRF; `retrieval.hybrid`, on by default) and re-ranks with a cross-encoder. Track 2 runs either the agent loop (`graph_agent`, default: the local model chooses each hop under a hard time budget) or the fixed walk (`graph_walk`) it is measured against. Every passage and graph node is marked **this rig** or **reference** (another installation). Track 1's query expansion and multi-hop re-retrieval are not built |
 | Evaluation harness | Built, run from a terminal (`python -m app.cli_eval`). It asks every question in `config/eval/queries.yaml` once per arm (`vector` · `graph-walk` · `graph-agent`) through the real chat path, scores each answer against hand-written labels, and writes a report, a CSV and an LLM-judge input file. It refuses an official run unless the comparison is frozen. The query set holds 5 examples until the real corpus is ingested. See [`EVALUATION.md`](EVALUATION.md) |
 
 ---
@@ -119,7 +119,7 @@ Vite proxies `/api` to it.
 | `POST` | `/api/graph/proposals/{id}/reject` | Declines one. Kept, not deleted: what the extractor got wrong is the evidence for how well it works |
 | `POST` | `/api/rag/rerankers/{id}/benchmark` | Time re-scoring 20 chunk-sized passages on this machine (median of three, after a warm-up); stored with the weights, it replaces the estimate in the model's verdict |
 | `POST`/`DELETE` | `/api/rag/rerankers/{id}` (`/download` for POST) | Download a re-ranker's pinned weights on a worker thread, or delete them. Called from The Forge → Re-rankers; progress is read back from `/api/rag/config`'s `rerankers` |
-| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
+| `GET`/`PUT` | `/api/rag/config` | Which retrieval track answers a knowledge query, and whether each can; Track 1's re-ranking (`rerank`) and depth (`retrieval`: `top_k`, `similarity_threshold`, `hybrid`); Track 2's mode, budget and step limit (`graph`: `mode` `agent`·`walk`, `budget_s` 1–30, `max_steps` 1–4). `PUT` is refused with 409 while the comparison is frozen |
 | `GET`/`PUT` | `/api/embeddings/config` | The embedding model, what is installed, and whether the index matches it. `PUT` (Settings → Vector RAG) is refused with 409 while the comparison is frozen |
 | `POST` | `/api/embeddings/pull` | Pull an embedding model, streaming progress as SSE (`total_bytes`, `completed_bytes`, `percent` per line) |
 | `GET`/`PUT` | `/api/assistant/config` | Settings → Assistant: site timezone, system prompt, refusal wording and extra blocked phrases, with the built-in defaults and rules. A null field resets it. Prompt and safety edits are refused with 409 while the comparison is frozen; the timezone is not |
@@ -250,7 +250,9 @@ tidiness — see `PROJECT.md` §6.3.
 | Prefs | `db/prefs_store.py` | SQLite | read/write |
 
 **The Vector store has two halves.** Chroma holds the vectors; `corpus.db` holds
-the manifest of what was ingested — documents, chunk text with its offsets,
+the manifest of what was ingested — documents, chunk text with its offsets
+(and a BM25 full-text index over it, `chunks_fts`, kept in step by triggers —
+Track 1's keyword half),
 every pipeline run with the recipe it used, and a level-tagged event log. It also
 carries Track 2's authoring history and proposal queue, because those are
 operational records *about* the knowledge layer rather than the knowledge itself.
@@ -1424,8 +1426,8 @@ to a class rather than applied globally, because the alternative faces —
 OpenDyslexic in particular — very much do want smoothing. `theme.css` emits the
 same two declarations for the first painted frame.
 
-**The other four faces** (Geist, Fira Code, Georgia, OpenDyslexic) remain in
-the Font selector. `FONT_MAP` in `themes.ts` and `_FONT_STACKS` in
+**The other five faces** (Geist, Fira Code, Georgia, OpenDyslexic, and Comic
+Neue as a handwritten option) remain in the Font selector. `FONT_MAP` in `themes.ts` and `_FONT_STACKS` in
 `backend/app/api/prefs.py` are parallel tables and must be kept in step — both
 render the same selector, one for the live UI and one for the first frame.
 

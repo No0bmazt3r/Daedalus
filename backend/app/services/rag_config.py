@@ -87,6 +87,8 @@ CANDIDATE_RANGE = (5, 50)
 # num_ctx 4096 cannot afford more). `similarity_threshold` drops a passage whose
 # cosine similarity (1 − Chroma's distance) is below it, before re-ranking;
 # `None` keeps every candidate. Frozen with the track, like re-ranking.
+# `hybrid` adds a BM25 keyword ranking (FTS5) fused with the vector one by RRF;
+# off is the dense-only baseline for the ablation.
 TOP_K_RANGE = (1, 10)
 THRESHOLD_RANGE = (0.0, 1.0)
 
@@ -100,7 +102,7 @@ DEFAULT: dict[str, Any] = {
     "note": "Track 1 (vector) is the baseline/control arm. See PROJECT.md §5.",
     "rerank": {"enabled": True, "model": "ms-marco-minilm-l6", "candidates": DEFAULT_CANDIDATES},
     "graph": {"mode": "agent", "budget_s": 6.0, "max_steps": 4},
-    "retrieval": {"top_k": 5, "similarity_threshold": None},
+    "retrieval": {"top_k": 5, "similarity_threshold": None, "hybrid": True},
 }
 
 
@@ -118,6 +120,8 @@ def _retrieval(raw: Any) -> dict[str, Any]:
     t = raw.get("similarity_threshold")
     if _number(t) and THRESHOLD_RANGE[0] <= t <= THRESHOLD_RANGE[1]:
         out["similarity_threshold"] = float(t)
+    if isinstance(raw.get("hybrid"), bool):
+        out["hybrid"] = raw["hybrid"]
     return out
 
 
@@ -270,6 +274,8 @@ def _validate_retrieval(raw: dict[str, Any]) -> None:
         low, high = THRESHOLD_RANGE
         if t is not None and (not _number(t) or not low <= t <= high):
             raise ValueError(f"retrieval.similarity_threshold must be empty or a number from {low:g} to {high:g}")
+    if "hybrid" in raw and not isinstance(raw["hybrid"], bool):
+        raise ValueError("retrieval.hybrid must be true or false")
 
 
 def _validate_graph(raw: dict[str, Any]) -> None:

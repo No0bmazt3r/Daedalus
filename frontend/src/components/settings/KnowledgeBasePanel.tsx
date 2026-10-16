@@ -292,6 +292,10 @@ const THRESHOLD_OPTIONS = [
   { value: '', label: 'No similarity cut-off' },
   ...[0.3, 0.4, 0.5, 0.6, 0.7].map((t) => ({ value: String(t), label: `similarity ≥ ${t}` })),
 ]
+const HYBRID_OPTIONS = [
+  { value: 'on', label: 'Vector + keyword (hybrid)' },
+  { value: 'off', label: 'Vector only' },
+]
 const BUDGET_OPTIONS = [3, 6, 10, 20].map((n) => ({ value: String(n), label: `${n} s budget` }))
 const STEP_OPTIONS = [1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} step${n === 1 ? '' : 's'}` }))
 
@@ -528,7 +532,7 @@ function RerankSection({
 function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (config: RagConfig) => void }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const { top_k, similarity_threshold } = config.retrieval
+  const { top_k, similarity_threshold, hybrid } = config.retrieval
   const locked = config.frozen || busy
   const withCurrent = (options: { value: string; label: string }[], value: string, label: string) =>
     options.some((o) => o.value === value) ? options : [...options, { value, label }]
@@ -553,7 +557,8 @@ function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (
       </h3>
       <p className="text-xs leading-relaxed theme-text-muted">
         How many passages reach the prompt, and how close a passage must be to the question to count at
-        all. Vary these for the ablation table, then freeze.
+        all, and whether exact keyword matches (BM25) are fused in alongside vector similarity. Vary these for
+        the ablation table, then freeze.
       </p>
       <div className={`flex flex-wrap items-center gap-3 ${locked ? 'pointer-events-none opacity-50' : ''}`}>
         <ThemeSelect
@@ -571,6 +576,14 @@ function RetrievalSection({ config, onChange }: { config: RagConfig; onChange: (
           ariaLabel="Similarity cut-off"
           size="sm"
           className="w-52"
+        />
+        <ThemeSelect
+          value={hybrid === false ? 'off' : 'on'}
+          onChange={(v) => void save({ hybrid: v === 'on' })}
+          options={HYBRID_OPTIONS}
+          ariaLabel="Keyword search"
+          size="sm"
+          className="w-56"
         />
       </div>
       {error && (

@@ -64,7 +64,7 @@ left out).
 | M3 Deterministic tool layer | 8 | 31 / 31 | 100% | Sensor tools, both tracks' retrieval, effect/track/argument gates |
 | M4 Model provider | 6 | 5 / 7 | 71% | Serving and streaming work; the SLM tier is untested |
 | M5 Orchestration | 7 | 23 / 23 | 100% | All 11 steps of the chat flow, with a validator that replaces ungrounded answers (numbers, times, causes, rule 9) |
-| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 17 / 20 | 85% | Both tracks answer; Track 2's agent loop built; Track 1 is a plain baseline with re-ranking by decision |
+| M6 Retrieval tracks (vector RAG + GraphRAG) | 5 | 17 / 20 | 85% | Both tracks answer; Track 2's agent loop built; Track 1 is a hybrid baseline with re-ranking by decision |
 | M7 Observability | 10 | 6 / 6 | 100% | Every turn fully logged on one `query_id`, secrets and identifiers scrubbed; read back in Ariadne's Thread |
 | M8 Evaluation | — | 7 / 14 | 50%\* | **Harness built; no evaluation run.** The query set, labels and runs wait on the corpus |
 | M9 Hardware & model console | 11 | 15 / 16 | 94% | Working ("The Forge") |
@@ -542,8 +542,8 @@ Save all images to `docs/screenshots/`.
 | Installer | A cross-platform `doctor`/`setup` CLI (Windows without bash) — optional | M11 |
 
 **Cut from FYP2 (2026-10-01), to be stated in the report as scope:** Track 1's
-query expansion, hybrid BM25 search, contextual compression and multi-hop
-re-retrieval (Track 1 is a plain baseline with re-ranking); the vector-DB
+query expansion, contextual compression and multi-hop re-retrieval (Track 1 is
+a hybrid dense + BM25 baseline with re-ranking; hybrid reinstated 2026-10-17); the vector-DB
 bake-off; the Streamlit log viewer (replaced by Ariadne's Thread); the
 Prometheus/Grafana stack; the separate source-badge row; the PyQt5 tab
 (Phase 2).
@@ -592,7 +592,7 @@ What this shows so far:
 | Corpus | Manuals and SOPs | Five categories, each document tagged **this rig** or **reference** | Public literature is useful for concepts but wrong for this rig's specifics, and answers must say which they rest on |
 | Frontend | — | Daedalus is a **standalone chat app**, not a component of the reactor or its SCADA app | It reads the reactor's data over a read-only boundary |
 | Deployment | Docker Compose (FYP1 design) | **Runs on the host**; Docker only for the optional SearXNG | A container stack bought nothing on a single-user lab machine and cost gigabytes of memory under WSL |
-| Track 1 | Advanced RAG: expansion, hybrid, compression, multi-hop | **Plain baseline with cross-encoder re-ranking** | Scoping decision; stated so it does not read as a handicap tilting the comparison |
+| Track 1 | Advanced RAG: expansion, hybrid, compression, multi-hop | **Hybrid (dense + BM25, RRF) baseline with cross-encoder re-ranking** | Scoping decision; stated so it does not read as a handicap tilting the comparison |
 | Log viewer | Streamlit | **Ariadne's Thread**, inside the web dashboard | One app, and it doubles as the labelling tool for evaluation |
 
 ---
@@ -629,4 +629,4 @@ done.
 - **Main ask (suggested):** the lab's own manuals and SOPs for the rig — they
   unblock the rig-specific half of the evaluation.
 - **Decisions to confirm with the advisor:** PyQt5 tab and vector-DB bake-off
-  both moved to Phase 2; Track 1 kept as a plain baseline with re-ranking.
+  both moved to Phase 2; Track 1 kept as a hybrid baseline with re-ranking.

@@ -33,12 +33,42 @@ _MAX_TOP_K = 10
 SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "other", "any")
 
 
+# Reciprocal Rank Fusion's constant, from Cormack et al. (2009) and still the
+# usual default: large enough that rank 1 vs 2 is not decisive on its own.
+RRF_K = 60
+
+
+def fuse(dense: list[dict[str, Any]], lexical: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge two best-first rankings by RRF: score = Σ 1 / (RRF_K + rank).
+
+    Ranks, not scores, because cosine distance and bm25 are on scales nothing
+    relates; RRF needs no tuning and no labelled set to calibrate. Each chunk
+    keeps its place in both lists (`dense_rank`, `keyword_rank`, None when
+    absent) so a log reader can see which half found it.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for field, ranking in (("dense_rank", dense), ("keyword_rank", lexical)):
+        for rank, chunk in enumerate(ranking, 1):
+            key = chunk.get("chunk_id") or f"{field}:{rank}"
+            entry = merged.setdefault(key, {
+                "chunk_id": chunk.get("chunk_id"), "text": chunk.get("text"),
+                "distance": chunk.get("distance"), "source_file": chunk.get("source_file"),
+                "section_title": chunk.get("section_title"), "page_number": chunk.get("page_number"),
+                "source_type": chunk.get("source_type"),
+                "dense_rank": None, "keyword_rank": None, "rrf_score": 0.0,
+            })
+            entry[field] = rank
+            entry["rrf_score"] += 1 / (RRF_K + rank)
+    # Stable sort: equal scores keep the vector order.
+    return sorted(merged.values(), key=lambda c: -c["rrf_score"])
+
+
 @register(
     name="search_corpus",
     category="search",
     summary=(
         "Search the ingested document corpus (manuals, SOPs, troubleshooting and safety documents) "
-        "for passages relevant to a question. Track 1: vector similarity."
+        "for passages relevant to a question. Track 1: vector similarity plus keyword (BM25) matching, re-ranked."
     ),
     effects={Effect.READ_CORPUS},
     integrity=Integrity.CORPUS,
@@ -54,7 +84,8 @@ SOURCE_TYPES = ("manual", "sop", "anomaly_record", "uauc_record", "other", "any"
     ),
 )
 def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
-    """Track 1 retrieval: nearest chunks by cosine, then re-ranked by a cross-encoder.
+    """Track 1 retrieval: nearest chunks by cosine, fused (RRF) with BM25 keyword
+    hits when `retrieval.hybrid` is on, then re-ranked by a cross-encoder.
 
     Reads through the guarded `get_collection()`, so an index built by a
     different embedding model raises rather than returning results ranked by
@@ -132,12 +163,30 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
 
     # The ablation's cut-off, before re-ranking: a passage the embedder
     # already judged too far away is not one the cross-encoder should rescue.
-    threshold = rag_config.retrieval_settings()["similarity_threshold"]
+    retrieval = rag_config.retrieval_settings()
+    threshold = retrieval["similarity_threshold"]
     dropped = 0
     if threshold is not None:
         kept = [c for c in chunks if c["distance"] is None or 1 - c["distance"] >= threshold]
         dropped = len(chunks) - len(kept)
         chunks = kept
+
+    # Hybrid: a BM25 ranking from the manifest's FTS5 index, fused with the
+    # vector one. Exact tokens (ABV-1, alarm codes) are where embeddings are
+    # weakest and keywords strongest. The threshold above is a cosine cut-off,
+    # so it applies to the vector side only — a keyword hit has no distance.
+    keyword: dict[str, Any] = {"enabled": retrieval["hybrid"], "hits": 0, "reason": None}
+    if retrieval["hybrid"]:
+        from ...db import corpus_store  # noqa: PLC0415
+
+        try:
+            lexical = corpus_store.keyword_search(
+                query, collection=state["collection"], limit=pool,
+                source_type=None if source_type == "any" else source_type)
+        except Exception as exc:  # noqa: BLE001 — a missing index degrades to vector-only, said aloud
+            lexical, keyword["reason"] = [], str(exc)
+        keyword["hits"] = len(lexical)
+        chunks = fuse(chunks, lexical)[:pool]
 
     rerank: dict[str, Any] = {"enabled": settings["enabled"], "model": None,
                               "candidates": len(chunks), "latency_ms": None, "reason": None}
@@ -175,6 +224,9 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         detail = f"{len(chunks)} passages from {state['collection']} (vector order: {rerank['reason']})"
     if chunks and dropped:
         detail += f"; {dropped} below similarity {threshold:g} dropped"
+    if keyword["enabled"]:
+        detail += (f"; hybrid with {keyword['hits']} keyword hits" if keyword["reason"] is None
+                   else f"; keyword search failed, vector only: {keyword['reason']}")
 
     return {
         # `collection` travels with the result so the dispatch boundary can
@@ -182,7 +234,8 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
         # resolving the collection separately is how a log ends up naming one
         # index while the query read another.
         "data": {"chunks": chunks, "track": "vector", "collection": state["collection"],
-                 "rerank": rerank, "similarity_threshold": threshold, "below_threshold": dropped},
+                 "rerank": rerank, "keyword": keyword,
+                 "similarity_threshold": threshold, "below_threshold": dropped},
         "detail": detail,
     }
 

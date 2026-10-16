@@ -758,6 +758,10 @@ def _log_retrieval(
                 candidate_count=rerank.get("candidates"),
                 rerank_latency_ms=rerank.get("latency_ms"),
             )
+        keyword = data.get("keyword") or {}
+        if keyword.get("enabled"):
+            # Migration 011. NULL when hybrid was off.
+            row["keyword_hits"] = keyword.get("hits")
     else:
         from .. import knowledge_graph as kg  # noqa: PLC0415 — only needed on the logging path
 

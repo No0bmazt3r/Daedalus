@@ -296,6 +296,8 @@ export interface RetrievalSettings {
   top_k: number;
   /** Drop a passage whose cosine similarity is below this, before re-ranking; null keeps all. */
   similarity_threshold: number | null;
+  /** BM25 keyword hits fused (RRF) with the vector ranking; false is the dense-only baseline. */
+  hybrid: boolean;
 }
 
 export type GraphMode = 'agent' | 'walk';

@@ -7,7 +7,7 @@
 // border / primary / text / textMuted) because the React components already
 // bind to those CSS variables.
 
-export type FontKey = 'minecraft' | 'sans' | 'mono' | 'serif' | 'opendyslexic';
+export type FontKey = 'minecraft' | 'sans' | 'mono' | 'serif' | 'opendyslexic' | 'comic';
 export type DensityKey = 'compact' | 'comfortable' | 'spacious';
 export type UiScale = '100' | '125';
 export type PatternKey =
@@ -88,6 +88,7 @@ const FONT_MAP: Record<FontKey, string> = {
   mono: "'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace",
   serif: "Georgia, 'Times New Roman', serif",
   opendyslexic: "'OpenDyslexic', 'Comic Sans MS', sans-serif",
+  comic: "'Comic Neue', 'Comic Sans MS', sans-serif",
 };
 
 export const FONT_OPTIONS: { value: FontKey; label: string }[] = [
@@ -96,6 +97,7 @@ export const FONT_OPTIONS: { value: FontKey; label: string }[] = [
   { value: 'mono', label: 'Monospace' },
   { value: 'serif', label: 'Serif' },
   { value: 'opendyslexic', label: 'OpenDyslexic (dyslexia-friendly)' },
+  { value: 'comic', label: 'Handwritten (Comic Neue)' },
 ];
 
 export const DENSITY_OPTIONS: { value: DensityKey; label: string }[] = [
@@ -1044,7 +1046,7 @@ export function coerceState(raw: unknown, fallbackId = DEFAULT_THEME_ID): ThemeS
     if (Object.keys(clean).length) advanced = clean;
   }
 
-  const fonts: FontKey[] = ['minecraft', 'sans', 'mono', 'serif', 'opendyslexic'];
+  const fonts: FontKey[] = ['minecraft', 'sans', 'mono', 'serif', 'opendyslexic', 'comic'];
   const densities: DensityKey[] = ['compact', 'comfortable', 'spacious'];
   const patterns = PATTERN_OPTIONS.map((p) => p.value);
 

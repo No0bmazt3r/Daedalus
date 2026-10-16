@@ -168,7 +168,7 @@ Two retrieval architectures, same query set, same model — so the
 
 | | Track 1 — vector RAG | Track 2 — agentic GraphRAG |
 |:--|:--|:--|
-| **Retrieval** | Top-k similarity + cross-encoder re-rank | Multi-hop traversal, embedding-free entry by alias |
+| **Retrieval** | Hybrid top-k (vector + BM25, RRF-fused) + cross-encoder re-rank | Multi-hop traversal, embedding-free entry by alias |
 | **Store** | ChromaDB | NetworkX (62-node authored graph) |
 | **Shape** | One retrieval → one generation | Model picks each hop under a time budget, vs a fixed walk |
 | **Expected cost** | Weak on multi-hop | Higher latency; silent gaps where a relation was never authored |

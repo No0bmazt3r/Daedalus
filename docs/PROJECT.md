@@ -244,7 +244,7 @@ evaluation harness are administrative. They never sit in the live query path.
 | 2 | SCADA acquisition | 2 | Pre-existing |
 | 3 | SQLite sensor data | 3 | **Store built** — read-only accessor + dev seeder |
 | 4 | Knowledge ingestion (offline) | Setup | **Built** — upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Track 1 → Build). 2 reference PDFs ingested (162 chunks); the rest of the corpus is not |
-| 5 | Retrieval — vector + graph | 3 | **Wired into chat**, one track at a time — Track 1 top-k over the current index with metadata filtering and cross-encoder re-ranking; Track 2 the agent loop (`graph_agent`) or the fixed walk it is measured against (`graph_walk`). Every result marked this rig or reference. Track 1's hybrid search, query expansion, compression and multi-hop were cut from FYP2 |
+| 5 | Retrieval — vector + graph | 3 | **Wired into chat**, one track at a time — Track 1 hybrid (vector + BM25, RRF-fused) top-k over the current index with metadata filtering and cross-encoder re-ranking; Track 2 the agent loop (`graph_agent`) or the fixed walk it is measured against (`graph_walk`). Every result marked this rig or reference. Track 1's query expansion, compression and multi-hop were cut from FYP2 |
 | 6 | Model provider (Ollama) | 3 | **Built** — client, registry, model config, benchmark, and the serving path behind `POST /api/chat` |
 | 7 | FastAPI orchestration | 3 | **Built** — all 11 steps of §7.1: guard, deterministic planning, evidence pack, validator with fallback, background summariser; citations shown in the chat |
 | 8 | Deterministic tool layer | 3 | **Built** — the two sensor tools plus both tracks' retrieval, behind the registry's effect, track and argument gates |
@@ -269,13 +269,15 @@ on top (all from the FYP1 retrieval-layer spec):
 |---|---|---|
 | Metadata-filtered retrieval | Narrow by `source_type`, `reactor_mode`, `document_version` | **Built** (`source_type`) |
 | Query expansion | LLM rewrites the query with lab synonyms before searching | Cut from FYP2 |
-| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | Cut from FYP2 |
+| Hybrid search | Dense embeddings + BM25 sparse, for exact terminology | **Built** (2026-10-17) — SQLite FTS5 BM25 fused with the vector ranking by RRF before re-ranking; on by default, frozen with the track |
 | Cross-encoder re-ranking | Re-score top-N locally before synthesis | **Built** — on by default, frozen with the track |
 | Contextual compression | Strip irrelevant sentences to save context window | Cut from FYP2 |
 | Multi-hop | Loop back and re-retrieve if evidence is insufficient | Cut from FYP2 |
 
-**Track 1 is deliberately a plain baseline with cross-encoder re-ranking**
-(decided 2026-10-01). The report must say so, so that the four cut techniques
+**Track 1 is deliberately a hybrid (dense + BM25) baseline with cross-encoder
+re-ranking** (decided 2026-10-01; hybrid reinstated 2026-10-17, since exact tags
+like `ABV-1` are where embeddings are weakest). The report must say so, so that
+the three cut techniques
 read as a scoping decision rather than as a handicap that tilts the comparison
 towards Track 2.
 
@@ -826,7 +828,7 @@ Trust comes from visible reasoning, not a black box:
 | **Orchestration** | All 11 steps: normalise, rewrite follow-ups, classify (7 intents), safety guard, deterministic planning, tool execution, labelled evidence pack, prompt, stream, validate (numbers, times, causes, control claims → fallback), log |
 | **Sensor data** | Read-only store (`mode=ro`) with a demo seeder (4,320 rows); `get_live_reading` and `get_trend` with enum-checked columns, timeouts and downsampling |
 | **Knowledge ingestion** | Upload → extract → chunk → embed → Chroma as one recorded run (Blueprints → Track 1 → Build); per-document category and rig/reference origin; PDF extraction handles AES-locked and font-shifted manuals. **2 reference PDFs ingested (162 chunks)**; 15 more collected in `data/corpus_sources/`, and the lab's own documents not yet obtained |
-| **Track 1** | Chroma top-k with `source_type` filtering and cross-encoder re-ranking; refuses an index built by a different embedding model |
+| **Track 1** | Chroma top-k fused with BM25 keyword hits (RRF), `source_type` filtering and cross-encoder re-ranking; refuses an index built by a different embedding model |
 | **Track 2** | Hand-authored 34-node graph (placeholder data until the real corpus), editable in Blueprints with an assisted proposal queue; the agent loop and the fixed walk, switchable; replay of every walk |
 | **Tool layer** | 33 tools in six categories behind effect, track and argument gates; Simple/Advanced mode enforced at dispatch |
 | **Observability** | Every turn writes conversation, tool, rag and model rows on one `query_id`, with grounded/hallucination flags and per-item origins; Ariadne's Thread reads them back and takes human labels |
@@ -848,7 +850,7 @@ Trust comes from visible reasoning, not a black box:
   any hardware, and the Forge measures fit on the machine it is on.
 - A validator check for prompt rule 9 (reference-only rig specifics).
 
-**Cut from FYP2 (2026-10-01), stated as scope:** Track 1's hybrid BM25 search,
+**Cut from FYP2 (2026-10-01), stated as scope:** Track 1's
 query expansion, contextual compression and multi-hop re-retrieval; the
 `VectorStoreAdapter` and vector-DB bake-off; the Streamlit log viewer; the
 Prometheus/Grafana metrics stack; the separate source-badge row.

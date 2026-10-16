@@ -72,7 +72,7 @@ retry, read-only mode).
 | **Sensor** | `data/sqlite/sensor_readings.db` | Reactor telemetry (temperature, pressure, pH, level, CO₂) | `db/sensor_store.py` | The reactor's own software — **never Daedalus** (opened read-only) | Sensor tools |
 | **Audit** | `logs/ai_logs.db` | Seven log tables, all keyed on `query_id`: conversation, tool, rag, model, error, feedback (ratings and labels), memory | `db/audit_store.py` | The chat pipeline, every turn | Ariadne's Thread, evaluation, Data stores |
 | **Chat** | `data/sqlite/chat.db` | Sessions and messages (the transcript the user owns), each answer's evidence pack | `db/chat_store.py` | `services/chat_service.py` | The chat, the Thread |
-| **Corpus** | `data/sqlite/corpus.db` | Uploaded documents, their chunks, ingest runs (with chunk size/overlap), events | `db/corpus_store.py` | `services/ingestion.py` | Track 1 search, Blueprints, the Thread |
+| **Corpus** | `data/sqlite/corpus.db` | Uploaded documents, their chunks (with an FTS5 keyword index, `chunks_fts`), ingest runs (with chunk size/overlap), events | `db/corpus_store.py` | `services/ingestion.py` | Track 1 search, Blueprints, the Thread |
 | **Preferences** | `backend/data/prefs.db` | Settings: theme, keybinds, assistant, Thread settings, … | `db/prefs_store.py` | Settings panels | Everything that reads a setting |
 | **Vectors** | `data/chroma/` | Chunk embeddings, one collection per embedding model | `db/vector_store.py` | Ingestion | Track 1 search |
 | **Knowledge graph** | `config/knowledge_graph.yaml` once authored; until then the seed in `backend/app/data/graph/knowledge_graph.yaml` | Track 2's nodes and edges (sensors, thresholds, SOPs, steps) | `services/knowledge_graph.py` | Blueprints → Track 2 → Build | Track 2 search |
@@ -149,9 +149,9 @@ arguments valid, read-only) and is logged.
 |---|---|---|
 | Idea | Find the most similar document chunks | Walk a hand-authored knowledge graph |
 | Search | `services/agent_tools/knowledge.py` → Chroma | `services/graph_tools.py`, `graph_agent.py` (the agent picks each hop) |
-| Ranking | `services/reranker.py` (cross-encoder re-scores the top N) | — |
+| Ranking | BM25 keyword hits (`corpus_store.keyword_search`, FTS5) fused with the vector ranking by RRF (`agent_tools/search.fuse`), then `services/reranker.py` (cross-encoder re-scores the top N) | — |
 | Built from | `ingestion.py` → `extraction.py` → `chunking.py` → embeddings (`embedding_models.py`) | `knowledge_graph.py`, authored in Blueprints |
-| Logged as | `rag_logs`: chunk ids, distances, re-rank scores, origins | `rag_logs.traversal_path`: every hop |
+| Logged as | `rag_logs`: chunk ids, distances, re-rank scores, origins, keyword hits | `rag_logs.traversal_path`: every hop |
 
 Which track answers is `services/rag_config.py` (`config/rag_config.json`); the
 comparison can be **frozen** so nothing is tuned after seeing results.

@@ -28,6 +28,7 @@ into the one store whose value is that nothing ever deletes from it.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -341,6 +342,43 @@ def origins_for(chunk_ids: list[str]) -> dict[str, str]:
             chunk_ids,
         ).fetchall()
     return {r["chunk_id"]: r["origin"] for r in rows}
+
+
+# A run of word characters, allowing the joiners a tag is written with, so
+# "ABV-1" and "SOP-4.2" stay one term and match as a phrase.
+_TERM = re.compile(r"\w[\w\-./]*")
+
+
+def keyword_search(
+    query: str, *, collection: str, limit: int, source_type: str | None = None,
+) -> list[dict[str, Any]]:
+    """Track 1's lexical half: chunks ranked by FTS5 bm25, best first.
+
+    Only chunks embedded into `collection`, so both halves of the hybrid search
+    an identical corpus and a fused hit is always one the vector side could
+    have returned. Terms are OR'd — bm25's IDF already sinks "the" and "what" —
+    and each is quoted, so user text can never become FTS5 query syntax.
+    """
+    terms = _TERM.findall(query)
+    if not terms:
+        return []
+    match = " OR ".join('"' + t.replace('"', '""') + '"' for t in terms)
+    sql = """
+        SELECT c.chunk_id, c.text, c.section_title, c.page_number,
+               d.filename AS source_file, d.source_type, bm25(chunks_fts) AS bm25
+          FROM chunks_fts f
+          JOIN chunks c ON c.chunk_id = f.chunk_id
+          JOIN documents d ON d.document_id = c.document_id
+         WHERE chunks_fts MATCH ? AND c.embedded = 1 AND c.collection = ?
+    """
+    args: list[Any] = [match, collection]
+    if source_type:
+        sql += " AND d.source_type = ?"
+        args.append(source_type)
+    sql += " ORDER BY bm25 LIMIT ?"
+    args.append(limit)
+    with _connect() as conn:
+        return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
 
 def all_chunk_ids() -> list[str]:

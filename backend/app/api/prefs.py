@@ -75,6 +75,7 @@ _FONT_STACKS = {
     "mono": "'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace",
     "serif": "Georgia, 'Times New Roman', serif",
     "opendyslexic": "'OpenDyslexic', 'Comic Sans MS', sans-serif",
+    "comic": "'Comic Neue', 'Comic Sans MS', sans-serif",
 }
 
 # What a machine with no saved theme paints on its first frame — matches

@@ -146,8 +146,10 @@ report should keep:
   the latency, that says the graph's added complexity is not justified at this
   problem size — arguably the more interesting finding. Design to find out, not
   to make GraphRAG win.
-- **Name the cuts.** Track 1 is a plain baseline with cross-encoder re-ranking
-  by decision; the four advanced techniques were scoped out, not forgotten.
+- **Name the cuts.** Track 1 is a hybrid (dense + BM25) baseline with
+  cross-encoder re-ranking by decision; the three other advanced techniques were
+  scoped out, not forgotten. Hybrid vs vector-only is itself an ablation row
+  (`retrieval.hybrid`, logged as `rag_logs.keyword_hits`).
 - **Two different failure modes.** A graph fails by omission — enumerable, and
   shown in Coverage. A vector index fails by a confident wrong match, which
   cannot be enumerated. The two arms are not equally auditable in principle.
@@ -211,8 +213,8 @@ The demo values above are synthetic — say so in any caption.
   persistence), then a weighted score: retrieval precision/recall 30%, p95
   latency 20%, offline guarantee 15%, integration effort 10%, metadata
   filtering 8%, disk 7%, maturity 5%, re-index effort 5%.
-- **Track 1's advanced techniques** — query expansion, hybrid BM25, contextual
-  compression, multi-hop — as an ablation over the frozen baseline.
+- **Track 1's advanced techniques** — query expansion, contextual compression,
+  multi-hop — as an ablation over the frozen baseline.
 - **Multi-device** `device_profiles` with per-device tools (the sensor table
   already carries a defaulted `device_id`), a Kùzu graph backend, and LAN /
   multi-lab deployment.

@@ -577,7 +577,15 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [x] Top-k cosine retrieval with metadata filtering — `top_k` capped at 10,
       filtered by `source_type`
 - [-] Query expansion (LLM rewrites with lab synonyms) *(cut from FYP2, 2026-10-01)*
-- [-] Hybrid dense + BM25 search *(cut from FYP2, 2026-10-01)*
+- [x] Hybrid dense + BM25 search *(2026-10-17; reinstated after the 2026-10-01 cut)*.
+      SQLite FTS5 index over chunk text, section title and document title
+      (`corpus/006_chunks_fts.sql`, kept in step by triggers), queried by
+      `corpus_store.keyword_search` against the same collection as the vectors,
+      fused with the vector ranking by RRF (k=60) in `search_corpus`, then
+      re-ranked as before. `retrieval.hybrid` in `rag_config.json`, on by
+      default and frozen with the track; Settings → Vector RAG → Retrieval depth.
+      Per query `rag_logs.keyword_hits` (NULL = off). 8 tests (`test_hybrid.py`)
+  - [ ] Run the ablation hybrid vs vector-only on the query set before freezing
 - [x] Cross-encoder re-ranking — `reranker.py`, wired into `search_corpus`:
       a wider candidate pool is retrieved and reranked down to `top_k`, and an
       answer built on un-reranked chunks says so. Toggled in `rag_config`.
@@ -595,9 +603,10 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
         model is `marginal`. Re-check on the machine that runs the evaluation before freezing
 - [-] Contextual compression *(cut from FYP2, 2026-10-01)*
 - [-] Multi-hop re-retrieval loop *(cut from FYP2, 2026-10-01)*
-  - Track 1 is deliberately a **plain baseline with cross-encoder re-ranking**.
-    The report must say so, so that the four cut techniques read as a scoping
-    decision rather than as a handicap that tilts the comparison towards Track 2
+  - Track 1 is deliberately a **hybrid (dense + BM25) baseline with cross-encoder
+    re-ranking** — the standard production retrieval stack. The report must say
+    so, so that the three cut techniques read as a scoping decision rather than
+    as a handicap that tilts the comparison towards Track 2
 - [x] Expose `chunk_size`, `top_k`, `similarity_threshold` as config for the ablation table
       *(2026-10-10)*. `top_k` (1–10) and `similarity_threshold` (cosine, applied
       before re-ranking; empty = off) in `rag_config.json` → `retrieval`, frozen
@@ -1907,6 +1916,8 @@ CLI that works the same on Windows, macOS and Linux.
       Comic Sans respectively). Pre-existing; the OpenDyslexic one matters most,
       since it is offered as an accessibility affordance and currently isn't one.
       Quick fix: remove the two options rather than ship a broken accessibility setting
+- [x] *(2026-10-17)* Handwritten face (Comic Neue) added to the Font selector,
+      bundled from `@fontsource/comic-neue` (400, 700) like the others
 - [ ] Hugging Face gated repositories cannot be pulled. Public GGUF publishers
       (bartowski, unsloth, mradermacher, lmstudio-community) need no token, but
       `meta-llama` and friends do, and Ollama's `hf.co/` pull does not reliably
