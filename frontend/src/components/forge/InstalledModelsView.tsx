@@ -438,9 +438,7 @@ export function InstalledModelsView({
       {confirmDialog}
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm theme-text-muted">
-          What this machine has, and what it has been running. Benchmark and delete models,
-          verify embedding models and benchmark re-rankers. Chat (local and cloud baseline),
-          embedding and re-ranking models each have their own list.
+          The models on this machine — benchmark, verify or delete them.
         </p>
         <button
           onClick={() => { setRefreshKey((k) => k + 1); void load() }}

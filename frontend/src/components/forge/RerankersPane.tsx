@@ -4,7 +4,7 @@ import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import { useConfirm } from '../ui/confirm-dialog'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import {
-  AlertTriangle, CircleAlert, CircleCheck, CircleSlash, Download, Gauge, Loader2, Sparkles, Trash2,
+  AlertTriangle, CircleAlert, CircleCheck, CircleSlash, Cpu, Download, Gauge, Loader2, Sparkles, Trash2,
 } from 'lucide-react'
 import {
   benchmarkReranker, deleteReranker, downloadReranker, fetchRagConfig,
@@ -38,6 +38,11 @@ import { BrowseLink, EmptyNote, PaneIntro } from './paneParts'
  */
 function mb(bytes: number) {
   return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${Math.round(bytes / 1_000_000)} MB`
+}
+
+/** "Apache-2.0 (BAAI weights; …)" → "Apache-2.0"; the whole string stays on hover. */
+function brief(text: string) {
+  return text.split(' (')[0]
 }
 
 function seconds(ms: number) {
@@ -121,29 +126,27 @@ export function RerankersPane({
     .filter((m) => mode === 'browse' || m.installed)
     .sort((a, b) => b.recommended_for.length - a.recommended_for.length || b.quality - a.quality)
 
+  const budget = `Re-scoring ${fit.candidates} chunks should take under ${seconds(fit.budget_ms)}, `
+    + "re-ranking's share of a 3-second answer. Times are estimates until benchmarked here. Weights are "
+    + 'pinned to a Hugging Face commit under data/models/rerankers; after the download nothing uses the network.'
+
   return (
     <div className="space-y-3">
       {confirmDialog}
-      {mode === 'browse' ? (
-        <PaneIntro>
-          Cross-encoders that re-score Track 1's nearest chunks and keep the ones that actually answer
-          the question, rated for how well they run on this machine. Download one here, benchmark it under Installed,
-          and choose which Track 1 uses in Settings → Vector RAG.
-        </PaneIntro>
-      ) : (
-        <PaneIntro action={onBrowse && <BrowseLink onClick={onBrowse}>Browse re-rankers</BrowseLink>}>
-          The re-rankers on this machine. Benchmark one to replace its estimated time with a
-          measurement; choose which Track 1 uses in Settings → Vector RAG.
-        </PaneIntro>
-      )}
+      <PaneIntro action={mode === 'installed' && onBrowse && <BrowseLink onClick={onBrowse}>Browse re-rankers</BrowseLink>}>
+        {mode === 'browse'
+          ? 'Cross-encoders that re-score Track 1’s candidates. Pick which one runs in Settings → Vector RAG.'
+          : 'Downloaded re-rankers. Benchmark one to replace its estimate with a measurement.'}
+      </PaneIntro>
 
-      <div className="rounded-xl border theme-border p-3 text-[11px] leading-relaxed theme-text-muted">
-        Judged for <span className="theme-text">{fit.machine.cpu ?? 'this CPU'}</span>
-        {' '}({fit.machine.threads} threads){free != null && <> with <span className="theme-text">{mb(free)}</span> free</>}:
-        re-scoring {fit.candidates} chunks should take under{' '}
-        <span className="theme-text">{seconds(fit.budget_ms)}</span>, re-ranking's share of a 3-second answer.
-        Times are estimates until you press <span className="theme-text">Benchmark</span> on a downloaded model.
-      </div>
+      {/* The machine the verdicts are for — one line; the reasoning is on hover. */}
+      <p className="flex flex-wrap items-center gap-x-2 text-[11px] theme-text-muted" title={budget}>
+        <Cpu size={12} className="shrink-0" />
+        <span className="theme-text">{fit.machine.cpu ?? 'This CPU'}</span>
+        <span>· {fit.machine.threads} threads</span>
+        {free != null && <span>· {mb(free)} free</span>}
+        <span>· budget {seconds(fit.budget_ms)} / {fit.candidates} chunks</span>
+      </p>
 
       {!config.rerank_runtime.available && (
         <div className="flex items-start gap-2 rounded-xl border status-warn-border status-warn-bg p-3 text-xs">
@@ -181,12 +184,6 @@ export function RerankersPane({
       </div>
 
       {error && <p className="text-xs text-rose-400">{error}</p>}
-
-      <p className="text-[11px] leading-relaxed theme-text-muted">
-        Weights are pinned to a Hugging Face commit and stored under{' '}
-        <code className="theme-text">data/models/rerankers</code>; after the download nothing uses the
-        network. A benchmark is kept with the weights and replaces the estimate in the verdict.
-      </p>
     </div>
   )
 }
@@ -206,32 +203,26 @@ function RerankerRow({
   const job = model.download
   const pct = job && job.total ? Math.min(100, Math.round((job.bytes / job.total) * 100)) : 0
   const verdict = VERDICT[model.fit.verdict]
-  const recommended = model.recommended_for
+  const measured = model.fit.latency_source === 'measured'
+  const why = model.fit.reasons.join(' · ')
+  const source = `${model.repo} @ ${model.revision.slice(0, 7)}`
+  const button = 'flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors disabled:opacity-50'
   return (
-    <div className={`rounded-xl border p-3 ${recommended.length ? 'theme-accent-border theme-surface-strong' : 'theme-border'}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="truncate text-sm theme-text">{model.label}</span>
-        <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text-muted">
-          {model.languages}
-        </span>
-        <span
-          className={`flex shrink-0 items-center gap-1 text-[10px] ${verdict.tone}`}
-          title={model.fit.reasons.join(' · ') || 'Fits this machine'}
-        >
-          <verdict.icon size={11} /> {verdict.label}
-        </span>
-        {recommended.map((r) => (
+    <div className={`group rounded-xl border px-3 py-2.5 ${inUse ? 'theme-accent-border' : 'theme-border'}`}>
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 truncate text-sm theme-text" title={`${model.note}\n${source}`}>{model.label}</span>
+        {model.recommended_for.map((r) => (
           <span
             key={r}
-            className="flex shrink-0 items-center gap-1 rounded border theme-accent-border px-1.5 py-0.5 text-[10px] theme-accent"
+            className="flex shrink-0 items-center gap-1 text-[10px] theme-accent"
             title={`The strongest re-ranker this machine can run for ${r === 'english' ? 'English' : 'Malay'} questions`}
           >
-            <Sparkles size={10} /> Recommended{r === 'malay' ? ' for Malay' : ''}
+            <Sparkles size={10} /> {r === 'malay' ? 'Best for Malay' : 'Recommended'}
           </span>
         ))}
         {inUse && (
-          <span className="shrink-0 rounded border theme-border px-1.5 py-0.5 text-[10px] theme-text">
-            {model.installed ? 'used by Track 1' : 'selected, needs download'}
+          <span className="shrink-0 rounded-full theme-surface-strong px-2 py-0.5 text-[10px] theme-text">
+            {model.installed ? 'In use' : 'Selected · not downloaded'}
           </span>
         )}
         <span className="ml-auto" />
@@ -241,63 +232,44 @@ function RerankerRow({
           </span>
         ) : model.installed && mode === 'browse' ? (
           onManage ? (
-            <button
-              onClick={onManage}
-              className="shrink-0 rounded-lg border theme-border px-2 py-1 text-[11px] theme-text-muted hover:theme-text"
-              title="Benchmark or delete it under Installed → Re-rankers"
-            >
-              Downloaded · Manage
+            <button onClick={onManage} className={`${button} theme-text-muted hover:theme-text`}
+              title="Benchmark or delete it under Installed → Re-rankers">
+              Manage
             </button>
           ) : (
             <span className="shrink-0 text-[11px] status-ok">Downloaded</span>
           )
         ) : model.installed ? (
           <>
-            <button
-              onClick={onBenchmark}
-              disabled={benching}
-              className="flex shrink-0 items-center gap-1 rounded-lg border theme-border px-2 py-1 text-[11px] theme-text hover:theme-surface disabled:opacity-50"
-              title="Time re-scoring a question's candidates on this machine"
-            >
+            <button onClick={onBenchmark} disabled={benching} className={`${button} border theme-border theme-text hover:theme-surface`}
+              title="Time re-scoring a question's candidates on this machine">
               {benching ? <Loader2 size={12} className="animate-spin" /> : <Gauge size={12} />} Benchmark
             </button>
-            <button
-              onClick={onDelete}
-              className="shrink-0 rounded p-1 theme-text-muted hover:text-rose-400"
-              title="Delete the downloaded weights"
-              aria-label={`Delete ${model.label}`}
-            >
+            <button onClick={onDelete} title="Delete the downloaded weights" aria-label={`Delete ${model.label}`}
+              className="shrink-0 rounded p-1 theme-text-muted opacity-60 transition-opacity hover:text-rose-400 hover:opacity-100 group-hover:opacity-100">
               <Trash2 size={13} />
             </button>
           </>
         ) : (
-          <button
-            onClick={onDownload}
-            className="flex shrink-0 items-center gap-1 rounded-lg border theme-border px-2 py-1 text-[11px] theme-text hover:theme-surface"
-          >
+          <button onClick={onDownload} className={`${button} border theme-border theme-text hover:theme-surface`}>
             <Download size={12} /> {mb(model.size_bytes)}
           </button>
         )}
       </div>
 
-      <p className="mt-1.5 text-[11px] leading-relaxed theme-text-muted">{model.note}</p>
-
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] theme-text-muted">
-        <span>
-          <span className="theme-text">{model.fit.latency_source === 'measured' ? '' : '~'}{seconds(model.fit.latency_ms)}</span>
-          {' '}per question · {model.fit.latency_source === 'measured' ? 'measured here' : 'estimated'}
+      {/* One line of facts. The verdict colours the time it is about; the why is on hover. */}
+      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] theme-text-muted">
+        <span className={`flex items-center gap-1 ${verdict.tone}`} title={why || 'Fits this machine'}>
+          <verdict.icon size={11} />
+          {measured ? '' : '~'}{seconds(model.fit.latency_ms)}
+          <span className="theme-text-muted">{measured ? 'measured' : 'est.'}</span>
+          {model.fit.verdict !== 'safe' && <span>· {verdict.label}</span>}
         </span>
-        <span><span className="theme-text">{mb(model.fit.memory_bytes)}</span> memory</span>
-        <span>{model.licence}</span>
+        <span>· {mb(model.fit.memory_bytes)}</span>
+        <span title={model.languages}>· {brief(model.languages)}</span>
+        <span title={model.licence}>· {brief(model.licence)}</span>
+        {job?.status === 'error' && <span className="text-rose-400">· download failed: {job.error}</span>}
       </div>
-      {model.fit.reasons.length > 0 && (
-        <p className={`mt-1 text-[10px] leading-relaxed ${verdict.tone}`}>{model.fit.reasons.join(' · ')}</p>
-      )}
-      <p className="mt-1 text-[10px] theme-text-muted">
-        <code className="theme-text">{model.repo}</code> @ {model.revision.slice(0, 7)}
-        {model.installed ? ' · downloaded' : ' · not downloaded'}
-        {job?.status === 'error' && <span className="text-rose-400"> · download failed: {job.error}</span>}
-      </p>
     </div>
   )
 }
