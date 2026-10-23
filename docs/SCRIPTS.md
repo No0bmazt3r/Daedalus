@@ -106,7 +106,7 @@ choice, and the symptom is a Search panel that looks configured and fails on
 every query. Nothing starts for a provider nobody picked.
 
 The check is only trustworthy because `ready` now means **reachable** rather
-than **configured** — see the note in `services/web_search.py`.
+than **configured** — see the note in `tools/web_search.py`.
 
 ### `start` (alias `up`)
 

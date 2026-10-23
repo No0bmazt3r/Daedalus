@@ -349,7 +349,8 @@ Not in CI — run before a commit.
 
 ```text
 frontend/      React dashboard — components, contexts, hooks, typed API client
-backend/       FastAPI service — api/, services/, models/, db/, cli_eval.py
+backend/       FastAPI service — one package per module (chat, tools, blueprints,
+               forge, thread, evaluation, system), each with a README; db/
 config/        committed choices: model, retrieval track, graph, eval query set
 docs/          all documentation — start at docs/README.md
 scripts/       shared shell helpers, and the animated startup banner

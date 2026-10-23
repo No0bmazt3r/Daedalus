@@ -1,4 +1,4 @@
-// Client for the FastAPI preference store (backend/app/api/prefs.py).
+// Client for the FastAPI preference store (backend/app/system/api/prefs.py).
 //
 // This is the only persistence the UI has — nothing is kept in localStorage.
 // Writes are coalesced per key so dragging a colour picker produces one

@@ -433,7 +433,7 @@ export const setRagTrack = async (track: RagTrack) => {
 // ── the corpus pipeline (Track 1) ────────────────────────────────────────────
 //
 // M2, built. These replace the `available: false, blocked_by: 'M2'` shapes the
-// corpus half used to answer with — see `api/corpus.py`.
+// corpus half used to answer with — see `blueprints/api/corpus.py`.
 
 export type DocumentOrigin = 'rig' | 'reference';
 

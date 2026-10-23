@@ -10,9 +10,10 @@ from typing import Any
 from unittest import mock
 
 from app.db import audit_store
-from app.services import agent_tools, graph_agent, rag_config
-from app.services.agent_tools import search
-from app.services.orchestration import planner
+from app.tools import agent_tools
+from app.blueprints import graph_agent, rag_config
+from app.tools.agent_tools import search
+from app.chat.orchestration import planner
 
 from .. import fixtures
 

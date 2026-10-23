@@ -7,8 +7,9 @@ import unittest
 from unittest import mock
 
 from app.db import audit_store, chat_store
-from app.services import background_models, chat_service, session_titles, token_calibration
-from app.services.query_pipeline import local_model
+from app.forge import background_models
+from app.chat import chat_service, session_titles, token_calibration
+from app.chat.query_pipeline import local_model
 
 LOCAL = [{"name": "small:1b"}, {"name": "big:8b"}]
 

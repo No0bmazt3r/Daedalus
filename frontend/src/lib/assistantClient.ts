@@ -1,7 +1,7 @@
-// Client for Settings → Assistant — backend `api/assistant.py`.
+// Client for Settings → Assistant — backend `chat/api/assistant.py`.
 //
 // The site timezone, the system prompt, and the safety wording and extra
-// blocked phrases. See `services/assistant_settings.py`.
+// blocked phrases. See `chat/assistant_settings.py`.
 
 import { request } from './http';
 

@@ -52,7 +52,7 @@ import {
  *
  * What is left is the part that changes: which effects are on, what each tool
  * may touch, and whether its result may be cited. The reasoning lives in
- * `services/agent_tools/registry.py` and `docs/FEATURES.md`, where it can be
+ * `tools/agent_tools/registry.py` and `docs/FEATURES.md`, where it can be
  * read once rather than on every visit.
  *
  * ## Two switches, on purpose

@@ -1,4 +1,4 @@
-// Client for the chat session API (backend/app/api/sessions.py).
+// Client for the chat session API (backend/app/chat/api/sessions.py).
 //
 // Conversation state lives on the server, not in this component tree and not
 // in browser storage. That is deliberate: the transcript is replayed into the

@@ -19,7 +19,7 @@ import { BrowseLink, EmptyNote, PaneIntro } from './paneParts'
  * The cross-encoders Track 1 can re-score its candidates with — judged against
  * this machine, downloaded, benchmarked and deleted here, because the Forge is
  * where every model on this machine lives. The catalogue is curated and pinned
- * (`services/reranker.py`), so browsing and managing share one list.
+ * (`forge/reranker.py`), so browsing and managing share one list.
  *
  * Each model gets the Forge's verdict — safe / marginal / will not fit — on the
  * two things a re-ranker spends: memory beside the chat model, and the time to

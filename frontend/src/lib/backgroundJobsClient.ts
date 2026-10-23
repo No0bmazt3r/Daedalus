@@ -1,7 +1,7 @@
-// Client for Settings → Background Jobs — backend `api/background_jobs.py`.
+// Client for Settings → Background Jobs — backend `forge/api/background_jobs.py`.
 //
 // Which local model names chats and which folds old turns into the rolling
-// summary, and how the title job behaves. See `services/background_models.py`.
+// summary, and how the title job behaves. See `forge/background_models.py`.
 
 import { request } from './http';
 

@@ -20,34 +20,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import (
-    assistant,
-    background_jobs,
-    chat,
-    corpus,
-    embeddings,
-    events,
-    forge,
-    graph,
-    health,
-    logs,
-    maintenance,
-    mcp,
-    persona,
-    prefs,
-    providers,
-    search,
-    sessions,
-    system,
-    thread,
-    tools,
-)
+# One package per module; each keeps its HTTP routes in its own `api/`.
+from .blueprints.api import corpus, graph
+from .chat import chat_service
+from .chat.api import assistant, chat, persona, sessions
 from .db import corpus_store, migrations, paths, sqlite_util
-from .services import app_logs, chat_service, hardware, live_events
+from .forge import hardware
+from .forge.api import background_jobs, embeddings, forge, providers
+from .system import app_logs, live_events
+from .system.api import events, health, logs, maintenance, prefs, system
+from .thread.api import thread
+from .tools.api import mcp, search, tools
 
-# Aliased: `api.forge` is already imported above under that name, and the two
+# Aliased: `forge.api.forge` is already imported above under that name, and the two
 # shadowing each other broke router registration at import time.
-from .services import forge as forge_service
+from .forge import forge as forge_service
 
 # The same records that go to stdout also go to a rotating file, so Settings →
 # System can read them back without a second terminal and a container name.
@@ -107,7 +94,7 @@ async def lifespan(_app: FastAPI):
 
     # Notices model changes made outside the app — `ollama rm` in a terminal —
     # and tells every open view. Polls only while a browser is listening; see
-    # `services/live_events.py`.
+    # `system/live_events.py`.
     watch_task = asyncio.create_task(live_events.watch_ollama())
 
     try:

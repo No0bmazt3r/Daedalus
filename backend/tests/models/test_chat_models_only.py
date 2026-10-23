@@ -5,8 +5,9 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from app.api import system
-from app.services import inference, model_config, ollama_client
+from app.system.api import system
+from app.chat import inference
+from app.forge import model_config, ollama_client
 
 CAPS = {
     "qwen3:1.7b": ["completion", "thinking"],

@@ -154,7 +154,7 @@ function IndexState({ config }: { config: EmbeddingConfig }) {
 /**
  * `nomic-embed-text:latest` and `nomic-embed-text` are one model, but
  * `snowflake-arctic-embed:335m` and `snowflake-arctic-embed:33m` are two.
- * Mirrors `normalise_tag` in `services/embedding_models.py`.
+ * Mirrors `normalise_tag` in `forge/embedding_models.py`.
  */
 function normaliseTag(tag: string): string {
   return tag.endsWith(':latest') ? tag.slice(0, -':latest'.length) : tag

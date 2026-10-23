@@ -1,4 +1,4 @@
-// The browser end of `GET /api/events` — see backend `services/live_events.py`.
+// The browser end of `GET /api/events` — see backend `system/live_events.py`.
 //
 // One EventSource for the whole tab, however many views listen: a connection
 // per view would multiply against the browser's per-host limit of six, and a

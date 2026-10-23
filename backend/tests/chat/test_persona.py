@@ -6,7 +6,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from app.services import chat_service, inference, ollama_client, persona
+from app.chat import chat_service, inference, persona
+from app.forge import ollama_client
 
 from .. import fixtures
 from ..fakes import FakeHttpx

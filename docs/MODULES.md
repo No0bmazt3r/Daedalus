@@ -206,7 +206,7 @@ All read-only, all served from `ai_logs.db`, none on the chat path.
 
 ### 1.7 As built (2026-10-07)
 
-`services/thread/`, `api/thread.py`, `components/thread/`. The §1.5 API exactly,
+`thread/`, `thread/api/thread.py`, `components/thread/`. The §1.5 API exactly,
 plus `q` (search the question or id) on the list. Both views of §1.3: the window
 from the sidebar (`Ctrl+Alt+A`, the palette), and the strip under every answer,
 which opens the thread in a panel beside the chat (with the evidence pack on
@@ -279,8 +279,8 @@ cloud baselines). **All six are built.**
 
 | # | Function | Detail |
 |---|---|---|
-| 1 | **Detect** ✅ | RAM, CPU, GPU/VRAM, disk, Ollama version. `psutil` + `pynvml`/`nvidia-smi`, every probe independently guarded — `services/hardware.py`, `GET /api/forge/hardware`. Runs on a background schedule in three tiers rather than per panel open, and goes dormant when nobody is watching |
-| 2 | **Estimate** ✅ | `≈ (params_B × bytes_per_param) + kv_cache + runtime`. Prefers a *measured* weight size wherever one exists: the real bytes on disk for a pulled model, or the size published in the model's Ollama manifest for one that is not. Only the KV cache and the ~0.8GB runtime stay arithmetic — `services/model_fit.py` |
+| 1 | **Detect** ✅ | RAM, CPU, GPU/VRAM, disk, Ollama version. `psutil` + `pynvml`/`nvidia-smi`, every probe independently guarded — `forge/hardware.py`, `GET /api/forge/hardware`. Runs on a background schedule in three tiers rather than per panel open, and goes dormant when nobody is watching |
+| 2 | **Estimate** ✅ | `≈ (params_B × bytes_per_param) + kv_cache + runtime`. Prefers a *measured* weight size wherever one exists: the real bytes on disk for a pulled model, or the size published in the model's Ollama manifest for one that is not. Only the KV cache and the ~0.8GB runtime stay arithmetic — `forge/model_fit.py` |
 | 3 | **Score** ✅ | fit / speed / quality / context → `safe` \| `marginal` \| `will_not_fit`, judged against **two** memory pools. A model too large for VRAM is *offloaded*, not disqualified: an early single-pool version marked Mistral 7B unrunnable on a machine that runs it fine, which is a recommendation engine refusing to recommend the answer |
 | 4 | **Manage** ✅ | Ollama list / pull (SSE, cancellable) / delete. A local API call, so Rule 1 permits it |
 | 5 | **Benchmark** ✅ | Time-to-first-token and end-to-end latency from the wall clock; prefill and generation from Ollama's own counters. The two are recorded separately and neither is derived from the other — see §2.3 |
@@ -372,7 +372,7 @@ The full methodology, including the threats to validity this measurement does
 
 ### 2.4 Detection, and the three decisions worth keeping
 
-`backend/app/services/hardware.py` detects CPU model and
+`backend/app/forge/hardware.py` detects CPU model and
 core counts, total/available RAM, swap, GPU and VRAM, free disk where models
 land, and the Ollama version. It is rendered by `HardwareView`, which is shared
 between the Forge's Hardware tab and anything else that reads the machine — one component, so the two
@@ -402,8 +402,8 @@ Three decisions in that module worth keeping:
 
 | Built | Where |
 |---|---|
-| `GET /api/system/models` — Ollama models + cloud baselines, aggregated | `backend/app/api/system.py` |
-| Cloud endpoint store — provider catalogue, base URL + key, connection test | `services/model_endpoints.py` |
+| `GET /api/system/models` — Ollama models + cloud baselines, aggregated | `backend/app/system/api/system.py` |
+| Cloud endpoint store — provider catalogue, base URL + key, connection test | `forge/model_endpoints.py` |
 | "Added Models" settings panel | `components/settings/ModelEndpointsPanel.tsx` |
 
 The Forge absorbs the "Added Models" panel rather than duplicating it, as the
@@ -587,7 +587,7 @@ checked rather than assumed.
 
 **NetworkX over a git-tracked YAML source of truth**, as recommended below —
 37 nodes and 48 edges across all 7 node and 7 edge types, loaded by
-`services/knowledge_graph.py`, which validates against the declared schema and
+`blueprints/knowledge_graph.py`, which validates against the declared schema and
 **refuses a graph that does not validate** rather than serving a subtly broken
 one. A typo'd edge type is not a crash; it is a silent retrieval failure, which
 is the failure mode §3.3 is about.

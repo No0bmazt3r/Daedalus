@@ -143,7 +143,7 @@ export function CoverageView() {
       <p className="text-[11px] leading-relaxed theme-text-muted">
         Authored in{' '}
         <code className="theme-text">config/knowledge_graph.yaml</code> (the packaged seed until the first edit). Run{' '}
-        <code className="theme-text">python -m app.services.knowledge_graph</code> for the same
+        <code className="theme-text">python -m app.blueprints.knowledge_graph</code> for the same
         report in the terminal while editing.
       </p>
     </div>

@@ -6,7 +6,8 @@ import unittest
 from unittest import mock
 
 from app.db import prefs_store, tool_policy_store
-from app.services import inference, model_config
+from app.chat import inference
+from app.forge import model_config
 
 
 class CloudToggleTest(unittest.TestCase):

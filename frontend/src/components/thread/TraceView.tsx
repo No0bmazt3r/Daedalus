@@ -30,7 +30,7 @@ import { LabelPanel } from './LabelPanel'
  * ## The marks are the validator's
  *
  * Green, red and amber are what the validator decided when the answer was
- * written (`services/thread/` explains why it is not re-decided here). This
+ * written (`thread/` explains why it is not re-decided here). This
  * view adds the source line for each green number, so a reader can check it.
  */
 

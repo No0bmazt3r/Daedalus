@@ -36,13 +36,13 @@ reports itself unavailable, naming the package.
 | `fastapi`, `uvicorn[standard]` | The API server | — |
 | `chromadb` | The vector store, embedded in the API process (`db/vector_store.py`) | The full package, not `chromadb-client`, which only speaks HTTP to a separate server. The two install the same module and must not coexist; `ensure_embedded_chroma` in `scripts/common.sh` removes the client from old venvs |
 | `httpx` | Ollama, registry and provider calls; the connection test | Arrives via chromadb, but imported directly — a transitive dependency is not a contract |
-| `psutil` | RAM, CPU and disk for the Forge (`services/hardware.py`) | — |
+| `psutil` | RAM, CPU and disk for the Forge (`forge/hardware.py`) | — |
 | `nvidia-ml-py` | GPU detection (`pynvml`) | 13 ms against 613 ms for the `nvidia-smi` subprocess under WSL, which lets VRAM refresh every 30 s. Pure Python; without an NVIDIA driver `nvmlInit()` fails and that reads as "no GPU" |
-| `networkx` | Track 2's graph (`services/knowledge_graph.py`) | A YAML file in git plus NetworkX, rather than a sixth store: tens of hand-edited nodes |
+| `networkx` | Track 2's graph (`blueprints/knowledge_graph.py`) | A YAML file in git plus NetworkX, rather than a sixth store: tens of hand-edited nodes |
 | `pyyaml` | Reads that graph file and the eval query set | Arrives via chromadb; listed for the same reason as `httpx` |
-| `pypdf[crypto]` | PDF text (`services/extraction.py`) | Pure Python. `[crypto]` brings `cryptography`, needed for the AES-locked manufacturer manuals. No OCR on purpose: a scanned PDF is refused with that reason |
+| `pypdf[crypto]` | PDF text (`blueprints/extraction.py`) | Pure Python. `[crypto]` brings `cryptography`, needed for the AES-locked manufacturer manuals. No OCR on purpose: a scanned PDF is refused with that reason |
 | `pdfplumber` | PDF tables kept as Markdown rows (`extraction._tables`) | MIT, no model weights (unlike Docling), no network. Without it tables are simply not added |
-| `onnxruntime`, `tokenizers` | Track 1's cross-encoder re-ranking (`services/reranker.py`) | ~80 MB, CPU only, instead of sentence-transformers and its gigabyte of PyTorch for the same model. Weights are downloaded on request, pinned to a commit; without these two, Track 1 keeps Chroma's order |
+| `onnxruntime`, `tokenizers` | Track 1's cross-encoder re-ranking (`forge/reranker.py`) | ~80 MB, CPU only, instead of sentence-transformers and its gigabyte of PyTorch for the same model. Weights are downloaded on request, pinned to a commit; without these two, Track 1 keeps Chroma's order |
 
 ## Layout
 
@@ -50,18 +50,21 @@ reports itself unavailable, naming the package.
 app/
   main.py     the app, its routers, start-up migrations, the catch-all error handler
   cli_eval.py the evaluation harness (python -m app.cli_eval)
-  api/        HTTP only — routing, status codes, validation errors
-  services/   the logic
-    query_pipeline/   §7.1 steps 1–4: normalise, rewrite, classify, guard
-    orchestration/    §7.1 steps 5–8, 10: plan, execute, evidence, prompt, validate
-    agent_tools/      Layer 8: every tool, and the gates it runs behind
-    inference.py      step 9 (the model call) and 11 (logging), tying it together
-    thread/           Ariadne's Thread: listing, trace, groundedness, retrieval
-    ingestion.py      Track 1's pipeline (extraction.py, chunking.py, embedding_models.py)
-    knowledge_graph.py, graph_*.py   Track 2: the graph, its walk and agent, authoring, proposals
-    hardware.py, model_fit.py, benchmark.py, forge.py   The Forge
-    evaluation.py     the harness behind cli_eval.py
-  models/     Pydantic wire contracts
+
+  One package per module, each with its own README.md. Inside a module, api/
+  is HTTP only (routing, status codes, validation); the .py files beside it are
+  the logic.
+
+  chat/        the core: query_pipeline/ (§7.1 steps 1–4), orchestration/
+               (steps 5–8, 10), inference.py (step 9 and 11), sessions, persona
+  tools/       Layer 8: agent_tools/ (every tool and its gates), MCP, web search
+  blueprints/  Labyrinth Blueprints: Track 1 corpus (ingestion, extraction,
+               chunking), Track 2 graph (knowledge_graph, graph_*), rag_config
+  forge/       The Forge: hardware, model fit, Ollama, benchmark, embedders,
+               re-ranker, cloud endpoints
+  thread/      Ariadne's Thread: listing, trace, groundedness, retrieval
+  evaluation/  the harness behind cli_eval.py
+  system/      health, prefs, live events, process log, store browser, backup
   data/       shipped catalogues (models, embedders) and the graph seed
   db/         persistence
     sqlite_util.py   connections, pragmas, transactions, retry, backup
@@ -89,7 +92,7 @@ Stdlib `unittest`, no extra dependency. `tests/__init__.py` points every store
 and the config directory at a throwaway directory before anything is imported,
 so a run never touches `data/` or `config/`; the chat-path tests fake Ollama.
 
-The orchestrator calls `services/` directly. It never loops back through HTTP
+The orchestrator calls other modules' Python directly. It never loops back through HTTP
 to reach conversation state — that would make an internal operation depend on
 the web layer being up.
 
@@ -191,7 +194,7 @@ baseline** — Rule 1 keeps them out of the live query path. That is not a
 convention this router happens to follow; `model_endpoints.purpose` carries
 `CHECK (purpose = 'benchmark')`, so a runtime-purposed row cannot be written
 even by a future handler that tried. Nothing in the chat path imports
-`services/model_endpoints.py`.
+`forge/model_endpoints.py`.
 
 API keys are write-only over HTTP. They go in through `POST`/`PATCH` and come
 back only as a masked hint; `EndpointOut` has no `api_key` field, and the raw

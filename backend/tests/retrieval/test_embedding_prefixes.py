@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from app.services import embedding_models as em
-from app.services import ingestion
+from app.forge import embedding_models as em
+from app.blueprints import ingestion
 
 
 class PrefixTest(unittest.TestCase):

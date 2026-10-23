@@ -6,8 +6,9 @@ import json
 import unittest
 
 from app.db import audit_store
-from app.services import agent_tools, rag_config
-from app.services.agent_tools import registry
+from app.tools import agent_tools
+from app.blueprints import rag_config
+from app.tools.agent_tools import registry
 
 from .. import fixtures
 

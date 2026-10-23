@@ -98,11 +98,11 @@ def get_client() -> Any:
 
 
 # The naming policy belongs to the embedding domain — it is derived from the
-# selected model — so it lives in `services/embedding_models` and is imported
+# selected model — so it lives in `forge/embedding_models` and is imported
 # here lazily. The alternative is every caller resolving a name before it can
 # open a collection, which is how a caller ends up hardcoding one.
 def _embedding_models() -> Any:
-    from ..services import embedding_models  # noqa: PLC0415 — see comment above
+    from ..forge import embedding_models  # noqa: PLC0415 — see comment above
 
     return embedding_models
 

@@ -9,8 +9,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from app.services import embedding_models as em
-from app.services import fit_verdict, reranker
+from app.forge import embedding_models as em
+from app.forge import fit_verdict, reranker
 
 GB = 1_000_000_000
 ROOMY = {"available_bytes": 64 * GB, "total_bytes": 64 * GB, "cpu": "test"}

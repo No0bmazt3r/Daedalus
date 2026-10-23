@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from app.services import orchestration, query_pipeline
-from app.services.orchestration import numbers, timeparse, validator
+from app.chat import orchestration, query_pipeline
+from app.chat.orchestration import numbers, timeparse, validator
 
 from .. import fixtures
 

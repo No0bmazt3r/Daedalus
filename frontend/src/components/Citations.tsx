@@ -47,7 +47,7 @@ function lineText(evidence: StoredEvidence, label: string): string {
 }
 
 // A reading: a number with the unit written after it (the validator's `UNITS`,
-// `services/orchestration/numbers.py`), or pH before it. A bare number is not
+// `chat/orchestration/numbers.py`), or pH before it. A bare number is not
 // one — a count, a step, a year — so it is left as text.
 const UNIT = String.raw`(?:°\s?[CF]|%|m³|(?:ppm|ppb|percent|degC|degrees|barg|bara|mbar|bar|kPa|Pa|psi|atm|L\/min|mL\/min|lpm|slpm|sccm|mL|L|m3|kg|mg|g|mm|cm|rpm|mV|mA|kW|mmol|mol)\b)`
 const READING = String.raw`(?<![\w.-])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s?${UNIT}|\bpH\s?\d+(?:\.\d+)?`

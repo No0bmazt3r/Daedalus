@@ -18,8 +18,8 @@ this file says *where* each thing lives.
  └────────┼─────────────────────────────────────────────────────────┘
           │ HTTP / JSON, plus two streams (chat tokens, live events)
  ┌────────▼──────────────── FastAPI (backend/app) ──────────────────┐
- │  api/        thin HTTP routes: validate input, call a service    │
- │  services/   the logic: chat pipeline, retrieval, Forge, …       │
+ │  chat/ tools/ blueprints/ forge/ thread/ evaluation/ system/     │
+ │    each: api/ (thin HTTP routes) + the logic beside it           │
  │  db/         one module per store; schema migrations             │
  └────────┬───────────────────────┬─────────────────────┬───────────┘
           │                       │                     │
@@ -47,8 +47,8 @@ this file says *where* each thing lives.
 | Screen | `frontend/src/components/` | Render and react to the user | `thread/ThreadWindow.tsx` |
 | Client | `frontend/src/lib/*Client.ts` | Typed calls to one backend area; no UI | `lib/threadClient.ts` |
 | Shared fetch | `frontend/src/lib/http.ts` | Timeouts, error status, streaming | `request()` |
-| Route | `backend/app/api/*.py` | HTTP in and out, input validation | `api/thread.py` |
-| Service | `backend/app/services/` | The actual logic | `services/thread/` |
+| Route | `backend/app/<module>/api/*.py` | HTTP in and out, input validation | `thread/api/thread.py` |
+| Service | `backend/app/<module>/` | The actual logic | `thread/` |
 | Store | `backend/app/db/*_store.py` | SQL for one database | `db/audit_store.py` |
 | Schema | `backend/app/db/migrations/<store>/*.sql` | Versioned tables | `audit/010_model_logs_prompt_hash.sql` |
 
@@ -71,11 +71,11 @@ retry, read-only mode).
 |---|---|---|---|---|---|
 | **Sensor** | `data/sqlite/sensor_readings.db` | Reactor telemetry (temperature, pressure, pH, level, CO₂) | `db/sensor_store.py` | The reactor's own software — **never Daedalus** (opened read-only) | Sensor tools |
 | **Audit** | `logs/ai_logs.db` | Seven log tables, all keyed on `query_id`: conversation, tool, rag, model, error, feedback (ratings and labels), memory | `db/audit_store.py` | The chat pipeline, every turn | Ariadne's Thread, evaluation, Data stores |
-| **Chat** | `data/sqlite/chat.db` | Sessions and messages (the transcript the user owns), each answer's evidence pack | `db/chat_store.py` | `services/chat_service.py` | The chat, the Thread |
-| **Corpus** | `data/sqlite/corpus.db` | Uploaded documents, their chunks (with an FTS5 keyword index, `chunks_fts`), ingest runs (with chunk size/overlap), events | `db/corpus_store.py` | `services/ingestion.py` | Track 1 search, Blueprints, the Thread |
+| **Chat** | `data/sqlite/chat.db` | Sessions and messages (the transcript the user owns), each answer's evidence pack | `db/chat_store.py` | `chat/chat_service.py` | The chat, the Thread |
+| **Corpus** | `data/sqlite/corpus.db` | Uploaded documents, their chunks (with an FTS5 keyword index, `chunks_fts`), ingest runs (with chunk size/overlap), events | `db/corpus_store.py` | `blueprints/ingestion.py` | Track 1 search, Blueprints, the Thread |
 | **Preferences** | `backend/data/prefs.db` | Settings: theme, keybinds, assistant, Thread settings, … | `db/prefs_store.py` | Settings panels | Everything that reads a setting |
 | **Vectors** | `data/chroma/` | Chunk embeddings, one collection per embedding model | `db/vector_store.py` | Ingestion | Track 1 search |
-| **Knowledge graph** | `config/knowledge_graph.yaml` once authored; until then the seed in `backend/app/data/graph/knowledge_graph.yaml` | Track 2's nodes and edges (sensors, thresholds, SOPs, steps) | `services/knowledge_graph.py` | Blueprints → Track 2 → Build | Track 2 search |
+| **Knowledge graph** | `config/knowledge_graph.yaml` once authored; until then the seed in `backend/app/data/graph/knowledge_graph.yaml` | Track 2's nodes and edges (sensors, thresholds, SOPs, steps) | `blueprints/knowledge_graph.py` | Blueprints → Track 2 → Build | Track 2 search |
 | Small stores | `search`, `mcp`, `model_endpoint`, `tool_policy` `_store.py` | Web-search providers, MCP servers, cloud endpoints, tool on/off | `db/*_store.py` | Their Settings panels | Their services |
 
 **Schema changes** are numbered SQL files per store in
@@ -102,19 +102,19 @@ What happens when you press Send, in order (`PROJECT.md` §7.1's eleven steps):
 
 | Step | What | File |
 |---|---|---|
-| 1 | Normalise the text | `services/query_pipeline/normaliser.py` |
-| 2 | **Safety guard**: refuse control or data-changing requests before anything runs | `services/query_pipeline/safety.py`, `vocabulary.py` |
-| 3 | Rewrite a follow-up into a standalone question | `services/query_pipeline/condense.py` |
-| 4 | Classify the intent (live reading, trend, document, …) | `services/query_pipeline/intent.py` |
-| 5 | Resolve times ("this morning", "at 10:00") | `services/orchestration/timeparse.py` |
-| 6 | Plan which tools to call | `services/orchestration/planner.py` |
-| 7 | Call them through the gated registry | `services/orchestration/executor.py`, `services/agent_tools/registry.py` |
-| 8 | Build the evidence pack (labelled lines S1, D1, G1) and the prompt | `services/orchestration/evidence.py`, `prompt.py` |
-| 9 | Stream the model's answer from Ollama | `services/inference.py`, `services/ollama_client.py` |
-| 10 | **Validate**: every number, time, citation and cause checked against the evidence; a failure is replaced by a fixed fallback | `services/orchestration/validator.py`, `numbers.py` |
-| 11 | Log everything under one `query_id`; store the turn | `db/audit_store.py`, `services/chat_service.py` |
+| 1 | Normalise the text | `chat/query_pipeline/normaliser.py` |
+| 2 | **Safety guard**: refuse control or data-changing requests before anything runs | `chat/query_pipeline/safety.py`, `vocabulary.py` |
+| 3 | Rewrite a follow-up into a standalone question | `chat/query_pipeline/condense.py` |
+| 4 | Classify the intent (live reading, trend, document, …) | `chat/query_pipeline/intent.py` |
+| 5 | Resolve times ("this morning", "at 10:00") | `chat/orchestration/timeparse.py` |
+| 6 | Plan which tools to call | `chat/orchestration/planner.py` |
+| 7 | Call them through the gated registry | `chat/orchestration/executor.py`, `tools/agent_tools/registry.py` |
+| 8 | Build the evidence pack (labelled lines S1, D1, G1) and the prompt | `chat/orchestration/evidence.py`, `prompt.py` |
+| 9 | Stream the model's answer from Ollama | `chat/inference.py`, `forge/ollama_client.py` |
+| 10 | **Validate**: every number, time, citation and cause checked against the evidence; a failure is replaced by a fixed fallback | `chat/orchestration/validator.py`, `numbers.py` |
+| 11 | Log everything under one `query_id`; store the turn | `db/audit_store.py`, `chat/chat_service.py` |
 
-Around it: the conversation window and rolling summary (`services/chat_service.py`,
+Around it: the conversation window and rolling summary (`chat/chat_service.py`,
 `summariser.py`, `token_calibration.py`), chat titles (`session_titles.py`),
 which model answers (`model_config.py`, `background_models.py`).
 
@@ -124,7 +124,7 @@ which model answers (`model_config.py`, `background_models.py`).
   highlights, the evidence list), `contexts/SessionsContext.tsx` (chats,
   messages, sending, ratings)
 - **Client:** `lib/chatClient.ts`, `lib/sessionsClient.ts`
-- **Routes:** `api/chat.py` (send, stream, rate), `api/sessions.py` (chats)
+- **Routes:** `chat/api/chat.py` (send, stream, rate), `chat/api/sessions.py` (chats)
 - **Stores:** chat, audit, sensor (read-only)
 - **Tests:** `backend/tests/chat/` (the whole path with a fake Ollama, safety,
   summary, titles), `backend/tests/tools/` (planning, evidence, validation)
@@ -135,12 +135,12 @@ Tools are deterministic functions the planner calls; the model never touches a
 database itself. Every call passes the registry's gates (allowed, enabled,
 arguments valid, read-only) and is logged.
 
-- **Registry and gates:** `services/agent_tools/registry.py`
+- **Registry and gates:** `tools/agent_tools/registry.py`
 - **Tools by kind:** `sensor.py` (readings, trends — read-only), `knowledge.py`
   (document and graph search), `search.py`, `session.py`, `system.py`,
   `other.py`; `extended/` holds the advanced-mode tools (MCP, web, workspace)
 - **Settings:** `components/settings/AgentToolsPanel.tsx`, `AgentToolsSimple.tsx`;
-  `api/tools.py`; `db/tool_policy_store.py`
+  `tools/api/tools.py`; `db/tool_policy_store.py`
 - **Tests:** `backend/tests/tools/`
 
 ### 4.3 Retrieval — the two tracks being compared
@@ -148,12 +148,12 @@ arguments valid, read-only) and is logged.
 | | Track 1 — vector RAG | Track 2 — graph RAG |
 |---|---|---|
 | Idea | Find the most similar document chunks | Walk a hand-authored knowledge graph |
-| Search | `services/agent_tools/knowledge.py` → Chroma | `services/graph_tools.py`, `graph_agent.py` (the agent picks each hop) |
-| Ranking | BM25 keyword hits (`corpus_store.keyword_search`, FTS5) fused with the vector ranking by RRF (`agent_tools/search.fuse`), then `services/reranker.py` (cross-encoder re-scores the top N), an optional re-rank score floor (abstention) and focused passage window (`search.focus`) | — |
+| Search | `tools/agent_tools/knowledge.py` → Chroma | `blueprints/graph_tools.py`, `graph_agent.py` (the agent picks each hop) |
+| Ranking | BM25 keyword hits (`corpus_store.keyword_search`, FTS5) fused with the vector ranking by RRF (`agent_tools/search.fuse`), then `forge/reranker.py` (cross-encoder re-scores the top N), an optional re-rank score floor (abstention) and focused passage window (`search.focus`) | — |
 | Built from | `ingestion.py` → `extraction.py` → `chunking.py` → embeddings (`embedding_models.py`) | `knowledge_graph.py`, authored in Blueprints |
 | Logged as | `rag_logs`: chunk ids, distances, re-rank scores, origins, keyword hits | `rag_logs.traversal_path`: every hop |
 
-Which track answers is `services/rag_config.py` (`config/rag_config.json`); the
+Which track answers is `blueprints/rag_config.py` (`config/rag_config.json`); the
 comparison can be **frozen** so nothing is tuned after seeing results.
 
 - **Tests:** `backend/tests/retrieval/`
@@ -175,10 +175,10 @@ person's label (the evaluation's ground truth).
   - `status.ts`, `StatusIcon.tsx` — names, icons and colours
 - **Pure logic:** `lib/threadLogic.ts` (grouping, keyboard navigation, export)
 - **Client:** `lib/threadClient.ts`
-- **Routes:** `api/thread.py`
-- **Service:** `services/thread/` — `listing.py` (status, buckets, figures),
+- **Routes:** `thread/api/thread.py`
+- **Service:** `thread/` — `listing.py` (status, buckets, figures),
   `trace.py` (steps), `groundedness.py` (number check), `retrieval.py` (chunks or
-  walk); `services/thread_settings.py` (Settings → Ariadne's Thread)
+  walk); `thread/thread_settings.py` (Settings → Ariadne's Thread)
 - **Settings:** `components/settings/ThreadPanel.tsx`
 - **Stores:** audit (read; labels appended), chat (evidence), corpus (chunk text)
 - **Tests:** `backend/tests/thread/`, `frontend/tests/threadLogic.test.ts`
@@ -190,21 +190,21 @@ detect → estimate → score → manage → benchmark → commit.
 
 | Step | Service |
 |---|---|
-| Detect RAM, CPU, GPU, disk | `services/hardware.py` |
-| Estimate memory per model | `services/model_fit.py` |
-| Score the fit (safe / marginal / will not fit) | `services/model_fit.py`, `fit_verdict.py` |
-| Manage: list, pull, delete | `services/ollama_client.py`, `ollama_registry.py`, `hf_discovery.py` |
-| Benchmark: real time-to-first-token and tokens/s | `services/benchmark.py`, `model_usage.py` |
-| Commit the choice | `services/model_config.py` |
+| Detect RAM, CPU, GPU, disk | `forge/hardware.py` |
+| Estimate memory per model | `forge/model_fit.py` |
+| Score the fit (safe / marginal / will not fit) | `forge/model_fit.py`, `fit_verdict.py` |
+| Manage: list, pull, delete | `forge/ollama_client.py`, `ollama_registry.py`, `hf_discovery.py` |
+| Benchmark: real time-to-first-token and tokens/s | `forge/benchmark.py`, `model_usage.py` |
+| Commit the choice | `forge/model_config.py` |
 | Embedding models, re-rankers, cloud baselines | `embedding_models.py`, `reranker.py`, `model_endpoints.py` |
-| The model table that joins it all | `services/forge.py` |
+| The model table that joins it all | `forge/forge.py` |
 
 - **Screen:** `components/forge/` — `ForgeWindow.tsx` (tabs), `HardwareView.tsx`,
   `ModelsView.tsx` (discover and rank; its card, detail panel, shortlist and
   formatting live in `forge/models/`), `InstalledModelsView.tsx` (manage),
   `EmbeddingModelsPane.tsx`, `RerankersPane.tsx`, `CloudModelsView.tsx`
 - **Client:** `lib/forgeClient.ts`, `lib/embeddingsClient.ts`
-- **Routes:** `api/forge.py`, `api/embeddings.py`, `api/providers.py`
+- **Routes:** `forge/api/forge.py`, `forge/api/embeddings.py`, `forge/api/providers.py`
 - **Tests:** `backend/tests/models/`; the method is defended in `docs/MODEL_FIT.md`
   and `docs/BENCHMARK.md`
 
@@ -215,14 +215,14 @@ the graph and how it was authored.
 
 | Track · tab | Shows | Screen | Backend |
 |---|---|---|---|
-| 1 · Build | Upload → extract → chunk → embed → run, step by step | `IngestView.tsx` (the stepper); one file per step in `blueprints/ingest/` (`RunStep.tsx` shows each run and its log) | `services/ingestion.py`, `extraction.py`, `chunking.py`, `corpus_config.py` |
-| 1 · Corpus | Documents and their chunks | `CorpusView.tsx` (passages re-joined for display by `lib/passage.ts`) | `api/corpus.py`, `db/corpus_store.py` |
-| 1 · Replay | What a vector query returned | `RetrievalView.tsx` | `api/corpus.py` → `services/retrieval_replay.py` |
-| 1 · Logs | Every ingest run and each document's history | `IngestLogsView.tsx` | `api/corpus.py`, `db/corpus_store.py` |
-| 2 · Build | Add nodes and edges; review the model's proposals | `AuthoringView.tsx`, `ProposalQueue.tsx` | `services/graph_authoring.py`, `graph_proposals.py` |
-| 2 · Graph | The graph as a diagram | `GraphView.tsx`, `GraphCanvas.tsx` | `api/graph.py`, `services/knowledge_graph.py` |
-| 2 · Coverage | What the graph covers, and what it misses | `CoverageView.tsx` | `services/knowledge_graph.py` |
-| 2 · Replay | A graph walk, hop by hop | `TraversalView.tsx` | `api/graph.py` |
+| 1 · Build | Upload → extract → chunk → embed → run, step by step | `IngestView.tsx` (the stepper); one file per step in `blueprints/ingest/` (`RunStep.tsx` shows each run and its log) | `blueprints/ingestion.py`, `extraction.py`, `chunking.py`, `corpus_config.py` |
+| 1 · Corpus | Documents and their chunks | `CorpusView.tsx` (passages re-joined for display by `lib/passage.ts`) | `blueprints/api/corpus.py`, `db/corpus_store.py` |
+| 1 · Replay | What a vector query returned | `RetrievalView.tsx` | `blueprints/api/corpus.py` → `blueprints/retrieval_replay.py` |
+| 1 · Logs | Every ingest run and each document's history | `IngestLogsView.tsx` | `blueprints/api/corpus.py`, `db/corpus_store.py` |
+| 2 · Build | Add nodes and edges; review the model's proposals | `AuthoringView.tsx`, `ProposalQueue.tsx` | `blueprints/graph_authoring.py`, `graph_proposals.py` |
+| 2 · Graph | The graph as a diagram | `GraphView.tsx`, `GraphCanvas.tsx` | `blueprints/api/graph.py`, `blueprints/knowledge_graph.py` |
+| 2 · Coverage | What the graph covers, and what it misses | `CoverageView.tsx` | `blueprints/knowledge_graph.py` |
+| 2 · Replay | A graph walk, hop by hop | `TraversalView.tsx` | `blueprints/api/graph.py` |
 
 - **Window and tabs:** `components/blueprints/BlueprintsWindow.tsx`, `tabs.ts`
 - **Client:** `lib/blueprintsClient.ts`
@@ -234,14 +234,14 @@ the graph and how it was authored.
 One window (`components/SettingsModal.tsx`); every panel is declared once in
 `lib/settingsRegistry.ts` (navigation and search both read it). Panels live in
 `components/settings/`; each talks to its own client and route — for example
-Assistant: `AssistantPanel.tsx` → `lib/assistantClient.ts` → `api/assistant.py`
-→ `services/assistant_settings.py` → prefs store.
+Assistant: `AssistantPanel.tsx` → `lib/assistantClient.ts` → `chat/api/assistant.py`
+→ `chat/assistant_settings.py` → prefs store.
 
 ### 4.8 Data stores browser
 
 Read-only rows of any allow-listed table, from the sidebar.
 `components/stores/StoreWindow.tsx`, `StoreBrowser.tsx` → `lib/systemClient.ts`
-→ `api/logs.py` → `services/log_browser.py` (allow-list, read-only connections,
+→ `system/api/logs.py` → `system/log_browser.py` (allow-list, read-only connections,
 secrets masked).
 
 ### 4.9 Error pages
@@ -258,14 +258,14 @@ found in Settings → Process Log. Test: `backend/tests/test_error_reporting.py`
 
 ### 4.10 Live updates
 
-`services/live_events.py` publishes "something changed" (models, corpus, rag,
-trace, …) over a server-sent-events stream (`api/events.py`); the browser
+`system/live_events.py` publishes "something changed" (models, corpus, rag,
+trace, …) over a server-sent-events stream (`system/api/events.py`); the browser
 subscribes once (`lib/liveEvents.ts`) and views re-read through
 `hooks/useLiveRefresh.ts`. No view polls for these.
 
 ### 4.11 Evaluation
 
-`services/evaluation.py` runs a frozen question set (`config/eval/`) through the
+`evaluation/evaluation.py` runs a frozen question set (`config/eval/`) through the
 real chat path per arm (Track 1, Track 2 walk, Track 2 agent) and scores
 groundedness, retrieval precision/recall/MRR and latency; `app/cli_eval.py` is
 its command line. Results land in the audit store like any turn, so Ariadne's

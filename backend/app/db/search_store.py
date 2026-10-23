@@ -13,7 +13,7 @@ only `'setup'`, so a row claiming a runtime web search cannot be written. See
   `key_hint` (`tvl…9f4a`) rather than the key.
 - `secret_for(provider)` is the single accessor that returns the real value,
   named so a call site making an outbound request with it is obvious in review.
-- `services/log_browser.py` does not list these tables, so the raw-log viewer
+- `system/log_browser.py` does not list these tables, so the raw-log viewer
   cannot render them.
 """
 

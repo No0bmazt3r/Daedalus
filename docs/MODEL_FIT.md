@@ -15,9 +15,9 @@ build when it does not.
 
 | Kind | What it does at answer time | Catalogue | Judged by | Time budget | Hard requirement |
 |---|---|---|---|---|---|
-| **Chat** | Writes the answer | `backend/app/data/model_catalogue.json` | `services/model_fit.py` (its own scorer) | — (scored on speed with quality and context) | Weights + KV cache fit the GPU/CPU memory pools |
+| **Chat** | Writes the answer | `backend/app/data/model_catalogue.json` | `forge/model_fit.py` (its own scorer) | — (scored on speed with quality and context) | Weights + KV cache fit the GPU/CPU memory pools |
 | **Embedding** | Embeds the question for Track 1 | `backend/app/data/embedding_catalogue.json` | `services/embedding_models.fit()` | **300 ms** per question | Window ≥ one chunk (~375 tokens) |
-| **Re-ranker** | Re-scores Track 1's 20 candidates | `CATALOGUE` in `services/reranker.py` | `services/reranker.fit()` | **1 s** per question | — |
+| **Re-ranker** | Re-scores Track 1's 20 candidates | `CATALOGUE` in `forge/reranker.py` | `services/reranker.fit()` | **1 s** per question | — |
 
 **A model's kind comes from Ollama, not its name.** A chat model is one whose
 `/api/show` capabilities include `completion`; an embedding model reports
@@ -40,7 +40,7 @@ generation needs the rest.
 
 ---
 
-## 2. The shared rule — `services/fit_verdict.py`
+## 2. The shared rule — `forge/fit_verdict.py`
 
 Every non-chat kind calls `fit_verdict.verdict()` with three things:
 

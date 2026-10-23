@@ -7,8 +7,9 @@ import unittest
 from unittest import mock
 
 from app.db import audit_store, vector_store
-from app.services import embedding_models, ingestion, rag_config, reranker
-from app.services.agent_tools import registry
+from app.forge import embedding_models, reranker
+from app.blueprints import ingestion, rag_config
+from app.tools.agent_tools import registry
 
 from .. import fixtures
 

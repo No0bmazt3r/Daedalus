@@ -6,9 +6,10 @@ import json
 import unittest
 
 from app.db import audit_store, corpus_store
-from app.services import agent_tools, ingestion
-from app.services import knowledge_graph as kg
-from app.services.orchestration import evidence, prompt
+from app.tools import agent_tools
+from app.blueprints import ingestion
+from app.blueprints import knowledge_graph as kg
+from app.chat.orchestration import evidence, prompt
 
 from .. import fixtures
 

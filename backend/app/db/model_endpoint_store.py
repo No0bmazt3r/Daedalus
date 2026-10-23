@@ -17,7 +17,7 @@ cannot be written — see `migrations/prefs/002_model_endpoints.sql`.
   `key_hint` (`sk-…f4a2`) rather than the key.
 - `secret_for(id)` is the single accessor that returns the real value, named
   so that a call site using it is obvious in review.
-- `services/log_browser.py` does not list this table, so the raw-log viewer
+- `system/log_browser.py` does not list this table, so the raw-log viewer
   cannot render it.
 """
 

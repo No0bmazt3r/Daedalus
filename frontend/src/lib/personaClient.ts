@@ -1,7 +1,7 @@
-// Client for Settings → Persona — backend `api/persona.py`.
+// Client for Settings → Persona — backend `chat/api/persona.py`.
 //
 // What Daedalus has learned about this install's user, proposed by a background
-// job and applied only once accepted. See `services/persona.py`.
+// job and applied only once accepted. See `chat/persona.py`.
 
 import { request } from './http';
 import type { GraphNode } from './blueprintsClient';

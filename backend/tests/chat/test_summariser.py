@@ -6,8 +6,8 @@ import unittest
 from unittest import mock
 
 from app.db import paths, sqlite_util
-from app.services import chat_service, summariser
-from app.services.query_pipeline import local_model
+from app.chat import chat_service, summariser
+from app.chat.query_pipeline import local_model
 
 # ~150 tokens each at the store's estimate, so a dozen overflow the 1200 budget.
 LONG = "Tell me about the absorber outlet NDIR analyser and how it behaves. " * 9

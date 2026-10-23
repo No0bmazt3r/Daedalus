@@ -8,7 +8,7 @@ import unittest
 
 from app.db import audit_store
 from app.db.paths import AUDIT_DB
-from app.services import app_logs
+from app.system import app_logs
 
 LEAKY = "key=AIzaSyAbc123456789012345678901234567 from sharvin@uni.edu.my, CO2 540.2 ppm at 10:30"
 

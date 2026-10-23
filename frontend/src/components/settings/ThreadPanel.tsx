@@ -18,7 +18,7 @@ import { SectionsSkeleton } from '../ui/sections-skeleton'
  * Three things to play with — what "grounded" requires, which of the three
  * buckets each of the six statuses is filed under, and what the buckets are
  * called. None of it touches the stored record, the validator or an
- * evaluation run (`services/thread_settings.py`), so it stays editable while
+ * evaluation run (`thread/thread_settings.py`), so it stays editable while
  * the comparison is frozen, and an open Thread window follows each change.
  */
 

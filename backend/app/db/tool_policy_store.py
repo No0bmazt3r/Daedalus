@@ -1,6 +1,6 @@
 """Which of the four extended effects are closed. Empty means everything is open.
 
-The gate in `services/agent_tools/registry` can refuse `network_egress`,
+The gate in `tools/agent_tools/registry` can refuse `network_egress`,
 `write`, `admin` and `execute_code` on the runtime surface. This store is what
 tells it to, and it is empty by default.
 
@@ -22,7 +22,7 @@ half-done.
 Closing an effect is now the event, and `locked_at` plus `note` capture it.
 That is the direction that matters for the write-up anyway: before recording a
 groundedness number you lock everything, and the rows are the evidence that you
-did. `services/agent_tools` stamps the resulting policy onto every catalogue
+did. `tools/agent_tools` stamps the resulting policy onto every catalogue
 response, so a screenshot of the panel carries the state it was taken in.
 """
 

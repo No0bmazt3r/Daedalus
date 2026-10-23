@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from app.db.chat_store import capitalised
-from app.services import session_titles
+from app.chat import session_titles
 
 
 class TitleDisplayTest(unittest.TestCase):

@@ -1,6 +1,6 @@
 # The latency benchmark — what it measures, and why that is the right thing
 
-`services/benchmark.py`, surfaced at `POST /api/forge/benchmark` and in The
+`forge/benchmark.py`, surfaced at `POST /api/forge/benchmark` and in The
 Forge. This document exists to be **defended in a viva**: every choice below has
 a reason, and the ones that are still weak are named in §9 rather than hidden.
 
@@ -307,7 +307,7 @@ GROUP BY model_name;
 ```
 
 SQLite has no percentile function; compute p50/p95 in the analysis script from
-the ordered rows. `services/model_usage.py` already does this per model and is
+the ordered rows. `forge/model_usage.py` already does this per model and is
 what the Forge displays.
 
 Store: `logs/ai_logs.db` in dev, `DAEDALUS_LOG_DIR` otherwise.

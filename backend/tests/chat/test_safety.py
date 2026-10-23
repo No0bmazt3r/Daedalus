@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from app.services import query_pipeline
-from app.services.query_pipeline import local_model, safety
+from app.chat import query_pipeline
+from app.chat.query_pipeline import local_model, safety
 
 UNSAFE = [
     # control_command

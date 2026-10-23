@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from app.services.query_pipeline import condense
-from app.services.query_pipeline.normaliser import normalise
+from app.chat.query_pipeline import condense
+from app.chat.query_pipeline.normaliser import normalise
 
 HISTORY = [
     {"role": "user", "content": "co2 average last hour", "standalone_query": "What was the average CO2 over the last hour?"},

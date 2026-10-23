@@ -20,7 +20,7 @@ import argparse
 import sys
 
 from .db import migrations
-from .services import evaluation
+from .evaluation import evaluation
 
 
 def _validate() -> int:

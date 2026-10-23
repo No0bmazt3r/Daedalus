@@ -653,7 +653,7 @@ evidence. Causal language requires retrieved backing.
 ### 7.4 Conversation memory
 
 > Neither historical spec set covers multi-turn conversation. This section
-> fills that gap. Built: `db/chat_store.py`, `services/chat_service.py`.
+> fills that gap. Built: `db/chat_store.py`, `chat/chat_service.py`.
 
 Ollama is stateless. "The assistant remembers" only ever means the orchestrator
 re-sent the transcript, so the transcript is the memory and it is stored in its
@@ -715,7 +715,7 @@ evaluation data survives without storing what was said.
 #### The user persona (added 2026-10-17)
 
 Beyond one conversation, Daedalus learns how this install's user works
-(`services/persona.py`, Settings → Persona). A background job reads the user's
+(`chat/persona.py`, Settings → Persona). A background job reads the user's
 **own** messages every three questions and proposes traits of four closed kinds:
 **style** (language, length, format, technical level — fixed lists), **role**
 (a fixed list), **vocabulary** (a shorthand the user actually typed, grounded to

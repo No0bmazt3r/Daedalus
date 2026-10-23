@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 from app.db import audit_store
-from app.services import benchmark, forge
+from app.forge import benchmark, forge
 
 
 class BenchmarkExportTest(unittest.TestCase):

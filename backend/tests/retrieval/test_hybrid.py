@@ -7,9 +7,10 @@ import unittest
 from unittest import mock
 
 from app.db import corpus_store, migrations, vector_store
-from app.services import embedding_models, ingestion, rag_config, reranker
-from app.services.orchestration import evidence
-from app.services.agent_tools import registry, search
+from app.forge import embedding_models, reranker
+from app.blueprints import ingestion, rag_config
+from app.chat.orchestration import evidence
+from app.tools.agent_tools import registry, search
 
 from .. import fixtures
 

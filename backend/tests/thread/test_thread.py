@@ -14,7 +14,10 @@ from fastapi.testclient import TestClient
 
 from app.db import audit_store, migrations
 from app.main import app
-from app.services import chat_service, inference, ollama_client, orchestration, thread, thread_settings
+from app.chat import chat_service, inference, orchestration
+from app.forge import ollama_client
+from app import thread
+from app.thread import thread_settings
 
 from .. import fixtures
 from ..fakes import FakeHttpx
@@ -238,7 +241,7 @@ class ThreadTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/trace/q_nope/retrieval").status_code, 404)
 
     def test_graph_citation_keeps_its_evidence_label(self) -> None:
-        from app.services.orchestration.evidence import EvidenceItem, EvidencePack  # noqa: PLC0415
+        from app.chat.orchestration.evidence import EvidenceItem, EvidencePack  # noqa: PLC0415
         pack = EvidencePack(items=[EvidenceItem("G1", "graph", "graph_walk", "[G1] x",
                                                 {"type": "graph", "node_id": "sensor:co2", "name": "CO2"})])
         [c] = pack.citations()

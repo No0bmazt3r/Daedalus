@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.services import chunking, extraction, ingestion
+from app.blueprints import chunking, extraction, ingestion
 
 
 class ExtractionCleanupTest(unittest.TestCase):

@@ -108,7 +108,7 @@ export async function downloadExport(): Promise<string> {
 // ── Side-car containers ──────────────────────────────────────────────────────
 //
 // Only available when a Docker socket is mounted into the backend, which is off
-// by default. See `services/containers.py` for why that default is not a
+// by default. See `system/containers.py` for why that default is not a
 // convenience setting: a process that can reach the socket can do anything
 // Docker can on the host, and the agent's `bash` tool runs in the same
 // container.

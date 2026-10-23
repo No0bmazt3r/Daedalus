@@ -4,8 +4,8 @@ import os
 import unittest
 
 from app.db import prefs_store
-from app.services import assistant_settings as s
-from app.services.query_pipeline import safety
+from app.chat import assistant_settings as s
+from app.chat.query_pipeline import safety
 
 
 class AssistantSettingsTest(unittest.TestCase):

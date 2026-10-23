@@ -6,7 +6,7 @@ import json
 import unittest
 
 from app.db import audit_store, chat_store, corpus_store
-from app.services import document_usage, ingestion
+from app.blueprints import document_usage, ingestion
 
 
 def setUpModule() -> None:

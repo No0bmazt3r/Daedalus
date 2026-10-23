@@ -8,7 +8,7 @@ from unittest import mock
 
 import pypdf
 
-from app.services import extraction, ingestion
+from app.blueprints import extraction, ingestion
 
 TEXT = "The NDIR analyser measures CO2 by infrared absorption. " * 4
 

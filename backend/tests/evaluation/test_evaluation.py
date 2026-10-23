@@ -15,7 +15,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from app.services import evaluation, inference, rag_config
+from app.evaluation import evaluation
+from app.chat import inference
+from app.blueprints import rag_config
 
 QUERY_SET = """
 - id: Q01
@@ -293,7 +295,7 @@ class RunTest(unittest.TestCase):
 
     def test_retrieval_only_calls_the_arms_tool_and_never_the_model(self) -> None:
         from app.db import audit_store  # noqa: PLC0415
-        from app.services import agent_tools  # noqa: PLC0415
+        from app.tools import agent_tools  # noqa: PLC0415
 
         called: list[tuple[str, dict]] = []
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 
 from app.db import corpus_store
-from app.services import ingestion
-from app.services import knowledge_graph as kg
+from app.blueprints import ingestion
+from app.blueprints import knowledge_graph as kg
 
 
 def setUpModule() -> None:

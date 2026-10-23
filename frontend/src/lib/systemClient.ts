@@ -1,5 +1,5 @@
 // Clients for the diagnostic and configuration APIs:
-//   /api/logs       — read-only browser over the stores (backend/app/api/logs.py)
+//   /api/logs       — read-only browser over the stores (backend/app/system/api/logs.py)
 //   /api/providers  — cloud endpoints for the evaluation baseline
 //   /api/system     — store health, and where the metrics stack lives
 //

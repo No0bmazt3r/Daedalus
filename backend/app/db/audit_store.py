@@ -258,7 +258,7 @@ def recent_queries(
     One row per `query_id` — the latest `conversation_logs` row for it, which is
     the one that records how the turn ended. Unpaged: how a turn is *classified*
     (grounded or not) depends on Settings → Ariadne's Thread, so the caller
-    classifies, filters and pages (`services/thread/`). `since`/`until` are
+    classifies, filters and pages (`thread/`). `since`/`until` are
     ISO timestamps, `until` exclusive; `track` is a `rag_logs.track`.
     """
     init_db()

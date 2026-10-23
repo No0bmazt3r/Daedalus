@@ -13,7 +13,8 @@ import unittest
 from unittest import mock
 
 from app.db import audit_store, paths, sqlite_util
-from app.services import chat_service, inference, ollama_client, orchestration
+from app.chat import chat_service, inference, orchestration
+from app.forge import ollama_client
 
 from .. import fixtures
 from ..fakes import FakeHttpx

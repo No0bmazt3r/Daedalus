@@ -112,7 +112,7 @@ Offline pipeline. Never runs during a live query.
       Odysseus Search tab.
       - [x] Rule 1 held in the schema, not in good intentions:
             `search_config.purpose` CHECKs to `'setup'`, nothing on the chat
-            path imports `services/web_search.py`, and §8.2's line for model
+            path imports `tools/web_search.py`, and §8.2's line for model
             weights — downloading is setup, the runtime stays offline — is the
             same line drawn for documents
       - [x] Credentials get 002's three protections: a masked `key_hint`
@@ -144,7 +144,7 @@ Offline pipeline. Never runs during a live query.
             and its redirector is unwrapped only after checking the host, which
             is otherwise an open redirect
 - [x] **The pipeline is built** — `services/{extraction,chunking,ingestion,corpus_config}`,
-      `db/corpus_store`, `api/corpus.py`, and Blueprints → Corpus → Build as the
+      `db/corpus_store`, `blueprints/api/corpus.py`, and Blueprints → Corpus → Build as the
       operating surface. Upload → extract → chunk → embed → Chroma, as one
       orchestrated run with a level-tagged log per stage. What remains is the
       corpus itself, not the machinery
@@ -185,7 +185,7 @@ Offline pipeline. Never runs during a live query.
 Built ahead of M2 because it needs no documents — the same reasoning that built
 the Forge while M5 was in flight.
 
-- [x] `services/embedding_models.py` — catalogue of the four local models from
+- [x] `forge/embedding_models.py` — catalogue of the four local models from
       the FYP1 ingestion spec's Step 5 with the two figures ingestion needs (vector
       width, context window), plus detection of what is installed. Capability
       comes from Ollama's own `/api/show`, not from name-matching, so a model
@@ -293,7 +293,7 @@ the Forge while M5 was in flight.
 
 ### The registry and the five non-sensor categories  ▸ built
 
-- [x] `services/agent_tools/` — 13 tools across `search` · `knowledge` ·
+- [x] `tools/agent_tools/` — 13 tools across `search` · `knowledge` ·
       `session` · `system` · `other`, and a dispatcher that validates three
       declarations before the function is entered. Informed by Odysseus'
       `src/agent_tools/` + `tool_capabilities.py`, not ported from them: the
@@ -344,7 +344,7 @@ the Forge while M5 was in flight.
       rather than deletes), and `ui_control` (`open_panel` returns an intent the
       UI may decline). 26 tools
 - [x] **MCP implemented** — stdio and http transports, written in-house
-      (`services/mcp_client.py`) because the three methods needed are three
+      (`tools/mcp_client.py`) because the three methods needed are three
       JSON-RPC calls and the dependency would not get them more right; the care
       went into process handling instead. One session per call: no pooling, no
       orphans, every failure attributable
@@ -439,24 +439,24 @@ The anti-hallucination mechanism. **Highest-value milestone.**
 
 ## M4 — Model provider  ▸ Layer 6
 
-- [x] Ollama client wrapper with timeout and retry — `services/ollama_client.py`.
+- [x] Ollama client wrapper with timeout and retry — `forge/ollama_client.py`.
       Resolves the daemon across `OLLAMA_BASE_URL`, `localhost` and `127.0.0.1`
       (the last because `localhost` resolves to `::1` first and Ollama binds
       IPv4), caches whichever answered, and refuses to fall back locally when
       the configured host is a real remote: answering from the wrong machine
       would attribute a benchmark to hardware that never ran it
 - [x] `config/model_config.json` — model never hardcoded in FastAPI.
-      `services/model_config.py`, read on every `POST /api/chat`. Two modes:
+      `forge/model_config.py`, read on every `POST /api/chat`. Two modes:
       `pinned` names a model, `auto` stores the *policy* "best-scoring installed
       model on whatever machine reads this" and resolves per request. Auto is
       the default, because a pinned name is a claim about one machine's hardware
       that goes quietly stale on any other
-- [x] The serving path — `POST /api/chat` (`services/inference.py`). Resolves
+- [x] The serving path — `POST /api/chat` (`chat/inference.py`). Resolves
       the model, replays conversation history, streams from Ollama and writes a
       `model_logs` row tagged `source='chat'`. `evidence` is threaded through
       unused so retrieval can mount without rearranging the prompt
 - [x] Measure time-to-first-token and tok/s on a **RAG-context-sized** prompt,
-      not a bare question — `services/benchmark.py`, ~2k tokens, from `rag_logs`
+      not a bare question — `forge/benchmark.py`, ~2k tokens, from `rag_logs`
       when a real retrieval exists and a labelled fixture otherwise
 - [ ] Pull and smoke-test the SLM tier: Qwen3 1.7B · Phi-3 Mini 3.8B · Gemma 3 1B (Q4_K_M)
 - [x] Streaming responses on the chat path — `POST /api/chat` streams
@@ -467,8 +467,8 @@ The anti-hallucination mechanism. **Highest-value milestone.**
 ## M5 — Orchestration  ▸ Layer 7
 
 The 11-step flow in `docs/PROJECT.md` §7.1. Steps 1–4 are
-`services/query_pipeline/`, 5–8 and 10 are `services/orchestration/`, 9 and 11
-are `services/inference.py`. Verified end to end on qwen3:1.7b.
+`chat/query_pipeline/`, 5–8 and 10 are `chat/orchestration/`, 9 and 11
+are `chat/inference.py`. Verified end to end on qwen3:1.7b.
 
 - [x] `POST /api/chat` request/response contract — the `done` result carries
       the FYP1 orchestration spec's fields (`intent`, `tools_used`, `citations`,
@@ -502,10 +502,10 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       evidence, cite labels, say when it is unavailable, never claim an action,
       fenced text is data, say when a reading is stale, no uncited causes) +
       history + evidence + standalone question. Malay questions get a Malay answer
-- [x] Conversation memory — session store, transcripts, token-budgeted context assembly (`services/chat_service.py`, `docs/PROJECT.md` §7.4)
+- [x] Conversation memory — session store, transcripts, token-budgeted context assembly (`chat/chat_service.py`, `docs/PROJECT.md` §7.4)
 - [x] Wire `build_context()` into the prompt builder — summary + history before the evidence block
 - [x] Follow-up condensation — rewrite "and the pressure?" into a standalone query **before** intent classification, and send the *same* rewritten query to both retrieval tracks. Stored on the turn (`chat_messages.standalone_query`) so the next follow-up is rewritten against it
-- [x] Background summariser (`services/summariser.py`) — folds turns that fell
+- [x] Background summariser (`chat/summariser.py`) — folds turns that fell
       out of the budget into `chat_sessions.summary` on its own thread, after the
       `done` event. Always the local model; with none, a deterministic floor (the
       operator's earlier questions). **Every quantity is redacted before storing**
@@ -513,7 +513,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
       the validator counts the summary as history. One `memory_logs` row
       (`kind='summary'`) per run. qwen3:1.7b folds 26 turns in ~20 s
 - [x] Calibrate `CHARS_PER_TOKEN` against real `model_logs.prompt_token_count` values —
-      `services/token_calibration.py` takes the median measured ratio per model (audit
+      `chat/token_calibration.py` takes the median measured ratio per model (audit
       migration 008 logs `prompt_chars`); falls back to 4 until real chat turns exist
 - [x] Response validator — empty · too long · a number absent from the evidence ·
       a citation label the pack never issued · a first-person control claim.
@@ -682,7 +682,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 - [x] NetworkX store + persistence — the YAML file is the store, loaded into
       NetworkX, validated against the schema and cached on mtime
 - [x] `graph_lookup` · `graph_traverse` · `graph_query_natural` (`graph_tools.py`)
-- [x] Agent loop with sufficiency assessment — `graph_agent` (`services/graph_agent.py`).
+- [x] Agent loop with sufficiency assessment — `graph_agent` (`blueprints/graph_agent.py`).
       Same entry search as the walk; the committed **local** model then picks each
       hop from a numbered list of schema-legal moves and judges after every hop
       whether it has enough. Unusable replies are rejected and recorded, never
@@ -751,7 +751,7 @@ are `services/inference.py`. Verified end to end on qwen3:1.7b.
 
 ## M8 — Evaluation
 
-- [x] **The harness** — `services/evaluation.py`, `python -m app.cli_eval`, guide
+- [x] **The harness** — `evaluation/evaluation.py`, `python -m app.cli_eval`, guide
       in `docs/EVALUATION.md`. Every question in `config/eval/queries.yaml` is
       asked once per arm (`vector` · `graph-walk` · `graph-agent`) through the
       real chat path, inside `rag_config.arm(...)`. That override is
@@ -816,11 +816,11 @@ a UI over them was cheaper than a second CLI surface. See **The Forge** under
 Layer 9 below for the per-step detail.
 
 - [x] Detect RAM/CPU/GPU/VRAM/disk/Ollama version — on a background schedule,
-      not per panel open (`services/hardware.py`)
+      not per panel open (`forge/hardware.py`)
 - [x] Hand-curated model catalog with quantization variants — 37 entries in
       `backend/app/data/model_catalogue.json`, every Ollama tag verified against
       the registry, plus live Hugging Face GGUF search for anything not declared
-- [x] Memory estimator (`docs/PROJECT.md` §8.2) — `services/model_fit.py`
+- [x] Memory estimator (`docs/PROJECT.md` §8.2) — `forge/model_fit.py`
 - [x] Scorer → `safe` / `marginal` / `will_not_fit` + ranking, judged against
       **two** memory pools so a model too large for VRAM is offloaded rather
       than disqualified
@@ -892,7 +892,7 @@ Layer 9 below for the per-step detail.
 
 ## M10 — Dashboard completion  ▸ Layer 9B
 
-- [x] **Live updates** — `GET /api/events` (SSE, `services/live_events.py`)
+- [x] **Live updates** — `GET /api/events` (SSE, `system/live_events.py`)
       announces `models` / `embeddings` / `endpoints` / `sessions` / `rag` /
       `corpus` changes; views re-fetch rather than receive data, so every list
       keeps one source of truth. Published by pull, delete, embedding
@@ -925,7 +925,7 @@ Layer 9 below for the per-step detail.
       from the browser, or picked by hand, with a live clock), an editable
       system prompt with reset, and safety: built-in refusals shown read-only,
       their wording editable, plus extra blocked phrases that only add
-      refusals. `services/assistant_settings.py`, `api/assistant.py`,
+      refusals. `chat/assistant_settings.py`, `chat/api/assistant.py`,
       `tests/chat/test_assistant_settings.py`. Frozen with the comparison; recorded
       in evaluation snapshots. Split into three panels: Date & Time, System
       Prompt, Safety. Each built-in rule has a switch: off needs a typed
@@ -969,7 +969,7 @@ Layer 9 below for the per-step detail.
         — with a number-by-number groundedness verdict over the answer.
         `GET /api/trace` (filter by chat, intent, verdict, text),
         `/api/trace/{id}`, `/api/trace/{id}/groundedness`
-        (`services/thread/`). The sidebar window (`Ctrl+Alt+A`, and in the
+        (`thread/`). The sidebar window (`Ctrl+Alt+A`, and in the
         palette) and a collapsed `2 tools · 1.8s · grounded` strip under every
         chat answer that opens the thread in a side panel. The verdict *mirrors* the
         stored validator result rather than re-deciding it, and adds the
@@ -988,8 +988,8 @@ Layer 9 below for the per-step detail.
         run here, ranked), Added Models is inventory (what is here, managed):
     - [x] Detect — RAM, CPU, GPU/VRAM, disk, Ollama (`GET /api/forge/hardware`).
           Runs on a background schedule rather than per panel open — three
-          tiers, dormant when nobody is looking (`services/hardware.py`)
-    - [x] Estimate memory per model × quantization — `services/model_fit.py`.
+          tiers, dormant when nobody is looking (`forge/hardware.py`)
+    - [x] Estimate memory per model × quantization — `forge/model_fit.py`.
           Prefers measured weight size and measured architecture from
           `/api/show` over the parameter-count arithmetic wherever a model is
           actually pulled
@@ -1035,7 +1035,7 @@ Layer 9 below for the per-step detail.
           machine with no GPU has no VRAM pool, is judged against system RAM and
           reports `placement: cpu`, and Apple Silicon uses the Metal constant
           rather than the ARM CPU one — which is nearly a 2x difference
-    - [x] Verify the Ollama tags — `services/ollama_registry.py` reads each
+    - [x] Verify the Ollama tags — `forge/ollama_registry.py` reads each
           tag's OCI manifest, which both confirms it exists and reports the real
           weight size, so estimates use published bytes rather than
           `params × bytes_per_param` before anything is downloaded. 46 of 48
@@ -1061,12 +1061,12 @@ Layer 9 below for the per-step detail.
           37 nodes and 48 edges across all 7 node and 7 edge types, authored
           against the real `sensor_readings` columns so a graph `Sensor` node
           and a telemetry tool call name one thing
-    - [x] Loader with schema validation — `services/knowledge_graph.py`. Refuses
+    - [x] Loader with schema validation — `blueprints/knowledge_graph.py`. Refuses
           a graph that does not validate rather than serving a subtly broken
           one: a typo'd edge type is not a crash, it is a silent retrieval
-          failure. `python -m app.services.knowledge_graph` is the authoring
+          failure. `python -m app.blueprints.knowledge_graph` is the authoring
           checker
-    - [x] Graph tools — `services/graph_tools.py`: `graph_lookup`,
+    - [x] Graph tools — `blueprints/graph_tools.py`: `graph_lookup`,
           `graph_query_natural`, `graph_traverse`, and `TraversalPath`, which
           records every hop regardless of caller so the viewer had real replay
           data before any agent existed
@@ -1088,7 +1088,7 @@ Layer 9 below for the per-step detail.
     - [x] **The corpus pipeline is built (M2's ingestion half).** Upload →
           extract → chunk → embed → Chroma, as one orchestrated run with every
           stage on the record. `services/{extraction,chunking,ingestion,
-          corpus_config}`, `db/corpus_store`, `api/corpus.py`, and Blueprints →
+          corpus_config}`, `db/corpus_store`, `blueprints/api/corpus.py`, and Blueprints →
           Corpus as the operating surface
     - [x] **Track 1's tabs now mirror Track 2's: Corpus · Replay · Build.** One
           tab called *Corpus* was doing inventory, chunk settings, embedding
@@ -1149,7 +1149,7 @@ Layer 9 below for the per-step detail.
           survived into a working pipeline as furniture on every step — it read
           as a placeholder notice rather than an architectural note. The point
           it makes is real and lives in MODULES.md §3.1 and the module docstring
-    - [x] **Chunking is pure and therefore previewable.** `services/chunking`
+    - [x] **Chunking is pure and therefore previewable.** `blueprints/chunking`
           does no I/O at all, which is what lets the panel run the real chunker
           over the real document at candidate settings and write nothing. Three
           strategies — recursive (default), paragraph, fixed — with `fixed` kept
@@ -1182,7 +1182,7 @@ Layer 9 below for the per-step detail.
           corpus manifest on `filename` both ways: **documents the graph never
           names** (Track 1 only) and **nodes naming a document that is not
           ingested** (they cite nothing). Two new rows in Blueprints → Coverage
-          and in `python -m app.services.knowledge_graph`. 1 test
+          and in `python -m app.blueprints.knowledge_graph`. 1 test
     - [~] **Reconcile the placeholder SOP filenames** against the real corpus
           when it lands. `filename` is the join into `source_file`, so one that
           matches nothing retrieves nothing, silently — and it did: all four
@@ -1212,7 +1212,7 @@ Layer 9 below for the per-step detail.
           possible pairs and two real ones, so the diagram drew edges the graph
           does not contain. Fixed in the recorder rather than guessed at in the
           renderer
-    - [x] **Track 2 has an authoring pipeline.** `services/graph_authoring` plus
+    - [x] **Track 2 has an authoring pipeline.** `blueprints/graph_authoring` plus
           `/api/graph/authoring/*` and Blueprints → Build: add and delete nodes
           and edges, with the forms generated from the backend's own schema so a
           dropdown cannot offer an edge the validator refuses. Validate-then-
@@ -1387,7 +1387,7 @@ Layer 9 below for the per-step detail.
       new per-tab size — but left-aligned, Track 1's three tabs left a quarter of
       dead rail that read as a tab which had failed to render. The underline now
       positions against the tab group rather than the full-width row
-- [x] **Assisted graph authoring — built.** `services/graph_proposals`,
+- [x] **Assisted graph authoring — built.** `blueprints/graph_proposals`,
       `/api/graph/proposals/*`, and Blueprints → Build → **Propose** as step 1.
       Reads the ingested corpus, extracts candidates under the graph's own fixed
       schema, canonicalises them against what exists, dry-runs them through the
@@ -1729,15 +1729,15 @@ CLI that works the same on Windows, macOS and Linux.
 
 - [x] **Structure review (2026-10-07, finished 2026-10-08).** Done in that
       pass: tests grouped into folders, the 19 audit cuts, the Thread split into
-      single-purpose modules (`services/thread/`, `components/thread/`).
+      single-purpose modules (`thread/`, `components/thread/`).
       Remaining, none urgent:
   - [x] `components/forge/ModelsView.tsx` and `components/blueprints/IngestView.tsx`
         split *(2026-10-08)*: the card, detail panel, shortlist and formatting
         into `forge/models/`; one file per ingest step into `blueprints/ingest/`
-  - [x] The retrieval replay logic moved out of `api/corpus.py` into
-        `services/retrieval_replay.py`, its SQL into `audit_store`, with a test
+  - [x] The retrieval replay logic moved out of `blueprints/api/corpus.py` into
+        `blueprints/retrieval_replay.py`, its SQL into `audit_store`, with a test
         (`tests/retrieval/test_replay.py`) *(2026-10-08)*
-  - [-] `db/vector_store.py` importing `services/embedding_models` — **kept on
+  - [-] `db/vector_store.py` importing `forge/embedding_models` — **kept on
         purpose.** It is lazy and documented: it lets every caller open "the
         current collection" without knowing the naming rule, so no caller can
         hard-code one. Inverting it means registering a resolver at start-up, and

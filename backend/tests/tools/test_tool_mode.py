@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from app.db import tool_policy_store
-from app.services import agent_tools
+from app.tools import agent_tools
 
 from .. import fixtures
 
@@ -68,15 +68,15 @@ class ToolModeTest(unittest.TestCase):
         self.assertTrue(env["ok"])
 
     def test_fallback_sensor_set_matches_the_planner(self) -> None:
-        from app.services.agent_tools import registry
-        from app.services.orchestration import planner
+        from app.tools.agent_tools import registry
+        from app.chat.orchestration import planner
 
         self.assertEqual(registry._FALLBACK_SENSOR_TOOLS, frozenset(planner.SENSOR_TOOLS))
 
     def test_unreadable_planner_keeps_only_the_named_sensor_tools(self) -> None:
         from unittest import mock
 
-        from app.services.agent_tools import registry
+        from app.tools.agent_tools import registry
 
         tool_policy_store.set_mode("simple")
         with mock.patch.object(registry, "_answering_names", return_value=None):
@@ -86,7 +86,7 @@ class ToolModeTest(unittest.TestCase):
             self.assertEqual(agent_tools.call("get_current_time", {})["status"], "refused")
 
     def test_simple_switches_web_search_off(self) -> None:
-        from app.services import web_search  # noqa: PLC0415
+        from app.tools import web_search  # noqa: PLC0415
 
         tool_policy_store.set_mode("simple")
         with self.assertRaises(web_search.SearchDisabled):

@@ -414,7 +414,7 @@ transcript that silently fails to persist looks fine until the user reopens the
 chat and it is gone. Losing evidence of a turn is recoverable; losing the turn
 is not.
 
-#### Context assembly — `services/chat_service.py`
+#### Context assembly — `chat/chat_service.py`
 
 `build_context()` turns a stored transcript into the messages that go into a
 prompt, inside a token budget (default 1200 — the SLM tier runs at num_ctx
@@ -441,7 +441,7 @@ orchestrator can fold them into the rolling summary **after** responding.
 Summarisation is another inference call; doing it inline would spend the
 latency budget the <3s target is measured against.
 
-### Raw store browser — `services/log_browser.py`
+### Raw store browser — `system/log_browser.py`
 
 Backs the sidebar's **Data stores** section: what is actually in the stores
 right now. `trace(query_id)` proves one response was grounded; this shows
@@ -465,7 +465,7 @@ always insertion order, and same-second rows would otherwise be arbitrary.
 Cells over 4000 characters are truncated with a count, so one large transcript
 cannot push megabytes into the browser.
 
-### Ariadne's Thread — `services/thread/`
+### Ariadne's Thread — `thread/`
 
 The product view of the audit store (`MODULES.md` §1): one answer, reassembled
 from the seven tables on its `query_id`, plus the evidence pack the transcript
@@ -531,7 +531,7 @@ in the chat worker). Counts, timings and verdicts are kept. The Thread lists it
 as *incognito* and says nothing was recorded.
 
 **Settings → Ariadne's Thread** (`components/settings/ThreadPanel.tsx`,
-`services/thread_settings.py`, preference row `thread`): whether grounded
+`thread/thread_settings.py`, preference row `thread`): whether grounded
 requires a citation and/or evidence (both on is the validator's definition),
 which of Grounded · Not grounded · Not checked each of the six statuses is filed
 under, and the three names. It relabels the view only — the stored record, the
@@ -578,7 +578,7 @@ Rule 1 is enforced against.
 > https://ollama.com`, not weights. Ollama lists it beside local models, which
 > is why the distinction has to be made explicitly at every layer.
 
-### Cloud model endpoints — `services/model_endpoints.py`
+### Cloud model endpoints — `forge/model_endpoints.py`
 
 Settings → **Add Models**. Configures OpenAI, Anthropic, DeepSeek, OpenRouter,
 Groq, Mistral, Together, Gemini or any OpenAI-compatible URL.
@@ -675,7 +675,7 @@ wrongly. Documents with *no* stamp are not: something wrote them without
 recording itself, and an unknown vector space cannot be declared comparable to
 the selected one.
 
-### Text extraction — `services/extraction.py`
+### Text extraction — `blueprints/extraction.py`
 
 TXT, MD, CSV, JSON, YAML and PDF (pypdf, plus pdfplumber for tables). Pure in-memory: bytes in, text and
 page breaks out, so every offset the chunker records describes the string this
@@ -708,7 +708,7 @@ What real PDFs needed, each found by one failing:
   (`extract_status = 'failed'`, `extract_error`) and shown in Blueprints →
   Ingest as *Unreadable*, never a server error.
 
-### The embedding model — `services/embedding_models.py`
+### The embedding model — `forge/embedding_models.py`
 
 Which model turns chunks into vectors. **Not the chat model**: `nomic-embed-text`
 embeds the corpus once at ingest, and Qwen3 answers at query time and never sees
@@ -764,7 +764,7 @@ be embedded by the same model to be comparable, so every question follows. A
 cloud selection therefore writes the separate collection above and
 `resolve_for_runtime()` refuses it.
 
-### Web search — `services/web_search.py`
+### Web search — `tools/web_search.py`
 
 Six providers behind one interface: SearXNG, DuckDuckGo, Brave, Google PSE,
 Tavily and Serper, plus `disabled` as a real selectable state rather than the
@@ -854,7 +854,7 @@ wraps every result in its own redirector, and the unwrapper checks the host is
 DuckDuckGo's before following `uddg=` — otherwise it is an open redirect this
 code walks into willingly.
 
-### Agent tools — `services/agent_tools/`
+### Agent tools — `tools/agent_tools/`
 
 Layer 8. Six categories (`sensor` · `search` · `knowledge` · `session` ·
 `system` · `other`), thirty-three tools, and a dispatcher that checks three
@@ -878,7 +878,7 @@ difference is who decides where to walk, which is the within-track comparison.
   order: sensor → `HAS_THRESHOLD` → `TRIGGERS` → `RESOLVED_BY` → `CONTAINS`, each
   hop walking from every node of its start type gathered so far (at most 4). It
   is deliberately not clever.
-- **`graph_agent`** — the agent loop (`services/graph_agent.py`), the default.
+- **`graph_agent`** — the agent loop (`blueprints/graph_agent.py`), the default.
   The committed **local** model is shown the question, what has been gathered,
   and a numbered list of the moves the schema allows from it, and replies with
   a move number (0 to stop) plus a verdict: does what it has already answer the
@@ -1033,7 +1033,7 @@ was implemented — see below. It is kept as an explicit empty rather than
 deleted, because a stated "nothing" is a claim and a missing section is an
 absence somebody has to interpret.
 
-### Orchestration — `services/query_pipeline/` · `services/orchestration/`
+### Orchestration — `chat/query_pipeline/` · `chat/orchestration/`
 
 `PROJECT.md` §7.1's eleven steps, split by whether a model can be involved:
 
@@ -1098,7 +1098,7 @@ turn (`message.evidence`, never replayed). The chat turns `[S1]` into a chip
 whose tooltip is the evidence line, and a *Sources* list under the answer shows
 what was cited, what was gathered but not cited, and any tool that failed.
 
-**The rolling summary** (`services/summariser.py`) folds turns that no longer fit
+**The rolling summary** (`chat/summariser.py`) folds turns that no longer fit
 the history budget into `chat_sessions.summary`, on its own thread after the
 `done` event. It asks the local model for referents — sensors, times,
 procedures — and then redacts every quantity anyway, because the summary is
@@ -1120,7 +1120,7 @@ app shows a dialog asking for a model to be added first, with a button into The
 Forge; a send attempted with no model reopens it rather than failing at the
 model call.
 
-### MCP — `services/mcp_client.py` · `services/mcp_servers.py`
+### MCP — `tools/mcp_client.py` · `tools/mcp_servers.py`
 
 Daedalus can connect to external MCP servers, over **stdio** (a program it
 spawns) or **http** (JSON-RPC, including `text/event-stream` replies). The three
@@ -1193,7 +1193,7 @@ telemetry of record and deserve their own module and review; the registry
 already carries a `READ_SENSOR` effect so adding them is a registration rather
 than a redesign.
 
-### Evaluation harness — `services/evaluation.py` · `cli_eval.py`
+### Evaluation harness — `evaluation/evaluation.py` · `cli_eval.py`
 
 The guide is [`EVALUATION.md`](EVALUATION.md). Each question runs through
 `inference.answer_stream` with `evaluation=True` (this logs
@@ -1209,7 +1209,7 @@ answer. A crash, Ctrl-C or a turn still running after its timeout plus a drain
 period stops the run as `aborted`, keeping every answer scored so far, and the
 report then says it is not citable.
 
-### System maintenance — `services/app_logs.py` · `services/maintenance.py`
+### System maintenance — `system/app_logs.py` · `system/maintenance.py`
 
 Settings → System, in three cards, following the Odysseus panel of the same
 name. Every difference from it comes out of a rule this project already has.
@@ -1446,7 +1446,7 @@ same two declarations for the first painted frame.
 
 **The other five faces** (Geist, Fira Code, Georgia, OpenDyslexic, and Comic
 Neue as a handwritten option) remain in the Font selector. `FONT_MAP` in `themes.ts` and `_FONT_STACKS` in
-`backend/app/api/prefs.py` are parallel tables and must be kept in step — both
+`backend/app/system/api/prefs.py` are parallel tables and must be kept in step — both
 render the same selector, one for the live UI and one for the first frame.
 
 ---
@@ -1688,7 +1688,7 @@ controls, which is how two screens end up disagreeing about the current font.
 
 ---
 
-### 6.3 Assistant — `components/settings/AssistantPanel.tsx` · `services/assistant_settings.py`
+### 6.3 Assistant — `components/settings/AssistantPanel.tsx` · `chat/assistant_settings.py`
 
 What the assistant is told and when it refuses, editable without touching code.
 Three panels under the Assistant group: **Date & Time**, **System Prompt** and
@@ -1725,7 +1725,7 @@ comparison is frozen, and every evaluation snapshot records `disabled_rules`.
 | To | Edit |
 |---|---|
 | Add a word or tag a rule should catch | the verb lists and `*_TARGET_RE` patterns in `query_pipeline/vocabulary.py` (`ACTUATE_VERBS`, `ADJUST_VERBS`, `DATA_VERBS`, `PLANT_TARGET_RE`, `PARAMETER_TARGET_RE`, `DATA_TARGET_RE`, `OVERRIDE_RE`, `SQL_WRITE_RE`) |
-| Change what Settings shows for it | `BUILT_IN_RULES` in `api/assistant.py` |
+| Change what Settings shows for it | `BUILT_IN_RULES` in `chat/api/assistant.py` |
 
 Then run `tests/chat/test_safety.py`, which pins what each rule must and must not
 refuse, and update it to match the new intent.
@@ -1735,7 +1735,7 @@ evaluation run records these settings in its snapshot (`assistant`), and they
 join the configuration fingerprint only when customised, so runs on the defaults
 keep their old fingerprint.
 
-### 6.4 Persona — `components/settings/PersonaPanel.tsx` · `services/persona.py`
+### 6.4 Persona — `components/settings/PersonaPanel.tsx` · `chat/persona.py`
 
 What Daedalus has learned about this install's user, as a globe — the same
 `GraphCanvas` Blueprints uses, with **You** at the centre, the four kinds around
@@ -2053,7 +2053,7 @@ Deliberate. `localStorage` is touched in exactly one place —
 `migrateLegacyLocalStorage()` — which reads legacy keys once, pushes them to
 the backend, and **deletes** them.
 
-Six keys, all server-side (`api/prefs.py` rejects any other):
+Six keys, all server-side (`system/api/prefs.py` rejects any other):
 
 | Key | Holds |
 |---|---|
@@ -2099,7 +2099,7 @@ for it, and `.env` held container addresses (`http://chromadb:8000`,
 still rewrites a leftover container-era value with a warning, so an old `.env`
 keeps working.
 
-**GPU detection reads the host directly.** `services/hardware.py` still carries
+**GPU detection reads the host directly.** `forge/hardware.py` still carries
 `_in_container()` — run inside a container, it says the figures are a cgroup's
 allowance rather than the machine's — and `_wsl_host()` one level up for WSL.
 On the default host install neither applies and pynvml reports the card.

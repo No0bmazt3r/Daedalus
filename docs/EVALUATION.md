@@ -1,7 +1,7 @@
 # Evaluation — running the dual-track comparison
 
 [`PROJECT.md`](PROJECT.md) §5 says *what* is compared and §9 *against which
-targets*; this is how to run it. The machinery is `backend/app/services/evaluation.py`,
+targets*; this is how to run it. The machinery is `backend/app/evaluation/evaluation.py`,
 driven from a terminal by `backend/app/cli_eval.py`. Guarded by
 `backend/tests/evaluation/test_evaluation.py`.
 
