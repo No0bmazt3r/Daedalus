@@ -409,6 +409,53 @@ def _mismatched_reading_citations(text: str, pack: EvidencePack) -> list[str]:
     return bad
 
 
+TRIMMED_NOTE = "\n\n_Part of this answer was removed: it was not supported by the evidence._"
+
+
+def salvage(
+    answer: str,
+    v: Validation,
+    pack: EvidencePack,
+    *,
+    question: str = "",
+    history: list[dict[str, Any]] | None = None,
+) -> str | None:
+    """Cut what failed instead of the whole answer; `None` when the rest still fails.
+
+    A bad value inside brackets loses the brackets ("31.74 °C (about 88.1 °F)"),
+    otherwise its sentence goes; an uncited cause loses its sentence; an unknown
+    label is dropped. The remainder is validated again, so nothing here can let
+    a failure through. A control claim is never trimmed: an answer that says it
+    acted on the rig is not trusted for the rest either.
+    """
+    if v.control_claim:
+        return None
+    bad = v.unsupported + v.stale + v.unsupported_times
+    causes = set(v.uncited_causes)
+
+    def dirty(sentence: str) -> bool:
+        return any(b in sentence for b in bad) or " ".join(sentence.split())[:160] in causes
+
+    text = re.sub(r"\s*\([^()]*\)", lambda m: "" if dirty(m.group()) else m.group(), answer)
+    text = _CITATION_RE.sub(
+        lambda m: (lambda keep: f"[{', '.join(keep)}]" if keep else "")(
+            [x.strip() for x in re.split(r"[,;]", m.group(1)) if x.strip() in pack.labels]
+        ),
+        text,
+    )
+    lines = []
+    for line in text.split("\n"):
+        kept = [s for s in re.split(r"(?<=[.!?])\s+", line) if not dirty(s)]
+        if kept or not line.strip():
+            lines.append(" ".join(kept))
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    if not text or text == answer.strip():
+        return None
+    if not validate(text, pack, question=question, history=history).passed:
+        return None
+    return text + TRIMMED_NOTE
+
+
 def grounded(v: Validation, pack: EvidencePack) -> bool:
     """Passed, had evidence, and cited some of it — what `grounded_flag` records."""
     return v.passed and not pack.empty and bool(set(v.cited) & pack.labels)

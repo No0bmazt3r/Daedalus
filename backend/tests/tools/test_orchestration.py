@@ -179,6 +179,20 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         # 984 − 450 = 534: true, and still not a number any tool reported.
         self.assertIn("534", self.validate("It rose by 534 ppm [S1].").unsupported)
 
+    def test_salvage_cuts_only_the_bad_part(self) -> None:
+        co2 = fixtures.co2(34)
+        answer = f"CO2 peaked at {co2} ppm (about 1200 ppb) [S1].\nIt is fine. It was 777.7 ppm earlier [S1]."
+        v = self.validate(answer)
+        trimmed = validator.salvage(answer, v, self.pack, question=self.question)
+        self.assertIsNotNone(trimmed)
+        self.assertIn(f"{co2} ppm [S1]", trimmed)
+        self.assertNotIn("1200", trimmed)
+        self.assertNotIn("777.7", trimmed)
+        self.assertTrue(trimmed.endswith(validator.TRIMMED_NOTE))
+        # Nothing left worth saying → still the fallback.
+        lone = "It was 777.7 ppm [S1]."
+        self.assertIsNone(validator.salvage(lone, self.validate(lone), self.pack))
+
     def test_stale_number_from_history_is_caught(self) -> None:
         history = [{"role": "assistant", "content": "[2026-09-12 09:00 UTC] CO2 was 612.4 ppm."}]
         v = self.validate("CO2 is 612.4 ppm [S1].", history=history)

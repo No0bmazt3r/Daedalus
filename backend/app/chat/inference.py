@@ -590,7 +590,9 @@ def answer_stream(
                     text, pack, question=understood.standalone, history=history,
                 )
                 if not verdict.passed:
-                    delivered = orchestration.FALLBACK
+                    delivered = orchestration.validator.salvage(
+                        text, verdict, pack, question=understood.standalone, history=history,
+                    ) or orchestration.FALLBACK
                 events.put({"phase": "validated", **verdict.as_dict(),
                             "answer": delivered})
             grounded = bool(verdict and orchestration.validator.grounded(verdict, pack))
