@@ -16,6 +16,8 @@ export const PREF_UI_CHROME = 'ui-chrome';
 export const PREF_FORGE_SHORTLIST = 'forge-shortlist';
 /** `{ enabled: boolean }`. The backend reads it too, so off is enforced. */
 export const PREF_CLOUD_MODELS = 'cloud-models';
+/** `{ name, onboarded }` from the first-run screen. The name is for the greeting only. */
+export const PREF_PROFILE = 'profile';
 
 type PrefKey =
   | typeof PREF_THEME
@@ -25,7 +27,8 @@ type PrefKey =
   | typeof PREF_KEYBINDS
   | typeof PREF_UI_CHROME
   | typeof PREF_FORGE_SHORTLIST
-  | typeof PREF_CLOUD_MODELS;
+  | typeof PREF_CLOUD_MODELS
+  | typeof PREF_PROFILE;
 
 export type SyncStatus = 'loading' | 'ready' | 'offline';
 

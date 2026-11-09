@@ -24,6 +24,7 @@ import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
 import { OPEN_STORE_EVENT, OPEN_THREAD_EVENT } from '../lib/threadClient'
+import { OPEN_FORGE_EVENT } from '../components/Onboarding'
 import { ToastHost } from '../components/ui/toast'
 
 export const Route = createRootRoute({
@@ -187,11 +188,15 @@ function AppShell() {
       openWindow('stores', () => setStoreTarget({ store, table }))
     }
     window.addEventListener(OPEN_STORE_EVENT, onStore)
+    // The first-run screen's "Open The Forge".
+    const onForge = () => openForge()
+    window.addEventListener(OPEN_FORGE_EVENT, onForge)
     return () => {
       window.removeEventListener(OPEN_THREAD_EVENT, onOpen)
       window.removeEventListener(OPEN_STORE_EVENT, onStore)
+      window.removeEventListener(OPEN_FORGE_EVENT, onForge)
     }
-  }, [openThread])
+  }, [openThread, openForge])
 
   const openBlueprints = useCallback((tab: BlueprintsTab | null = null) => {
     openWindow('blueprints', () => {

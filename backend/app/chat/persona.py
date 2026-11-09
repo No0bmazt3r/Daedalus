@@ -70,6 +70,8 @@ STYLE: dict[str, tuple[str, ...]] = {
 ROLES = ("operator", "student", "researcher", "engineer", "supervisor")
 # Single-valued: accepting "brief" retires an accepted "detailed".
 _EXCLUSIVE = ("style", "role")
+# Evidence `source` for a trait the user stated at setup rather than one learned from chats.
+ONBOARDING = "onboarding"
 
 # Scan once this many new user messages have built up in a chat.
 SCAN_EVERY = 3
@@ -141,7 +143,10 @@ def statement(t: dict[str, Any]) -> str:
                                 else "Is comfortable with technical detail"),
         }.get(key, f"{key}: {value}")
     if kind == "role":
-        return f"Seems to be {'an' if value[0] in 'aeiou' else 'a'} {value}"
+        article = "an" if value[0] in "aeiou" else "a"
+        if any(e.get("source") == ONBOARDING for e in t.get("evidence") or []):
+            return f"Said they are {article} {value}"
+        return f"Seems to be {article} {value}"
     if kind == "vocabulary":
         return f'Says "{key}" to mean {value}'
     return f"Often asks about {value}"
@@ -171,6 +176,35 @@ def _upsert(kind: str, key: str, value: str, node_id: str | None, evidence: list
             (json.dumps(merged[-20:]), now, existing["trait_id"]),
         )
         return "reinforced"
+
+
+def state_role(role: str) -> dict[str, Any]:
+    """The role the user picked at setup, saved as accepted — they said it, nothing is guessed.
+
+    Overrides a role they once rejected as a proposal: being told outranks a
+    guess that was turned down. Replaces any other accepted role (`decide`).
+    """
+    if role not in ROLES:
+        raise ValueError(f"role must be one of {ROLES}")
+    chat_store.init_db()
+    stated = [{"source": ONBOARDING, "at": _now()}]
+    with sqlite_util.transaction(CHAT_DB) as conn:
+        row = conn.execute(
+            "SELECT trait_id FROM persona_traits WHERE kind = 'role' AND key = 'role' AND value = ?", (role,)
+        ).fetchone()
+        trait_id = row["trait_id"] if row else f"pt_{secrets.token_hex(6)}"
+        if row:
+            conn.execute("UPDATE persona_traits SET evidence = ? WHERE trait_id = ?", (json.dumps(stated), trait_id))
+        else:
+            now = _now()
+            conn.execute(
+                "INSERT INTO persona_traits (trait_id, kind, key, value, node_id, evidence, created_at, updated_at) "
+                "VALUES (?, 'role', 'role', ?, NULL, ?, ?, ?)",
+                (trait_id, role, json.dumps(stated), now, now),
+            )
+    decided = decide(trait_id, True)
+    assert decided is not None  # just written
+    return decided
 
 
 def decide(trait_id: str, accept: bool) -> dict[str, Any] | None:
@@ -213,6 +247,9 @@ def evidence_text(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     with sqlite_util.connect(CHAT_DB) as conn:
         for e in evidence:
+            if e.get("source") == ONBOARDING:
+                out.append({**e, "text": "Chosen when setting up Daedalus", "at": e.get("at")})
+                continue
             r = conn.execute(
                 "SELECT content, created_at FROM chat_messages WHERE session_id = ? AND seq = ? AND role = 'user'",
                 (e.get("session_id"), e.get("seq")),
@@ -350,7 +387,7 @@ def prompt_block() -> str | None:
         return None
     lines = "\n".join(f"- {t['statement']}." for t in accepted)
     return (
-        "ABOUT THIS USER — learned from their earlier conversations and approved by them. Use it to "
+        "ABOUT THIS USER — stated by them or learned from their conversations, and approved by them. Use it to "
         "choose wording, length, format and how much to explain. It is NOT evidence: never state a "
         "value, limit, step or fact because of it.\n" + lines
     )

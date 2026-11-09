@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {
   loadAllPrefs,
+  PREF_PROFILE,
   savePref,
   PREF_KEYBINDS,
   PREF_UI_CHROME,
@@ -69,8 +70,24 @@ interface UiPrefsContextType {
   /** Convenience for render sites: `show('sidebar-brand') && <Brand/>`. */
   show: (key: ChromeKey) => boolean;
 
+  /** Who is at the keyboard, from the first-run screen. Null until read (or if it cannot be). */
+  profile: Profile | null;
+  setProfile: (next: Profile) => void;
+
   /** False until the stored values have been read, so nothing flashes. */
   hydrated: boolean;
+}
+
+/** One install, one person: a name for the greeting, and whether setup is done. */
+export interface Profile {
+  name: string | null;
+  onboarded: boolean;
+}
+
+function normaliseProfile(raw: unknown): Profile {
+  const r = (raw ?? {}) as Partial<Profile>;
+  const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 40) : null;
+  return { name, onboarded: r.onboarded === true };
 }
 
 const UiPrefsContext = createContext<UiPrefsContextType | undefined>(undefined);
@@ -88,6 +105,7 @@ export function UiPrefsProvider({ children }: { children: ReactNode }) {
   const [keybinds, setKeybinds] = useState<KeybindMap>(KEYBIND_DEFAULTS);
   const [chrome, setChromeState] = useState<Record<ChromeKey, boolean>>(CHROME_DEFAULTS);
   const [hydrated, setHydrated] = useState(false);
+  const [profile, setProfileState] = useState<Profile | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +114,9 @@ export function UiPrefsProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setKeybinds(normaliseBinds(values[PREF_KEYBINDS]));
         setChromeState(normaliseChrome(values[PREF_UI_CHROME]));
+        // Left null when the store cannot be read, so the first-run screen never
+        // shows to an install that has simply lost its backend for a moment.
+        setProfileState(normaliseProfile(values[PREF_PROFILE]));
       })
       .catch(() => {
         /* backend down — the shipped defaults are a working interface */
@@ -135,9 +156,16 @@ export function UiPrefsProvider({ children }: { children: ReactNode }) {
       resetAllChrome: () => persistChrome({ ...CHROME_DEFAULTS }),
       show: (key) => chrome[key] !== false,
 
+      profile,
+      setProfile: (next) => {
+        const clean = normaliseProfile(next);
+        setProfileState(clean);
+        savePref(PREF_PROFILE, clean);
+      },
+
       hydrated,
     }),
-    [keybinds, chrome, hydrated, persistBinds, persistChrome]
+    [keybinds, chrome, profile, hydrated, persistBinds, persistChrome]
   );
 
   return <UiPrefsContext.Provider value={value}>{children}</UiPrefsContext.Provider>;

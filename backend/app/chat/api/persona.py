@@ -40,6 +40,16 @@ def decide(trait_id: str, decision: str) -> dict[str, Any]:
     return read()
 
 
+@router.put("/role")
+def state_role(role: str = Body(..., embed=True)) -> dict[str, Any]:
+    """The role picked during onboarding, saved as accepted (`persona.state_role`)."""
+    try:
+        persona.state_role(role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return read()
+
+
 @router.delete("/traits/{trait_id}")
 def forget_one(trait_id: str) -> dict[str, Any]:
     if not persona.forget(trait_id):

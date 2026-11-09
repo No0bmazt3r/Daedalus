@@ -7,6 +7,7 @@ import { Switch } from '../ui/switch'
 import { useConfirm } from '../ui/confirm-dialog'
 import { SectionsSkeleton } from '../ui/sections-skeleton'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
+import { useUiPrefs } from '../../contexts/UiPrefsContext'
 import {
   decideTrait,
   fetchPersona,
@@ -70,9 +71,17 @@ export function PersonaPanel(_props: { isPeek?: boolean }) {
     }
   }
 
+  const { profile, setProfile } = useUiPrefs()
+  const myName = profile?.name
   const nodes = useMemo(
-    () => (state?.graph.nodes ?? []).map((n) => ({ ...n, tint: TINT[n.type as string] })),
-    [state],
+    () =>
+      (state?.graph.nodes ?? []).map((n) => ({
+        ...n,
+        // The centre of the globe is you, by name when you gave one.
+        label: n.id === 'you' && myName ? myName : n.label,
+        tint: TINT[n.type as string],
+      })),
+    [state, myName],
   )
 
   if (loadError) {
@@ -119,6 +128,29 @@ export function PersonaPanel(_props: { isPeek?: boolean }) {
         <div className="flex items-center gap-2 rounded-lg border border-rose-400/40 bg-rose-400/10 p-2.5 text-[11px] theme-text">
           <AlertCircle size={13} className="shrink-0 text-rose-400" /> {error}
         </div>
+      )}
+
+      {profile && (
+        <label className="block rounded-lg border theme-border p-4">
+          <span className="flex items-center gap-1.5 text-sm theme-text">
+            <UserRound size={14} className="theme-text-muted" /> Your name
+          </span>
+          <input
+            // Keyed so a name saved elsewhere (the first-run screen) refills it.
+            key={profile.name ?? ''}
+            defaultValue={profile.name ?? ''}
+            placeholder="Operator"
+            maxLength={40}
+            onBlur={(e) => {
+              if ((e.target.value.trim() || null) !== profile.name) setProfile({ ...profile, name: e.target.value })
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            className="mt-2 w-full rounded-md border theme-border bg-transparent px-2.5 py-1.5 text-[13px] placeholder:opacity-40 outline-none focus-visible:ring-1 focus-visible:ring-[color-mix(in_srgb,var(--primary)_70%,transparent)]"
+          />
+          <span className="mt-1 block text-[11px] theme-text-muted">
+            Used to greet you on a new chat. Never sent to a model. Saved when you leave the field.
+          </span>
+        </label>
       )}
 
       <section className="space-y-3 rounded-lg border theme-border p-4">
@@ -255,6 +287,10 @@ function TraitDetail({ trait }: { trait: PersonaTrait }) {
       <p className="text-xs theme-text">
         {trait.statement} <span className="theme-text-muted">· {trait.status}</span>
       </p>
+      {trait.evidence.some((e) => e.source === 'onboarding') ? (
+        <p className="text-[11px] theme-text-muted">You chose this when setting up Daedalus.</p>
+      ) : (
+      <>
       <p className="text-[11px] theme-text-muted">Because you wrote:</p>
       <ul className="space-y-1">
         {trait.evidence.map((e) => (
@@ -263,6 +299,8 @@ function TraitDetail({ trait }: { trait: PersonaTrait }) {
           </li>
         ))}
       </ul>
+      </>
+      )}
     </div>
   )
 }

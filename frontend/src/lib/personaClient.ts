@@ -19,8 +19,8 @@ export interface PersonaTrait {
   sightings: number;
   /** Written from the fields by the backend, never by the model. */
   statement: string;
-  /** The user's own messages that showed it; `text` is null once the chat is deleted. */
-  evidence: { session_id: string; seq: number; text: string | null; at: string | null }[];
+  /** The user's own messages that showed it (`text` null once the chat is deleted), or `source: 'onboarding'` for a role stated at setup. */
+  evidence: { session_id?: string; seq?: number; source?: 'onboarding'; text: string | null; at: string | null }[];
   created_at: string;
   decided_at: string | null;
 }
@@ -44,6 +44,10 @@ export const decideTrait = (id: string, accept: boolean) =>
 
 export const forgetTrait = (id: string) =>
   request<PersonaState>(`/api/persona/traits/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+/** The role picked at setup, saved as accepted — the user said it, nothing is guessed. */
+export const stateRole = (role: string) =>
+  request<PersonaState>('/api/persona/role', { method: 'PUT', body: JSON.stringify({ role }) });
 
 export const forgetPersona = () => request<PersonaState>('/api/persona', { method: 'DELETE' });
 

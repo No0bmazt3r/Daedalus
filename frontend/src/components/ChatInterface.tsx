@@ -29,6 +29,8 @@ import { useSessionTraces } from '../hooks/useSessionTraces'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { saveLabel } from '../lib/threadClient'
 import { timeAgo } from '../lib/time'
+import { greeting } from '../lib/greeting'
+import { Onboarding } from './Onboarding'
 
 function TypewriterText({ text }: { text: string }) {
   // How much of `text` is typed. Keyed by the text it counts, so a new text
@@ -652,7 +654,7 @@ export function ChatInterface() {
   const closePanel = useCallback(() => setPanel(null), [])
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { show } = useUiPrefs()
+  const { show, profile } = useUiPrefs()
   const { endRef, hasUnseen, jumpToLatest } = useStickToBottom(messages, sending)
 
   // Settings → Appearance. `chat-fullwidth` is the one that is off by default:
@@ -744,14 +746,19 @@ export function ChatInterface() {
         </Tooltip>
         )}
       </div>
-      {messages.length === 0 ? (
+      {messages.length === 0 && profile && !profile.onboarded && !isIncognito ? (
+        // First run: who is at the keyboard, in place of the greeting.
+        <div className={`flex-1 flex flex-col items-center justify-center px-4 ${columnWidth}`}>
+          <Onboarding />
+        </div>
+      ) : messages.length === 0 ? (
         <div className={`flex-1 flex flex-col items-center justify-center px-4 ${columnWidth}`}>
           {show('chat-welcome') && (
           <div className="flex items-center gap-3 mb-8">
             <LabyrinthIcon className={`w-10 h-10 transition-colors duration-300 ${isIncognito ? 'incognito-text incognito-drop-glow' : 'theme-accent'}`} />
             <h1 className={`text-3xl font-serif tracking-tight transition-colors duration-300 ${isIncognito ? 'incognito-text' : ''}`}>
               <TypewriterText
-                text={isIncognito ? 'Off the record, Operator' : 'Good afternoon, Operator'}
+                text={greeting(profile?.name, isIncognito)}
               />
             </h1>
           </div>
