@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * While the pointer is dragging, its distance to the viewport edges decides a
  * target region — the halves, the four quadrants, or the whole screen from the
  * top edge. The region is drawn as a dashed outline (`.snap-preview` in
- * `index.css`) *before* the drop, because a window that resizes itself the
+ * `styles/windows.css`) *before* the drop, because a window that resizes itself the
  * instant you brush an edge is a window fighting you; showing the intention and
  * committing on release is what makes it feel like a desktop.
  *
@@ -116,7 +116,7 @@ export function useDraggable() {
   const settle = useCallback(() => {
     setSettling(true)
     window.clearTimeout(settleTimer.current)
-    // Matches `.snap-settling` in index.css. The class has to come off again,
+    // Matches `.snap-settling` in styles/windows.css. The class has to come off again,
     // or the next drag animates `left`/`top` and the window trails the cursor.
     settleTimer.current = window.setTimeout(() => setSettling(false), 220)
   }, [])

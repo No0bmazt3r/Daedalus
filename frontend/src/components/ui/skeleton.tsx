@@ -8,7 +8,7 @@
  * "nothing here" is visible without reading any text.
  *
  * Colour comes from `--text-main` mixed into transparency rather than a fixed
- * grey — see `.skeleton` in index.css for why.
+ * grey — see `.skeleton` in styles/skeleton.css for why.
  */
 
 /** One shimmering block. Give it a size with `className`. */

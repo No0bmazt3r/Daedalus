@@ -1,0 +1,62 @@
+/* Confirm dialog, theme-modal sliders, colour inputs. Imported, in order, by src/index.css. */
+
+/* ── Confirm dialog ──
+   See-through glass on the theme's own card colour. The heavy blur is what keeps
+   text readable at this opacity: whatever sits behind is smoothed to a wash, on
+   light themes as well as dark. */
+.confirm-glass {
+  background-color: color-mix(in srgb, var(--card, var(--bg)) 75%, transparent) !important;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text-main, #fff) 10%, transparent) 0%,
+    transparent 45%
+  );
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  border-color: color-mix(in srgb, var(--text-main) 20%, transparent) !important;
+}
+
+/* ── Sliders in the theme modal ── */
+input[type='range'].theme-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-main, #fff) 18%, transparent);
+  outline: none;
+  cursor: pointer;
+}
+input[type='range'].theme-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+input[type='range'].theme-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+/* Hide the native colour-input chrome — every picker is rendered as a
+   swatch with the real input laid over it at zero opacity. */
+input[type='color'] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: none;
+}
+input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type='color']::-webkit-color-swatch {
+  border: none;
+}

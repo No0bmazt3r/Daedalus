@@ -1,0 +1,91 @@
+/* Domino collapse/expand cascade. Imported, in order, by src/index.css. */
+
+/* ── Domino collapse/expand ────────────────────────────────────────────────
+   Ported from Odysseus' sidebar sections, where opening one does not reveal a
+   block: the rows cascade in from a little below and to the left, one after
+   another, and closing peels them off from the bottom up. The feel is the
+   whole point — a list that appears all at once reads as a repaint, while a
+   stagger reads as *this list belongs to that heading*.
+
+   Three things the naive version gets wrong, and this does not:
+
+   - **The stagger is the animation.** The container height is not animated. A
+     `max-height` transition has to guess a height, and guessing short clips
+     the list while guessing tall makes every collapse end with a dead pause.
+   - **Out plays before the rows are gone.** `Collapse` keeps the children
+     mounted for the length of the outbound cascade and waits on the *real*
+     animations rather than a timeout, so a list of two rows does not sit
+     through the timing of a list of twelve.
+   - **The inbound curve overshoots** (`cubic-bezier(0.22, 1.61, 0.36, 1)`) and
+     the outbound does not. Arriving with a small bounce reads as springy;
+     leaving with one reads as indecision.
+
+   Rows are the direct children of `[data-domino]`, so a wrapper `<div>` around
+   a list makes the whole list one domino — which is what you want for a body
+   that is a paragraph rather than a list. */
+@keyframes domino-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) translateX(-4px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+@keyframes domino-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px) translateX(-3px) scale(0.94);
+  }
+}
+
+[data-domino='in'] > * {
+  animation: domino-in 0.36s cubic-bezier(0.22, 1.61, 0.36, 1) backwards;
+}
+
+/* `backwards` on the inbound fill matters: without it a row is painted in its
+   final position for the frames before its delay elapses, which is a flash of
+   the finished list followed by it animating in. */
+[data-domino='in'] > *:nth-child(1) { animation-delay: 0.04s; }
+[data-domino='in'] > *:nth-child(2) { animation-delay: 0.08s; }
+[data-domino='in'] > *:nth-child(3) { animation-delay: 0.12s; }
+[data-domino='in'] > *:nth-child(4) { animation-delay: 0.16s; }
+[data-domino='in'] > *:nth-child(5) { animation-delay: 0.2s; }
+[data-domino='in'] > *:nth-child(6) { animation-delay: 0.24s; }
+[data-domino='in'] > *:nth-child(7) { animation-delay: 0.28s; }
+[data-domino='in'] > *:nth-child(8) { animation-delay: 0.32s; }
+[data-domino='in'] > *:nth-child(9) { animation-delay: 0.36s; }
+[data-domino='in'] > *:nth-child(10) { animation-delay: 0.4s; }
+[data-domino='in'] > *:nth-child(11) { animation-delay: 0.44s; }
+/* Past twelve the cascade would be longer than anybody waits, so the rest
+   arrive together on the last beat rather than trailing off the end. */
+[data-domino='in'] > *:nth-child(n + 12) { animation-delay: 0.48s; }
+
+[data-domino='out'] > * {
+  animation: domino-out 0.22s ease-in forwards;
+}
+
+/* `nth-last-child`, so the bottom row leaves first and the cascade rolls
+   upward — the inbound order played backwards, which is what makes the two
+   read as one gesture rather than two effects. */
+[data-domino='out'] > *:nth-last-child(1) { animation-delay: 0s; }
+[data-domino='out'] > *:nth-last-child(2) { animation-delay: 0.025s; }
+[data-domino='out'] > *:nth-last-child(3) { animation-delay: 0.05s; }
+[data-domino='out'] > *:nth-last-child(4) { animation-delay: 0.075s; }
+[data-domino='out'] > *:nth-last-child(5) { animation-delay: 0.1s; }
+[data-domino='out'] > *:nth-last-child(6) { animation-delay: 0.125s; }
+[data-domino='out'] > *:nth-last-child(7) { animation-delay: 0.15s; }
+[data-domino='out'] > *:nth-last-child(8) { animation-delay: 0.175s; }
+[data-domino='out'] > *:nth-last-child(9) { animation-delay: 0.2s; }
+[data-domino='out'] > *:nth-last-child(10) { animation-delay: 0.225s; }
+[data-domino='out'] > *:nth-last-child(11) { animation-delay: 0.25s; }
+[data-domino='out'] > *:nth-last-child(n + 12) { animation-delay: 0.275s; }

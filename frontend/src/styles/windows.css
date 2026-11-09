@@ -1,0 +1,45 @@
+/* Floating window snapping. Imported, in order, by src/index.css. */
+
+/* ── Window snapping ──────────────────────────────────────────────────────
+   The dashed outline a window would land in, drawn while it is dragged into an
+   edge. Deliberately not filled solid: it sits over the page you are about to
+   cover, and a solid block hides the thing you are aiming at. */
+.snap-preview {
+  position: fixed;
+  z-index: 99;
+  pointer-events: none;
+  border: 2px dashed var(--primary);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent) inset;
+  transition:
+    left 0.14s ease,
+    top 0.14s ease,
+    width 0.14s ease,
+    height 0.14s ease,
+    opacity 0.14s ease;
+}
+
+/* The window's own move into (and out of) a snapped position. Only while
+   snapping — a transition on `left`/`top` during a drag would make the window
+   lag the cursor, which reads as the app being slow rather than as motion. */
+.snap-settling {
+  transition:
+    left 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Motion is a nicety; nobody should have to sit through it to use the app. */
+@media (prefers-reduced-motion: reduce) {
+  [data-domino='in'] > *,
+  [data-domino='out'] > * {
+    animation-duration: 0.01ms;
+    animation-delay: 0s;
+  }
+  .snap-preview,
+  .snap-settling {
+    transition-duration: 0.01ms;
+  }
+}

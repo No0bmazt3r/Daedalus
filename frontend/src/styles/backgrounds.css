@@ -1,0 +1,62 @@
+/* Background patterns and frosted glass. Imported, in order, by src/index.css. */
+
+/* ── Background patterns ── */
+.bg-pattern-dots {
+  background-image: radial-gradient(
+    color-mix(
+      in srgb,
+      var(--bg-effect-color, var(--primary)) calc(12% * var(--bg-effect-intensity, 1)),
+      transparent
+    )
+      1px,
+    transparent 1px
+  );
+  background-size: calc(20px * var(--bg-effect-size, 1)) calc(20px * var(--bg-effect-size, 1));
+  background-attachment: fixed;
+}
+
+.bg-pattern-synapse {
+  /* CSS grid as the base layer; the canvas overlays the travelling pulses. */
+  background-image: linear-gradient(
+      color-mix(
+        in srgb,
+        var(--bg-effect-color, var(--primary)) calc(8% * var(--bg-effect-intensity, 1)),
+        transparent
+      )
+        1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(
+        in srgb,
+        var(--bg-effect-color, var(--primary)) calc(8% * var(--bg-effect-intensity, 1)),
+        transparent
+      )
+        1px,
+      transparent 1px
+    );
+  background-size: 24px 24px;
+  background-attachment: fixed;
+}
+
+/* ── Frosted glass ──
+   Layers a translucent tint over every panel and blurs what sits behind it,
+   so the UI reads as sheets of glass. The .theme-* utilities above set their
+   background with !important, so these have to as well. */
+body.theme-frosted .theme-sidebar,
+body.theme-frosted .theme-card,
+body.theme-frosted [data-slot='dropdown-menu-content'],
+body.theme-frosted [data-slot='popover-content'],
+body.theme-frosted [data-slot='menu-popup'] {
+  background-color: color-mix(in srgb, var(--card, var(--bg)) 32%, transparent) !important;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text-main, #fff) 14%, transparent) 0%,
+    color-mix(in srgb, var(--text-main, #fff) 4%, transparent) 26%,
+    transparent 55%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border-color: color-mix(in srgb, var(--text-main) 22%, transparent) !important;
+}

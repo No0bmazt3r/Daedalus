@@ -1388,7 +1388,7 @@ which replaced 71 `bg-black/N` usages that darkened regardless of theme.
 Emits `daedalus-theme-change` on every apply; the effects layer listens to
 invalidate its cached variable reads.
 
-### CSS utility classes — `frontend/src/index.css`
+### CSS utility classes — `frontend/src/styles/` (imported by `index.css`)
 
 | Group | Classes |
 |---|---|

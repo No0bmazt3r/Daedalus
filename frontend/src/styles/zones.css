@@ -1,0 +1,91 @@
+/* Themed zones, zone highlight, incognito. Imported, in order, by src/index.css. */
+
+/* ── Themed zones the advanced colour pickers drive ── */
+.zone-user-bubble {
+  background-color: var(--user-bubble-bg, var(--sidebar)) !important;
+  border-color: var(--bubble-border, var(--border));
+}
+.zone-ai-bubble {
+  background-color: var(--ai-bubble-bg, var(--card)) !important;
+  border-color: var(--bubble-border, var(--border));
+}
+.zone-bubble-border {
+  border-color: var(--bubble-border, var(--border)) !important;
+}
+.zone-sidebar {
+  background-color: var(--sidebar-bg, var(--sidebar)) !important;
+}
+.zone-brand {
+  color: var(--brand-color, var(--primary)) !important;
+}
+.zone-brand-text {
+  background: linear-gradient(
+    90deg,
+    var(--brand-color, var(--primary)),
+    var(--brand-mix-to, var(--text-main))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.zone-input {
+  background-color: var(--input-bg, var(--card)) !important;
+  border-color: var(--input-border, var(--border)) !important;
+}
+.zone-send-btn {
+  background-color: var(--send-btn-bg, var(--primary)) !important;
+}
+.zone-send-btn:hover:not(:disabled) {
+  background-color: var(--send-btn-hover, var(--primary)) !important;
+}
+.zone-code {
+  background-color: var(--code-bg, var(--card));
+  color: var(--code-fg, var(--text-main));
+}
+.zone-toggle-active {
+  background-color: var(--toggle-active, var(--primary)) !important;
+}
+
+/* Hovering a colour row in the theme modal outlines the part of the UI that
+   colour drives (see src/lib/zoneHighlight.ts). */
+.theme-zone-highlight {
+  position: fixed;
+  z-index: 99;
+  pointer-events: none;
+  border-radius: 6px;
+  border: 1.5px dashed var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  animation: zone-highlight-in 140ms ease-out;
+}
+
+@keyframes zone-highlight-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Incognito mode ──
+   Driven by --incognito, which the theme engine derives from the active
+   accent (see deriveIncognitoColor in src/lib/themes.ts) and the user can
+   override under Customize → More Colors → Controls. */
+.incognito-text {
+  color: var(--incognito, #818cf8) !important;
+}
+.incognito-bg {
+  background-color: var(--incognito, #818cf8) !important;
+}
+.incognito-bg-soft {
+  background-color: color-mix(in srgb, var(--incognito, #818cf8) 18%, transparent) !important;
+}
+.incognito-glow {
+  box-shadow: 0 0 15px color-mix(in srgb, var(--incognito, #818cf8) 35%, transparent);
+}
+.incognito-drop-glow {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--incognito, #818cf8) 45%, transparent));
+}
+.incognito-placeholder::placeholder {
+  color: color-mix(in srgb, var(--incognito, #818cf8) 55%, transparent);
+}

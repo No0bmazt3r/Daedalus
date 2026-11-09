@@ -1,0 +1,80 @@
+/* The pipeline stepper. Imported, in order, by src/index.css. */
+
+/* ── The pipeline stepper ────────────────────────────────────────────────────
+   Numbered circles joined by a track that fills as you advance.
+
+   The fill is a `scaleX` on an inner element rather than an animated `width`.
+   Width animates on the layout box, so every frame is a layout pass for the
+   whole row; a transform is composited and costs nothing. It also gives the
+   reverse for free — going back scales the same element to 0, so the fill
+   drains right-to-left instead of jumping.
+
+   `transform-origin: left` is what makes the direction read correctly: the fill
+   grows *from the completed step towards the next one*, which is the direction
+   the pipeline runs. Origin at centre would grow outwards from the middle of
+   the connector and look like a bar loading rather than progress flowing. */
+.step-track {
+  position: relative;
+  height: 2px;
+  background: color-mix(in srgb, var(--text-main) 14%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.step-track-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--primary);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-track-fill[data-filled='true'] { transform: scaleX(1); }
+
+/* The travelling highlight. Only on the connector being crossed right now, so
+   exactly one segment is ever animating — a row where every connector shimmers
+   reads as "loading", not as "you are here". */
+.step-track-flow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* `--primary`, not `--primary-contrast`. Contrast is white in the light theme
+     and the unfilled track is light grey, so the highlight would travel
+     invisibly in exactly the theme somebody is most likely to demo in. Primary
+     is dark on light and light on dark, which is the one that reads in both. */
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 45%, transparent),
+    transparent
+  );
+  animation: step-flow 1.4s ease-in-out infinite;
+}
+
+@keyframes step-flow {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* The current step's ring. A slow breath rather than a pulse: this sits next to
+   a log that updates and a progress bar that moves, and a third thing competing
+   for attention would make the panel feel busy rather than alive. */
+.step-dot-active {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+  animation: step-breathe 2.4s ease-out infinite;
+}
+
+@keyframes step-breathe {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--primary) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The fill still lands in the right place — only the travel goes. Progress is
+     information, so it must survive; the motion carrying it is decoration. */
+  .step-track-fill { transition: none; }
+  .step-track-flow::after { animation: none; }
+  .step-dot-active { animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent); }
+}

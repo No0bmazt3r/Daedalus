@@ -1,0 +1,122 @@
+/* Light/dark palettes, dynamic themes, status colours. Imported, in order, by src/index.css. */
+
+:root {
+  /* Status defaults for the light case. applyColors() overwrites these on every
+     theme change; they exist so the first paint — before the theme context has
+     run — is not an unstyled colour. Kept in step with deriveStatusColors(). */
+  --status-ok: #14803c;
+  --status-warn: #a75c07;
+  --status-bad: #c1352c;
+  --status-info: #1160b4;
+  --primary-readable: oklch(0.205 0 0);
+  --primary-contrast: #ffffff;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --status-ok: #4fd07f;
+  --status-warn: #f5ad3d;
+  --status-bad: #ef6f66;
+  --status-info: #64a6f5;
+  --primary-readable: oklch(0.922 0 0);
+  --primary-contrast: #000000;
+
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+/* Dynamic Themes from themes.ts */
+.theme-bg { background-color: var(--bg) !important; }
+.theme-sidebar { background-color: var(--sidebar) !important; }
+.theme-card { background-color: var(--card) !important; }
+.theme-border { border-color: var(--border) !important; }
+.theme-text { color: var(--text-main) !important; }
+.theme-text-muted { color: var(--text-muted) !important; }
+.theme-primary { color: var(--primary) !important; }
+.theme-bg-primary { background-color: var(--primary) !important; }
+/* Selected state for a choice the user has committed to — the Forge's
+   deployment mode uses it. Companion to the two above, so a selected card
+   picks up the theme accent rather than hardcoding a colour. */
+.theme-border-primary { border-color: var(--primary) !important; }
+
+/* Status colours — see deriveStatusColors() in lib/themes.ts for why these are
+   derived from the theme rather than written as Tailwind literals. Text, a 12%
+   surface tint and a 38% border, so a callout can be built from one name. */
+.status-ok { color: var(--status-ok) !important; }
+.status-warn { color: var(--status-warn) !important; }
+.status-bad { color: var(--status-bad) !important; }
+.status-info { color: var(--status-info) !important; }
+.status-ok-bg { background-color: color-mix(in srgb, var(--status-ok) 12%, transparent) !important; }
+.status-warn-bg { background-color: color-mix(in srgb, var(--status-warn) 12%, transparent) !important; }
+.status-bad-bg { background-color: color-mix(in srgb, var(--status-bad) 12%, transparent) !important; }
+.status-ok-border { border-color: color-mix(in srgb, var(--status-ok) 38%, transparent) !important; }
+.status-warn-border { border-color: color-mix(in srgb, var(--status-warn) 38%, transparent) !important; }
+.status-bad-border { border-color: color-mix(in srgb, var(--status-bad) 38%, transparent) !important; }
+.status-warn-fill { background-color: var(--status-warn) !important; }
+.status-ok-fill { background-color: var(--status-ok) !important; }
+.status-bad-fill { background-color: var(--status-bad) !important; }
+/* A hairline that stays visible on either theme. Used where a literal
+   white/20 or black/40 border was previously assumed. */
+.theme-hairline { border-color: color-mix(in srgb, var(--text-main) 25%, transparent) !important; }
+/* Mid-grey on both themes, so a white switch knob reads against it either way. */
+.theme-switch-off { background-color: color-mix(in srgb, var(--text-main) 38%, transparent) !important; }

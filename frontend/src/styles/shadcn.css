@@ -1,0 +1,50 @@
+/* shadcn tokens bound to the theme, hidden scrollbars, portals. Imported, in order, by src/index.css. */
+
+/* ── Bind the shadcn design tokens to the active theme ──
+   The primitives (dropdown, popover, menu, card, tabs…) paint with
+   bg-popover / bg-accent / text-muted-foreground and friends. Those resolve
+   to the fixed oklch values in :root above — and since the app never sets the
+   `.dark` class, every one of them rendered light-mode white regardless of
+   the chosen theme. Re-pointing the tokens at the theme variables fixes all
+   of those components at once instead of per call site.
+   This block must stay after the :root defaults it overrides. */
+:root {
+  --background: var(--bg);
+  --foreground: var(--text-main);
+  --card-foreground: var(--text-main);
+  --popover: var(--card);
+  --popover-foreground: var(--text-main);
+  --muted-foreground: var(--text-muted);
+  --muted: color-mix(in srgb, var(--text-main) 10%, transparent);
+  --accent: color-mix(in srgb, var(--primary) 16%, transparent);
+  --accent-foreground: var(--text-main);
+  --secondary: color-mix(in srgb, var(--text-main) 8%, transparent);
+  --secondary-foreground: var(--text-main);
+  --input: var(--border);
+  --ring: var(--primary);
+}
+
+/* Scroll without a visible scrollbar — used by the modal panes, which are
+   small enough that a track eats noticeable width and reads as clutter.
+   Only the bar is hidden; wheel, trackpad, keyboard and touch all still
+   scroll normally. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* ── Popups opened from inside a floating window ──
+   Base UI portals dropdowns/menus to the end of <body> and gives the
+   positioner `z-index: 50`. The theme and settings windows sit at z-index 100,
+   so a dropdown opened inside one paints *behind* its own window — visible in
+   the DOM, invisible on screen. Lift the portal above them.
+   Scoped to the positioner (never the inert backdrop, which would then swallow
+   clicks meant for the window underneath). */
+[data-base-ui-portal] .isolate {
+  z-index: 200;
+}

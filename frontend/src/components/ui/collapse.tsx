@@ -16,7 +16,7 @@ const EXIT_ANIMATIONS = new Set(['domino-out', 'collapse-flow-out'])
  * Opening a section does not reveal a block: the rows arrive from a little
  * below and to the left, one after another, with a small overshoot. Closing
  * peels them off from the bottom up, faster and without the bounce. The
- * keyframes and the stagger live in `index.css` under `[data-domino]`; this
+ * keyframes and the stagger live in `styles/domino.css` under `[data-domino]`; this
  * file owns the part CSS cannot do, which is *keeping the children mounted
  * long enough for the outbound cascade to play*.
  *

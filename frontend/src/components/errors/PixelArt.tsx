@@ -35,7 +35,7 @@ const COLOURS: Record<string, string> = {
 }
 
 /**
- * The picture, animated per code by `.pix-<code>` in index.css. Each pixel
+ * The picture, animated per code by `.pix-<code>` in `./animations.css`. Each pixel
  * carries its colour letter as a class (`px-a`, `px-w`, …) and its grid
  * position as `--x` / `--y`, so the CSS can move one part of a picture (the
  * dot in the maze, the sand in the hourglass) or stagger an effect across it.

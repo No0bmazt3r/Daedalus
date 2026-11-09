@@ -80,7 +80,7 @@ export const MAX_CUSTOM_THEMES = 8;
 export const THEME_CHANGE_EVENT = 'daedalus-theme-change';
 
 const FONT_MAP: Record<FontKey, string> = {
-  // Monocraft, bundled at src/assets/fonts and declared in index.css. It is
+  // Monocraft, bundled at src/assets/fonts and declared in styles/fonts.css. It is
   // monospaced, so the fallbacks are too — a proportional fallback would
   // re-flow every table and log view if the woff2 ever failed to load.
   minecraft: "'Monocraft', ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -896,7 +896,7 @@ function applyFontDensity(font: FontKey, density: DensityKey) {
   const family = FONT_MAP[font] || FONT_MAP[DEFAULT_FONT];
   document.documentElement.style.setProperty('--font-family', family);
   // Monocraft is a bitmap face and wants antialiasing off to stay crisp; every
-  // other option wants it on. index.css keys that off .font-pixel.
+  // other option wants it on. styles/preferences.css keys that off .font-pixel.
   document.documentElement.classList.toggle('font-pixel', font === 'minecraft');
   document.documentElement.classList.remove('density-compact', 'density-spacious');
   if (density !== 'comfortable') document.documentElement.classList.add('density-' + density);

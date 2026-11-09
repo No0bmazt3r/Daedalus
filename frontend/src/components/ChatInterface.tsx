@@ -99,7 +99,7 @@ function ThoughtProcess({ text, live }: { text: string; live: boolean }) {
         className="group flex items-center gap-1.5 rounded-md px-1 -mx-1 py-0.5 text-[12px] theme-text-muted enabled:hover:theme-text outline-none focus-visible:ring-1 focus-visible:ring-[color-mix(in_srgb,var(--primary)_70%,transparent)]"
       >
         {/* Hover (or keyboard focus) switches the bulb on: it fills warm and
-            pixel sparks pop out around it (`.bulb-spark` in index.css). */}
+            pixel sparks pop out around it (`.bulb-spark` in styles/effects.css). */}
         <span className="relative inline-flex" aria-hidden>
           <Lightbulb
             size={13}

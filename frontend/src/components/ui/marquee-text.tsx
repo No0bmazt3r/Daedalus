@@ -12,7 +12,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
  * label takes longer rather than moving faster.
  *
  * `prefers-reduced-motion` gets an ellipsis instead (see `.marquee` in
- * index.css) — a moving label is decoration, and the full text is in `title`.
+ * styles/effects.css) — a moving label is decoration, and the full text is in `title`.
  */
 const PX_PER_SECOND = 28
 const GAP_PX = 24

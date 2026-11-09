@@ -328,7 +328,7 @@ function NavButton({
         }`}
       >
         {/* Keyed on `active` so the one-shot select animation replays when
-            the panel is chosen. See .tab-icon in index.css. */}
+            the panel is chosen. See .tab-icon in styles/surfaces.css. */}
         <Icon
           key={active ? 'on' : 'off'}
           size={14}

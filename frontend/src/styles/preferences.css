@@ -1,0 +1,87 @@
+/* Font, attention dimming, density, UI scale. Imported, in order, by src/index.css. */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Theme engine — typography, density, background effects and frosted glass.
+   The CSS variables these rules read are written by src/lib/themes.ts.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg-effect-intensity: 1;
+  --bg-effect-size: 1;
+
+  /* The face everything falls back to before the saved theme lands. */
+  --font-base: 'Monocraft', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* The Font selector writes --font-family; sitting outside @layer base keeps
+   it ahead of the `html { @apply font-sans }` default. */
+html {
+  font-family: var(--font-family, var(--font-base));
+}
+
+/* Monocraft is a bitmap face: its glyphs are drawn on a whole-pixel grid, so
+   greyscale antialiasing only blurs edges that are already aligned. Turning it
+   off is what makes the text read as pixels rather than as a blurry small
+   font. Scoped to a class themes.ts toggles, because the alternative faces —
+   OpenDyslexic in particular — very much do want smoothing. */
+:root.font-pixel,
+:root.font-pixel body {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
+}
+
+/* ── Attention dimming ──────────────────────────────────────────────────────
+   A panel you are not pointing at sits back a little, so the background effect
+   reads through it; the one under the cursor — or holding keyboard focus —
+   comes forward solid.
+
+   Opacity rather than a background-colour mix, deliberately: it composes with
+   frosted glass and with the !important on .theme-sidebar instead of fighting
+   either, and it settles the whole panel back rather than just its fill, which
+   is what "not the thing you are working in" should look like.
+
+   Only descendants are dimmed, never the zone element itself — an opaque
+   ancestor behind a translucent panel would cancel the whole effect, which is
+   why the sidebar's outer container in __root.tsx carries no surface colour. */
+:root {
+  --panel-idle-opacity: 0.82;
+}
+
+.attention-zone .theme-sidebar,
+.attention-zone .theme-card {
+  transition: opacity 220ms ease;
+}
+
+.attention-zone:not(:hover):not(:focus-within) .theme-sidebar,
+.attention-zone:not(:hover):not(:focus-within) .theme-card {
+  opacity: var(--panel-idle-opacity, 0.82);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention-zone .theme-sidebar,
+  .attention-zone .theme-card {
+    transition: none;
+  }
+}
+
+/* ── Density ── */
+:root.density-compact {
+  font-size: 14px;
+}
+:root.density-spacious {
+  font-size: 17px;
+}
+
+/* ── UI text scale (accessibility) ── */
+:root.ui-scale-125 {
+  zoom: 1.25;
+}
+:root.ui-scale-125 body {
+  height: calc(100dvh / 1.25);
+  overflow: hidden;
+}
+:root.ui-scale-125 #root,
+:root.ui-scale-125 #root > * {
+  height: 100%;
+}
