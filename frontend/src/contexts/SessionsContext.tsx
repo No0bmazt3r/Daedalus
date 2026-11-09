@@ -15,7 +15,7 @@ import {
   listSessions,
   renameSession as apiRenameSession,
   regenerateTitle,
-  truncateMessages,
+  forkSession,
   SessionApiError,
   type ChatMessage,
   type ChatSession,
@@ -75,8 +75,14 @@ interface SessionsContextValue {
   newChat: () => void;
   selectSession: (id: string) => void;
   sendMessage: (content: string) => Promise<void>;
-  /** Re-ask a user message (retry), or ask it reworded (edit): drops it and everything after, then sends `content`. */
-  resend: (key: string, content: string) => Promise<void>;
+  /** A new chat with this one's messages up to `uptoSeq`, opened. The original is untouched. */
+  fork: (uptoSeq: number) => Promise<void>;
+  /**
+   * Ask a user message again — as is (retry/rerun) or reworded (edit) — in a
+   * fork that ends just before it, optionally with a one-off model. A message
+   * that never reached the server is just sent again where it is.
+   */
+  askAgain: (key: string, content: string, model?: string) => Promise<void>;
   /** Set when the server answered with a different model than was asked for. */
   modelNotice: string | null;
   rename: (id: string, title: string) => Promise<void>;
@@ -280,8 +286,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   // `history` is what stays on screen above the new turn: the whole transcript
   // for a normal send, the part before the re-asked message for retry/edit.
+  // `to` names the session (a fork that was just made, before state has
+  // caught up) and a one-off model; both default to the open chat and picker.
   const send = useCallback(
-    async (content: string, history: DisplayMessage[], cutFrom?: number) => {
+    async (content: string, history: DisplayMessage[], to: { sessionId?: string; model?: string } = {}) => {
       const trimmed = content.trim();
       if (!trimmed || sending) return;
 
@@ -290,7 +298,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
       // A message sent after the mode was toggled starts a new session rather
       // than joining the hidden one.
-      let sessionId = modeMismatch ? null : activeSessionId;
+      let sessionId = to.sessionId ?? (modeMismatch ? null : activeSessionId);
 
       // Echo immediately; the composer should never feel like it stalled.
       const optimisticKey = `local-${Date.now()}`;
@@ -302,9 +310,6 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       ]);
 
       try {
-        // Cut the stored transcript first, so the old answer is not replayed
-        // into the context of the re-asked one.
-        if (sessionId && cutFrom !== undefined) await truncateMessages(sessionId, cutFrom);
         if (!sessionId) {
           const created = await createSession({ ephemeral: isIncognito });
           sessionId = created.session_id;
@@ -314,7 +319,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
         // One call. /api/chat records both turns server-side, so posting the
         // user message separately would store it twice.
-        const reply = await sendChat(sessionId, trimmed, selectedModel || null, (p) => {
+        const reply = await sendChat(sessionId, trimmed, to.model || selectedModel || null, (p) => {
           const piece = p.phase === 'generating' ? p.piece ?? '' : '';
           setMessages((prev) =>
             prev.map((m) =>
@@ -369,15 +374,51 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     [send, messages, modeMismatch],
   );
 
-  const resend = useCallback(
-    async (key: string, content: string) => {
-      const i = messages.findIndex((m) => m.key === key);
-      if (i < 0 || messages[i].role !== 'user') return;
-      // A failed send never got a seq: it is only on screen, so there is
-      // nothing stored to cut — dropping it locally is enough.
-      await send(content, messages.slice(0, i), messages[i].seq);
+  // Make the fork and switch to it, showing the copied turns straight away
+  // (they are exactly the ones on screen). Returns the fork and its history.
+  const branch = useCallback(
+    async (uptoSeq: number) => {
+      if (!activeSessionId || modeMismatch || sending) return null;
+      let forked;
+      try {
+        forked = await forkSession(activeSessionId, uptoSeq);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'could not fork this chat');
+        return null;
+      }
+      loadToken.current += 1;
+      stopPolling();
+      const history = messages.filter((m) => m.seq !== undefined && m.seq <= uptoSeq);
+      setActiveSessionId(forked.session_id);
+      setActiveEphemeral(forked.ephemeral);
+      setMessages(history);
+      setRatings({});
+      setError(null);
+      setModelNotice(null);
+      if (!forked.ephemeral) void refresh();
+      return { sessionId: forked.session_id, history };
     },
-    [messages, send],
+    [activeSessionId, messages, modeMismatch, refresh, sending, stopPolling],
+  );
+
+  const fork = useCallback(
+    async (uptoSeq: number) => {
+      await branch(uptoSeq);
+    },
+    [branch],
+  );
+
+  const askAgain = useCallback(
+    async (key: string, content: string, model?: string) => {
+      const i = messages.findIndex((m) => m.key === key);
+      const msg = messages[i];
+      if (!msg || msg.role !== 'user') return;
+      // Never reached the server: nothing stored to fork, so resend in place.
+      if (msg.seq === undefined) return send(content, messages.slice(0, i), { model });
+      const forked = await branch(msg.seq - 1);
+      if (forked) await send(content, forked.history, { sessionId: forked.sessionId, model });
+    },
+    [branch, messages, send],
   );
 
   const rename = useCallback(
@@ -460,7 +501,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       newChat,
       selectSession,
       sendMessage,
-      resend,
+      fork,
+      askAgain,
       modelNotice,
       rename,
       retitle,
@@ -481,7 +523,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       newChat,
       selectSession,
       sendMessage,
-      resend,
+      fork,
+      askAgain,
       rename,
       retitle,
       remove,

@@ -387,33 +387,51 @@ def set_summary(session_id: str, summary: str, upto_seq: int) -> None:
     sqlite_util.with_retry(_write, what="set_summary")
 
 
-def truncate_messages(session_id: str, from_seq: int) -> int:
-    """Delete message `from_seq` and everything after it. Returns how many went.
+def fork_session(session_id: str, upto_seq: int) -> dict[str, Any]:
+    """Copy a chat's messages 1..`upto_seq` into a new chat, and return it.
 
-    What retry and edit stand on: the turn is re-asked from that point, so the
-    old reply (and anything after) must not be replayed into the new context.
-    A summary that covered any deleted turn is dropped; the summariser rebuilds it.
+    What fork, edit, retry and rerun stand on: the original is never cut, so no
+    answer is ever lost. Copies keep their evidence, model tag and query_id, so
+    citations and the audit trail still resolve. The rolling summary comes along
+    only if it covers nothing past the cut. The title is the operator's
+    (`title_source = 'user'`), so the title job leaves "Fork: …" alone.
     """
     init_db()
+    fork_id = new_session_id()
+    now = _now()
 
-    def _write() -> int:
+    def _write() -> None:
         with sqlite_util.transaction(DB_PATH) as conn:
-            if conn.execute(
-                "SELECT 1 FROM chat_sessions WHERE session_id = ?", (session_id,)
-            ).fetchone() is None:
+            src = conn.execute(
+                "SELECT * FROM chat_sessions WHERE session_id = ?", (session_id,)
+            ).fetchone()
+            if src is None:
                 raise SessionNotFoundError(session_id)
-            n = conn.execute(
-                "DELETE FROM chat_messages WHERE session_id = ? AND seq >= ?",
-                (session_id, from_seq),
-            ).rowcount
+            keep_summary = src["summary_upto_seq"] <= upto_seq
+            # A fork of a fork is still "Fork: X", not "Fork: Fork: X".
+            base = (capitalised(src["title"]) or "New chat").removeprefix("Fork: ")
+            title = f"Fork: {base}"[:MAX_TITLE_CHARS]
             conn.execute(
-                "UPDATE chat_sessions SET summary = NULL, summary_upto_seq = 0 "
-                "WHERE session_id = ? AND summary_upto_seq >= ?",
-                (session_id, from_seq),
+                "INSERT INTO chat_sessions (session_id, created_at, updated_at, title, device_id, "
+                "ephemeral, title_source, summary, summary_upto_seq) VALUES (?, ?, ?, ?, ?, ?, 'user', ?, ?)",
+                (fork_id, now, now, title, src["device_id"], src["ephemeral"],
+                 src["summary"] if keep_summary else None,
+                 src["summary_upto_seq"] if keep_summary else 0),
             )
-            return n
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(chat_messages)")
+                    if r["name"] not in ("id", "session_id")]
+            names = ", ".join(cols)
+            conn.execute(
+                f"INSERT INTO chat_messages (session_id, {names}) "
+                f"SELECT ?, {names} FROM chat_messages WHERE session_id = ? AND seq <= ? ORDER BY seq",
+                (fork_id, session_id, upto_seq),
+            )
 
-    return sqlite_util.with_retry(_write, what="truncate_messages")
+    sqlite_util.with_retry(_write, what="fork_session")
+    forked = get_session(fork_id)
+    if forked is None:  # pragma: no cover - the insert just succeeded
+        raise ChatStoreError(f"session {fork_id} vanished immediately after insert")
+    return forked
 
 
 def purge_ephemeral() -> int:

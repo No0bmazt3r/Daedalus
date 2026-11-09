@@ -1,5 +1,5 @@
 {
-  "track": "vector",
+  "track": "graph",
   "frozen": false,
   "note": "Track 1 (vector) is the baseline/control arm \u2014 see PROJECT.md \u00a75.",
   "rerank": {
@@ -14,6 +14,10 @@
   },
   "retrieval": {
     "top_k": 5,
-    "similarity_threshold": null
+    "similarity_threshold": null,
+    "hybrid": true,
+    "min_rerank_score": null,
+    "window": "head",
+    "order": "rank"
   }
 }

@@ -16,7 +16,7 @@ transcript can only ever contain things the system really said.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from ...db import chat_store, sqlite_util
 from ..schemas import (
@@ -30,7 +30,7 @@ from ..schemas import (
     SessionUpdate,
 )
 from ...forge import background_models
-from .. import chat_service, inference, session_titles
+from .. import chat_service, session_titles
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -152,17 +152,15 @@ def add_message(session_id: str, body: MessageCreate) -> dict:
         raise _unavailable(exc) from exc
 
 
-@router.delete("/{session_id}/messages", response_model=DeleteOut)
-def truncate_messages(session_id: str, from_seq: int = Query(..., ge=1)) -> dict:
-    """Drop message `from_seq` onward — the first half of retry and edit.
+@router.post("/{session_id}/fork", response_model=SessionDetail, status_code=201)
+def fork_session(session_id: str, upto_seq: int = Body(..., ge=0, embed=True)) -> dict:
+    """A new chat holding this one's messages up to `upto_seq` — fork, edit, retry, rerun.
 
-    The client then re-sends the (possibly edited) question through /api/chat.
-    Refused mid-answer: the running generation would append to a cut transcript.
+    `upto_seq = 0` is an empty fork (editing the very first message). The
+    original is untouched, so asking again never costs an answer.
     """
-    if inference.ACTIVE_GENERATIONS.get(session_id):
-        raise HTTPException(status_code=409, detail="wait for the current answer to finish")
     try:
-        return {"ok": True, "deleted": chat_store.truncate_messages(session_id, from_seq) > 0}
+        return chat_store.fork_session(session_id, upto_seq)
     except chat_store.SessionNotFoundError as exc:
         raise _not_found(session_id) from exc
     except sqlite_util.DatabaseUnavailableError as exc:

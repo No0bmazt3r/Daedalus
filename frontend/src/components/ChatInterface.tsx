@@ -63,7 +63,7 @@ function TypewriterText({ text }: { text: string }) {
 }
 
 const ACTION_BTN =
-  'p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
+  'p-1.5 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-[color-mix(in_srgb,var(--primary)_70%,transparent)] theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
 
 const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -151,7 +151,7 @@ function EditBox({ initial, onCancel, onSave }: {
       <div className="flex items-center gap-3 mt-1.5 text-[13px]">
         <span
           className="theme-text-muted cursor-help"
-          title="Saving asks this again. The old answer and everything after it are removed."
+          title="Saving starts a new chat from here. This one stays as it is."
         >
           <Info size={14} />
         </span>
@@ -164,12 +164,69 @@ function EditBox({ initial, onCancel, onSave }: {
   )
 }
 
+/**
+ * Rerun: pick which model asks again. The one that answered comes first; the
+ * choice is for this rerun only and leaves the composer's picker alone.
+ */
+function RerunMenu({ answeredBy, onPick }: { answeredBy?: string; onPick: (model?: string) => void }) {
+  const { models, referenceModels } = useSettings()
+  const local = models.filter((m) => m.name !== answeredBy)
+  const cloud = referenceModels.filter((m) => m.name !== answeredBy)
+  const answeredByCloud = referenceModels.some((m) => m.name === answeredBy)
+  const item = 'cursor-pointer flex items-center gap-2 theme-text-muted data-[highlighted]:theme-text'
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={`${ACTION_BTN} data-[popup-open]:theme-text data-[popup-open]:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)]`} title="Rerun in a new chat" aria-label="Rerun in a new chat">
+        <RefreshCw size={14} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64 z-50 theme-card theme-border theme-text border">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide theme-text-muted font-normal">
+            Rerun in a new chat with
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => onPick(answeredBy)} className={`${item} theme-text`}>
+            {answeredByCloud ? <Cloud size={12} className="shrink-0 status-warn" /> : <RefreshCw size={12} className="shrink-0 theme-accent" />}
+            <span className="truncate">{answeredBy ?? 'The current model'}</span>
+            <span className="ml-auto text-[10px] uppercase tracking-wide shrink-0 theme-text-muted">same</span>
+          </DropdownMenuItem>
+          {local.map((m) => (
+            <DropdownMenuItem key={m.name} onClick={() => onPick(m.name)} className={item}>
+              <Zap size={12} className="shrink-0" />
+              <span className="truncate">{m.name}</span>
+              <CapabilityBadges capabilities={m.capabilities} />
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        {cloud.length > 0 && (
+          <>
+            <DropdownMenuSeparator className="theme-border" />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide status-warn font-normal">
+                Evaluation only · not Rule&nbsp;1 safe
+              </DropdownMenuLabel>
+              {cloud.map((m) => (
+                <DropdownMenuItem key={m.id} onClick={() => onPick(m.name)} title={m.note ?? undefined} className={item}>
+                  <Cloud size={12} className="shrink-0" />
+                  <span className="truncate">{m.name}</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wide shrink-0">cloud</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function MessageActions({
-  text, modelTag, fromCloud, rating, onRate, queryId, onRetry,
+  text, modelTag, fromCloud, rating, onRate, queryId, onRerun, onFork,
 }: {
   /** The turn's audit id, for the label prompt a thumbs-down opens. */
   queryId?: string
-  onRetry?: () => void
+  /** Absent while an answer is in flight, or when there is no question above. */
+  onRerun?: (model?: string) => void
+  onFork?: () => void
   text: string
   modelTag?: string
   fromCloud?: boolean
@@ -242,22 +299,12 @@ function MessageActions({
           </button>
         </>
       )}
-      {/* Not wired up yet. Disabled rather than inert: a button that quietly
-          does nothing reads as a bug, and these are the shape the branching
-          work in MODULES.md will fill in. */}
-      <button
-        disabled
-        className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
-        aria-label="Fork the chat from here (coming soon)"
-        title="Fork the chat from here (coming soon)"
-      >
-        <GitFork size={14} />
-      </button>
-      {onRetry && (
-        <button onClick={onRetry} className={ACTION_BTN} aria-label="Rerun this prompt" title="Rerun this prompt">
-          <RefreshCw size={14} />
+      {onFork && (
+        <button onClick={onFork} className={ACTION_BTN} aria-label="Fork the chat from here" title="Fork the chat from here">
+          <GitFork size={14} />
         </button>
       )}
+      {onRerun && <RerunMenu answeredBy={modelTag} onPick={onRerun} />}
       {modelTag && (
         <span
           className={`text-[11px] ml-1 select-none flex items-center gap-1 ${
@@ -356,7 +403,7 @@ function ComposerControls({
   return (
       <div className={`flex items-center justify-between px-3 pt-1 ${compact ? 'pb-2' : 'pb-3'}`}>
         <div className="flex items-center gap-2">
-          {/* Not wired up yet, so disabled rather than inert (same rule as Fork/Rerun). */}
+          {/* Not wired up yet, so disabled rather than inert (same rule as Voice). */}
           <Button variant="ghost" size="icon" disabled aria-label="Attach (coming soon)" title="Attach (coming soon)" className="w-8 h-8 rounded-full theme-text-muted disabled:opacity-40 disabled:cursor-not-allowed">
             <Plus size={18} />
           </Button>
@@ -531,7 +578,7 @@ export function ChatInterface() {
   // here, to mark which transcript turns came from off the machine.
   const { isIncognito, setIsIncognito, referenceModels, noModel, showNoModelPrompt } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
-  const { messages, sendMessage, resend, sending, error, modelNotice, ratings, rate, activeSessionId } = useSessions()
+  const { messages, sendMessage, fork, askAgain, sending, error, modelNotice, ratings, rate, activeSessionId } = useSessions()
   // The user message being reworded, by key. One at a time.
   const [editing, setEditing] = useState<string | null>(null)
   // Ariadne's Thread, one line per answer. Re-read when a stored answer arrives:
@@ -705,7 +752,7 @@ export function ChatInterface() {
                       onSave={(text) => {
                         setEditing(null)
                         if (noModel) return showNoModelPrompt()
-                        void resend(msg.key, text)
+                        void askAgain(msg.key, text)
                       }}
                     />
                   </div>
@@ -762,9 +809,10 @@ export function ChatInterface() {
                         rating={msg.queryId ? ratings[msg.queryId] : undefined}
                         onRate={msg.queryId ? (r) => void rate(msg.queryId!, r) : undefined}
                         queryId={msg.queryId}
-                        onRetry={
+                        onFork={!sending && msg.seq !== undefined ? () => void fork(msg.seq!) : undefined}
+                        onRerun={
                           !sending && messages[i - 1]?.role === 'user'
-                            ? () => (noModel ? showNoModelPrompt() : void resend(messages[i - 1].key, messages[i - 1].content))
+                            ? (model) => void askAgain(messages[i - 1].key, messages[i - 1].content, model)
                             : undefined
                         }
                       />
@@ -783,7 +831,7 @@ export function ChatInterface() {
                       text={msg.content}
                       sentAt={msg.createdAt}
                       busy={sending}
-                      onRetry={() => (noModel ? showNoModelPrompt() : void resend(msg.key, msg.content))}
+                      onRetry={() => (noModel ? showNoModelPrompt() : void askAgain(msg.key, msg.content))}
                       onEdit={() => setEditing(msg.key)}
                     />
                   )}

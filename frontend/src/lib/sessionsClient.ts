@@ -165,9 +165,12 @@ export function regenerateTitle(id: string): Promise<{ ok: boolean; scheduled: b
   return request(`${BASE}/${encodeURIComponent(id)}/title`, { method: 'POST' });
 }
 
-/** Drop message `fromSeq` onward — retry and edit re-ask from that point. */
-export function truncateMessages(id: string, fromSeq: number): Promise<{ ok: boolean; deleted: boolean }> {
-  return request(`${BASE}/${encodeURIComponent(id)}/messages?from_seq=${fromSeq}`, { method: 'DELETE' });
+/** A new chat holding this one's messages up to `uptoSeq`. The original is untouched. */
+export function forkSession(id: string, uptoSeq: number): Promise<ChatSessionDetail> {
+  return request<ChatSessionDetail>(`${BASE}/${encodeURIComponent(id)}/fork`, {
+    method: 'POST',
+    body: JSON.stringify({ upto_seq: uptoSeq }),
+  });
 }
 
 /** Deletes the chat and its messages. Audit rows in ai_logs.db are untouched. */

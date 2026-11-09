@@ -102,8 +102,21 @@ function Popup({ text, anchor }: { text: string; anchor: DOMRect }) {
 
   // Measured before paint, so it never flashes at the wrong spot.
   useLayoutEffect(() => {
-    const box = ref.current?.getBoundingClientRect()
-    if (!box) return
+    const el = ref.current
+    if (!el) return
+    // Wrapped text leaves the box at its full max-width, with a blank strip
+    // beside the shorter lines. Shrink it to the widest line. Rects are read
+    // through the zoom-in animation's scale, so divide it back out.
+    const scale = el.getBoundingClientRect().width / el.offsetWidth || 1
+    const range = document.createRange()
+    range.selectNodeContents(el.firstChild ?? el)
+    const lines = [...range.getClientRects()]
+    if (lines.length > 1) {
+      const pad = el.offsetWidth - el.clientWidth + parseFloat(getComputedStyle(el).paddingLeft) * 2
+      el.style.width = `${Math.ceil(Math.max(...lines.map((r) => r.width)) / scale + pad)}px`
+    }
+    // Layout sizes, not getBoundingClientRect: those are mid-animation, at 95%.
+    const box = { width: el.offsetWidth, height: el.offsetHeight }
     const side = anchor.top - box.height - GAP < MARGIN ? 'bottom' : 'top'
     const centre = anchor.left + anchor.width / 2
     const left = Math.min(Math.max(centre - box.width / 2, MARGIN), window.innerWidth - box.width - MARGIN)
