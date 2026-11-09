@@ -15,6 +15,7 @@ import {
   listSessions,
   renameSession as apiRenameSession,
   regenerateTitle,
+  truncateMessages,
   SessionApiError,
   type ChatMessage,
   type ChatSession,
@@ -56,6 +57,10 @@ interface DisplayMessage {
   queryId?: string;
   /** While a reply is in flight: the stage the server last reported (evidence, generating…). */
   phase?: string;
+  /** Position in the stored transcript; what retry/edit cut from. Stored turns only. */
+  seq?: number;
+  /** When the server stored it (ISO). Stored turns only. */
+  createdAt?: string;
 }
 
 type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -70,6 +75,8 @@ interface SessionsContextValue {
   newChat: () => void;
   selectSession: (id: string) => void;
   sendMessage: (content: string) => Promise<void>;
+  /** Re-ask a user message (retry), or ask it reworded (edit): drops it and everything after, then sends `content`. */
+  resend: (key: string, content: string) => Promise<void>;
   /** Set when the server answered with a different model than was asked for. */
   modelNotice: string | null;
   rename: (id: string, title: string) => Promise<void>;
@@ -102,6 +109,8 @@ function toDisplay(message: ChatMessage): DisplayMessage {
     modelTag: message.model_tag,
     evidence: asEvidence(message.evidence),
     queryId: message.role === 'assistant' ? message.query_id ?? undefined : undefined,
+    seq: message.seq,
+    createdAt: message.created_at,
   };
 }
 
@@ -269,8 +278,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     })();
   }, [stopPolling]);
 
-  const sendMessage = useCallback(
-    async (content: string) => {
+  // `history` is what stays on screen above the new turn: the whole transcript
+  // for a normal send, the part before the re-asked message for retry/edit.
+  const send = useCallback(
+    async (content: string, history: DisplayMessage[], cutFrom?: number) => {
       const trimmed = content.trim();
       if (!trimmed || sending) return;
 
@@ -280,7 +291,6 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       // A message sent after the mode was toggled starts a new session rather
       // than joining the hidden one.
       let sessionId = modeMismatch ? null : activeSessionId;
-      const history = modeMismatch ? [] : messages;
 
       // Echo immediately; the composer should never feel like it stalled.
       const optimisticKey = `local-${Date.now()}`;
@@ -292,6 +302,9 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       ]);
 
       try {
+        // Cut the stored transcript first, so the old answer is not replayed
+        // into the context of the re-asked one.
+        if (sessionId && cutFrom !== undefined) await truncateMessages(sessionId, cutFrom);
         if (!sessionId) {
           const created = await createSession({ ephemeral: isIncognito });
           sessionId = created.session_id;
@@ -348,7 +361,23 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         setSending(false);
       }
     },
-    [activeSessionId, isIncognito, messages, modeMismatch, refresh, selectedModel, sending],
+    [activeSessionId, isIncognito, modeMismatch, refresh, selectedModel, sending],
+  );
+
+  const sendMessage = useCallback(
+    (content: string) => send(content, modeMismatch ? [] : messages),
+    [send, messages, modeMismatch],
+  );
+
+  const resend = useCallback(
+    async (key: string, content: string) => {
+      const i = messages.findIndex((m) => m.key === key);
+      if (i < 0 || messages[i].role !== 'user') return;
+      // A failed send never got a seq: it is only on screen, so there is
+      // nothing stored to cut — dropping it locally is enough.
+      await send(content, messages.slice(0, i), messages[i].seq);
+    },
+    [messages, send],
   );
 
   const rename = useCallback(
@@ -431,6 +460,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       newChat,
       selectSession,
       sendMessage,
+      resend,
       modelNotice,
       rename,
       retitle,
@@ -451,6 +481,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       newChat,
       selectSession,
       sendMessage,
+      resend,
       rename,
       retitle,
       remove,

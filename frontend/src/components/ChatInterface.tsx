@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown, Pencil, Info } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -62,11 +62,114 @@ function TypewriterText({ text }: { text: string }) {
   )
 }
 
+const ACTION_BTN =
+  'p-1.5 rounded-md theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
+
+const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60],
+]
+
+/** `2 hours ago`, `yesterday`, `just now`. Computed on render, so it moves when the chat does. */
+function timeAgo(iso: string): string {
+  const secs = (new Date(iso).getTime() - Date.now()) / 1000
+  for (const [unit, size] of UNITS) {
+    if (Math.abs(secs) >= size) return RELATIVE.format(Math.round(secs / size), unit)
+  }
+  return 'just now'
+}
+
+/** Under a user bubble: when it was sent, then copy it, ask it again, or reword it. */
+function UserMessageActions({ text, sentAt, busy, onRetry, onEdit }: {
+  text: string
+  sentAt?: string
+  busy: boolean
+  onRetry: () => void
+  onEdit: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <div className="flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      {sentAt && (
+        <span className="text-[11px] theme-text-muted mr-1 select-none" title={new Date(sentAt).toLocaleString()}>
+          {timeAgo(sentAt)}
+        </span>
+      )}
+      <button onClick={onRetry} disabled={busy} className={ACTION_BTN} title="Retry" aria-label="Retry">
+        <RefreshCw size={14} />
+      </button>
+      <button onClick={onEdit} disabled={busy} className={ACTION_BTN} title="Edit" aria-label="Edit">
+        <Pencil size={14} />
+      </button>
+      <button onClick={handleCopy} className={ACTION_BTN} title="Copy" aria-label="Copy">
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * The user bubble, made editable in place: same look, same size, and it grows
+ * with the text. The textarea sits over an invisible copy of its own text in
+ * one grid cell, so the copy sets the size (width up to the bubble's cap,
+ * height to every line) in any browser. Enter saves, Escape cancels.
+ */
+function EditBox({ initial, onCancel, onSave }: {
+  initial: string
+  onCancel: () => void
+  onSave: (text: string) => void
+}) {
+  const [text, setText] = useState(initial)
+  const changed = !!text.trim() && text.trim() !== initial.trim()
+  const save = () => {
+    if (changed) onSave(text)
+  }
+  return (
+    <div className="flex flex-col items-end max-w-[80%]">
+      <div className="grid theme-sidebar zone-user-bubble border px-5 py-3 rounded-2xl text-[15px] leading-relaxed focus-within:ring-1 focus-within:ring-[color-mix(in_srgb,var(--primary)_55%,transparent)]">
+        {/* The trailing space keeps a just-typed newline from collapsing. */}
+        <span aria-hidden className="invisible col-start-1 row-start-1 whitespace-pre-wrap break-words">{text + ' '}</span>
+        <textarea
+          autoFocus
+          rows={1}
+          value={text}
+          aria-label="Edit message"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() }
+            if (e.key === 'Escape') onCancel()
+          }}
+          onFocus={(e) => e.currentTarget.setSelectionRange(text.length, text.length)}
+          className="col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none whitespace-pre-wrap break-words p-0 m-0 font-[inherit] text-[length:inherit] leading-[inherit] theme-text"
+        />
+      </div>
+      <div className="flex items-center gap-3 mt-1.5 text-[13px]">
+        <span
+          className="theme-text-muted cursor-help"
+          title="Saving asks this again. The old answer and everything after it are removed."
+        >
+          <Info size={14} />
+        </span>
+        <button onClick={onCancel} className="theme-text hover:opacity-80">Cancel</button>
+        <button onClick={save} disabled={!changed} className="theme-accent font-medium disabled:theme-text-muted disabled:opacity-50">
+          Save
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function MessageActions({
-  text, modelTag, fromCloud, rating, onRate, queryId,
+  text, modelTag, fromCloud, rating, onRate, queryId, onRetry,
 }: {
   /** The turn's audit id, for the label prompt a thumbs-down opens. */
   queryId?: string
+  onRetry?: () => void
   text: string
   modelTag?: string
   fromCloud?: boolean
@@ -150,14 +253,11 @@ function MessageActions({
       >
         <GitFork size={14} />
       </button>
-      <button
-        disabled
-        className="p-1.5 rounded-md theme-text-muted opacity-40 cursor-not-allowed"
-        aria-label="Rerun this prompt (coming soon)"
-        title="Rerun this prompt (coming soon)"
-      >
-        <RefreshCw size={14} />
-      </button>
+      {onRetry && (
+        <button onClick={onRetry} className={ACTION_BTN} aria-label="Rerun this prompt" title="Rerun this prompt">
+          <RefreshCw size={14} />
+        </button>
+      )}
       {modelTag && (
         <span
           className={`text-[11px] ml-1 select-none flex items-center gap-1 ${
@@ -431,7 +531,9 @@ export function ChatInterface() {
   // here, to mark which transcript turns came from off the machine.
   const { isIncognito, setIsIncognito, referenceModels, noModel, showNoModelPrompt } = useSettings()
   // The transcript lives on the server — see contexts/SessionsContext.
-  const { messages, sendMessage, sending, error, modelNotice, ratings, rate, activeSessionId } = useSessions()
+  const { messages, sendMessage, resend, sending, error, modelNotice, ratings, rate, activeSessionId } = useSessions()
+  // The user message being reworded, by key. One at a time.
+  const [editing, setEditing] = useState<string | null>(null)
   // Ariadne's Thread, one line per answer. Re-read when a stored answer arrives:
   // its audit rows are written before the turn is, so they are there to read.
   const traces = useSessionTraces(
@@ -594,8 +696,21 @@ export function ChatInterface() {
                 toggle is always there, and minimized-window chips sit beside
                 it, so the first message has to start below both. */}
             <div className={`flex flex-col pt-4 px-4 gap-6 pb-10 ${columnWidth}`}>
-              {messages.map((msg) => (
-                <div key={msg.key} className={`flex w-full group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {messages.map((msg, i) => (
+                msg.role === 'user' && editing === msg.key ? (
+                  <div key={msg.key} className="flex w-full justify-end">
+                    <EditBox
+                      initial={msg.content}
+                      onCancel={() => setEditing(null)}
+                      onSave={(text) => {
+                        setEditing(null)
+                        if (noModel) return showNoModelPrompt()
+                        void resend(msg.key, text)
+                      }}
+                    />
+                  </div>
+                ) : (
+                <div key={msg.key} className={`flex w-full group ${msg.role === 'user' ? 'flex-col items-end' : 'justify-start'}`}>
                   {msg.role === 'assistant' && (
                     <div className="w-8 h-8 mr-4 shrink-0 rounded-md flex items-center justify-center border theme-border theme-card zone-ai-bubble">
                       <LabyrinthIcon className="w-5 h-5 zone-brand" />
@@ -647,6 +762,11 @@ export function ChatInterface() {
                         rating={msg.queryId ? ratings[msg.queryId] : undefined}
                         onRate={msg.queryId ? (r) => void rate(msg.queryId!, r) : undefined}
                         queryId={msg.queryId}
+                        onRetry={
+                          !sending && messages[i - 1]?.role === 'user'
+                            ? () => (noModel ? showNoModelPrompt() : void resend(messages[i - 1].key, messages[i - 1].content))
+                            : undefined
+                        }
                       />
                     )}
 
@@ -658,7 +778,17 @@ export function ChatInterface() {
                       </div>
                     )}
                   </div>
+                  {msg.role === 'user' && (
+                    <UserMessageActions
+                      text={msg.content}
+                      sentAt={msg.createdAt}
+                      busy={sending}
+                      onRetry={() => (noModel ? showNoModelPrompt() : void resend(msg.key, msg.content))}
+                      onEdit={() => setEditing(msg.key)}
+                    />
+                  )}
                 </div>
+                )
               ))}
               {modelNotice && (
                 <div className="text-[13px] status-warn px-1">{modelNotice}</div>

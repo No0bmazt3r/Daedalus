@@ -197,11 +197,13 @@ function citedLabels(text: string, evidence: StoredEvidence): string[] {
 }
 
 function SourceLine({ evidence, label }: { evidence: StoredEvidence; label: string }) {
-  const kind = evidence.citations.find((c) => c.label === label)?.kind ?? ''
-  const Icon = KIND_ICON[kind] ?? Database
+  const cite = evidence.citations.find((c) => c.label === label)
+  const Icon = KIND_ICON[cite?.kind ?? ''] ?? Database
+  // The line is right beside it, so the hover says what the label is, not what it says.
+  const hint = `${KIND_NAME[label[0]] ?? 'Evidence'} ${label}${cite?.tool ? `, from ${cite.tool}` : ''}`
   return (
     <li className="flex items-start gap-2">
-      <code className="shrink-0 text-[10px] mt-0.5 px-1 rounded theme-surface-strong theme-text">{label}</code>
+      <code title={hint} className="shrink-0 text-[10px] mt-0.5 px-1 rounded theme-surface-strong theme-text cursor-help">{label}</code>
       <Icon size={11} className="shrink-0 mt-1 theme-text-muted" />
       <span className="leading-relaxed">{withEvidenceHighlights(lineText(evidence, label))}</span>
     </li>

@@ -165,6 +165,11 @@ export function regenerateTitle(id: string): Promise<{ ok: boolean; scheduled: b
   return request(`${BASE}/${encodeURIComponent(id)}/title`, { method: 'POST' });
 }
 
+/** Drop message `fromSeq` onward — retry and edit re-ask from that point. */
+export function truncateMessages(id: string, fromSeq: number): Promise<{ ok: boolean; deleted: boolean }> {
+  return request(`${BASE}/${encodeURIComponent(id)}/messages?from_seq=${fromSeq}`, { method: 'DELETE' });
+}
+
 /** Deletes the chat and its messages. Audit rows in ai_logs.db are untouched. */
 export async function deleteSession(id: string): Promise<boolean> {
   const data = await request<{ deleted: boolean }>(`${BASE}/${encodeURIComponent(id)}`, {

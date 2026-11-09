@@ -387,6 +387,35 @@ def set_summary(session_id: str, summary: str, upto_seq: int) -> None:
     sqlite_util.with_retry(_write, what="set_summary")
 
 
+def truncate_messages(session_id: str, from_seq: int) -> int:
+    """Delete message `from_seq` and everything after it. Returns how many went.
+
+    What retry and edit stand on: the turn is re-asked from that point, so the
+    old reply (and anything after) must not be replayed into the new context.
+    A summary that covered any deleted turn is dropped; the summariser rebuilds it.
+    """
+    init_db()
+
+    def _write() -> int:
+        with sqlite_util.transaction(DB_PATH) as conn:
+            if conn.execute(
+                "SELECT 1 FROM chat_sessions WHERE session_id = ?", (session_id,)
+            ).fetchone() is None:
+                raise SessionNotFoundError(session_id)
+            n = conn.execute(
+                "DELETE FROM chat_messages WHERE session_id = ? AND seq >= ?",
+                (session_id, from_seq),
+            ).rowcount
+            conn.execute(
+                "UPDATE chat_sessions SET summary = NULL, summary_upto_seq = 0 "
+                "WHERE session_id = ? AND summary_upto_seq >= ?",
+                (session_id, from_seq),
+            )
+            return n
+
+    return sqlite_util.with_retry(_write, what="truncate_messages")
+
+
 def purge_ephemeral() -> int:
     """Delete every incognito session. Returns how many went.
 
