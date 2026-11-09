@@ -19,6 +19,10 @@ const PHASES: Record<string, Beat[]> = {
     { state: 'connecting', label: 'Looking up the facts' },
     { state: 'weaving', label: 'Gathering the evidence' },
   ],
+  thinking: [
+    { state: 'solving', label: 'Thinking it through' },
+    { state: 'shaping', label: 'Reasoning over the evidence' },
+  ],
   generating: [
     { state: 'solving', label: 'Thinking' },
     { state: 'weaving', label: 'Putting the pieces together' },

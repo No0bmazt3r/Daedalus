@@ -181,6 +181,7 @@ def add_assistant_message(
     query_id: str | None = None,
     evidence: Any = None,
     model_tag: str | None = None,
+    thinking: str | None = None,
 ) -> dict[str, Any]:
     """Record what the assistant answered — **orchestrator only**.
 
@@ -188,7 +189,8 @@ def add_assistant_message(
     messages could seed the model's own context with fabricated readings.
     """
     return chat_store.append_message(
-        session_id, "assistant", content, query_id=query_id, evidence=evidence, model_tag=model_tag
+        session_id, "assistant", content, query_id=query_id, evidence=evidence,
+        model_tag=model_tag, thinking=thinking,
     )
 
 

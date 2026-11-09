@@ -106,8 +106,10 @@ interface ChatProgress {
    * provisional — `done` carries the stored answer, which is the fallback when
    * validation rejected what streamed.
    */
-  phase: 'understood' | 'evidence' | 'generating' | 'validated' | 'done' | 'error';
+  phase: 'understood' | 'evidence' | 'thinking' | 'generating' | 'validated' | 'done' | 'error';
   piece?: string;
+  /** `thinking` only: the next piece of a reasoning model's thought process. */
+  thought?: string;
   result?: ChatReply;
   error?: string;
 }

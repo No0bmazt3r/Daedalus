@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
-import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown, Pencil, Info } from 'lucide-react'
+import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown, Pencil, Info, ChevronRight, Lightbulb } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip'
 import { 
   DropdownMenu, 
@@ -65,6 +65,70 @@ function TypewriterText({ text }: { text: string }) {
 
 const ACTION_BTN =
   'p-1.5 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-[color-mix(in_srgb,var(--primary)_70%,transparent)] theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
+
+// Where each pixel lands around the 13px bulb, when it starts, and how big it is.
+const BULB_SPARKS = [
+  { '--x': '-9px', '--y': '-8px', '--d': '0ms', '--s': '2px' },
+  { '--x': '9px', '--y': '-7px', '--d': '150ms', '--s': '2px' },
+  { '--x': '0px', '--y': '-12px', '--d': '300ms', '--s': '3px' },
+  { '--x': '-11px', '--y': '2px', '--d': '450ms', '--s': '2px' },
+  { '--x': '11px', '--y': '3px', '--d': '600ms', '--s': '3px' },
+  { '--x': '-6px', '--y': '10px', '--d': '750ms', '--s': '2px' },
+]
+
+/**
+ * A reasoning model's thought process, above its answer. Open and following
+ * along while it thinks; folded once the answer starts, and opened in full on
+ * click. It is the model's working, not evidence: never validated, never
+ * replayed into a later prompt.
+ */
+function ThoughtProcess({ text, live }: { text: string; live: boolean }) {
+  const [open, setOpen] = useState(false)
+  const shown = live || open
+  const box = useRef<HTMLDivElement>(null)
+  // While it streams, keep the newest line in view.
+  useEffect(() => {
+    if (live && box.current) box.current.scrollTop = box.current.scrollHeight
+  }, [text, live])
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={live}
+        aria-expanded={shown}
+        className="group flex items-center gap-1.5 rounded-md px-1 -mx-1 py-0.5 text-[12px] theme-text-muted enabled:hover:theme-text outline-none focus-visible:ring-1 focus-visible:ring-[color-mix(in_srgb,var(--primary)_70%,transparent)]"
+      >
+        {/* Hover (or keyboard focus) switches the bulb on: it fills warm and
+            pixel sparks pop out around it (`.bulb-spark` in index.css). */}
+        <span className="relative inline-flex" aria-hidden>
+          <Lightbulb
+            size={13}
+            className={
+              live
+                ? 'theme-accent animate-pulse motion-reduce:animate-none'
+                : 'transition-[color,fill] duration-200 group-hover:text-amber-400 group-hover:fill-amber-300/50 group-focus-visible:text-amber-400 group-focus-visible:fill-amber-300/50'
+            }
+          />
+          {!live && BULB_SPARKS.map((spark, i) => (
+            <span key={i} className="bulb-spark" style={spark as React.CSSProperties} />
+          ))}
+        </span>
+        {live ? 'Thinking…' : 'Thought process'}
+        {!live && <ChevronRight size={12} className={`transition-transform duration-200 ${open ? 'rotate-90' : ''}`} aria-hidden />}
+      </button>
+      {shown && (
+        <div
+          ref={box}
+          className={`mt-1.5 border-l-2 theme-border pl-3 text-[13px] leading-relaxed theme-text-muted whitespace-pre-wrap break-words ${
+            live ? 'max-h-40 overflow-y-auto [mask-image:linear-gradient(to_bottom,transparent,black_24px)]' : ''
+          }`}
+        >
+          {text}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** Under a user bubble: when it was sent, then copy it, ask it again, or reword it. */
 function UserMessageActions({ text, sentAt, busy, onRetry, onEdit }: {
@@ -757,6 +821,9 @@ export function ChatInterface() {
                         : 'max-w-[85%] pt-1'
                     } ${msg.failed ? 'status-bad-border' : ''}`}
                   >
+                    {msg.role === 'assistant' && msg.thinking && (
+                      <ThoughtProcess text={msg.thinking} live={!msg.persisted && msg.content === ''} />
+                    )}
                     {msg.role === 'assistant' && msg.content === '' && !msg.persisted ? (
                       <ThinkingIndicator phase={msg.phase} />
                     ) : msg.role === 'assistant' ? (

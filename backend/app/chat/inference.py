@@ -65,6 +65,7 @@ from typing import Any
 
 from ..db import audit_store
 from . import chat_service, orchestration, persona, query_pipeline, session_titles, summariser
+from .query_pipeline import local_model
 from ..system import live_events
 from ..forge import model_config, ollama_client
 
@@ -76,6 +77,33 @@ GENERATE_TIMEOUT = 300.0
 # (`orchestration.prompt`). A one-line instruction is not reliable on a 1B
 # model, and a leaked stamp is visible in the transcript and in the report.
 _LEADING_STAMP = re.compile(r"^\s*\[\s*\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
+
+# `<think>…</think>` inline in the answer: what a reasoning model emits when
+# Ollama does not separate it, or an older Ollama that cannot. An unclosed one
+# is a model cut off mid-thought; a bare `</think>` is a template that opened
+# the block itself, so everything before it was thought.
+_THINK_BLOCK = re.compile(r"<think>(.*?)(?:</think>|\Z)", re.DOTALL | re.IGNORECASE)
+_THINK_CLOSE = re.compile(r"^(.*?)</think>", re.DOTALL | re.IGNORECASE)
+
+
+def split_thinking(text: str) -> tuple[str, str]:
+    """(answer, thought) — every inline think block moved out of the answer.
+
+    The answer is what is validated, stored and replayed; a thought left in it
+    is checked as a claim and fed back as history, so this runs before both.
+    """
+    thoughts: list[str] = []
+    m = _THINK_CLOSE.match(text)
+    if m and "<think>" not in m.group(1).lower():
+        thoughts.append(m.group(1))
+        text = text[m.end():]
+
+    def take(match: re.Match[str]) -> str:
+        thoughts.append(match.group(1))
+        return ""
+
+    text = _THINK_BLOCK.sub(take, text)
+    return text, "\n\n".join(t.strip() for t in thoughts if t.strip())
 
 
 def _known_tags() -> tuple[set[str], set[str]]:
@@ -483,6 +511,12 @@ def answer_stream(
                 window, pack, understood, persona=None if evaluation else persona.prompt_block())
             payload = {"model": tag, "messages": messages, "stream": True,
                        "options": dict(ollama_client.ANSWER_OPTIONS)}
+            # A reasoning model thinks either way; asking Ollama to say so
+            # explicitly makes it hand the thought back apart from the answer
+            # (`message.thinking`) instead of inline. Only for a model that
+            # declares the capability: Ollama rejects the field otherwise.
+            if local_model.supports_thinking(tag):
+                payload["think"] = True
             # Beside Ollama's token count, this is what calibrates the history
             # budget's characters-per-token (`token_calibration`).
             prompt_chars = sum(len(m["content"]) for m in messages)
@@ -495,6 +529,7 @@ def answer_stream(
             started = time.perf_counter()
             first_token_at: float | None = None
             pieces: list[str] = state["pieces"]
+            thoughts: list[str] = []
             final: dict[str, Any] = {}
             error: str | None = None
 
@@ -521,6 +556,14 @@ def answer_stream(
                                     continue
                                 if event.get("error"):
                                     raise ollama_client.OllamaError(str(event["error"]))
+                                thought = (event.get("message") or {}).get("thinking") or ""
+                                # Thinking is output too: the first token is the
+                                # first of either, as it was when thought came inline.
+                                if thought and first_token_at is None:
+                                    first_token_at = time.perf_counter()
+                                if thought:
+                                    thoughts.append(thought)
+                                    events.put({"phase": "thinking", "thought": thought})
                                 piece = (event.get("message") or {}).get("content") or ""
                                 if piece and first_token_at is None:
                                     first_token_at = time.perf_counter()
@@ -544,7 +587,10 @@ def answer_stream(
             ended = time.perf_counter()
             total_ms = int((ended - started) * 1000)
             ttft_ms = int((first_token_at - started) * 1000) if first_token_at else None
-            text = _LEADING_STAMP.sub("", "".join(pieces)).strip()
+            text, inline_thought = split_thinking("".join(pieces))
+            thinking = "".join(thoughts).strip()
+            thinking = "\n\n".join(t for t in (thinking, inline_thought) if t) or None
+            text = _LEADING_STAMP.sub("", text).strip()
             # One citation format for the validator, the transcript and the UI:
             # `[EVIDENCE: S1]` and friends become `[S1]`.
             text = orchestration.validator.normalise_citations(text)
@@ -633,7 +679,8 @@ def answer_stream(
             # The evidence pack is stored with the turn for the UI and for
             # Ariadne's Thread; `build_context` never replays it (§7.4).
             stored = chat_service.add_assistant_message(
-                session_id, delivered, query_id=query_id, evidence=pack.as_json(), model_tag=tag
+                session_id, delivered, query_id=query_id, evidence=pack.as_json(), model_tag=tag,
+                thinking=thinking,
             )
             summary_scheduled = False if evaluation else _maybe_summarise(session_id)
             # After the answer is stored, on its own thread — like the summary,

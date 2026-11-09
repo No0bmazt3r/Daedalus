@@ -92,9 +92,12 @@ def pending(session_id: str) -> bool:
 def schedule(session_id: str, *, force: bool = False) -> bool:
     """Start the title job in the background. False if one is already running."""
     with _lock:
-        if session_id in _running:
-            return False
-        _running.add(session_id)
+        already = session_id in _running
+        if not already:
+            _running.add(session_id)
+    if already:
+        job_runs.busy("title", session_id, "already naming this chat; this request was dropped")
+        return False
 
     def _run() -> None:
         try:

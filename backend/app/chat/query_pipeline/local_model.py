@@ -43,7 +43,7 @@ _thinking: dict[str, bool] = {}
 _lock = threading.Lock()
 
 
-def _supports_thinking(tag: str) -> bool:
+def supports_thinking(tag: str) -> bool:
     with _lock:
         if tag in _thinking:
             return _thinking[tag]
@@ -89,7 +89,7 @@ def ask_json(
             json_format=True,
             temperature=0.0,
             timeout=timeout,
-            think=False if _supports_thinking(tag) else None,
+            think=False if supports_thinking(tag) else None,
             max_tokens=max_tokens,
         )
         data = json.loads(raw)

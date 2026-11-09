@@ -79,9 +79,12 @@ _lock = threading.Lock()
 def schedule(session_id: str) -> bool:
     """Start a summarisation pass in the background. False if one is already running."""
     with _lock:
-        if session_id in _running:
-            return False
-        _running.add(session_id)
+        already = session_id in _running
+        if not already:
+            _running.add(session_id)
+    if already:
+        job_runs.busy("summary", session_id, "already summarising this chat; this request was dropped")
+        return False
 
     def _run() -> None:
         try:

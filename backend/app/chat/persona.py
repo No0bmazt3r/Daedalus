@@ -49,7 +49,7 @@ import secrets
 import threading
 from typing import Any
 
-from ..db import chat_store, prefs_store, sqlite_util
+from ..db import audit_store, chat_store, prefs_store, sqlite_util
 from ..db.paths import CHAT_DB
 from ..db.sqlite_util import utc_now as _now
 from ..forge import background_models
@@ -231,13 +231,16 @@ def schedule(session_id: str) -> bool:
 
     def _run() -> None:
         if not _running.acquire(blocking=False):
-            return  # one scan at a time; the next answer will pick this chat up
+            # One scan at a time; the next answer will pick this chat up.
+            job_runs.busy("persona", session_id, "another scan was running; the next answer will pick this chat up")
+            return
         try:
             with job_runs.run("persona", session_id):
                 if scan(session_id):
                     live_events.publish("persona")
         except Exception as exc:  # noqa: BLE001 — a background job must never surface
             log.warning("persona scan of %s failed: %s", session_id, exc)
+            audit_store.log_error("persona", exc, level="warning")
         finally:
             _running.release()
 

@@ -85,6 +85,12 @@ def run(job: str, session_id: str) -> Iterator[None]:
         live_events.publish("jobs")
 
 
+def busy(job: str, session_id: str, reason: str) -> None:
+    """Record a request that was turned away because a run was already going."""
+    with run(job, session_id):
+        skip(reason)
+
+
 def recent() -> dict[str, list[dict[str, Any]]]:
     """Each job's runs, newest first. Copies, so a caller cannot edit the record."""
     with _lock:

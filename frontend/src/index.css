@@ -1079,3 +1079,31 @@ input[type='color']::-webkit-color-swatch {
   .marquee-moving .marquee-track,
   .marquee-moving .marquee-copy { display: block; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* "Thought process" bulb: square pixels pop out around it while hovered,
+   stepped rather than smooth so they read as pixels, not dust. Each spark sets
+   --x/--y (where it lands), --d (stagger) and --s (size). */
+.bulb-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--s, 2px);
+  height: var(--s, 2px);
+  background: #fbbf24;
+  opacity: 0;
+  pointer-events: none;
+}
+.group:hover .bulb-spark,
+.group:focus-visible .bulb-spark {
+  animation: bulb-pixel 900ms steps(6, end) var(--d, 0ms) infinite;
+}
+@keyframes bulb-pixel {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  25% { opacity: 1; transform: translate(calc(-50% + var(--x) * 0.55), calc(-50% + var(--y) * 0.55)) scale(1); }
+  70% { opacity: 1; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x) * 1.2), calc(-50% + var(--y) * 1.2)) scale(0.5); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .bulb-spark,
+  .group:focus-visible .bulb-spark { animation: none; }
+}

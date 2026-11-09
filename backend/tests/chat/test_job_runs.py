@@ -51,6 +51,13 @@ class JobRunsTest(unittest.TestCase):
         self.assertEqual(self.last("title")["status"], "skipped")
         self.assertEqual(self.last("title")["detail"], "no answer yet")
 
+    def test_a_second_request_while_running_is_recorded(self) -> None:
+        session_titles._running.add("busy-chat")
+        self.addCleanup(session_titles._running.discard, "busy-chat")
+        self.assertFalse(session_titles.schedule("busy-chat"))
+        self.assertEqual(self.last("title")["status"], "skipped")
+        self.assertIn("already naming", self.last("title")["detail"])
+
     def test_marks_outside_a_run_are_ignored(self) -> None:
         job_runs.skip("nobody listening")  # e.g. a test calling scan() directly
         self.assertEqual(job_runs.recent()["title"], [])

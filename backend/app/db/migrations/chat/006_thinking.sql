@@ -1,0 +1,11 @@
+-- A reasoning model's thought process, kept beside the answer it led to.
+--
+-- qwen3, gpt-oss and the like think before they answer. Ollama returns that as
+-- `message.thinking`, apart from `content` — or, when not asked to separate it,
+-- inline as `<think>…</think>` at the front of the answer, where the validator
+-- then checked it as if it were the answer and history replayed it as context.
+--
+-- Shown to the operator on request; never validated, never replayed into a
+-- prompt (history reads `content`), never evidence. NULL for a model that does
+-- not think, and on every turn written before this column existed.
+ALTER TABLE chat_messages ADD COLUMN thinking TEXT;

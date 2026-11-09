@@ -61,6 +61,8 @@ interface DisplayMessage {
   seq?: number;
   /** When the server stored it (ISO). Stored turns only. */
   createdAt?: string;
+  /** A reasoning model's thought process, streamed as it thinks, then stored. */
+  thinking?: string;
 }
 
 type SessionsStatus = 'loading' | 'ready' | 'offline';
@@ -117,6 +119,7 @@ function toDisplay(message: ChatMessage): DisplayMessage {
     queryId: message.role === 'assistant' ? message.query_id ?? undefined : undefined,
     seq: message.seq,
     createdAt: message.created_at,
+    thinking: message.thinking ?? undefined,
   };
 }
 
@@ -321,9 +324,17 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         // user message separately would store it twice.
         const reply = await sendChat(sessionId, trimmed, to.model || selectedModel || null, (p) => {
           const piece = p.phase === 'generating' ? p.piece ?? '' : '';
+          const thought = p.phase === 'thinking' ? p.thought ?? '' : '';
           setMessages((prev) =>
             prev.map((m) =>
-              m.key === assistantKey ? { ...m, phase: p.phase, content: m.content + piece } : m,
+              m.key === assistantKey
+                ? {
+                    ...m,
+                    phase: p.phase,
+                    content: m.content + piece,
+                    thinking: thought ? (m.thinking ?? '') + thought : m.thinking,
+                  }
+                : m,
             ),
           );
         });

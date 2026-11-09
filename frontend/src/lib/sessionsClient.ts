@@ -39,6 +39,8 @@ export interface ChatMessage {
   token_estimate: number;
   created_at: string;
   model_tag?: string;
+  /** A reasoning model's thought process. Display only; never replayed. */
+  thinking?: string | null;
 }
 
 const BASE = '/api/sessions';

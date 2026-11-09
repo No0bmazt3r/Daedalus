@@ -82,6 +82,8 @@ class MessageOut(BaseModel):
     # could never say what answered — and a cloud-answered turn could not be
     # told apart from a local one after the fact.
     model_tag: str | None = None
+    # A reasoning model's thought process (migration 006). Display only.
+    thinking: str | None = None
 
 
 class SessionOut(BaseModel):
