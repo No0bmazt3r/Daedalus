@@ -28,6 +28,7 @@ import { AnswerPanel, type AnswerTab } from './thread/AnswerPanel'
 import { useSessionTraces } from '../hooks/useSessionTraces'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { saveLabel } from '../lib/threadClient'
+import { timeAgo } from '../lib/time'
 
 function TypewriterText({ text }: { text: string }) {
   // How much of `text` is typed. Keyed by the text it counts, so a new text
@@ -64,20 +65,6 @@ function TypewriterText({ text }: { text: string }) {
 
 const ACTION_BTN =
   'p-1.5 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-[color-mix(in_srgb,var(--primary)_70%,transparent)] theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
-
-const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60],
-]
-
-/** `2 hours ago`, `yesterday`, `just now`. Computed on render, so it moves when the chat does. */
-function timeAgo(iso: string): string {
-  const secs = (new Date(iso).getTime() - Date.now()) / 1000
-  for (const [unit, size] of UNITS) {
-    if (Math.abs(secs) >= size) return RELATIVE.format(Math.round(secs / size), unit)
-  }
-  return 'just now'
-}
 
 /** Under a user bubble: when it was sent, then copy it, ask it again, or reword it. */
 function UserMessageActions({ text, sentAt, busy, onRetry, onEdit }: {

@@ -38,3 +38,29 @@ export const saveBackgroundJobs = (patch: BackgroundJobsPatch) =>
     method: 'PUT',
     body: JSON.stringify(patch),
   });
+
+export type JobName = 'title' | 'summary' | 'persona';
+
+/** One run of a background job (`chat/job_runs.py`). In memory since the backend started. */
+export interface JobRun {
+  job: JobName;
+  /** Null for an incognito chat: Settings never links to one. */
+  session_id: string | null;
+  status: 'running' | 'done' | 'skipped' | 'failed';
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  model: string | null;
+  /** What it did, why it skipped, or the error. */
+  detail: string | null;
+  /** Null when the chat has since been deleted. */
+  chat: { incognito: boolean; title: string | null } | null;
+}
+
+export interface JobRuns {
+  runs: Record<JobName, JobRun[]>;
+  persona_enabled: boolean;
+  keep: number;
+}
+
+export const fetchJobRuns = () => request<JobRuns>('/api/background-jobs/runs');

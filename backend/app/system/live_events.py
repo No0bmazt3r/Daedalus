@@ -18,6 +18,7 @@ view per change, on a machine with one user.
 | `embeddings` | the selected embedding model, or a verified vector width, changed |
 | `endpoints` | a cloud endpoint was added, edited, tested or removed |
 | `sessions` | a background job renamed a chat — the sidebar re-reads its list |
+| `jobs` | a chat background job started or finished (`chat/job_runs.py`) |
 
 ## Two sources, one topic
 
@@ -51,7 +52,7 @@ from ..forge import ollama_client
 
 log = logging.getLogger("daedalus.events")
 
-TOPICS = ("models", "embeddings", "endpoints", "sessions", "rag", "corpus", "trace", "persona")
+TOPICS = ("models", "embeddings", "endpoints", "sessions", "rag", "corpus", "trace", "persona", "jobs")
 
 # How often the watcher asks Ollama, while somebody is listening. Five seconds
 # is quick enough that a terminal `ollama rm` shows up before anyone goes

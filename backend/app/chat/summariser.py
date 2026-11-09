@@ -49,7 +49,7 @@ from typing import Any
 
 from ..db import audit_store, chat_store
 from ..forge import background_models
-from . import chat_service
+from . import chat_service, job_runs
 from .orchestration import numbers
 from .query_pipeline import local_model
 
@@ -85,7 +85,8 @@ def schedule(session_id: str) -> bool:
 
     def _run() -> None:
         try:
-            summarise(session_id)
+            with job_runs.run("summary", session_id):
+                summarise(session_id)
         except Exception as exc:  # noqa: BLE001 — a background pass must never surface
             log.warning("summarising %s failed: %s", session_id, exc)
             audit_store.log_error("summariser", exc, level="warning")
@@ -122,7 +123,7 @@ def summarise(session_id: str) -> dict[str, Any] | None:
     """
     window = chat_service.build_context(session_id)
     if not window.dropped:
-        return None
+        return job_runs.skip("every turn still fits the history budget")
 
     upto = window.oldest_kept_seq - 1
     folded = [
@@ -130,7 +131,7 @@ def summarise(session_id: str) -> dict[str, Any] | None:
         if m["seq"] <= upto
     ]
     if not folded:
-        return None
+        return job_runs.skip("nothing new has fallen out of the window")
 
     prompt = (
         f"Previous summary: {window.summary or '(none)'}\n\n"
@@ -157,5 +158,10 @@ def summarise(session_id: str) -> dict[str, Any] | None:
         # prompt back to the turns it replaced.
         source=f"{method}:{tag or 'none'} seq {window.summary_upto_seq + 1}-{upto}"
                + (" · values redacted" if clean != text else ""),
+    )
+    job_runs.note(
+        f"folded {len(folded)} turns (up to #{upto})"
+        + (" with the fallback: the model gave nothing" if method == "fallback" else ""),
+        model=tag,
     )
     return {"summary": clean, "upto_seq": upto, "method": method, "model": tag, "folded": len(folded)}

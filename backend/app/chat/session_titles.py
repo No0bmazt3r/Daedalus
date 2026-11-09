@@ -51,6 +51,7 @@ from typing import Any
 from ..db import audit_store, chat_store
 from ..forge import background_models
 from ..system import live_events
+from . import job_runs
 from .orchestration import numbers
 from .query_pipeline import local_model
 
@@ -97,7 +98,8 @@ def schedule(session_id: str, *, force: bool = False) -> bool:
 
     def _run() -> None:
         try:
-            retitle(session_id, force=force)
+            with job_runs.run("title", session_id):
+                retitle(session_id, force=force)
         except Exception as exc:  # noqa: BLE001 — a background job must never surface
             log.warning("titling %s failed: %s", session_id, exc)
             audit_store.log_error("session_titles", exc, level="warning")
@@ -123,6 +125,20 @@ def _due(session: dict[str, Any], user_turns: int, answers: int, refresh_every: 
     if source != "model":
         return True
     return refresh_every > 0 and user_turns - int(session.get("title_turns") or 0) >= refresh_every
+
+
+def _why_not(session: dict[str, Any], user_turns: int, answers: int, refresh_every: int) -> str:
+    """Why `_due` said no, in the words the run list shows."""
+    if session.get("ephemeral"):
+        return "incognito chats are never named by a model"
+    if answers == 0:
+        return "no answer yet"
+    if session.get("title_source") == "user":
+        return "you named this chat"
+    if refresh_every <= 0:
+        return "already named; set to name once"
+    since = user_turns - int(session.get("title_turns") or 0)
+    return f"not due: {since} of {refresh_every} questions since the last title"
 
 
 def _line(message: dict[str, Any]) -> str:
@@ -159,16 +175,16 @@ def retitle(session_id: str, *, force: bool = False) -> dict[str, Any] | None:
     """
     config = background_models.read()["title"]
     if config["mode"] != "model":
-        return None
+        return job_runs.skip("titles are set to use the first message")
 
     session = chat_store.get_session(session_id)
     if session is None:
-        return None
+        return job_runs.skip("the chat was deleted")
     messages = chat_store.get_messages(session_id)
     user_turns = sum(1 for m in messages if m["role"] == "user")
     answers = sum(1 for m in messages if m["role"] == "assistant")
     if not _due(session, user_turns, answers, config["refresh_every"], force):
-        return None
+        return job_runs.skip(_why_not(session, user_turns, answers, config["refresh_every"]))
 
     # None means the chat model, resolved inside `ask_json`; with no model at
     # all the call returns nothing and the first-message title stands.
@@ -181,15 +197,17 @@ def retitle(session_id: str, *, force: bool = False) -> dict[str, Any] | None:
     parts.append("Conversation:\n" + "\n".join(_line(m) for m in messages[-_TURNS_SHOWN:]))
     data, tag = local_model.ask_json(_SYSTEM, "\n\n".join(parts), max_tokens=40,
                                      timeout=TIMEOUT_S, tag=chosen)
+    job_runs.note(model=tag)
     title = clean((data or {}).get("title") or "")
     if not title:
-        return None
+        return job_runs.fail("the model gave no usable title" if tag else "no local model to write one")
 
     if force and session.get("title_source") == "user":
         # Reclaimed on request: clear the operator's mark so the conditional
         # write below may replace it.
         chat_store.update_session(session_id, title=None)
     if not chat_store.set_generated_title(session_id, title, user_turns):
-        return None  # renamed by the operator while the model was thinking
+        return job_runs.skip("you renamed the chat while the model was writing")  # operator wins
+    job_runs.note(f"named it “{title}”")
     live_events.publish("sessions", session_id=session_id)
     return {"title": title, "model": tag, "turns": user_turns}

@@ -1,9 +1,12 @@
 import { useCallback, useState, useEffect } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
-import { AlertCircle, FileText, Tag, Info } from 'lucide-react'
+import { AlertCircle, FileText, Tag, Info, Orbit } from 'lucide-react'
+import { JobRunsList } from './JobRunsList'
 import {
   fetchBackgroundJobs,
+  fetchJobRuns,
+  type JobRuns,
   saveBackgroundJobs,
   type BackgroundJobsPatch,
   type BackgroundJobsStatus,
@@ -69,6 +72,15 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
   useEffect(load, [load])
   // A model pulled or deleted changes what can be chosen.
   useLiveRefresh(['models'], load)
+
+  // Each job's pulse. Not worth the error page: the settings work without it.
+  const [runs, setRuns] = useState<JobRuns | null>(null)
+  const loadRuns = useCallback(() => {
+    fetchJobRuns().then(setRuns).catch(() => undefined)
+  }, [])
+  useEffect(loadRuns, [loadRuns])
+  // `sessions` too: a renamed chat should not keep its old name here.
+  useLiveRefresh(['jobs', 'persona', 'sessions'], loadRuns)
 
   const save = async (patch: BackgroundJobsPatch) => {
     setSaving(true)
@@ -171,6 +183,7 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
           className={!modelTitle || saving ? 'pointer-events-none opacity-50' : ''}
         />
         {modelTitle && <Resolved job={resolved.title} />}
+        {runs && <JobRunsList runs={runs.runs.title} keep={runs.keep} />}
       </section>
 
       <section className="space-y-3 rounded-lg border theme-border p-4">
@@ -192,7 +205,25 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
           className={saving ? 'pointer-events-none opacity-60' : ''}
         />
         <Resolved job={resolved.summary} />
+        {runs && <JobRunsList runs={runs.runs.summary} keep={runs.keep} />}
       </section>
+
+      {/* Configured in Settings → Persona; here only so all three jobs' pulses sit together. */}
+      {runs && (
+        <section className="space-y-3 rounded-lg border theme-border p-4">
+          <h4 className="flex items-center gap-1.5 text-sm theme-text">
+            <Orbit size={14} className="theme-text-muted" /> Persona scan
+            {!runs.persona_enabled && (
+              <span className="ml-auto rounded border theme-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide theme-text-muted">Off</span>
+            )}
+          </h4>
+          <p className="text-[11px] leading-relaxed theme-text-muted">
+            Reads your recent messages for habits worth proposing to your persona. It uses the
+            summary's model. Turn it on or off in Settings → Persona.
+          </p>
+          <JobRunsList runs={runs.runs.persona} keep={runs.keep} />
+        </section>
+      )}
 
       {error && <ErrorNote message={error} />}
 

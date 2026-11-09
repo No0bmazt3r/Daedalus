@@ -69,6 +69,8 @@ const FRICTION = 0.93
 const MIN_SPEED = 0.05
 /** A release this long after the last move is a stop, not a flick. */
 const FLICK_MS = 80
+/** How close a selected node is brought. Clicking it again goes back to 1. */
+const FOCUS_ZOOM = 2.2
 /** Share of the remaining zoom covered per frame. */
 const ZOOM_EASE = 0.2
 /** How long a new graph takes to open out from the centre. */
@@ -97,7 +99,8 @@ export function GraphCanvas({
   nodes: GraphNode[]
   edges: { from: string; type: string; to: string }[]
   selected: string | null
-  onSelect: (id: string) => void
+  /** `null` when the selected node is clicked again: deselect. */
+  onSelect: (id: string | null) => void
   /**
    * Node ids to bring forward, everything else dimmed. Traversal replay drives
    * this from the hop being stepped through — MODULES.md §3.2's "highlighting
@@ -224,9 +227,20 @@ export function GraphCanvas({
     kick()
   }, [layout, kick])
 
+  // Selecting turns the node to the front and zooms in on it; deselecting
+  // zooms back out. Only on a real deselect, so the first render keeps zoom 1.
+  const hadSelection = useRef(false)
   useEffect(() => {
-    if (selected) turnTo(layout.get(selected))
-  }, [selected, layout, turnTo])
+    if (selected) {
+      motion.current.zoom = Math.max(motion.current.zoom, FOCUS_ZOOM)
+      turnTo(layout.get(selected))
+      kick()
+    } else if (hadSelection.current) {
+      motion.current.zoom = 1
+      kick()
+    }
+    hadSelection.current = !!selected
+  }, [selected, layout, turnTo, kick])
 
   useEffect(() => {
     if (!highlight?.size) return
@@ -427,10 +441,10 @@ export function GraphCanvas({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      onSelect(n.id)
+                      onSelect(isSelected ? null : n.id)
                     }
                   }}
-                  onClick={() => { if (!movedRef.current) onSelect(n.id) }}
+                  onClick={() => { if (!movedRef.current) onSelect(isSelected ? null : n.id) }}
                   onPointerEnter={() => { if (!dragRef.current) setHovered(n.id) }}
                   onPointerLeave={() => setHovered(null)}
                   {...hint(`${label}\n${n.type} · ${shortId(n.id)} · ${degree} edge${degree === 1 ? '' : 's'}`)}
@@ -484,7 +498,7 @@ export function GraphCanvas({
 
       <p className="shrink-0 border-t theme-border px-3 py-1.5 text-[10px] theme-text-muted">
         {caption ??
-          'Drag to turn the globe · scroll to zoom · hover for neighbours · click a node to open it. ' +
+          'Drag to turn the globe · scroll to zoom · hover for neighbours · click a node to open it, again to close. ' +
             'Linked nodes sit together; position shows connectedness, not measurement.'}
       </p>
     </div>

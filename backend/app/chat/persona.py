@@ -56,6 +56,7 @@ from ..forge import background_models
 from ..blueprints import graph_tools
 from ..system import live_events
 from .query_pipeline import local_model
+from . import job_runs
 
 log = logging.getLogger("daedalus.persona")
 
@@ -232,8 +233,9 @@ def schedule(session_id: str) -> bool:
         if not _running.acquire(blocking=False):
             return  # one scan at a time; the next answer will pick this chat up
         try:
-            if scan(session_id):
-                live_events.publish("persona")
+            with job_runs.run("persona", session_id):
+                if scan(session_id):
+                    live_events.publish("persona")
         except Exception as exc:  # noqa: BLE001 — a background job must never surface
             log.warning("persona scan of %s failed: %s", session_id, exc)
         finally:
@@ -250,12 +252,14 @@ def scan(session_id: str, *, force: bool = False, ask: Any = None) -> list[dict[
     """
     session = chat_store.get_session(session_id)
     if session is None or session.get("ephemeral"):
+        job_runs.skip("incognito chats are never read" if session else "the chat was deleted")
         return []
     with sqlite_util.connect(CHAT_DB) as conn:
         mark = conn.execute("SELECT upto_seq FROM persona_scans WHERE session_id = ?", (session_id,)).fetchone()
     upto = mark["upto_seq"] if mark else 0
     mine = [m for m in chat_store.get_messages(session_id, after_seq=upto) if m["role"] == "user"]
     if not mine or (len(mine) < SCAN_EVERY and not force):
+        job_runs.skip(f"not due: {len(mine)} of {SCAN_EVERY} new messages")
         return []
     shown = mine[-_MESSAGES_SHOWN:]
 
@@ -265,8 +269,9 @@ def scan(session_id: str, *, force: bool = False, ask: Any = None) -> list[dict[
     if known:
         prompt = f"Already known (report again only if these messages show it too): {known}\n\n" + prompt
     if ask is None:
-        data, _tag = local_model.ask_json(_SYSTEM, prompt, max_tokens=300, timeout=TIMEOUT_S,
-                                          tag=background_models.configured_tag("summary"))
+        data, tag = local_model.ask_json(_SYSTEM, prompt, max_tokens=300, timeout=TIMEOUT_S,
+                                         tag=background_models.configured_tag("summary"))
+        job_runs.note(model=tag)
     else:
         data = ask(_SYSTEM, prompt)
 
@@ -282,6 +287,7 @@ def scan(session_id: str, *, force: bool = False, ask: Any = None) -> list[dict[
             "ON CONFLICT(session_id) DO UPDATE SET upto_seq = excluded.upto_seq, scanned_at = excluded.scanned_at",
             (session_id, mine[-1]["seq"], _now()),
         )
+    job_runs.note(f"read {len(shown)} messages, proposed {len(queued)}")
     return queued
 
 
