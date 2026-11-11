@@ -37,8 +37,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import re
+
 from ..db import chat_store
 from . import token_calibration
+
+# Where the validator cut an unsupported sentence (`validator.salvage`). The
+# chat draws it as a "Removed: not supported" marker linking to the Thread; it
+# is stripped before a turn is replayed, so the model never sees it.
+REMOVED_MARK = "⟦removed⟧"
+_MARK_LINE = re.compile(rf"^[ \t]*(?:[-*+]|\d+[.)])?[ \t]*{re.escape(REMOVED_MARK)}[ \t]*\n?", re.MULTILINE)
+
+
+def without_marks(text: str) -> str:
+    """The answer as replayed history: removal markers gone, whole marker lines too."""
+    return _MARK_LINE.sub("", text).replace(f" {REMOVED_MARK}", "").replace(REMOVED_MARK, "")
 
 # How much of the context window history may occupy.
 #
@@ -109,7 +122,7 @@ class ContextWindow:
         for message in self.messages:
             content = message["content"]
             if message["role"] == "assistant":
-                content = f"[{_stamp(message['created_at'])}] {content}"
+                content = f"[{_stamp(message['created_at'])}] {without_marks(content)}"
             out.append({"role": message["role"], "content": content})
         return out
 

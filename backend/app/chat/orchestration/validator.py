@@ -116,6 +116,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import numbers
+from ..chat_service import REMOVED_MARK
 from .evidence import EvidencePack
 
 FALLBACK = "I could not generate a grounded answer from the available data."
@@ -470,6 +471,8 @@ def _mismatched_document_citations(text: str, pack: EvidencePack, asked: set[flo
     return bad
 
 
+# Ended trimmed answers before the in-place marker (2026-11-11); kept so old
+# rows still read correctly.
 TRIMMED_NOTE = "\n\n_Part of this answer was removed: it was not supported by the evidence._"
 
 
@@ -503,7 +506,9 @@ def salvage(
     def dirty(sentence: str) -> bool:
         return any(b in sentence for b in bad) or _key(sentence) in causes
 
-    text = re.sub(r"\s*\([^()]*\)", lambda m: "" if dirty(m.group()) else m.group(), answer)
+    # A cut leaves REMOVED_MARK where the text was, so the operator sees that
+    # something went and where, without reading it.
+    text = re.sub(r"\s*\([^()]*\)", lambda m: f" {REMOVED_MARK}" if dirty(m.group()) else m.group(), answer)
     text = _CITATION_RE.sub(
         lambda m: (lambda keep: f"[{', '.join(keep)}]" if keep else "")(
             [x.strip() for x in re.split(r"[,;]", m.group(1)) if x.strip() in pack.labels]
@@ -513,15 +518,26 @@ def salvage(
     lines = []
     for line in text.split("\n"):
         sentences = re.split(r"(?<=[.!?])\s+", line)
-        kept = [s for s in sentences if not dirty(s)]
-        # A list item's marker ("2.") splits off as a sentence of its own, and so
-        # does a label written after the full stop ("… drained. [D3]"). Once the
-        # sentence between them is cut, a line of only those is not an answer:
-        # it went out as "2. [D3]". Drop it whole.
-        if len(kept) < len(sentences) and _HOLLOW.fullmatch(" ".join(kept)):
-            continue
-        if kept or not line.strip():
-            lines.append(" ".join(kept))
+        out: list[str] = []
+        cut = False
+        for sentence in sentences:
+            if dirty(sentence):
+                if not out or out[-1] != REMOVED_MARK:
+                    out.append(REMOVED_MARK)
+                cut = True
+            # A label written after the full stop ("… drained. [D3]") went with its sentence.
+            elif cut and out and out[-1] == REMOVED_MARK and _HOLLOW.fullmatch(sentence):
+                continue
+            else:
+                out.append(sentence)
+        # A list item's marker ("2.") splits off as a sentence of its own. Once
+        # the sentence after it is cut, the item is the marker alone: "2. ⟦removed⟧",
+        # never "2. [D3]" (seen 2026-11-11).
+        if cut and _HOLLOW.fullmatch(" ".join(o for o in out if o != REMOVED_MARK)):
+            bullet = re.match(r"\s*(?:[-*+]|\d+[.)])\s", line)
+            out = [*([bullet.group().strip()] if bullet else []), REMOVED_MARK]
+        if out or not line.strip():
+            lines.append(" ".join(out))
     text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
     if not text or text == answer.strip():
         return None
@@ -532,7 +548,7 @@ def salvage(
         return None
     if not validate(text, pack, question=question, history=history).passed:
         return None
-    return text + TRIMMED_NOTE
+    return text
 
 
 def grounded(v: Validation, pack: EvidencePack) -> bool:

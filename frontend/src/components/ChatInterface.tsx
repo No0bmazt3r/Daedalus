@@ -308,7 +308,8 @@ function MessageActions({
   }
 
   const handleCopy = () => {
-    void navigator.clipboard.writeText(text)
+    // The validator's in-place marker, in words for wherever this is pasted.
+    void navigator.clipboard.writeText(text.replaceAll('⟦removed⟧', '[removed: not supported by the evidence]'))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -840,7 +841,7 @@ export function ChatInterface() {
                       // Markdown while streaming too, so the text does not
                       // jump from stars to bold when it lands. Chips come once
                       // the turn is stored: until then there is no evidence pack.
-                      <AnswerMarkdown text={msg.content} evidence={msg.persisted ? msg.evidence : undefined} />
+                      <AnswerMarkdown text={msg.content} evidence={msg.persisted ? msg.evidence : undefined} queryId={msg.queryId} />
                     ) : (
                       msg.content
                     )}

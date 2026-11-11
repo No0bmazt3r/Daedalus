@@ -1095,7 +1095,10 @@ not merely somewhere in the evidence, or it fails as
 source"). A failed answer has its failing sentences cut (`salvage`), or
 becomes *"I could not generate a grounded answer from the available data."*
 when nothing sound is left, including when no cited sentence survives the
-cut. A retrieval tool's status header ("re-ranked from 20") is shown to the
+cut. Each cut leaves `⟦removed⟧` in place (`chat_service.REMOVED_MARK`): the
+chat draws it as "Removed: not supported by the evidence · see why", opening
+the turn in the Thread; it is stripped before the turn is replayed to the
+model, and copied as words. A retrieval tool's status header ("re-ranked from 20") is shown to the
 model but its numbers are not evidence. Its known blind spots — clock times, integers
 0–10, causal claims — are listed in `validator.py` and TODO M5.
 

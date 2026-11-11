@@ -185,10 +185,10 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         v = self.validate(answer)
         trimmed = validator.salvage(answer, v, self.pack, question=self.question)
         self.assertIsNotNone(trimmed)
-        self.assertIn(f"{co2} ppm [S1]", trimmed)
         self.assertNotIn("1200", trimmed)
         self.assertNotIn("777.7", trimmed)
-        self.assertTrue(trimmed.endswith(validator.TRIMMED_NOTE))
+        self.assertIn(f"{co2} ppm {validator.REMOVED_MARK} [S1]", trimmed)  # the aside went, marked in place
+        self.assertIn(f"It is fine. {validator.REMOVED_MARK}", trimmed)
         # Nothing left worth saying → still the fallback.
         lone = "It was 777.7 ppm [S1]."
         self.assertIsNone(validator.salvage(lone, self.validate(lone), self.pack))
@@ -201,9 +201,15 @@ class EvidenceAndValidatorTest(unittest.TestCase):
                   "3. **Excursion**: It was a High CO2 excursion. [D1]")
         trimmed = validator.salvage(answer, self.validate(answer), self.pack, question=self.question)
         self.assertIsNotNone(trimmed)
-        self.assertNotIn("2.", trimmed)
+        # The item stays, as its number and a marker: no "2. [S1]", no 777.7.
+        self.assertIn(f"\n2. {validator.REMOVED_MARK}\n", trimmed)
+        self.assertNotIn("777.7", trimmed)
         self.assertIn("1. **Peak**", trimmed)
         self.assertIn("3. **Excursion**", trimmed)
+        # Replayed to the model later, the marker and its empty item are gone.
+        from app.chat.chat_service import without_marks  # noqa: PLC0415
+        self.assertEqual(without_marks(trimmed).count("\n"), 1)
+        self.assertNotIn("removed", without_marks(trimmed))
 
     def test_stale_number_from_history_is_caught(self) -> None:
         history = [{"role": "assistant", "content": "[2026-09-12 09:00 UTC] CO2 was 612.4 ppm."}]

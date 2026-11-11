@@ -8,6 +8,7 @@ from typing import Any
 from ..db import audit_store, chat_store
 from . import thread_settings
 from ..chat.orchestration import numbers
+from ..chat.chat_service import REMOVED_MARK
 from ..chat.orchestration.validator import FALLBACK, TRIMMED_NOTE
 from .common import counts as turn_counts
 from .common import parse_json
@@ -24,7 +25,7 @@ def _removed(answer: str, delivered: str) -> list[str]:
     that only lost a bracketed aside is reported as that aside, not the whole
     sentence, because that is all that went.
     """
-    kept = " ".join(delivered.replace(TRIMMED_NOTE, "").split())
+    kept = " ".join(delivered.replace(TRIMMED_NOTE, "").replace(REMOVED_MARK, "").split())
     out: list[str] = []
     for line in answer.split("\n"):
         for sentence in re.split(r"(?<=[.!?])\s+", line):
