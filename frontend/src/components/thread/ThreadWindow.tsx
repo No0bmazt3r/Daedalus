@@ -92,6 +92,7 @@ export function ThreadWindow({
       status: extra.status || undefined,
       model: extra.model || undefined,
       labelled: extra.labelled || undefined,
+      origin: extra.origin || undefined,
       since: extra.since ? new Date(`${extra.since}T00:00:00`).toISOString() : undefined,
       until: extra.until ? dayAfter(extra.until) : undefined,
     }

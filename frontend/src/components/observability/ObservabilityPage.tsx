@@ -4,7 +4,7 @@ import {
   Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  observability, OBS_PHASES, type Observability, type ObsPhase, type ObsRange, type ObsSource,
+  observability, OBS_PHASES, type Observability, type ObsOrigin, type ObsPhase, type ObsRange, type ObsSource,
 } from '../../lib/systemClient'
 import { openSettingsPanel, openThread, type TraceStatus } from '../../lib/threadClient'
 import { STATUS, formatMs } from '../thread/status'
@@ -31,6 +31,11 @@ const SOURCES: { id: ObsSource; label: string; hint: string }[] = [
   { id: 'chat', label: 'Chat', hint: 'Everyday chats, including refused questions' },
   { id: 'eval', label: 'Eval', hint: 'Evaluation runs (cli_eval)' },
   { id: 'benchmark', label: 'Benchmark', hint: 'The Forge benchmarks: model calls only, no chat turns' },
+]
+const ORIGINS: { id: ObsOrigin; label: string; hint: string }[] = [
+  { id: 'all', label: 'Anywhere', hint: 'Every turn, including ones from before origins were recorded' },
+  { id: 'web', label: 'Web', hint: 'Asked in the Daedalus web app' },
+  { id: 'mainui', label: 'MainUI', hint: "Asked from CO2SorptionDT's Daedalus tab" },
 ]
 const PHASE_LABEL: Record<ObsPhase, string> = {
   retrieval: 'Retrieval', rerank: 'Re-rank', load: 'Model load', prefill: 'Prefill', generation: 'Generation',
@@ -383,6 +388,7 @@ function Loading() {
 export function ObservabilityPage() {
   const [range, setRange] = useState<ObsRange>('all')
   const [source, setSource] = useState<ObsSource>('chat')
+  const [origin, setOrigin] = useState<ObsOrigin>('all')
   const [data, setData] = useState<Observability | null>(null)
   const [failure, setFailure] = useState<LoadFailure | null>(null)
   const [busy, setBusy] = useState(true)
@@ -392,15 +398,16 @@ export function ObservabilityPage() {
   const reload = useCallback(() => { setBusy(true); setNonce((n) => n + 1) }, [])
   const pickRange = (next: ObsRange) => { setBusy(true); setRange(next) }
   const pickSource = (next: ObsSource) => { setBusy(true); setSource(next) }
+  const pickOrigin = (next: ObsOrigin) => { setBusy(true); setOrigin(next) }
 
   useEffect(() => {
     let cancelled = false
-    observability(range, source).then(
+    observability(range, source, origin).then(
       (d) => { if (!cancelled) { setData(d); setFailure(null) } },
       (e) => { if (!cancelled) setFailure(toFailure(e)) },
     ).finally(() => { if (!cancelled) setBusy(false) })
     return () => { cancelled = true }
-  }, [range, source, nonce])
+  }, [range, source, origin, nonce])
 
   if (failure) {
     return <TabError code={failure.status} detail={failure.message} what="The Observability figures could not load." onRetry={reload} />
@@ -422,6 +429,7 @@ export function ObservabilityPage() {
           <div ref={dockSlotRef} id={MINIMIZED_DOCK_SLOT} className="flex flex-wrap items-center gap-2 empty:hidden" />
           <Segmented label="Time range" value={range} options={RANGES} onChange={pickRange} />
           <Segmented label="Source" value={source} options={SOURCES} onChange={pickSource} />
+          <Segmented label="Asked from" value={origin} options={ORIGINS} onChange={pickOrigin} />
           <div className="flex items-center gap-2">
             <button
               onClick={reload}
@@ -470,7 +478,9 @@ export function ObservabilityPage() {
                       ? 'Benchmarks call the model directly, so they have no chat turns. Their model calls are in Models below.'
                       : source === 'eval'
                         ? 'No evaluation runs in this range. Run one with python -m app.cli_eval.'
-                        : 'No turns in this range. Ask the assistant something, or pick a longer range.'}
+                        : origin !== 'all'
+                          ? 'No turns from here in this range. Where a question was asked is recorded from 11 Nov 2026; older turns only count under Anywhere.'
+                          : 'No turns in this range. Ask the assistant something, or pick a longer range.'}
                     {range !== 'all' && source !== 'benchmark' && (
                       <button onClick={() => pickRange('all')} className="block mx-auto mt-2 underline hover:theme-text">Show all time</button>
                     )}

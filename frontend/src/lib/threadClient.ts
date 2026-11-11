@@ -46,6 +46,10 @@ export interface TraceSummary {
   error_count: number;
   tracks: string[];
   label: TraceLabel | null;
+  /** Where it was asked: 'web', 'mainui' or 'eval'; null for turns logged before this was recorded. */
+  origin: 'web' | 'mainui' | 'eval' | null;
+  /** The rig token's name, for a MainUI turn. */
+  origin_label: string | null;
 }
 
 /** Figures over every turn the filters match, not just the page. */
@@ -143,6 +147,7 @@ export interface TraceFilters {
   /** One exact outcome, finer than a bucket. */
   status?: TraceStatus;
   labelled?: 'yes' | 'no';
+  origin?: 'web' | 'mainui';
   q?: string;
 }
 

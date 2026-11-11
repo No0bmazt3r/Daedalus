@@ -12,6 +12,7 @@ function turn(query_id: string, session_id: string | null): TraceSummary {
     chat: session_id ? { session_id, title: `chat ${session_id}`, exists: true, incognito: false } : null,
     intent: null, model: null, status: 'grounded', bucket: 'grounded', grounded: true,
     latency_ms: 10, tool_count: 0, retrieval_count: 0, error_count: 0, tracks: [], label: null,
+    origin: null, origin_label: null,
   };
 }
 

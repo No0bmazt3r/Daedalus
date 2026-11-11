@@ -61,6 +61,8 @@ export function readLogTable(
 
 export type ObsRange = '24h' | '7d' | '30d' | 'all';
 export type ObsSource = 'chat' | 'eval' | 'benchmark';
+/** Where turns were asked: the web app, CO2SorptionDT's MainUI, or both. */
+export type ObsOrigin = 'all' | 'web' | 'mainui';
 export const OBS_PHASES = ['retrieval', 'rerank', 'load', 'prefill', 'generation'] as const;
 export type ObsPhase = (typeof OBS_PHASES)[number];
 
@@ -74,6 +76,7 @@ export type ObsPoint = {
 export interface Observability {
   range: ObsRange;
   source: ObsSource;
+  origin: ObsOrigin;
   unit: 'hour' | 'day' | 'week';
   timezone: string;
   generated_at: string;
@@ -107,8 +110,8 @@ export interface Observability {
 }
 
 /** The Observability page's figures over the audit log. See TODO.md, M7. */
-export function observability(range: ObsRange, source: ObsSource): Promise<Observability> {
-  return request<Observability>(`/api/system/observability?range=${range}&source=${source}`, { cache: 'no-store' });
+export function observability(range: ObsRange, source: ObsSource, origin: ObsOrigin = 'all'): Promise<Observability> {
+  return request<Observability>(`/api/system/observability?range=${range}&source=${source}&origin=${origin}`, { cache: 'no-store' });
 }
 
 // ── the Forge — hardware detection ───────────────────────────────────────────

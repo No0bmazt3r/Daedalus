@@ -1,3 +1,4 @@
+import { OriginBadge } from './OriginBadge'
 import { ChevronRight, Columns2, ListFilter, MessageSquare, Tag } from 'lucide-react'
 import { type TraceChat, type TraceSummary } from '../../lib/threadClient'
 import { type Group } from '../../lib/threadLogic'
@@ -91,6 +92,7 @@ function QueryRow({
             status side truncates, the date keeps its width. */}
         <span className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-[10px] theme-text-muted">
           <StatusIcon status={t.status} />
+          <OriginBadge origin={t.origin} label={t.origin_label} />
           <span className="min-w-0 truncate">
             <span className="tabular-nums">{formatMs(t.latency_ms)}</span>
             {t.tool_count > 0 && ` · ${t.tool_count} tool${t.tool_count === 1 ? '' : 's'}`}

@@ -3,7 +3,7 @@ import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { Collapse } from './ui/collapse'
-import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map as MapIcon, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2, Activity } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map as MapIcon, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2, Activity, Monitor } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { Skeleton } from './ui/skeleton'
 import {
@@ -118,10 +118,15 @@ function SessionRow({
         variant="ghost"
         onClick={onSelect}
         onDoubleClick={() => setEditing(true)}
-        title={sessionLabel(session)}
+        title={session.origin === 'mainui' ? `${sessionLabel(session)} (started in MainUI)` : sessionLabel(session)}
         className={`flex-1 min-w-0 justify-start h-8 px-2 text-sm font-normal hover:bg-transparent ${active ? 'theme-text' : 'theme-text-muted hover:theme-text'}`}
       >
-        <Circle size={8} className={`shrink-0 mr-2 ${active ? 'theme-accent opacity-100' : 'opacity-60'}`} />
+        {/* A chat opened from CO2SorptionDT's MainUI is marked; each turn's own origin is in the Thread. */}
+        {session.origin === 'mainui' ? (
+          <Monitor size={11} className="shrink-0 mr-1.5 status-info" aria-label="Started in MainUI" />
+        ) : (
+          <Circle size={8} className={`shrink-0 mr-2 ${active ? 'theme-accent opacity-100' : 'opacity-60'}`} />
+        )}
         {titling ? (
           <span className="flex-1 py-1" role="status" aria-label="Writing a title for this chat">
             <Skeleton className="h-3 w-3/4" />

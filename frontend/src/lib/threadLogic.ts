@@ -122,8 +122,8 @@ export function traceMarkdown(trace: Trace, check: Groundedness, retrievals: Ret
 }
 
 /** The list's extra filters (under the sliders icon), as the form holds them. */
-export type Extra = { status: '' | TraceStatus; track: '' | 'vector' | 'graph'; model: string; labelled: '' | 'yes' | 'no'; since: string; until: string }
-export const NO_EXTRA: Extra = { status: '', track: '', model: '', labelled: '', since: '', until: '' }
+export type Extra = { status: '' | TraceStatus; track: '' | 'vector' | 'graph'; model: string; labelled: '' | 'yes' | 'no'; origin: '' | 'web' | 'mainui'; since: string; until: string }
+export const NO_EXTRA: Extra = { status: '', track: '', model: '', labelled: '', origin: '', since: '', until: '' }
 
 /** The day after `date` (YYYY-MM-DD), as the exclusive end of a "To" day. */
 export function dayAfter(date: string): string {

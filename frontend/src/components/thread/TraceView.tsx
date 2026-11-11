@@ -1,3 +1,4 @@
+import { OriginBadge } from './OriginBadge'
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, Download, MessageSquare } from 'lucide-react'
 import { traceMarkdown } from '../../lib/threadLogic'
@@ -131,6 +132,7 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
               <StatusIcon status={s.status} />
               {STATUS[s.status].label}
             </span>
+            <OriginBadge origin={s.origin} label={s.origin_label} full />
             <span className="tabular-nums">{formatMs(s.latency_ms)}</span>
             {s.model && <code>{s.model}</code>}
             {s.intent && <span>{s.intent}</span>}

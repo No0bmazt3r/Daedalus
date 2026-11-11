@@ -21,6 +21,8 @@ export interface ChatSession {
   title_source?: 'first_message' | 'model' | 'user' | null;
   /** The chat this one was forked from (edit, retry, rerun, fork), or null. */
   forked_from?: string | null;
+  /** 'mainui' for a chat started in CO2SorptionDT's Daedalus tab; null for the web app. */
+  origin?: string | null;
   /** The background title job is running for this chat right now. */
   title_pending?: boolean;
 }

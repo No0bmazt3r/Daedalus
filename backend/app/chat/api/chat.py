@@ -17,6 +17,8 @@ import json
 from collections.abc import Iterator
 from typing import Any
 
+from typing import Literal
+
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
@@ -100,6 +102,35 @@ def stream_answer(session_id: str, message: str, *, model: str | None = None,
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/feedback")
+def feedback(
+    query_id: str = Body(..., embed=True),
+    rating: Literal[-1, 0, 1] = Body(..., embed=True),
+    session_id: str | None = Body(default=None, embed=True),
+) -> dict[str, Any]:
+    """A thumbs rating on one answer: +1 up, -1 down, 0 withdrawn.
+
+    Appended to `feedback_logs`, never updated: changing your mind is a second
+    row and the newest counts (`audit_store.latest_ratings`). A rating must name
+    an answer that was logged, or it is refused rather than stored against nothing.
+    """
+    if not audit_store.has_query(query_id):
+        raise HTTPException(status_code=404, detail="no such answer")
+    audit_store.log("feedback_logs", query_id=query_id, session_id=session_id,
+                    evaluator_role="operator", rating=rating)
+    return {"ok": True, "query_id": query_id, "rating": rating}
+
+
+@router.get("/feedback")
+def ratings(session_id: str = Query(...)) -> dict[str, Any]:
+    """The current rating of every rated answer in a chat, `{query_id: ±1}`.
+
+    Includes answers a fork copied in, whose audit rows stay under the chat that
+    produced them (`chat_store.query_ids`).
+    """
+    return {"ratings": audit_store.latest_ratings(session_id, chat_store.query_ids(session_id))}
 
 
 @router.get("/{session_id}/status")

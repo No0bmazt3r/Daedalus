@@ -51,6 +51,17 @@ export function MoreFilters({ value, onChange, models }: { value: Extra; onChang
           options={[{ value: 'any', label: 'Any label' }, { value: 'yes', label: 'Labelled' }, { value: 'no', label: 'Unlabelled' }]}
         />
       ))}
+      {/* Where it was asked. Turns from before this was recorded match neither. */}
+      {row('From', (
+        <ThemeSelect
+          size="sm"
+          ariaLabel="Asked from"
+          className="w-full"
+          value={value.origin || 'any'}
+          onChange={(v) => onChange({ ...value, origin: v === 'any' ? '' : (v as Extra['origin']) })}
+          options={[{ value: 'any', label: 'Anywhere' }, { value: 'web', label: 'Web app' }, { value: 'mainui', label: 'MainUI' }]}
+        />
+      ))}
       {row('Model', (
         <ThemeSelect
           size="sm"
