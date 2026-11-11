@@ -20,7 +20,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 
 from .. import benchmark as benchmark_service
-from .. import embedding_models, hardware, model_usage, ollama_client
+from .. import embedding_models, hardware, hf_gated, model_usage, ollama_client
 from ...system import live_events
 from .. import forge as forge_service
 
@@ -149,7 +149,7 @@ def pull_model(tag: str = Body(..., embed=True)) -> StreamingResponse:
 
     def events() -> Iterator[str]:
         try:
-            for event in ollama_client.pull(tag):
+            for event in hf_gated.pull_with_fallback(tag):
                 yield f"data: {json.dumps(event)}\n\n"
         except (ollama_client.OllamaError, ollama_client.OllamaUnavailable) as exc:
             # Reported inside the stream, not as a status code: by the time this

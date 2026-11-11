@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
 import {
-  AlertTriangle, Check, ExternalLink, Globe, Loader2, Play, Plus, Power, Search,
+  AlertTriangle, Check, ExternalLink, FilePlus2, Globe, Loader2, Play, Plus, Power, Search,
   Trash2, X,
 } from 'lucide-react'
+import { addDocumentFromUrl } from '../../lib/blueprintsClient'
 import { ThemeSelect } from '../ui/theme-select'
 import {
   containerAction,
@@ -175,6 +176,22 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
   const [searching, setSearching] = useState(false)
   const [search, setSearch] = useState<SearchResponse | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
+  /** "Add to corpus" per result URL: in flight, added, or why it was not. */
+  const [adds, setAdds] = useState<Record<string, { busy?: boolean; ok?: string; error?: string }>>({})
+  const addToCorpus = useCallback(async (url: string, title: string) => {
+    setAdds((prev) => ({ ...prev, [url]: { busy: true } }))
+    try {
+      const { document } = await addDocumentFromUrl(url, title || undefined)
+      setAdds((prev) => ({
+        ...prev,
+        [url]: document.extract_error
+          ? { error: `Saved, but unreadable: ${document.extract_error}` }
+          : { ok: 'Added. Ingest it in Blueprints → Ingest' },
+      }))
+    } catch (e) {
+      setAdds((prev) => ({ ...prev, [url]: { error: e instanceof Error ? e.message : 'could not add it' } }))
+    }
+  }, [])
 
   /** Point the credential drafts at one provider's stored values. */
   const adoptProvider = useCallback((next: SearchConfig, id: string) => {
@@ -742,6 +759,22 @@ export function SearchPanel({ isPeek }: { isPeek: boolean }) {
                         {r.snippet}
                       </p>
                     )}
+                    <div className="mt-1 flex items-center gap-2 text-[10px]">
+                      {!adds[r.url]?.ok && (
+                        <button
+                          type="button"
+                          onClick={() => void addToCorpus(r.url, r.title)}
+                          disabled={adds[r.url]?.busy}
+                          className="flex items-center gap-1 rounded px-1 theme-text-muted hover:theme-text disabled:opacity-60"
+                          title="Download this page or file into the corpus, keeping its URL"
+                        >
+                          {adds[r.url]?.busy ? <Loader2 size={10} className="animate-spin" /> : <FilePlus2 size={10} />}
+                          Add to corpus
+                        </button>
+                      )}
+                      {adds[r.url]?.ok && <span className="status-ok flex items-center gap-1"><Check size={10} />{adds[r.url]?.ok}</span>}
+                      {adds[r.url]?.error && <span className="status-warn">{adds[r.url]?.error}</span>}
+                    </div>
                   </li>
                 ))}
               </ul>

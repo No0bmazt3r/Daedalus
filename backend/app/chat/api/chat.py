@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from ...db import audit_store
+from ...db import audit_store, chat_store
 from .. import inference
 from ...forge import model_config
 
@@ -127,7 +127,8 @@ def feedback(
 @router.get("/feedback")
 def feedback_for_session(session_id: str = Query(...)) -> dict[str, Any]:
     """The current rating of each rated answer in a chat, for redrawing the thumbs."""
-    return {"session_id": session_id, "ratings": audit_store.latest_ratings(session_id)}
+    ratings = audit_store.latest_ratings(session_id, chat_store.query_ids(session_id))
+    return {"session_id": session_id, "ratings": ratings}
 
 
 @router.get("/{session_id}/status")

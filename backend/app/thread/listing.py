@@ -138,6 +138,8 @@ def recent(
     # thousands, move the status into SQL if the audit log reaches the millions.
     settings = thread_settings.read()
     labels = audit_store.latest_labels()
+    if filters.get("session_id"):
+        filters["query_ids"] = chat_store.query_ids(filters["session_id"])
     items = [summary(r, None, settings, labels.get(r["query_id"])) for r in audit_store.recent_queries(**filters)]
     if bucket:
         items = [t for t in items if t["bucket"] == bucket]

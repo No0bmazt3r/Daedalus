@@ -73,15 +73,11 @@ export interface Measurement {
   completion_token_count: number | null;
   tokens_per_sec: number | null;
   /**
-   * Where `tokens_per_sec` came from, and it decides whether the figure means
-   * anything. `engine` is Ollama's own `eval_duration` — a property of the
-   * model. `wall_clock` is `completion ÷ (total − TTFT)`, the fallback for a
-   * run that reported no counters, and it charges the model for every
-   * client-side and network delay in that window. On a short generation the
-   * window is small enough that the quotient is nonsense, so the UI has to say
-   * which one it is rather than print both the same way.
+   * `engine` when `tokens_per_sec` is Ollama's own `eval_duration` rate; null
+   * when the run reported no counters (Ollama's cloud), and then there is no
+   * rate at all — a wall-clock quotient over a short stream is not one.
    */
-  rate_source: 'engine' | 'wall_clock' | null;
+  rate_source: 'engine' | null;
 }
 
 /**

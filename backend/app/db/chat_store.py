@@ -39,7 +39,7 @@ import secrets
 import sqlite3
 import threading
 from datetime import datetime, timezone
-from typing import Any, Final
+from typing import Any, Callable, Final
 
 from . import migrations, sqlite_util
 from .paths import CHAT_DB
@@ -149,6 +149,7 @@ def _session_row(row: sqlite3.Row) -> dict[str, Any]:
         "archived_at": row["archived_at"],
         "title_source": row["title_source"] if "title_source" in row.keys() else None,
         "title_turns": row["title_turns"] if "title_turns" in row.keys() else 0,
+        "forked_from": row["forked_from"] if "forked_from" in row.keys() else None,
         # Present only on list queries, which join the count in.
         "message_count": row["message_count"] if "message_count" in row.keys() else None,
     }
@@ -414,10 +415,11 @@ def fork_session(session_id: str, upto_seq: int) -> dict[str, Any]:
             title = f"Fork: {base}"[:MAX_TITLE_CHARS]
             conn.execute(
                 "INSERT INTO chat_sessions (session_id, created_at, updated_at, title, device_id, "
-                "ephemeral, title_source, summary, summary_upto_seq) VALUES (?, ?, ?, ?, ?, ?, 'user', ?, ?)",
+                "ephemeral, title_source, summary, summary_upto_seq, forked_from) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'user', ?, ?, ?)",
                 (fork_id, now, now, title, src["device_id"], src["ephemeral"],
                  src["summary"] if keep_summary else None,
-                 src["summary_upto_seq"] if keep_summary else 0),
+                 src["summary_upto_seq"] if keep_summary else 0, session_id),
             )
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(chat_messages)")
                     if r["name"] not in ("id", "session_id")]
@@ -433,6 +435,33 @@ def fork_session(session_id: str, upto_seq: int) -> dict[str, Any]:
     if forked is None:  # pragma: no cover - the insert just succeeded
         raise ChatStoreError(f"session {fork_id} vanished immediately after insert")
     return forked
+
+
+def repair_inline_thinking(split: Callable[[str], tuple[str, str]]) -> int:
+    """Move `<think>` text out of answers stored before thought was separated.
+
+    `split` is `inference.split_thinking`, passed in so this layer stays free
+    of the chat layer. Only assistant rows still holding a tag are touched, so
+    a second run changes nothing. Returns how many rows were repaired.
+    """
+    init_db()
+
+    def _write() -> int:
+        with sqlite_util.transaction(DB_PATH) as conn:
+            rows = conn.execute(
+                "SELECT id, content, thinking FROM chat_messages WHERE role = 'assistant' "
+                "AND (content LIKE '%<think>%' OR content LIKE '%</think>%')"
+            ).fetchall()
+            for row in rows:
+                answer, thought = split(row["content"])
+                merged = "\n\n".join(t for t in (row["thinking"], thought) if t) or None
+                conn.execute(
+                    "UPDATE chat_messages SET content = ?, thinking = ?, token_estimate = ? WHERE id = ?",
+                    (answer.strip(), merged, estimate_tokens(answer), row["id"]),
+                )
+            return len(rows)
+
+    return sqlite_util.with_retry(_write, what="repair_inline_thinking")
 
 
 def purge_ephemeral() -> int:
@@ -567,6 +596,17 @@ def get_messages(
     with sqlite_util.connect(DB_PATH) as conn:
         rows = conn.execute(sql, params).fetchall()
     return [_message_row(row) for row in rows]
+
+
+def query_ids(session_id: str) -> list[str]:
+    """Every query_id among a chat's messages — its own answers and any it was forked with."""
+    init_db()
+    with sqlite_util.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT query_id FROM chat_messages WHERE session_id = ? AND query_id IS NOT NULL",
+            (session_id,),
+        ).fetchall()
+    return [r["query_id"] for r in rows]
 
 
 def message_for_query(query_id: str) -> dict[str, Any] | None:

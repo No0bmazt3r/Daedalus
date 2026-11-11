@@ -43,6 +43,7 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from typing import Any
 
 # Extensions we will attempt, mapped to the media type recorded on the document.
@@ -56,6 +57,9 @@ TEXT_TYPES: dict[str, str] = {
     ".yml": "application/x-yaml",
     ".log": "text/plain",
     ".rst": "text/x-rst",
+    # Web pages saved from Settings → Search; reduced to their readable text.
+    ".html": "text/html",
+    ".htm": "text/html",
 }
 
 PDF_TYPES: dict[str, str] = {".pdf": "application/pdf"}
@@ -318,8 +322,46 @@ def _decode(raw: bytes) -> str:
         return raw.decode("latin-1", errors="replace")
 
 
+class _PageText(HTMLParser):
+    """A web page's readable text: no scripts, styles, menus or footers."""
+
+    _SKIP = {"script", "style", "noscript", "nav", "header", "footer", "aside", "form", "svg", "template"}
+    _BLOCK = {"p", "div", "section", "article", "li", "tr", "br", "h1", "h2", "h3", "h4", "h5",
+              "h6", "pre", "blockquote", "table", "ul", "ol", "dd", "dt", "figcaption"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skipping = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SKIP:
+            self._skipping += 1
+        elif tag in self._BLOCK:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP and self._skipping:
+            self._skipping -= 1
+        elif tag in self._BLOCK:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skipping:
+            self.parts.append(data)
+
+
+def html_text(body: str) -> str:
+    page = _PageText()
+    page.feed(body)
+    lines = (re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in "".join(page.parts).split("\n"))
+    return "\n".join(lines)
+
+
 def _extract_text(raw: bytes, filename: str) -> Extracted:
     body = _decode(raw)
+    if _suffix(filename) in (".html", ".htm"):
+        return Extracted(text=_normalise(html_text(body)), extractor="html")
     if _suffix(filename) == ".json":
         # Pretty-print it. One-line JSON has no structure for the chunker to
         # break on, so it would split mid-token at arbitrary characters.

@@ -84,6 +84,10 @@ _LEADING_STAMP = re.compile(r"^\s*\[\s*\d{4}-\d{2}-\d{2}[^\]]*\]\s*")
 # the block itself, so everything before it was thought.
 _THINK_BLOCK = re.compile(r"<think>(.*?)(?:</think>|\Z)", re.DOTALL | re.IGNORECASE)
 _THINK_CLOSE = re.compile(r"^(.*?)</think>", re.DOTALL | re.IGNORECASE)
+# A token or two of debris before the opening tag — seen once as "4<think>…"
+# from qwen3 before thought was separated. No answer starts with a lone digit
+# and then thinks, so a letterless scrap of up to 3 characters is dropped.
+_STRAY_BEFORE_THINK = re.compile(r"^\s*[^\sA-Za-z<]{1,3}\s*(?=<think>)", re.IGNORECASE)
 
 
 def split_thinking(text: str) -> tuple[str, str]:
@@ -93,6 +97,7 @@ def split_thinking(text: str) -> tuple[str, str]:
     is checked as a claim and fed back as history, so this runs before both.
     """
     thoughts: list[str] = []
+    text = _STRAY_BEFORE_THINK.sub("", text)
     m = _THINK_CLOSE.match(text)
     if m and "<think>" not in m.group(1).lower():
         thoughts.append(m.group(1))

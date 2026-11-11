@@ -97,6 +97,8 @@ class SessionOut(BaseModel):
     message_count: int | None = None
     #: 'first_message' | 'model' | 'user', or None — see chat migration 004.
     title_source: str | None = None
+    #: The chat this one was forked from (chat migration 007), or None.
+    forked_from: str | None = None
 
 
 class SessionDetail(SessionOut):

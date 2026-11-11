@@ -74,6 +74,10 @@ async def lifespan(_app: FastAPI):
     if swept:
         log.info("swept %d ephemeral session(s) left by a previous run", swept)
 
+    repaired = chat_service.repair_inline_thinking()
+    if repaired:
+        log.info("moved inline <think> text out of %d stored answer(s)", repaired)
+
     orphaned = corpus_store.fail_orphaned_runs()
     if orphaned:
         log.info("marked %d ingest run(s) interrupted by a previous shutdown as failed", orphaned)

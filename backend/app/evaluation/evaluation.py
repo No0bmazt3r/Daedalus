@@ -642,6 +642,7 @@ def snapshot() -> dict[str, Any]:
 
     # Temperature, seed and num_ctx: part of what makes two runs comparable.
     snap["generation"] = dict(ollama_client.ANSWER_OPTIONS)
+    snap["tool_policy"] = tool_policy()
     try:
         info = kg.schema()
         source = kg.source_path()
@@ -688,6 +689,21 @@ def snapshot() -> dict[str, Any]:
     fingerprint = json.dumps({k: snap.get(k) for k in keys}, sort_keys=True, default=str)
     snap["fingerprint"] = _sha(fingerprint.encode())
     return snap
+
+
+def tool_policy() -> dict[str, Any]:
+    """Whether bash, python, writes, admin and network egress could run during a turn.
+
+    Closed means Simple mode (the extended tools are off) or all four effects
+    locked. A groundedness figure taken while one was open is not comparable,
+    so an official run refuses to start open, and any run stops if this changes.
+    """
+    from ..db import tool_policy_store  # noqa: PLC0415
+
+    simple = tool_policy_store.is_simple()
+    locked = sorted(tool_policy_store.locked())
+    return {"mode": "simple" if simple else "advanced", "locked": locked,
+            "closed": simple or len(locked) == len(tool_policy_store.UNLOCKABLE)}
 
 
 _RUN_LOCK = threading.Lock()
@@ -739,6 +755,13 @@ def run(
         )
     snap = snapshot()
     official = frozen and not practice and not query_ids
+    policy = tool_policy()
+    if official and not policy["closed"]:
+        raise EvalError(
+            "extended tool effects are open (Settings → Agent Tools). Switch to Simple mode or "
+            "lock all four before an official run: an answer that could run code or reach the "
+            "network is not the system being measured."
+        )
     if official:
         prior = [r for r in list_runs() if r.get("official") and r.get("fingerprint") == snap["fingerprint"]
                  and r.get("query_sha") == query_sha and r.get("status") == "complete"]
@@ -795,6 +818,11 @@ def run(
                         _checkpoint(record)
                         if on_progress:
                             on_progress(progress)
+                        if tool_policy() != policy:
+                            raise EvalError(
+                                "Settings → Agent Tools changed during the run, so the answers "
+                                "before and after it were not produced by the same system"
+                            )
                         if asked.get("still_running"):
                             raise EvalError(
                                 f"{arm} {q['id']} was still running {DRAIN_TIMEOUT_S}s after its "
@@ -947,6 +975,7 @@ def report_markdown(record: dict[str, Any]) -> str:
         f"graph: {(snap.get('graph') or {}).get('nodes')} nodes",
         f"- Chunking: {_recipe(snap)}",
         f"- Machine: {(snap.get('machine') or {}).get('cpu')}",
+        f"- Agent tools: {_policy_line(snap.get('tool_policy'))}",
         "",
         "## Comparison",
         "",
@@ -1033,6 +1062,13 @@ def report_markdown(record: dict[str, Any]) -> str:
               "Metric definitions: docs/EVALUATION.md. Correctness here is lexical (key facts by pattern);",
               "the LLM-judge and human-panel scores come from `judge.jsonl` and `results.csv`, offline.", ""]
     return "\n".join(lines)
+
+
+def _policy_line(policy: dict[str, Any] | None) -> str:
+    if not policy:
+        return "not recorded"
+    state = "closed" if policy["closed"] else "**open — groundedness not comparable**"
+    return f"{policy['mode']} mode, locked: {', '.join(policy['locked']) or 'none'} ({state})"
 
 
 def _recipe(snap: dict[str, Any]) -> str:

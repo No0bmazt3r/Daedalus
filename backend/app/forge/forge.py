@@ -111,14 +111,16 @@ def _last_benchmarks() -> dict[str, dict[str, Any]]:
         completion = row.get("completion_token_count")
         generation_ms = row.get("generation_ms")
 
+        # Only the engine's own counters give a rate. Ollama's cloud reports none,
+        # and completion ÷ (total − TTFT) over a few hundred ms of streaming read
+        # gpt-oss:120b as 836 tok/s — a number nobody should be able to quote, so
+        # a cloud row has no rate at all (BENCHMARK.md §7). TTFT and end-to-end
+        # are measured directly and stay.
         tps = None
         rate_source = None
         if completion and generation_ms:
             tps = round(completion / (generation_ms / 1000.0), 1)
             rate_source = "engine"
-        elif completion and total and ttft is not None and total > ttft:
-            tps = round(completion / ((total - ttft) / 1000.0), 1)
-            rate_source = "wall_clock"
 
         out[name] = {
             "at": row.get("timestamp"),

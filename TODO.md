@@ -569,6 +569,16 @@ are `chat/inference.py`. Verified end to end on qwen3:1.7b.
       with a button straight into The Forge. Dismissable, but sending a message
       with no model reopens it instead of sending a turn that would fail at the
       model call. Cloud models do not count; the default path is local
+- [x] **A reasoning model's thought kept out of its answer** *(2026-11-10)*. The
+      answer call sent no `think` field, so qwen3 returned `<think>…</think>`
+      inline: the validator checked the reasoning as if it were the answer
+      (blanking list items, "Part of this answer was removed"), and history
+      replayed it. Now `think: true` for models with the `thinking`
+      capability, so Ollama returns it as `message.thinking`; any inline block
+      left is moved out by `inference.split_thinking`. Stored in
+      `chat_messages.thinking` (chat migration 006) — display only: never
+      validated, never replayed. Time to first token still counts the first
+      thought token, so latency stays comparable. 5 tests
 
 ### The user persona *(added 2026-10-17)*
 - [x] Learns how this install's user works and proposes it in Settings → Persona;
@@ -580,6 +590,12 @@ are `chat/inference.py`. Verified end to end on qwen3:1.7b.
       learned or applied on evaluation turns; a fresh install starts empty.
       Globe (reusing `GraphCanvas`), proposal queue, forget one / everything,
       on/off switch, "Look for patterns now". 11 tests
+- [x] **Role stated at setup** *(2026-11-10)*. The first-run screen's role is
+      saved straight in as an *accepted* trait (`persona.state_role`,
+      `PUT /api/persona/role`), worded "Said they are a …" and marked
+      `source: onboarding`; it replaces any other role and overrides a rejected
+      guess. The persona's system message now says "stated by them or learned
+      from their conversations". 4 tests
 - [ ] Try it on the chosen chat model with real conversations — extraction
       quality on a 1.7B model is unmeasured, and a model that returns nothing
       leaves the queue empty rather than wrong
@@ -800,6 +816,9 @@ are `chat/inference.py`. Verified end to end on qwen3:1.7b.
   - [ ] Ingest the planted fixture before the freeze; remove it after the run
 - [~] Latency harness — mean, p50 and p95 for the whole turn, first token and
       retrieval. Not yet broken down further by stage (planning, validation)
+- [ ] Discard practice-run figures taken before 2026-11-10: the validator was
+      scoring qwen3's inline `<think>` text as part of the answer (see M5), so
+      groundedness from before the fix is not comparable
 - [ ] **Freeze both tracks, then run once.** Tuning after seeing results invalidates the comparison
 - [x] Produce the head-to-head comparison table — `report.md` per run
 - [ ] Qualitative failure analysis — *when* and *why* each track fails. The
@@ -1557,6 +1576,43 @@ Layer 9 below for the per-step detail.
         `docs/EVALUATION.md`. 1 test
   - [x] **Blueprints: the ingestion graph-gap check** (already above) is the one
         that keeps the comparison fair, and the first of these to do
+- [x] **Your messages: retry, edit, copy, sent time** *(2026-11-10)*. Under
+      each user bubble on hover or focus. Edit is in place — same bubble, grows
+      with the text; Enter saves, Escape cancels. The time is relative
+      ("2 hours ago", `lib/time.ts`) with the full date on hover
+- [x] **Fork, edit, retry and rerun never lose an answer** *(2026-11-10)*.
+      `POST /api/sessions/{id}/fork` copies a chat up to a message into a new
+      one ("Fork: …", evidence, model tag and `query_id` kept, incognito
+      stays incognito, summary only if it covers nothing past the cut). Fork
+      chat from here opens it; edit and retry fork from just before the
+      question and ask it there; ↻ Rerun opens a model menu (the one that
+      answered, then local, then cloud under its warning) — a one-off choice
+      that leaves the composer's picker alone. 3 tests
+- [x] **Thought process above the answer** *(2026-11-10)*. Streams open while
+      the model thinks, folds once the answer starts, opens in full on click;
+      the bulb lights with pixel sparks on hover (`.bulb-spark`)
+- [x] **Tooltips shrink to their text** *(2026-11-10)*. A wrapped tooltip kept
+      its full max-width; it is now sized to the widest line, and measured
+      without the zoom-in animation's scale (`ui/title-tooltips.tsx`)
+- [x] **Graph: click to zoom in, click again to zoom out** *(2026-11-10)*.
+      Selecting a node turns it to the front and zooms to `FOCUS_ZOOM` (2.2);
+      clicking it again deselects and eases back to 1 (`GraphCanvas`)
+- [x] **Background job runs** *(2026-11-10)*. Settings → Background Jobs shows,
+      per job (titles, rolling summary, persona scan), whether it is running and
+      its last 20 runs: done with what it did, skipped with why ("not due: 2 of 4
+      questions"), or failed with the error; a request turned away because a run
+      was going is recorded too. In memory, cleared on restart
+      (`chat/job_runs.py`, `GET /api/background-jobs/runs`, live topic `jobs`).
+      Persona scan failures now reach `error_logs` like the other two. 5 tests
+- [x] **First-run screen** *(2026-11-10)*. One card in place of the greeting
+      until finished or skipped: a name (greeting only, never sent to a model),
+      a role (see M5 → persona), and the model status with a way into The
+      Forge. Greeting is time-aware ("Good evening, …", `lib/greeting.ts`);
+      the name is editable in Settings → Persona and labels the globe's centre.
+      Stored as the `profile` pref; `reset.sh` brings the screen back. 2 tests
+- [x] **`index.css` split by topic** *(2026-11-10)*. 1,100 lines became 15 files
+      under `frontend/src/styles/`, imported in the original order; the built
+      CSS is byte-identical
 - [ ] **Voice-to-text in the composer** *(later scope, low priority)* — the mic
       button is disabled ("coming soon"); nothing is transcribed.
       Do it locally (record in the browser, transcribe with a small Whisper
@@ -1760,7 +1816,7 @@ CLI that works the same on Windows, macOS and Linux.
       in callbacks, with "busy" derived from what is loaded vs. what is wanted.
       Fixing `TypewriterText` also fixed a leak — its interval was never
       cleared on unmount
-- [ ] **Orphaned databases under `backend/data/`** (everything there except
+- [x] **Orphaned databases under `backend/data/`** (everything there except
       `prefs.db`). They come back whenever backend code runs without the host
       paths: a bare `uvicorn` from `backend/`, or the backend tests run without
       `-t .` — which also skips `tests/__init__.py`'s isolation, so those tests
@@ -1770,6 +1826,7 @@ CLI that works the same on Windows, macOS and Linux.
       makes a test refuse to run when the isolation in `tests/__init__.py` has
       not been applied would stop the config rewrite. *Cleared 2026-10-10*; the
       guard is still to do, so they can come back
+      *Fixed 2026-11-11:* `paths.py` now defaults to `data/` and `logs/` (what `host_py` sets), so a bare `uvicorn` reads the live stores, and a `python -m unittest` run without `-t .` refuses to start before any path is touched. The October copies in `backend/data/logs` and `backend/data/sqlite` are still there for you to delete
 - [x] Tests run locally only, by decision *(2026-10-17)*: the project stays
       local, so there is no CI. A Playwright smoke test (`pnpm e2e`: question →
       streamed, cited answer, API faked from recorded responses) joins the 9
@@ -1781,20 +1838,23 @@ CLI that works the same on Windows, macOS and Linux.
       `…_152247…`, `…_153121…`), from re-uploads; no `documents` row points at
       them. Safe to delete. Worth checking whether deleting or re-uploading a
       document removes its stored file
-- [ ] **The demo `sensor_readings.db` predates the anomaly removal** — it still
+- [x] **The demo `sensor_readings.db` predates the anomaly removal** — it still
       has an `anomaly_status` column and an `anomaly_records` table (1 row).
       Nothing reads them; `reset.sh --sensor` reseeds it with the current schema
+      *Fixed 2026-11-11:* the column, its index and the table dropped in place (4,320 readings kept, integrity ok); the schema now matches `sensor_store`'s seed exactly
 - [x] Dead CSS: the `Accordion` block in `frontend/src/index.css` (~line 886)
       styles `components/ui/accordion.tsx`, removed in the audit — deleted 2026-10-10
 - [x] **Off Docker (2026-09-30).** The app, ChromaDB (embedded, `data/chroma`) and Ollama all run on the host; `daedalus.sh` needs no Docker daemon. `docker-compose.yml` keeps only the optional SearXNG container
-- [ ] Editing `config/searxng/settings.yml` only changes what a **fresh**
+- [x] Editing `config/searxng/settings.yml` only changes what a **fresh**
       SearXNG volume gets. An instance that has already booted keeps its own
       copy, on purpose — so applying a template change means
       `docker volume rm daedalus_searxng-data` and letting it re-seed
-- [ ] The SearXNG image logs three engine init failures on every boot (`ahmia`,
+      *Fixed 2026-11-11:* the entrypoint re-renders the live copy whenever the template's sha256 changes, keeping the existing secret. Edit the template and restart
+- [x] The SearXNG image logs three engine init failures on every boot (`ahmia`,
       `torch`, `radio browser`). Upstream noise, unrelated to the engines
       Daedalus enables, and harmless — but it makes `docker logs` look worse
       than the container is
+      *Fixed 2026-11-11:* removed via `use_default_settings.engines.remove`, so they are never loaded
 - [x] **Embedded Chroma does not work on a default install** — *stale, closed
       2026-10-07.* `requirements.txt` has shipped full `chromadb` since the move
       off Docker, so embedded mode is the only mode, and the HTTP server mode
@@ -1810,13 +1870,15 @@ CLI that works the same on Windows, macOS and Linux.
 - [x] `POST /api/system/seed-demo` is a development convenience with no auth — remove or gate it before any shared deployment.
       *Gated 2026-10-10*, with both graph-trace seeders: they answer 403 unless
       `.env` sets `DAEDALUS_ALLOW_DEMO_SEED=1` (default 0). `reset.sh` is unaffected. 1 test
-- [ ] Search results are read by a person, not ingested. There is no "save this
+- [x] Search results are read by a person, not ingested. There is no "save this
       result to the corpus" path, so sourcing is still copy-a-URL-and-download
       by hand. Worth building with M2's extractor rather than before it, since
       the thing it would write into does not exist yet
-- [ ] A cloud search provider's key is stored in plain text in `prefs.db`,
+      *Fixed 2026-11-11:* **Add to corpus** under each result in Settings → Search downloads it through `store_upload` (same duplicate check and extraction) and keeps the URL (`documents.source_url`, corpus migration 007). Web pages are read as text (`extraction.html_text`, stdlib). 3 tests
+- [x] A cloud search provider's key is stored in plain text in `prefs.db`,
       exactly as the benchmark API keys are, and with the same caveat: fine for
       a single-user local deployment on a git-ignored file, not a secret store
+      *Fixed 2026-11-11:* encrypted at rest — see the benchmark keys below
 - [x] **`./daedalus.sh dev` runs in containers**, with the source bind-mounted
       and uvicorn/Vite reloading in place. `--host` keeps the old two-process
       path for attaching a debugger. The reason is not tidiness: every address in
@@ -1975,13 +2037,15 @@ CLI that works the same on Windows, macOS and Linux.
 - [-] MCP `resources` and `prompts` are not implemented — only `tools`. Nothing
       in Daedalus has anywhere to put them yet, and a half-wired capability is
       worse than an absent one *(cut from FYP2, 2026-10-01)*
-- [ ] `bash` and `python` are contained, not sandboxed. On a machine that
+- [x] `bash` and `python` are contained, not sandboxed. On a machine that
       matters, unlock `execute_code` only with Daedalus running in its container,
       where the process is confined by a kernel rather than by a regular
       expression
-- [ ] Unlocking any extended effect invalidates a groundedness measurement taken
+      *Fixed 2026-11-11:* they run under bubblewrap (`bwrap`): filesystem read-only, home/stores/config hidden, only the workspace writable, no network, own PID/IPC namespaces, plus CPU/memory/file-size rlimits. Without bwrap or a container they are refused (`DAEDALUS_ALLOW_UNSANDBOXED_EXEC=1` to override). **Install it:** `sudo apt install bubblewrap`. 5 tests (3 skip without bwrap)
+- [x] Unlocking any extended effect invalidates a groundedness measurement taken
       while it was open. There is no automatic guard for this — the panel warns,
       and `tool_policy.unlocked_at` is what lets a reviewer check afterwards
+      *Fixed 2026-11-11:* an official run refuses to start unless Simple mode or all four effects are locked; any run aborts if Settings → Agent Tools changes mid-run; the report states the policy. 2 tests
 - [x] ~~`render_for_prompt()` has no consumer yet~~ — resolved: the evidence
       pack fences every tool's block through it (`orchestration/evidence.py`)
 - [x] *(Fixed 2026-10-10: both bundled from `@fontsource`, 400 and 700, served locally.)*
@@ -1993,25 +2057,41 @@ CLI that works the same on Windows, macOS and Linux.
       Quick fix: remove the two options rather than ship a broken accessibility setting
 - [x] *(2026-10-17)* Handwritten face (Comic Neue) added to the Font selector,
       bundled from `@fontsource/comic-neue` (400, 700) like the others
-- [ ] Hugging Face gated repositories cannot be pulled. Public GGUF publishers
+- [x] Hugging Face gated repositories cannot be pulled. Public GGUF publishers
       (bartowski, unsloth, mradermacher, lmstudio-community) need no token, but
       `meta-llama` and friends do, and Ollama's `hf.co/` pull does not reliably
       honour one (ollama#7240). The route for those is `huggingface-cli download`
       then `ollama create`. No token field is offered, because it would be a box
       that often does not work
-- [ ] **A cloud `tokens_per_sec` is not quotable.** Ollama's cloud returns no
+      *Fixed 2026-11-11:* set `HF_TOKEN` in `.env`. When Ollama's own pull of an `hf.co/` tag fails, `forge/hf_gated.py` downloads the GGUF with the token, hands it to Ollama as a blob and runs `create` under the same tag, with the same progress bar. Accept the licence on Hugging Face first. 4 tests
+- [x] **A cloud `tokens_per_sec` is not quotable.** Ollama's cloud returns no
       engine counters, so the wall-clock fallback divides by a window of a few
       hundred ms and reported `gpt-oss:120b` at 836 tok/s. The UI marks it `~`
       with `rate_source: wall_clock`; the report must not cite it. TTFT and
       end-to-end for cloud rows are measured directly and are sound
       (`BENCHMARK.md` §7)
-- [ ] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
+      *Fixed 2026-11-11:* no rate is computed without engine counters, so a cloud row shows "not reported" instead of a number that could be quoted
+- [x] Benchmark API keys are stored in plain text in `prefs.db`. Acceptable for a single-user local deployment on a git-ignored file, and the API never returns them — but it is not a secret store, and the file should not be copied around
+      *Fixed 2026-11-11:* API keys and MCP env/header values are Fernet-encrypted (`db/secret_box.py`); the key is `secret.key` beside `prefs.db` (0600) or `$DAEDALUS_SECRET_KEY`. Old plain-text rows are sealed at start. A copy of `prefs.db` alone holds nothing usable. 4 tests
 - [x] **Over-engineering audit (2026-10-02): 19 of 19 cuts done (2026-10-07).**
       Dead UI components and exports, the duplicated size hook (now
       `useElementSize`), the two unused frontend dependencies, dead backend
       helpers and Chroma's server mode. The theming subsystem (J1) is kept on
       purpose. The audit file was retired 2026-10-10; what was kept on purpose
       is in [`docs/CODE_MAP.md`](docs/CODE_MAP.md) §7
+- [x] *(2026-11-10)* Answers stored before the `<think>` fix keep the reasoning in their text,
+      and are still replayed as history in those chats. Fork from before them,
+      or start a new chat
+      *Fixed 2026-11-11:* moved out at startup (`chat_service.repair_inline_thinking`); the one affected answer is repaired. Its list items were already blanked by the old validator and cannot be recovered
+- [x] *(2026-11-10)* A stray character (a `4`) appeared before `<think>` in one qwen3 answer.
+      Cause unknown; check whether it still appears now that thought is separated
+      *Fixed 2026-11-11:* a letterless scrap of up to 3 characters before `<think>` is dropped (`inference._STRAY_BEFORE_THINK`); with thought now separated by Ollama it should not recur. 2 tests
+- [x] *(2026-11-10)* Copied answers in a fork may not show their Ariadne's Thread strip: traces
+      are looked up by chat, and the copies belong to the original. Unchecked
+      *Fixed 2026-11-11 (it was broken):* traces and ratings for a chat now include every query_id among its messages, so copies show their strip and thumbs. 1 test
+- [x] *(2026-11-10)* Every edit, retry and rerun adds a chat to the sidebar. Grouping forks
+      under their original is not built
+      *Fixed 2026-11-11:* `chat_sessions.forked_from` (chat migrations 007–008, older forks backfilled); the sidebar files forks under their original behind "Show N forks", opened while one is active. 1 test
 
 ## Deferred — Phase 2
 

@@ -93,8 +93,8 @@ estimator look 0.38× optimistic when, measured properly, it was within 3%. A
 whole chapter's conclusion would have been wrong.
 
 So `tokens_per_sec` comes from `eval_count ÷ eval_duration`, the engine's own
-figures. When the engine returns no counters the wall-clock fallback is used
-**and flagged** as `rate_source: "wall_clock"` — see §6.
+figures. When the engine returns no counters there is **no rate**:
+`tokens_per_sec` is null and the card says "not reported" — see §6.
 
 ---
 
@@ -188,10 +188,10 @@ nonsense:
 ```
 
 A 120B model does not generate at 836 tok/s. That figure is an artifact of a
-153 ms window containing network jitter. The UI labels it `~` with
-`rate source: wall_clock`, and **the report must not quote a cloud tok/s
-figure**. TTFT and end-to-end for cloud rows are measured directly and are
-sound; the generation rate is not.
+153 ms window containing network jitter. It was shown with a `~` until
+2026-11-11; now no cloud row carries a rate at all, so there is no cloud tok/s
+figure to quote by mistake. TTFT and end-to-end for cloud rows are measured
+directly and are sound.
 
 Cloud TTFT across two runs of the same prompt: **1,090 ms** and **1,738 ms** — a
 60% spread, because the load on someone else's GPU is not a controlled variable.

@@ -22,6 +22,27 @@ class SplitThinkingTest(unittest.TestCase):
         self.assertEqual(split_thinking("Pressure is 1.2 barg [S2]."), ("Pressure is 1.2 barg [S2].", ""))
 
 
+class StrayPrefixTest(unittest.TestCase):
+    def test_a_stray_token_before_think_is_dropped(self) -> None:
+        self.assertEqual(split_thinking("4<think>plan</think>Answer"), ("Answer", "plan"))
+
+    def test_a_real_sentence_before_think_is_kept(self) -> None:
+        self.assertEqual(split_thinking("Yes. <think>x</think>")[0], "Yes. ")
+
+
+class RepairStoredTest(unittest.TestCase):
+    def test_old_answers_get_their_thought_moved_out_once(self) -> None:
+        from app.db import chat_store  # noqa: PLC0415
+
+        sid = chat_service.create_session()["session_id"]
+        chat_service.add_user_message(sid, "how?")
+        chat_service.add_assistant_message(sid, "4<think>\nOkay, the user asks</think>\n\nDo this [S1].")
+        self.assertGreaterEqual(chat_service.repair_inline_thinking(), 1)
+        answer = chat_store.get_messages(sid)[-1]
+        self.assertEqual((answer["content"], answer["thinking"]), ("Do this [S1].", "Okay, the user asks"))
+        self.assertEqual(chat_service.repair_inline_thinking(), 0)
+
+
 class StoredThinkingTest(unittest.TestCase):
     def test_stored_beside_the_answer_not_in_it(self) -> None:
         sid = chat_service.create_session()["session_id"]

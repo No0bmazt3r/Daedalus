@@ -1,11 +1,20 @@
 # SearXNG settings — the template, not the live file.
 #
 # Compose mounts this read-only at /tmp/searxng-settings.yml.template, and the
-# service's entrypoint copies it into the `searxng-data` volume on first boot
-# with a generated secret substituted in. Editing this file therefore changes
-# what a *fresh* instance gets; an existing one keeps what is in its volume.
+# service's entrypoint renders it into the `searxng-data` volume with the
+# secret substituted in: on first boot, and again whenever this file changes.
+# Edit here and restart (`./daedalus.sh stop`, then start with search); edits
+# made inside the volume are overwritten the next time this file changes.
 
-use_default_settings: true
+use_default_settings:
+  # Not loaded at all, so they stop logging init failures on every boot: two
+  # Tor-only engines (no Tor here) and Radio Browser. None is in a category
+  # Daedalus asks for.
+  engines:
+    remove:
+      - ahmia
+      - torch
+      - radio browser
 
 server:
   # Replaced at first boot with a generated value (or $SEARXNG_SECRET when one

@@ -188,6 +188,70 @@ def store_upload(
     return corpus_store.get_document(document_id) or {}
 
 
+# A Content-Type the extractor reads, mapped to the extension it keys on.
+_URL_TYPES: dict[str, str] = {
+    "application/pdf": ".pdf", "text/html": ".html", "application/xhtml+xml": ".html",
+    "text/plain": ".txt", "text/markdown": ".md", "text/csv": ".csv", "application/json": ".json",
+}
+URL_TIMEOUT_S = 60.0
+
+
+def store_url(
+    url: str,
+    *,
+    max_bytes: int,
+    title: str | None = None,
+    source_type: str = "other",
+    origin: str = "reference",
+) -> dict[str, Any]:
+    """Download one search result and store it exactly as an upload would be.
+
+    What "Add to corpus" in Settings → Search calls, so sourcing no longer means
+    copying a URL into a browser and uploading the file by hand. The bytes go
+    through `store_upload` — same duplicate check, same extraction on arrival —
+    and the URL is kept on the document (`source_url`). A web page is stored as
+    HTML and read as its text; a PDF link as the PDF.
+    """
+    import httpx  # noqa: PLC0415
+    from urllib.parse import unquote, urlparse  # noqa: PLC0415
+
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise IngestionError("only http(s) links can be added")
+    try:
+        with httpx.stream("GET", url.strip(), follow_redirects=True, timeout=URL_TIMEOUT_S,
+                          headers={"User-Agent": "Daedalus corpus sourcing"}) as response:
+            response.raise_for_status()
+            chunks: list[bytes] = []
+            size = 0
+            for chunk in response.iter_bytes():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise IngestionError(f"the download passed the {max_bytes // 1024 // 1024}MB limit")
+                chunks.append(chunk)
+            content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+            final_path = response.url.path
+    except httpx.HTTPError as exc:
+        raise IngestionError(f"could not download it: {exc}") from exc
+
+    name = unquote(final_path.rstrip("/").rsplit("/", 1)[-1]) or parsed.netloc
+    suffix = name[name.rfind("."):].lower() if "." in name else ""
+    if suffix not in extraction.SUPPORTED:
+        wanted = _URL_TYPES.get(content_type)
+        if not wanted:
+            raise IngestionError(
+                f"the link returned {content_type or 'an unknown type'}, which Daedalus cannot read. "
+                f"Supported: {', '.join(extraction.supported_extensions())}."
+            )
+        name = f"{name}{wanted}"
+    document = store_upload(b"".join(chunks), name[:200], source_type=source_type,
+                            title=title, origin=origin)
+    if document.get("document_id"):
+        document = {**(corpus_store.update_document(document["document_id"], source_url=url.strip()) or {}),
+                    **({"extract_error": document["extract_error"]} if document.get("extract_error") else {})}
+    return document
+
+
 def read_text(document: dict[str, Any]) -> extraction.Extracted:
     """Re-extract from the stored bytes.
 

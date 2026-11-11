@@ -21,7 +21,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Final
 
-from . import migrations, sqlite_util
+from . import migrations, secret_box, sqlite_util
 from .paths import PREFS_DB
 from .sqlite_util import utc_now as _now
 
@@ -54,6 +54,9 @@ def init_db() -> None:
         if _initialised:
             return
         migrations.migrate(STORE)
+        with sqlite_util.transaction(DB_PATH) as conn:
+            secret_box.seal_column(conn, "mcp_servers", "env_json")
+            secret_box.seal_column(conn, "mcp_servers", "headers_json")
         _initialised = True
 
 
@@ -86,7 +89,7 @@ def _loads(raw: str | None, fallback: Any) -> Any:
 def public(row: sqlite3.Row) -> dict[str, Any]:
     """The only shape that leaves this module. Never contains `headers_json`."""
     tools = _loads(row["tools_json"], None)
-    headers = _loads(row["headers_json"], {})
+    headers = _loads(secret_box.unseal(row["headers_json"]), {})
     return {
         "id": row["id"],
         "created_at": row["created_at"],
@@ -95,7 +98,7 @@ def public(row: sqlite3.Row) -> dict[str, Any]:
         "transport": row["transport"],
         "command": row["command"],
         "args": _loads(row["args_json"], []),
-        "env_keys": sorted(_loads(row["env_json"], {})),
+        "env_keys": sorted(_loads(secret_box.unseal(row["env_json"]), {})),
         "url": row["url"],
         # Names only. A header's *value* is where an API key lives.
         "header_keys": sorted(headers),
@@ -154,9 +157,9 @@ def secret_for(server_id: str) -> dict[str, Any]:
         "transport": row["transport"],
         "command": row["command"],
         "args": _loads(row["args_json"], []),
-        "env": _loads(row["env_json"], {}),
+        "env": _loads(secret_box.unseal(row["env_json"]), {}),
         "url": row["url"],
-        "headers": _loads(row["headers_json"], {}),
+        "headers": _loads(secret_box.unseal(row["headers_json"]), {}),
     }
 
 
@@ -195,9 +198,9 @@ def create_server(
                     server_id, now, now, label, transport,
                     (command or "").strip()[:MAX_COMMAND_CHARS] or None,
                     json.dumps([str(a) for a in (args or [])]),
-                    json.dumps({str(k): str(v) for k, v in (env or {}).items()}),
+                    secret_box.seal(json.dumps({str(k): str(v) for k, v in (env or {}).items()})),
                     (url or "").strip()[:MAX_URL_CHARS] or None,
-                    json.dumps({str(k): str(v) for k, v in (headers or {}).items()}),
+                    secret_box.seal(json.dumps({str(k): str(v) for k, v in (headers or {}).items()})),
                 ),
             )
             conn.commit()

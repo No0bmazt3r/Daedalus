@@ -255,6 +255,26 @@ class RunTest(unittest.TestCase):
         with self.assertRaises(evaluation.EvalError):
             evaluation.run(arms=["vector"])
 
+    def test_an_official_run_with_extended_tools_open_is_refused(self) -> None:
+        from app.blueprints import rag_config  # noqa: PLC0415
+
+        frozen = {**rag_config.read(), "frozen": True}
+        with mock.patch.object(rag_config, "read", return_value=frozen), \
+                mock.patch.object(evaluation, "tool_policy",
+                                  return_value={"mode": "advanced", "locked": [], "closed": False}), \
+                self.assertRaises(evaluation.EvalError) as caught:
+            evaluation.run(arms=["vector"])
+        self.assertIn("extended tool effects are open", str(caught.exception))
+
+    def test_opening_a_tool_mid_run_stops_it(self) -> None:
+        closed = {"mode": "simple", "locked": [], "closed": True}
+        opened = {"mode": "advanced", "locked": [], "closed": False}
+        with mock.patch.object(evaluation, "_ask", return_value=asked("The absorber is at 40 °C.")), \
+                mock.patch.object(evaluation, "tool_policy", side_effect=[closed, opened]), \
+                self.assertRaises(evaluation.EvalError):
+            evaluation.run(arms=["vector"], practice=True)
+        self.assertIn("Agent Tools changed", self._saved()["abort_reason"])
+
     def test_a_complete_practice_run(self) -> None:
         with mock.patch.object(evaluation, "_ask", return_value=asked("The absorber is at 40 °C.")):
             record = evaluation.run(arms=["vector", "graph-walk"], practice=True)

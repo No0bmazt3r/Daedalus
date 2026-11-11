@@ -204,7 +204,20 @@ def has_query(query_id: str) -> bool:
         ).fetchone() is not None
 
 
-def latest_ratings(session_id: str) -> dict[str, int]:
+def _in_chat(alias: str, session_id: str, query_ids: list[str] | None) -> tuple[str, list[Any]]:
+    """A WHERE clause for "this chat's rows": logged under it, or one of its answers.
+
+    A fork copies answers with their query_id, but their audit rows stay under
+    the chat that produced them — so a chat's own messages name the rest.
+    """
+    ids = sorted({q for q in query_ids or [] if q})
+    if not ids:
+        return f"{alias}.session_id = ?", [session_id]
+    marks = ",".join("?" for _ in ids)
+    return f"({alias}.session_id = ? OR {alias}.query_id IN ({marks}))", [session_id, *ids]
+
+
+def latest_ratings(session_id: str, query_ids: list[str] | None = None) -> dict[str, int]:
     """The newest thumbs rating per answer in one chat, `{query_id: +1 | -1}`.
 
     Ratings are appended, never updated — changing your mind is a second row —
@@ -212,16 +225,17 @@ def latest_ratings(session_id: str) -> dict[str, int]:
     left out here.
     """
     init_db()
+    chat, params = _in_chat("f", session_id, query_ids)
     with sqlite_util.connect(AUDIT_DB) as conn:
         rows = conn.execute(
             """
             SELECT f.query_id, f.rating
               FROM feedback_logs f
-             WHERE f.session_id = ? AND f.rating IS NOT NULL
+             WHERE {chat} AND f.rating IS NOT NULL
                AND f.id = (SELECT MAX(id) FROM feedback_logs g
                             WHERE g.query_id = f.query_id AND g.rating IS NOT NULL)
-            """,
-            (session_id,),
+            """.replace("{chat}", chat),
+            params,
         ).fetchall()
     return {r["query_id"]: r["rating"] for r in rows if r["rating"]}
 
@@ -246,6 +260,7 @@ def trace(query_id: str) -> dict[str, list[dict[str, Any]]]:
 def recent_queries(
     *,
     session_id: str | None = None,
+    query_ids: list[str] | None = None,
     intent: str | None = None,
     model: str | None = None,
     track: str | None = None,
@@ -265,8 +280,9 @@ def recent_queries(
     where = ["c.id IN (SELECT MAX(id) FROM conversation_logs GROUP BY query_id)"]
     params: list[Any] = []
     if session_id:
-        where.append("c.session_id = ?")
-        params.append(session_id)
+        chat, chat_params = _in_chat("c", session_id, query_ids)
+        where.append(chat)
+        params += chat_params
     if intent:
         where.append("c.intent = ?")
         params.append(intent)

@@ -20,24 +20,33 @@ never *how far* it reaches:
 4. **A pattern denylist** for the handful of things that are catastrophic
    regardless of intent.
 
-## The denylist is not a sandbox, and saying otherwise would be worse than not having it
+## The sandbox
 
-A denylist is a list of the ways somebody already thought of. It stops a model
-that has confidently decided to `rm -rf /`; it does not stop a determined
-attacker who has reached the point of choosing shell commands, and nothing at
-this layer would. The real boundaries are the unlock — off by default, recorded
-with a reason — and the container, where the process is confined by a kernel
-rather than by a regular expression. If this capability is being unlocked on a
-machine that matters, run Daedalus in Docker.
+A denylist is a list of the ways somebody already thought of, so `bash` and
+`python` also run under a kernel boundary, and refuse to run without one:
+
+- **bubblewrap** (`bwrap`) when it is installed: the whole filesystem read-only
+  except the workspace, a private `/tmp`, no network, and its own process,
+  IPC and hostname namespaces. Dies with the backend.
+- **A container** (`/.dockerenv` or `/run/.containerenv`): the container is the
+  boundary, so the commands run as before.
+- Neither: refused, with how to install bubblewrap. Setting
+  `DAEDALUS_ALLOW_UNSANDBOXED_EXEC=1` runs them contained only, as before —
+  an explicit choice, never the default.
+
+Every child also gets resource limits (CPU seconds, memory, file size), so a
+runaway loop or allocation ends instead of taking the machine with it.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import resource
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
@@ -112,6 +121,52 @@ def _child_env() -> dict[str, str]:
     return {k: v for k, v in env.items() if not _SECRET_HINT.search(k)}
 
 
+# Per child: a little over the timeout of CPU, 1 GiB of address space, 64 MiB
+# per written file. Generous for arithmetic over retrieved data.
+_MEM_LIMIT: Final = 1 << 30
+_FILE_LIMIT: Final = 64 << 20
+
+
+def _limits(timeout: int) -> Callable[[], None]:
+    def apply() -> None:
+        resource.setrlimit(resource.RLIMIT_CPU, (timeout + 1, timeout + 1))
+        resource.setrlimit(resource.RLIMIT_AS, (_MEM_LIMIT, _MEM_LIMIT))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (_FILE_LIMIT, _FILE_LIMIT))
+    return apply
+
+
+def _in_container() -> bool:
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+
+
+def _sandbox() -> list[str]:
+    """The argv prefix that confines a child, or a ToolError saying why it cannot run."""
+    bwrap = shutil.which("bwrap")
+    if bwrap:
+        workspace = str(_workspace().resolve())
+        argv = [bwrap, "--unshare-all", "--die-with-parent", "--new-session",
+                "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+        # `/` read-only still shows what is readable: SSH keys in the home
+        # directory, every store and the config. Hide those, then give back only
+        # the interpreter (the venv may live under home) and the workspace.
+        hidden = {Path.home(), paths.DATA_DIR, paths.LOG_DIR, paths.PREFS_DB.parent,
+                  paths.CONFIG_DIR, paths.CHAT_DB.parent}
+        for path in sorted({str(Path(h).resolve()) for h in hidden}, key=len):
+            argv += ["--tmpfs", path]
+        argv += ["--ro-bind", sys.prefix, sys.prefix,
+                 "--bind", workspace, workspace, "--chdir", workspace]
+        return argv
+    if _in_container():
+        return []
+    if os.environ.get("DAEDALUS_ALLOW_UNSANDBOXED_EXEC") == "1":
+        return []
+    raise ToolError(
+        "refused: no sandbox on this machine. Install bubblewrap (apt install bubblewrap · "
+        "dnf install bubblewrap · pacman -S bubblewrap · not available on macOS) or run "
+        "Daedalus in its container. DAEDALUS_ALLOW_UNSANDBOXED_EXEC=1 runs it without one."
+    )
+
+
 def _check_denied(text: str) -> None:
     for pattern, why in _DENIED_COMPILED:
         if pattern.search(text):
@@ -121,10 +176,12 @@ def _check_denied(text: str) -> None:
 def _run(argv: list[str], *, timeout: int) -> dict[str, Any]:
     """Run a child process under the workspace, the scrubbed env and a timeout."""
     workspace = str(_workspace())
+    prefix = _sandbox()
     try:
         completed = subprocess.run(  # noqa: S603 — argv is a list, never a shell string
-            argv,
+            prefix + argv,
             cwd=workspace,
+            preexec_fn=_limits(timeout),  # noqa: PLW1509 — no threads touched between fork and exec
             env=_child_env(),
             capture_output=True,
             text=True,

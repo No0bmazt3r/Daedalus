@@ -35,6 +35,25 @@ class ForkTest(unittest.TestCase):
         self.assertEqual(again["title"], "Fork: Pressure check")
         self.assertEqual(chat_service.get_messages(again["session_id"]), [])
 
+    def test_a_fork_names_its_original(self) -> None:
+        fork = chat_store.fork_session(self.sid, 2)
+        self.assertEqual(fork["forked_from"], self.sid)
+        listed = {s["session_id"]: s for s in chat_store.list_sessions()}
+        self.assertEqual(listed[fork["session_id"]]["forked_from"], self.sid)
+        self.assertIsNone(listed[self.sid]["forked_from"])
+
+    def test_copied_answers_keep_their_trace_and_rating(self) -> None:
+        from app import thread  # noqa: PLC0415
+        from app.db import audit_store  # noqa: PLC0415
+
+        audit_store.log("conversation_logs", query_id="qid0", session_id=self.sid, user_query="q0",
+                        intent="document_query")
+        audit_store.log("feedback_logs", query_id="qid0", session_id=self.sid, rating=1)
+        fork = chat_store.fork_session(self.sid, 2)["session_id"]
+        self.assertEqual(chat_store.query_ids(fork), ["qid0"])
+        self.assertIn("qid0", [t["query_id"] for t in thread.recent(session_id=fork)["items"]])
+        self.assertEqual(audit_store.latest_ratings(fork, chat_store.query_ids(fork)), {"qid0": 1})
+
     def test_unknown_session(self) -> None:
         with self.assertRaises(chat_store.SessionNotFoundError):
             chat_store.fork_session("nope", 1)

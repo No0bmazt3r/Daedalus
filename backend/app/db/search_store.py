@@ -7,7 +7,7 @@ only `'setup'`, so a row claiming a runtime web search cannot be written. See
 
 ## The credential
 
-`api_key` is stored as written, with the same three protections 002 has:
+`api_key` is encrypted at rest (`secret_box`), with the same three protections 002 has:
 
 - `public()` is the only shape that leaves this module, and it returns
   `key_hint` (`tvl…9f4a`) rather than the key.
@@ -24,7 +24,7 @@ import sqlite3
 import threading
 from typing import Any, Final
 
-from . import migrations, sqlite_util
+from . import migrations, secret_box, sqlite_util
 from .paths import PREFS_DB
 from .sqlite_util import utc_now as _now
 
@@ -49,6 +49,8 @@ def init_db() -> None:
         if _initialised:
             return
         migrations.migrate(STORE)
+        with sqlite_util.transaction(DB_PATH) as conn:
+            secret_box.seal_column(conn, "search_providers", "api_key")
         _initialised = True
 
 
@@ -76,8 +78,8 @@ def public(row: sqlite3.Row) -> dict[str, Any]:
         "updated_at": row["updated_at"],
         "base_url": row["base_url"],
         "engine_id": row["engine_id"],
-        "key_hint": mask(row["api_key"]),
-        "has_key": bool(row["api_key"]),
+        "key_hint": mask(secret_box.unseal(row["api_key"])),
+        "has_key": bool(secret_box.unseal(row["api_key"])),
         "last_tested_at": row["last_tested_at"],
         "last_test_ok": None if row["last_test_ok"] is None else bool(row["last_test_ok"]),
         "last_test_detail": row["last_test_detail"],
@@ -108,7 +110,7 @@ def secret_for(provider_id: str) -> tuple[str | None, str | None, str | None]:
         ).fetchone()
     if row is None:
         return (None, None, None)
-    return (row["base_url"], row["api_key"], row["engine_id"])
+    return (row["base_url"], secret_box.unseal(row["api_key"]), row["engine_id"])
 
 
 def upsert_provider(
@@ -143,7 +145,7 @@ def upsert_provider(
                     now,
                     now,
                     _clip(base_url, MAX_URL_CHARS),
-                    _clip(api_key, MAX_KEY_CHARS),
+                    _sealed(api_key),
                     _clip(engine_id, MAX_ENGINE_ID_CHARS),
                 ),
             )
@@ -160,7 +162,7 @@ def upsert_provider(
                 (
                     now,
                     _clip(base_url, MAX_URL_CHARS),
-                    _clip(api_key, MAX_KEY_CHARS),
+                    _sealed(api_key),
                     _clip(engine_id, MAX_ENGINE_ID_CHARS),
                     provider_id,
                 ),
@@ -170,6 +172,13 @@ def upsert_provider(
             "SELECT * FROM search_providers WHERE id = ?", (provider_id,)
         ).fetchone()
     return public(row)
+
+
+def _sealed(api_key: str | None) -> str | None:
+    """None leaves the stored key alone; "" clears it; anything else is encrypted."""
+    if api_key is None:
+        return None
+    return secret_box.seal(_clip(api_key, MAX_KEY_CHARS)) or ""
 
 
 def _clip(value: str | None, limit: int) -> str | None:

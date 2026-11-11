@@ -204,6 +204,13 @@ def purge_ephemeral() -> int:
     return chat_store.purge_ephemeral()
 
 
+def repair_inline_thinking() -> int:
+    """Startup: answers stored before thought was separated get it moved out."""
+    from .inference import split_thinking  # noqa: PLC0415 — inference imports this module
+
+    return chat_store.repair_inline_thinking(split_thinking)
+
+
 # ── context assembly ─────────────────────────────────────────────────────────
 
 

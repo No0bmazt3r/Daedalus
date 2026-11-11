@@ -342,8 +342,11 @@ export function GraphCanvas({
   const fade = (depth: number) => (0.25 + 0.75 * depth) * opened
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-lg border theme-border theme-card">
-      <div ref={frameRef} className="relative min-h-0 flex-1">
+    // Stretch only when filling the parent. With a fixed `height` (Replay, in a
+    // scrolling pane) `h-full` made the box the pane's height while the drawing
+    // stayed `height` tall, cutting the graph off mid-box.
+    <div className={`flex min-h-0 flex-col rounded-lg border theme-border theme-card ${height ? '' : 'h-full'}`}>
+      <div ref={frameRef} className={`relative min-h-0 ${height ? '' : 'flex-1'}`}>
         <svg
           ref={svgRef}
           viewBox={`${-half} ${-half} ${half * 2} ${half * 2}`}

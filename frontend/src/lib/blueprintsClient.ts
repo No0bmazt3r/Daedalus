@@ -583,6 +583,15 @@ export interface CorpusStatus {
 
 export const fetchCorpusStatus = () => request<CorpusStatus>('/api/corpus/status');
 
+/** Download a search result into the corpus (Settings → Search, "Add to corpus"). */
+export const addDocumentFromUrl = (url: string, title?: string) =>
+  request<{ document: CorpusDocument & { extract_error?: string } }>('/api/corpus/documents/from-url', {
+    method: 'POST',
+    body: JSON.stringify({ url, title }),
+    // The server downloads and parses the file before answering.
+    timeoutMs: 120_000,
+  });
+
 export const fetchCorpusDocuments = () =>
   request<{ available: true; documents: CorpusDocument[]; total: number }>('/api/corpus/documents');
 

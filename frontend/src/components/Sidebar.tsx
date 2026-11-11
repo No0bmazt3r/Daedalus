@@ -3,7 +3,7 @@ import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { Collapse } from './ui/collapse'
-import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map as MapIcon, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
 import { Skeleton } from './ui/skeleton'
 import {
   DropdownMenu,
@@ -33,6 +33,33 @@ interface SidebarProps {
 }
 
 /** One chat row: click to open, hover for rename/delete, double-click to rename. */
+/**
+ * Each chat with the forks made from it (edit, retry, rerun, fork), newest
+ * activity first. A fork of a fork files under the same original; one whose
+ * original is gone or off this page stands on its own.
+ */
+function groupForks(sessions: ChatSession[]): { session: ChatSession; forks: ChatSession[] }[] {
+  const byId = new Map(sessions.map((s) => [s.session_id, s]))
+  const rootOf = (s: ChatSession): string => {
+    const seen = new Set<string>()
+    let cur = s
+    while (cur.forked_from && byId.has(cur.forked_from) && !seen.has(cur.session_id)) {
+      seen.add(cur.session_id)
+      cur = byId.get(cur.forked_from)!
+    }
+    return cur.session_id
+  }
+  const groups = new Map<string, ChatSession[]>()
+  for (const s of sessions) {
+    const root = rootOf(s)
+    groups.set(root, [...(groups.get(root) ?? []), s])
+  }
+  return [...groups].map(([root, members]) => ({
+    session: byId.get(root)!,
+    forks: members.filter((m) => m.session_id !== root),
+  }))
+}
+
 function SessionRow({
   session,
   active,
@@ -291,6 +318,9 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
   const visible = needle
     ? sessions.filter((s) => sessionLabel(s).toLowerCase().includes(needle))
     : sessions
+  // Forks are filed under the chat they came from; a search lists flat.
+  const [openForks, setOpenForks] = useState<Set<string>>(() => new Set())
+  const rows = needle ? visible.map((s) => ({ session: s, forks: [] })) : groupForks(visible)
 
   return (
     <div className="flex flex-col h-full theme-sidebar zone-sidebar theme-text font-sans border-r theme-border transition-colors duration-200">
@@ -335,7 +365,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
           {[
             { title: "Ariadne's Thread", icon: Network, onClick: onOpenThread },
             { title: 'The Forge', icon: Hammer, onClick: onOpenForge },
-            { title: 'Labyrinth Blueprints', icon: Map, onClick: onOpenBlueprints },
+            { title: 'Labyrinth Blueprints', icon: MapIcon, onClick: onOpenBlueprints },
           ].map((item) => (
             <Button
               key={item.title}
@@ -422,7 +452,19 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
               </span>
             )}
 
-            {visible.map((session) => (
+            {rows.map(({ session: root, forks }) => {
+              const holdsActive = forks.some((f) => f.session_id === activeSessionId)
+              const open = openForks.has(root.session_id) || holdsActive
+              const toggle = () => setOpenForks((prev) => {
+                const next = new Set(prev)
+                if (next.has(root.session_id)) next.delete(root.session_id)
+                else next.add(root.session_id)
+                return next
+              })
+              return (
+              <div key={root.session_id}>
+              {[root, ...(open ? forks : [])].map((session) => (
+              <div key={session.session_id} className={session === root ? '' : 'ml-3 pl-2 border-l theme-border'}>
               <SessionRow
                 key={session.session_id}
                 session={session}
@@ -448,7 +490,22 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
                   if (ok) void remove(session.session_id)
                 }}
               />
-            ))}
+              </div>
+              ))}
+              {forks.length > 0 && !holdsActive && (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  aria-expanded={open}
+                  className="ml-3 flex items-center gap-1 h-6 px-2 text-xs rounded theme-text-muted hover:theme-text"
+                >
+                  <ChevronRight size={11} className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+                  {open ? 'Hide' : 'Show'} {forks.length} fork{forks.length === 1 ? '' : 's'}
+                </button>
+              )}
+              </div>
+              )
+            })}
           </div>
           </ScrollArea>
         </div>

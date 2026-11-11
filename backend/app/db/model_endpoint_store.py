@@ -11,7 +11,7 @@ cannot be written — see `migrations/prefs/002_model_endpoints.sql`.
 
 ## The credential
 
-`api_key` is stored as written. The protections around it are:
+`api_key` is encrypted at rest (`secret_box`). The protections around it are:
 
 - `public()` is the only shape that leaves this module, and it returns
   `key_hint` (`sk-…f4a2`) rather than the key.
@@ -29,7 +29,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Final
 
-from . import migrations, sqlite_util
+from . import migrations, secret_box, sqlite_util
 from .paths import PREFS_DB
 from .sqlite_util import utc_now as _now
 
@@ -62,6 +62,8 @@ def init_db() -> None:
         if _initialised:
             return
         migrations.migrate(STORE)
+        with sqlite_util.transaction(DB_PATH) as conn:
+            secret_box.seal_column(conn, "model_endpoints", "api_key")
         _initialised = True
 
 
@@ -94,8 +96,8 @@ def public(row: sqlite3.Row) -> dict[str, Any]:
         "label": row["label"],
         "provider": row["provider"],
         "base_url": row["base_url"],
-        "key_hint": mask(row["api_key"]),
-        "has_key": bool(row["api_key"]),
+        "key_hint": mask(secret_box.unseal(row["api_key"])),
+        "has_key": bool(secret_box.unseal(row["api_key"])),
         "enabled": bool(row["enabled"]),
         "purpose": row["purpose"],
         "last_tested_at": row["last_tested_at"],
@@ -139,7 +141,7 @@ def secret_for(endpoint_id: str) -> tuple[str, str, str | None]:
         ).fetchone()
     if row is None:
         raise EndpointNotFoundError(endpoint_id)
-    return row["provider"], row["base_url"], row["api_key"]
+    return row["provider"], row["base_url"], secret_box.unseal(row["api_key"])
 
 
 def create_endpoint(
@@ -148,7 +150,7 @@ def create_endpoint(
     init_db()
     clean_url = base_url.strip().rstrip("/")[:MAX_URL_CHARS]
     clean_label = (label.strip() or provider)[:MAX_LABEL_CHARS]
-    clean_key = (api_key or "").strip()[:MAX_KEY_CHARS] or None
+    clean_key = secret_box.seal((api_key or "").strip()[:MAX_KEY_CHARS])
     endpoint_id = new_endpoint_id()
     now = _now()
 
@@ -191,7 +193,7 @@ def update_endpoint(
     if api_key is not None:
         cleaned = api_key.strip()[:MAX_KEY_CHARS]
         assignments.append("api_key = ?")
-        params.append(cleaned or None)
+        params.append(secret_box.seal(cleaned))
         # A new key invalidates whatever the last test proved.
         assignments += ["last_test_ok = NULL", "last_test_detail = NULL",
                         "last_tested_at = NULL", "last_test_models = NULL"]

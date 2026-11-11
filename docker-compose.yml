@@ -32,20 +32,30 @@ services:
     # is not a dependency, it is a variable.
     image: docker.io/searxng/searxng:2026.5.31-7159b8aed
     container_name: daedalus-searxng
-    # First boot seeds /etc/searxng from the mounted template with a generated
-    # secret. Afterwards the volume's copy is authoritative, so an instance you
-    # have tuned is never silently reset by a redeploy.
+    # config/searxng/settings.yml is the source of truth: the live copy in the
+    # volume is re-rendered whenever the template's hash changes, so editing the
+    # template and restarting is enough. The secret survives a re-render
+    # ($SEARXNG_SECRET, else the one already in the volume, else a new one).
     entrypoint:
       - /bin/sh
       - -c
       - |
         set -eu
-        if [ ! -s /etc/searxng/settings.yml ] || grep -q '__SEARXNG_SECRET__' /etc/searxng/settings.yml; then
+        tpl=/tmp/searxng-settings.yml.template
+        live=/etc/searxng/settings.yml
+        want="$$(sha256sum "$$tpl" | cut -d' ' -f1)"
+        have="$$(cat /etc/searxng/.template-sha256 2>/dev/null || true)"
+        if [ ! -s "$$live" ] || grep -q '__SEARXNG_SECRET__' "$$live" || [ "$$want" != "$$have" ]; then
           secret="$${SEARXNG_SECRET:-}"
+          if [ -z "$$secret" ] && [ -s "$$live" ]; then
+            secret="$$(sed -n 's/^[[:space:]]*secret_key:[[:space:]]*"\([^"]*\)".*/\1/p' "$$live" | head -n 1)"
+            [ "$$secret" = "__SEARXNG_SECRET__" ] && secret=""
+          fi
           if [ -z "$$secret" ]; then
             secret="$$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
           fi
-          sed "s|__SEARXNG_SECRET__|$$secret|g" /tmp/searxng-settings.yml.template > /etc/searxng/settings.yml
+          sed "s|__SEARXNG_SECRET__|$$secret|g" "$$tpl" > "$$live"
+          echo "$$want" > /etc/searxng/.template-sha256
         fi
         exec /usr/local/searxng/entrypoint.sh
     ports:

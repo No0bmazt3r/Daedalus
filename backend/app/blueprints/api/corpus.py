@@ -130,6 +130,27 @@ async def upload_document(
     return {"document": document}
 
 
+@router.post("/documents/from-url")
+def add_from_url(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Download a search result into the corpus — Settings → Search, "Add to corpus"."""
+    url = str(body.get("url") or "").strip()
+    source_type = body.get("source_type") or "other"
+    origin = body.get("origin") or "reference"
+    if not url or len(url) > 2000:
+        raise HTTPException(400, "url is required (at most 2000 characters)")
+    if source_type not in SOURCE_TYPES:
+        raise HTTPException(400, f"source_type must be one of {', '.join(SOURCE_TYPES)}")
+    if origin not in ORIGINS:
+        raise HTTPException(400, f"origin must be one of {', '.join(ORIGINS)}")
+    title = str(body.get("title") or "").strip()[:300] or None
+    try:
+        document = ingestion.store_url(url, max_bytes=MAX_UPLOAD_BYTES, title=title,
+                                       source_type=source_type, origin=origin)
+    except ingestion.IngestionError as exc:
+        raise HTTPException(409 if "already in the corpus" in str(exc) else 400, str(exc)) from exc
+    return {"document": document}
+
+
 @router.get("/documents/{document_id}")
 def get_document(document_id: str) -> dict[str, Any]:
     document = corpus_store.get_document(document_id)

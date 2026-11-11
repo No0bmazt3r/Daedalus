@@ -33,14 +33,26 @@ under `/home`; in Docker keep the volume on the Linux side.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
-# Container defaults come from docker-compose; the fallbacks keep a bare
-# `uvicorn app.main:app` working from the backend/ directory.
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = _BACKEND_ROOT.parent
 
-DATA_DIR = Path(os.environ.get("DAEDALUS_DATA_DIR", _BACKEND_ROOT / "data"))
-LOG_DIR = Path(os.environ.get("DAEDALUS_LOG_DIR", _BACKEND_ROOT / "data" / "logs"))
+# A test run that skipped `tests/__init__.py` (no `-t .`) would otherwise write
+# into the real stores and rewrite config/. Refuse before any path is used.
+if (getattr(sys.modules.get("__main__"), "__package__", None) == "unittest"
+        and "DAEDALUS_DATA_DIR" not in os.environ):
+    raise RuntimeError(
+        "tests imported app.db.paths without their isolation. Run them from backend/ "
+        "with the top-level dir set:  python -m unittest discover -s tests -t ."
+    )
+
+# The same files `host_py` / `host_uvicorn` (scripts/common.sh) point at, so a
+# bare `uvicorn app.main:app` from backend/ reads the live stores instead of
+# creating a second, orphaned copy of each under backend/data/.
+DATA_DIR = Path(os.environ.get("DAEDALUS_DATA_DIR", _REPO_ROOT / "data"))
+LOG_DIR = Path(os.environ.get("DAEDALUS_LOG_DIR", _REPO_ROOT / "logs"))
 
 SENSOR_DB = DATA_DIR / "sqlite" / "sensor_readings.db"
 AUDIT_DB = LOG_DIR / "ai_logs.db"
@@ -72,7 +84,7 @@ CHROMA_DIR = DATA_DIR / "chroma"
 # Outside the five stores on purpose. It is configuration, not data: a human
 # reads it, a human may edit it by hand, and it belongs in version control
 # alongside the code it configures rather than in a database nobody can diff.
-CONFIG_DIR = Path(os.environ.get("DAEDALUS_CONFIG_DIR", _BACKEND_ROOT.parent / "config"))
+CONFIG_DIR = Path(os.environ.get("DAEDALUS_CONFIG_DIR", _REPO_ROOT / "config"))
 MODEL_CONFIG = CONFIG_DIR / "model_config.json"
 
 

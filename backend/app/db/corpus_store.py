@@ -160,7 +160,8 @@ def update_document(document_id: str, **fields: Any) -> dict[str, Any] | None:
     silently ignored key — the same argument `registry.validate` makes about
     unknown tool arguments.
     """
-    allowed = {"source_type", "title", "document_version", "reactor_mode", "origin", "page_ranges"}
+    allowed = {"source_type", "title", "document_version", "reactor_mode", "origin", "page_ranges",
+               "source_url"}
     unknown = set(fields) - allowed
     if unknown:
         raise ValueError(f"cannot update {', '.join(sorted(unknown))}; allowed: {', '.join(sorted(allowed))}")

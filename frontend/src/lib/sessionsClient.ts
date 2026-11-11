@@ -19,6 +19,8 @@ export interface ChatSession {
   message_count?: number | null;
   /** Who named it — 'first_message' placeholder, 'model' (the title job), or 'user'. */
   title_source?: 'first_message' | 'model' | 'user' | null;
+  /** The chat this one was forked from (edit, retry, rerun, fork), or null. */
+  forked_from?: string | null;
   /** The background title job is running for this chat right now. */
   title_pending?: boolean;
 }

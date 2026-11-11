@@ -131,13 +131,12 @@ function CloudModel({
           {benchProgress.phase === 'error' && <span className="status-bad">Failed</span>}
           {benchProgress.phase === 'done' && 'Saving...'}
         </div>
-      ) : measured?.tokens_per_sec ? (
+      ) : measured?.total_inference_ms ? (
         <div className="border-t theme-border px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-2">
             <Activity size={11} className="theme-accent" />
             <span className="text-[10px] uppercase tracking-wide theme-text-muted">
               Baseline: Ollama's hardware, not this machine
-              {measured.rate_source === 'wall_clock' && ' · rate approximate'}
             </span>
           </div>
           <div className="grid grid-cols-2 @lg:grid-cols-4 gap-x-4 gap-y-2">
@@ -145,16 +144,12 @@ function CloudModel({
             <Stat label="End-to-end" value={ms(measured.total_inference_ms)} />
             <Stat
               label="Generation"
-              value={
-                measured.rate_source === 'engine'
-                  ? `${measured.tokens_per_sec} tok/s`
-                  : `~${measured.tokens_per_sec} tok/s`
-              }
+              value={measured.tokens_per_sec ? `${measured.tokens_per_sec} tok/s` : 'not reported'}
               title={
-                measured.rate_source === 'engine'
+                measured.tokens_per_sec
                   ? "Reported by the engine, so it reflects the model itself"
-                  : 'Wall-clock estimate: no engine counters from the cloud, so this is '
-                    + 'not a trustworthy rate. TTFT and end-to-end are sound.'
+                  : 'The cloud returns no engine counters, so there is no rate to show. '
+                    + 'TTFT and end-to-end are measured directly and are sound.'
               }
             />
             <Stat label="Measured" value={since(measured.at ?? null)} />
