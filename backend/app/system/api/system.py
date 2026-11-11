@@ -103,7 +103,7 @@ def databases() -> dict[str, Any]:
                 "available": sensor["exists"],
                 "metrics": {
                     "device": sensor_store.device_id(),
-                    "link": "paired" if rig_link.pairing() else "off (not paired)",
+                    "link": f"{sum(not t['expired'] for t in rig_link.tokens())} active token(s)" if rig_link.paired() else "off (no active token)",
                     "last_row": _ago(sensor["latest"]),
                     "rows_today": sensor.get("rows_today", 0),
                     "rows": sensor["rows"],

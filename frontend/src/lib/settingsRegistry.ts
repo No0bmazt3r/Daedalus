@@ -24,6 +24,7 @@ import {
   Wrench,
   SlidersHorizontal,
   Orbit,
+  Radio,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -168,6 +169,13 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
       'search', 'web', 'internet', 'provider', 'searxng', 'duckduckgo', 'brave',
       'google', 'pse', 'tavily', 'serper', 'api', 'key', 'fallback', 'sourcing',
       'corpus', 'documents', 'safesearch',
+    ],
+  }),
+  panel({
+    id: 'rig', label: 'Rig connection', group: 'connections', icon: Radio, implemented: true,
+    keywords: [
+      'rig', 'mainui', 'co2sorptiondt', 'token', 'api key', 'key', 'pair', 'pairing', 'connect',
+      'dashboard', 'pyqt', 'expiry', 'revoke', 'sensor', 'link',
     ],
   }),
   panel({

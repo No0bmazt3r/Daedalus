@@ -74,6 +74,10 @@ Vite proxies `/api` to it.
 | `GET`/`POST` | `/api/providers` | List / add a benchmark endpoint |
 | `PATCH`/`DELETE` | `/api/providers/{id}` | Edit or remove one |
 | `POST` | `/api/providers/{id}/test` | Connection test — the only outbound call |
+| `GET` | `/api/ingest/status` | The Rig chip: off · waiting · connected (MainUI called in the last minute, no readings) · live · frozen |
+| `GET`/`POST` `/api/ingest/tokens` · `DELETE` `/api/ingest/tokens/{id}` | Settings → Rig connection: named rig tokens with an expiry (30/90/365 days or never), shown once, stored as a hash, each revoked on its own; the old single token carried over as "MainUI", never expiring |
+| `GET` | `/api/ingest/ping` · `POST` `/api/ingest/readings` | MainUI's data link, behind a rig token (`403` no active token, `401` wrong, revoked or expired) |
+| `GET` | `/api/rig-chat/status` · `/sessions` · `/sessions/{id}/messages` · `POST` `/sessions` · `POST` `/api/rig-chat` | MainUI's Daedalus tab, behind the same rig token: which model, the shared chat list (never incognito), a transcript, a new chat, and an answer streamed exactly as `/api/chat` streams it. Contract: `CO2SorptionDT/daedalus/CHAT_TAB.md` §5 |
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
 | `GET` | `/api/system/observability` | The Observability page's figures over `ai_logs.db`: headline numbers, p50/p95 and time breakdown per hour/day/week, tools, models, recent errors, slowest turns. `range` = `24h`·`7d`·`30d`·`all`, `source` = `chat`·`eval`·`benchmark` |
 | `GET` | `/api/forge/hardware` | RAM, CPU, GPU/VRAM, disk and Ollama. Always 200; unknowns come back null |

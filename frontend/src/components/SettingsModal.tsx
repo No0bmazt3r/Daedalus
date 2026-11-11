@@ -23,6 +23,7 @@ import { GraphRagPanel, KnowledgeBasePanel, VectorRagPanel } from './settings/Kn
 import { SearchPanel } from './settings/SearchPanel'
 import { AgentToolsPanel } from './settings/AgentToolsPanel'
 import { IntegrationsPanel } from './settings/IntegrationsPanel'
+import { RigConnectionPanel } from './settings/RigConnectionPanel'
 import { GeneralPanel } from './settings/GeneralPanel'
 import { BackupPanel, DangerPanel, LogsPanel } from './settings/SystemPanel'
 import { DatabasesPanel } from './settings/DatabasesPanel'
@@ -269,6 +270,7 @@ export function SettingsModal({ open, onClose, onOpenTheme, onOpenForge, panel =
             {effectiveTab === 'tools' && <AgentToolsPanel isPeek={isPeek} />}
             {effectiveTab === 'general' && <GeneralPanel isPeek={isPeek} />}
             {effectiveTab === 'integrations' && <IntegrationsPanel isPeek={isPeek} />}
+            {effectiveTab === 'rig' && <RigConnectionPanel />}
             {effectiveTab === 'storage' && <DatabasesPanel isPeek={isPeek} />}
             {effectiveTab === 'logs' && <LogsPanel />}
             {effectiveTab === 'backup' && <BackupPanel />}
