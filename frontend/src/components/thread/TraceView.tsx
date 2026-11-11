@@ -158,7 +158,7 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
 
       <ol className="space-y-1">
         {trace.steps.map((step, i) => (
-          <StepRow key={`${step.kind}-${i}`} step={step} totalMs={trace.total_ms} />
+          <StepRow key={`${trace.query_id}-${step.kind}-${i}`} step={step} totalMs={trace.total_ms} />
         ))}
       </ol>
 

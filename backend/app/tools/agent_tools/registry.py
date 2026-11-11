@@ -757,6 +757,11 @@ def _log_retrieval(
                 if rerank.get("model") else None,
                 candidate_count=rerank.get("candidates"),
                 rerank_latency_ms=rerank.get("latency_ms"),
+                # Migration 014: where each kept chunk stood before re-ranking,
+                # and why re-ranking did not run when it did not.
+                rerank_ranks=json.dumps([c.get("vector_rank") for c in chunks])
+                if rerank.get("model") else None,
+                rerank_reason=None if rerank.get("model") else rerank.get("reason"),
             )
         keyword = data.get("keyword") or {}
         if keyword.get("enabled"):

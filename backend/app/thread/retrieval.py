@@ -90,6 +90,7 @@ def retrieval(query_id: str) -> dict[str, Any] | None:
         ids = _list(row.get("retrieved_chunk_ids"))
         distances = _list(row.get("retrieval_scores"))
         reranks = _list(row.get("rerank_scores"))
+        before = _list(row.get("rerank_ranks"))
         origins = _list(row.get("retrieved_origins"))
         held = {c["chunk_id"]: c for c in corpus_store.chunks_by_id([str(i) for i in ids])}
         chunks = []
@@ -110,6 +111,8 @@ def retrieval(query_id: str) -> dict[str, Any] | None:
                 "tokens": c.get("token_estimate"),
                 "distance": distances[rank] if rank < len(distances) else None,
                 "rerank_score": reranks[rank] if rank < len(reranks) else None,
+                # Its place before re-ranking (migration 014); None on older rows.
+                "rank_before": before[rank] if rank < len(before) else None,
                 # As logged at query time; the document's origin today otherwise.
                 "origin": (origins[rank] if rank < len(origins) else None) or c.get("origin"),
                 "chunking": {

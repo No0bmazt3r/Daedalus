@@ -40,10 +40,11 @@ def _tool_step(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _retrieval_step(row: dict[str, Any]) -> dict[str, Any]:
-    ms = (row.get("retrieval_latency_ms") or 0) + (row.get("rerank_latency_ms") or 0)
+    # The search alone: re-ranking is its own step, with its own time.
+    ms = row.get("retrieval_latency_ms")
     track = row.get("track") or "?"
     return _step(
-        "retrieval", f"{track} retrieval", at=row["timestamp"], ms=ms or None,
+        "retrieval", f"{track} retrieval", at=row["timestamp"], ms=ms,
         detail={
             "track": track,
             "query": row.get("query_text"),
@@ -57,11 +58,50 @@ def _retrieval_step(row: dict[str, Any]) -> dict[str, Any]:
             "traversal_path": parse_json(row.get("traversal_path")),
             "entry_strategy": row.get("entry_strategy"),
             "candidates": row.get("candidate_count"),
-            "rerank_model": row.get("rerank_model"),
-            "rerank_scores": parse_json(row.get("rerank_scores")),
             "retrieval_ms": row.get("retrieval_latency_ms"),
-            "rerank_ms": row.get("rerank_latency_ms"),
         },
+    )
+
+
+def _rerank_step(row: dict[str, Any]) -> dict[str, Any] | None:
+    """What re-ranking did to one vector retrieval, or None on the graph track (it never re-ranks).
+
+    `moves` pairs each kept chunk's place before re-ranking with its place after.
+    Rows logged before migration 014 have the scores but not the places.
+    """
+    from ..db import corpus_store  # noqa: PLC0415 — as in retrieval.py
+    from ..forge import reranker  # noqa: PLC0415
+
+    if row.get("track") != "vector":
+        return None
+    model = row.get("rerank_model")
+    reason = row.get("rerank_reason")
+    if not model:
+        failed = bool(reason) and reason != reranker.OFF
+        return _step(
+            "rerank", f"Re-rank: failed ({reason})" if failed else "Re-rank: off",
+            at=row["timestamp"], status="warning" if failed else "ok",
+            detail={"reason": reason or reranker.OFF},
+        )
+    ids = parse_json(row.get("retrieved_chunk_ids")) or []
+    scores = parse_json(row.get("rerank_scores")) or []
+    before = parse_json(row.get("rerank_ranks"))
+    held = {c["chunk_id"]: c for c in corpus_store.chunks_by_id([str(i) for i in ids])}
+    moves = [{
+        "before": before[i] if isinstance(before, list) and i < len(before) else None,
+        "after": i + 1,
+        "document": (held.get(chunk_id) or {}).get("filename"),
+        "page": (held.get(chunk_id) or {}).get("page_number"),
+        "score": scores[i] if i < len(scores) else None,
+    } for i, chunk_id in enumerate(ids)]
+    title = f"{model} · {row.get('candidate_count') or '?'} → {len(ids)}"
+    if isinstance(before, list):
+        moved = sum(1 for m in moves if m["before"] != m["after"])
+        title += f" · {moved} of {len(ids)} moved"
+    return _step(
+        "rerank", title, at=row["timestamp"], ms=row.get("rerank_latency_ms"),
+        detail={"model": model, "candidates": row.get("candidate_count"),
+                "positions_logged": isinstance(before, list), "moves": moves},
     )
 
 
@@ -96,11 +136,17 @@ def trace(query_id: str) -> dict[str, Any] | None:
     # Each retrieval tool writes its own `rag_logs` row, in the order the tools
     # ran, so the n-th retrieval row belongs to the n-th retrieval tool.
     retrievals = list(rows.get("rag_logs") or [])
+
+    def retrieval_steps(row: dict[str, Any]) -> list[dict[str, Any]]:
+        rerank = _rerank_step(row)
+        return [_retrieval_step(row), *([rerank] if rerank else [])]
+
     for tool in rows.get("tool_logs") or []:
         steps.append(_tool_step(tool))
         if tool["tool_name"] in RETRIEVAL_TOOLS and retrievals:
-            steps.append(_retrieval_step(retrievals.pop(0)))
-    steps.extend(_retrieval_step(r) for r in retrievals)
+            steps.extend(retrieval_steps(retrievals.pop(0)))
+    for row in retrievals:
+        steps.extend(retrieval_steps(row))
 
     if isinstance(evidence, dict) and (evidence.get("lines") or evidence.get("failures")):
         lines = evidence.get("lines") or {}

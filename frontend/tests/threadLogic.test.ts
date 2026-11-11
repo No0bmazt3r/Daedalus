@@ -77,7 +77,7 @@ test('the Markdown export lists each retrieved chunk with its chunking and wheth
     documents: ['sop.pdf'],
     chunks: [{
       rank: 1, chunk_id: 'c1', missing: false, text: 't', document: 'sop.pdf', document_title: null, source_type: 'sop',
-      page: 4, section: 'NDIR', ordinal: 3, tokens: 120, distance: 0.2134, rerank_score: null, origin: 'rig',
+      page: 4, section: 'NDIR', ordinal: 3, tokens: 120, distance: 0.2134, rerank_score: null, rank_before: null, origin: 'rig',
       chunking: { strategy: 'recursive', size: 512, overlap: 64, embedding_model: 'nomic' }, label: 'D1', cited: true,
     }],
   }]);

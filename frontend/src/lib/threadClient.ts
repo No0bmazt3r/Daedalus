@@ -70,7 +70,7 @@ export interface TracePage {
 }
 
 export type StepKind =
-  | 'query' | 'understanding' | 'tool' | 'retrieval' | 'evidence'
+  | 'query' | 'understanding' | 'tool' | 'retrieval' | 'rerank' | 'evidence'
   | 'context' | 'model' | 'thinking' | 'validation' | 'answer' | 'error' | 'feedback' | 'label';
 
 export interface TraceStep {
@@ -177,6 +177,8 @@ export interface RetrievedChunkDetail {
   /** Cosine distance as stored; lower is closer. */
   distance: number | null;
   rerank_score: number | null;
+  /** Its place before re-ranking; null when not re-ranked or logged before positions were. */
+  rank_before: number | null;
   /** 'rig' (this reactor's own documents) or 'reference'. */
   origin: string | null;
   /** How its ingest run cut it. */

@@ -71,6 +71,11 @@ function ChunkRow({ c }: { c: RetrievedChunkDetail }) {
                 rerank <span className="tabular-nums">{c.rerank_score.toFixed(2)}</span>
               </Chip>
             )}
+            {c.rank_before != null && c.rank_before !== c.rank && (
+              <Chip title={`Re-ranking moved this from #${c.rank_before} to #${c.rank}`}>
+                was <span className="tabular-nums">#{c.rank_before}</span>
+              </Chip>
+            )}
             {c.chunking && (
               <Chip title={`Cut by its ingest run: ${c.chunking.strategy} chunking, ${c.chunking.size} with ${c.chunking.overlap} overlap`}>
                 {c.chunking.strategy} {c.chunking.size}/{c.chunking.overlap}

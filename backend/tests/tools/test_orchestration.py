@@ -193,6 +193,18 @@ class EvidenceAndValidatorTest(unittest.TestCase):
         lone = "It was 777.7 ppm [S1]."
         self.assertIsNone(validator.salvage(lone, self.validate(lone), self.pack))
 
+    def test_salvage_drops_a_list_item_it_emptied(self) -> None:
+        # Seen live: "2. **CO2**: below 600 ppm … drained. [D3]" was cut to "2. [D3]".
+        co2 = fixtures.co2(34)
+        answer = (f"1. **Peak**: CO2 peaked at {co2} ppm. [S1]\n"
+                  "2. **Limit**: Keep it below 777.7 ppm to be safe. [S1]\n"
+                  "3. **Excursion**: It was a High CO2 excursion. [D1]")
+        trimmed = validator.salvage(answer, self.validate(answer), self.pack, question=self.question)
+        self.assertIsNotNone(trimmed)
+        self.assertNotIn("2.", trimmed)
+        self.assertIn("1. **Peak**", trimmed)
+        self.assertIn("3. **Excursion**", trimmed)
+
     def test_stale_number_from_history_is_caught(self) -> None:
         history = [{"role": "assistant", "content": "[2026-09-12 09:00 UTC] CO2 was 612.4 ppm."}]
         v = self.validate("CO2 is 612.4 ppm [S1].", history=history)

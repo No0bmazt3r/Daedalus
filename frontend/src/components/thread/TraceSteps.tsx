@@ -9,7 +9,7 @@ import { formatMs } from './status'
 /** The trace's steps: one row each, opening to everything its log row recorded. */
 
 const KIND_LABEL: Record<TraceStep['kind'], string> = {
-  query: 'QUERY', understanding: 'INTENT', tool: 'TOOL', retrieval: 'RETRIEVAL',
+  query: 'QUERY', understanding: 'INTENT', tool: 'TOOL', retrieval: 'RETRIEVAL', rerank: 'RERANK',
   evidence: 'EVIDENCE', context: 'CONTEXT', model: 'MODEL', thinking: 'THINKING', validation: 'CHECK',
   answer: 'ANSWER', error: 'ERROR', feedback: 'FEEDBACK', label: 'LABEL',
 }
@@ -58,6 +58,41 @@ function Details({ step }: { step: TraceStep }) {
       </div>
     )
   }
+  if (step.kind === 'thinking' && typeof detail.thought === 'string' && detail.thought) {
+    // As the chat's "Thought process" shows it: the reasoning as prose, not a field.
+    return (
+      <div className="border-l-2 theme-border pl-3 text-xs leading-relaxed theme-text-muted whitespace-pre-wrap break-words">
+        {detail.thought}
+      </div>
+    )
+  }
+  if (step.kind === 'rerank' && Array.isArray(detail.moves)) {
+    const moves = detail.moves as { before: number | null; after: number; document: string | null; page: number | null; score: number | null }[]
+    return (
+      <div className="space-y-1.5 text-[11px]">
+        <p className="theme-text-muted">
+          {String(detail.model)} scored {String(detail.candidates ?? '?')} candidates and kept {moves.length}.
+          {!detail.positions_logged && ' Their places before re-ranking were not logged for this turn.'}
+        </p>
+        <ul className="space-y-1">
+          {moves.map((m) => {
+            const moved = m.before != null && m.before !== m.after
+            return (
+              <li key={m.after} className="flex items-baseline gap-3">
+                <span className={`w-16 shrink-0 font-mono tabular-nums ${moved ? 'theme-accent' : 'theme-text-muted'}`}>
+                  {m.before != null ? `#${m.before} → #${m.after}` : `#${m.after}`}
+                </span>
+                <span className="min-w-0 flex-1 truncate theme-text">
+                  {m.document ?? 'chunk no longer in the corpus'}{m.page != null && ` p.${m.page}`}
+                </span>
+                <span className="shrink-0 tabular-nums theme-text-muted">score {m.score != null ? m.score.toFixed(4) : '-'}</span>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    )
+  }
   const entries = Object.entries(detail).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length))
   if (!entries.length) return <p className="text-[11px] theme-text-muted">Nothing more was logged for this step.</p>
   return (
@@ -73,7 +108,9 @@ function Details({ step }: { step: TraceStep }) {
 }
 
 export function StepRow({ step, totalMs }: { step: TraceStep; totalMs: number | null }) {
-  const [open, setOpen] = useState(false)
+  // The model's reasoning is what people open a trace to read, so it starts open
+  // when there is some. Keyed by turn in TraceView, so each trace starts this way.
+  const [open, setOpen] = useState(step.kind === 'thinking' && Boolean(step.detail.thought))
   // The answer row's own `ms` is the whole turn; a bar for it would always be full.
   const share = step.kind !== 'answer' && step.ms != null && totalMs ? Math.min(1, step.ms / totalMs) : null
   return (

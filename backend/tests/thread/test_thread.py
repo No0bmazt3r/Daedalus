@@ -137,10 +137,43 @@ class ThreadTest(unittest.TestCase):
         audit_store.log("rag_logs", query_id=qid, track="vector", top_k=5,
                         retrieved_chunk_ids=["c1", "c2"], retrieval_latency_ms=30, rerank_latency_ms=8)
         steps = thread.trace(qid)["steps"]
-        self.assertEqual([s["kind"] for s in steps][2:5], ["tool", "tool", "retrieval"])
+        self.assertEqual([s["kind"] for s in steps][2:6], ["tool", "tool", "retrieval", "rerank"])
         retrieval = steps[4]
-        self.assertEqual(retrieval["ms"], 38)
+        self.assertEqual(retrieval["ms"], 30)  # the search alone; re-ranking has its own step
         self.assertEqual(retrieval["detail"]["chunk_ids"], ["c1", "c2"])
+        self.assertEqual(steps[5]["title"], "Re-rank: off")
+
+    def rerank_trace(self, **rag: object) -> dict:
+        qid = audit_store.new_query_id()
+        audit_store.log("conversation_logs", query_id=qid, user_query="why?", intent="document_query")
+        audit_store.log("tool_logs", query_id=qid, tool_name="search_corpus", status="ok", latency_ms=40)
+        audit_store.log("rag_logs", query_id=qid, track="vector", top_k=3,
+                        retrieved_chunk_ids=["c1", "c2", "c3"], retrieval_latency_ms=30, **rag)
+        return next(s for s in thread.trace(qid)["steps"] if s["kind"] == "rerank")
+
+    def test_rerank_step_says_what_moved(self) -> None:
+        step = self.rerank_trace(rerank_model="ms-marco", candidate_count=20, rerank_latency_ms=8,
+                                 rerank_scores=[0.9, 0.5, 0.1], rerank_ranks=[12, 2, 3])
+        self.assertEqual(step["title"], "ms-marco · 20 → 3 · 1 of 3 moved")
+        self.assertEqual(step["ms"], 8)
+        self.assertEqual([(m["before"], m["after"], m["score"]) for m in step["detail"]["moves"]],
+                         [(12, 1, 0.9), (2, 2, 0.5), (3, 3, 0.1)])
+
+    def test_rerank_step_before_positions_were_logged(self) -> None:
+        step = self.rerank_trace(rerank_model="ms-marco", candidate_count=20, rerank_scores=[0.9, 0.5, 0.1])
+        self.assertEqual(step["title"], "ms-marco · 20 → 3")
+        self.assertFalse(step["detail"]["positions_logged"])
+
+    def test_rerank_off_and_failed_are_told_apart(self) -> None:
+        self.assertEqual(self.rerank_trace(rerank_reason="re-ranking is off")["title"], "Re-rank: off")
+        failed = self.rerank_trace(rerank_reason="model not downloaded")
+        self.assertEqual((failed["title"], failed["status"]), ("Re-rank: failed (model not downloaded)", "warning"))
+
+    def test_graph_retrieval_has_no_rerank_step(self) -> None:
+        qid = audit_store.new_query_id()
+        audit_store.log("conversation_logs", query_id=qid, user_query="why?", intent="document_query")
+        audit_store.log("rag_logs", query_id=qid, track="graph", hop_count=2)
+        self.assertNotIn("rerank", [s["kind"] for s in thread.trace(qid)["steps"]])
 
 
     def test_label_is_appended_and_the_newest_wins(self) -> None:

@@ -581,6 +581,11 @@ def score(query: str, passages: list[str], *, model_id: str = DEFAULT_MODEL) -> 
     return out
 
 
+# Why re-ranking did not run, when it is switched off. Logged as `rag_logs.rerank_reason`;
+# any other reason there means it was switched on and failed (Ariadne's Thread).
+OFF = "re-ranking is off"
+
+
 def rerank(
     query: str,
     chunks: list[dict[str, Any]],

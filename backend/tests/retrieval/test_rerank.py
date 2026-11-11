@@ -66,6 +66,8 @@ class RerankTest(unittest.TestCase):
         self.assertEqual(row["candidate_count"], 20)
         self.assertEqual(json.loads(row["retrieved_chunk_ids"]), ["c19", "c18", "c17", "c16", "c15"])
         self.assertEqual(json.loads(row["rerank_scores"]), [0.95, 0.9, 0.85, 0.8, 0.75])
+        self.assertEqual(json.loads(row["rerank_ranks"]), [20, 19, 18, 17, 16])
+        self.assertIsNone(row["rerank_reason"])
 
     def test_unavailable_reranker_keeps_vector_order_and_says_so(self) -> None:
         with mock.patch.object(reranker, "score", side_effect=reranker.RerankUnavailable("not downloaded")):
@@ -74,6 +76,7 @@ class RerankTest(unittest.TestCase):
         self.assertIn("vector order: not downloaded", env["detail"])
         row = audit_store.trace("q_rerank_fallback")["rag_logs"][0]
         self.assertIsNone(row["rerank_model"])
+        self.assertIn("not downloaded", row["rerank_reason"])
 
     def test_off_means_top_k_straight_from_chroma(self) -> None:
         rag_config.write(rerank={"enabled": False})

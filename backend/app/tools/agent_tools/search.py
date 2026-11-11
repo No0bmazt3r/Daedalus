@@ -251,7 +251,7 @@ def search_corpus(query: str, top_k: int, source_type: str) -> dict[str, Any]:
     else:
         chunks = chunks[:top_k]
         if not settings["enabled"]:
-            rerank["reason"] = "re-ranking is off"
+            rerank["reason"] = reranker.OFF
 
     # Abstention: the cross-encoder judged these passages irrelevant, so none of
     # them reaches the model — an empty result is what makes the evidence pack

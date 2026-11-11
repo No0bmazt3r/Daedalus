@@ -414,6 +414,11 @@ def _mismatched_reading_citations(text: str, pack: EvidencePack) -> list[str]:
 TRIMMED_NOTE = "\n\n_Part of this answer was removed: it was not supported by the evidence._"
 
 
+# What is left of a line once its only statement is cut: a list marker,
+# citation labels, markdown emphasis and punctuation, and nothing that says anything.
+_HOLLOW = re.compile(r"\s*(?:[-*+]|\d+[.)])?\s*(?:\[[^\]]*\]|[*_`:;,.\s])*")
+
+
 def salvage(
     answer: str,
     v: Validation,
@@ -447,7 +452,14 @@ def salvage(
     )
     lines = []
     for line in text.split("\n"):
-        kept = [s for s in re.split(r"(?<=[.!?])\s+", line) if not dirty(s)]
+        sentences = re.split(r"(?<=[.!?])\s+", line)
+        kept = [s for s in sentences if not dirty(s)]
+        # A list item's marker ("2.") splits off as a sentence of its own, and so
+        # does a label written after the full stop ("… drained. [D3]"). Once the
+        # sentence between them is cut, a line of only those is not an answer:
+        # it went out as "2. [D3]". Drop it whole.
+        if len(kept) < len(sentences) and _HOLLOW.fullmatch(" ".join(kept)):
+            continue
         if kept or not line.strip():
             lines.append(" ".join(kept))
     text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
