@@ -28,7 +28,7 @@ class SessionCreate(BaseModel):
         description="Usually omitted; the first user message names the chat.",
     )
     device_id: str = Field(
-        default="co2_reactor",
+        default="mini-co2-rig-01",
         max_length=64,
         description="Forward-compatibility for Phase 2 multi-device. "
         "Single-device for FYP2 — see PROJECT.md §2.2 #3.",

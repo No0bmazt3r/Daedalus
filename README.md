@@ -282,8 +282,9 @@ Regenerate both charts from your own audit log with
 ## Configuration
 
 Everything lives in `.env`, created from [`.env.example`](.env.example) by
-`setup`. It holds no secrets — nothing calls a cloud API until you add a
-cloud endpoint in The Forge.
+`setup`. Out of the box it holds no secrets — nothing calls a cloud API until
+you add a cloud endpoint in The Forge. The only secret you might add is
+`HF_TOKEN` (below).
 
 | Setting | Default |
 |:--|:--|
@@ -291,6 +292,31 @@ cloud endpoint in The Forge.
 | `DAEDALUS_PORT` | `8000` (under `start`) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` |
 | `SEARXNG_URL` | `http://127.0.0.1:8081` |
+| `DAEDALUS_ALLOW_DEMO_SEED` | `0` — set `1` to let Settings → Databases and Blueprints seed demo data over HTTP. Those endpoints write and take no login, so keep it `0` on any shared machine. `reset.sh` seeds without it |
+| `DAEDALUS_DEVICE_ID` | `mini-co2-rig-01` — the rig the sensor data comes from; rows without an id are read as this rig |
+| `DAEDALUS_RIG_TZ` | empty (this PC's zone) — the time zone of the rig HMI's Date/Time, for the rig bridge |
+| `HF_TOKEN` | empty — only needed for gated Hugging Face models |
+
+### Hugging Face token (optional)
+
+You only need `HF_TOKEN` to pull a **gated** model from Hugging Face, one
+whose page asks you to accept a licence first, such as `meta-llama/*`. Ollama
+can't send a token with its own `hf.co/` pull, so a gated pull fails there.
+Daedalus then downloads the GGUF itself using your token and hands it to
+Ollama under the same tag. Public GGUFs, Hugging Face search in The Forge and
+re-ranker downloads all work without a token.
+
+To get one:
+
+1. Sign in at [huggingface.co](https://huggingface.co) and open the model's
+   page. Accept its licence; access to some models needs approval first.
+2. Go to **Settings → Access Tokens**
+   ([huggingface.co/settings/tokens](https://huggingface.co/settings/tokens))
+   → **Create new token**. Choose type **Read**.
+3. Paste it into `.env` as `HF_TOKEN=hf_...` and restart Daedalus.
+
+The token is sent only to huggingface.co, and Daedalus never stores it
+anywhere else.
 
 To point Daedalus at a **real reactor database**, put it (or a symlink) at
 `data/sqlite/sensor_readings.db`. It is opened read-only regardless.

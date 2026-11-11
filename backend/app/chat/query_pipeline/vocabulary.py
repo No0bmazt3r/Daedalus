@@ -36,10 +36,6 @@ SENSORS: dict[str, dict[str, object]] = {
         "display": "pH",
         "pattern": r"\bp\.?h\b|\bacidity\b|\balkalinity\b",
     },
-    "level": {
-        "display": "level",
-        "pattern": r"\b(?:liquid|tank|fill|reactor)\s+levels?\b|\blevels?\b|\bparas\b",
-    },
     "co2": {
         "display": "CO2",
         "pattern": r"\bco2\b|\bcarbon\s+dioxide\b|\bndir\b|\bppm\b|\bkarbon\s+dioksida\b",
@@ -68,17 +64,7 @@ def find_sensors(text: str) -> list[tuple[str, int, int]]:
                 kept[-1] = hit
             continue
         kept.append(hit)
-    # "CO2 level", "pH level": `level` there is a word about the sensor before
-    # it, not the tank-level sensor. A bare "level" directly after another
-    # sensor's name is dropped; "tank level" and "the level" are kept.
-    return [
-        hit for i, hit in enumerate(kept)
-        if not (
-            hit[0] == "level" and i and kept[i - 1][0] != "level"
-            and not text[kept[i - 1][2]:hit[1]].strip()
-            and text[hit[1]:hit[2]].startswith("level")
-        )
-    ]
+    return kept
 
 
 # ── time ─────────────────────────────────────────────────────────────────────

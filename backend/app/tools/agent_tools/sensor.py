@@ -50,7 +50,7 @@ from ...db import sensor_store
 from .registry import Effect, Param, ToolError, register
 
 # Numeric sensors — the ones a statistic means anything for.
-NUMERIC_SENSORS = ("temperature", "pressure", "ph", "level", "co2_ppm")
+NUMERIC_SENSORS = ("temperature", "pressure", "ph", "co2_ppm")
 # State sensors — readable, not aggregable (an "average mode" is not a thing).
 STATE_SENSORS = ("mode",)
 READABLE_SENSORS = NUMERIC_SENSORS + STATE_SENSORS + ("all",)

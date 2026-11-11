@@ -28,6 +28,7 @@ from typing import Any, Final
 from ..db import sqlite_util
 from ..db.audit_store import LOG_TABLES
 from ..db.paths import AUDIT_DB, CHAT_DB, CORPUS_DB
+from ..db import sensor_store
 from ..db.sensor_store import SENSOR_DB
 
 # Store → (database file, tables that may be read).
@@ -68,6 +69,22 @@ STORE_LABELS: Final[dict[str, str]] = {
 # Defence in depth — nothing in BROWSABLE currently has such a column.
 REDACTED_COLUMNS: Final[tuple[str, ...]] = ("api_key", "secret", "auth_token", "access_token", "session_token", "bearer", "password")
 REDACTED_MARKER: Final = "••• redacted"
+
+# Tables shown through a fixed projection instead of `SELECT *`. Sensor rows
+# read like the rig HMI's Data tab: same column order, plain-English names.
+# Still literals only, so rule 1 holds. The stored timestamp is UTC.
+DISPLAY_COLUMNS: Final[dict[str, str]] = {
+    "sensor_readings": (
+        '{device} AS "Device", '
+        'substr(timestamp, 1, 10) AS "Date", '
+        'substr(timestamp, 12, 8) AS "Time (UTC)", '
+        'temp_c AS "Temperature T-101 (°C)", '
+        'pressure_barg AS "Pressure P-101 (barg)", '
+        'ph AS "pH-101", '
+        'co2_ppm AS "CO₂ (ppm)", '
+        'mode AS "Mode"'
+    ),
+}
 
 DEFAULT_LIMIT: Final = 100
 MAX_LIMIT: Final = 1_000
@@ -235,9 +252,17 @@ def read(
     direction = "DESC" if newest_first else "ASC"
     with sqlite_util.connect(db_path, read_only=True) as conn:
         total = conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+        projection = DISPLAY_COLUMNS.get(table, "*")
+        params: tuple[Any, ...] = (limit, offset)
+        if "{device}" in projection:
+            # A row, or a writer's whole file, with no device id is this rig's.
+            has_column = any(r["name"] == "device_id" for r in conn.execute(f"PRAGMA table_info({table})"))
+            projection = projection.replace(
+                "{device}", "COALESCE(NULLIF(device_id, ''), ?)" if has_column else "?")
+            params = (sensor_store.device_id(), limit, offset)
         cursor = conn.execute(
-            f"SELECT * FROM {table} ORDER BY rowid {direction} LIMIT ? OFFSET ?",
-            (limit, offset),
+            f"SELECT {projection} FROM {table} ORDER BY rowid {direction} LIMIT ? OFFSET ?",
+            params,
         )
         columns = [d[0] for d in cursor.description]
         rows = [

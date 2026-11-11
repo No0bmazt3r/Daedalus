@@ -168,7 +168,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
       </div>
 
       {/* Rows */}
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="flex-1 overflow-auto no-scrollbar min-h-0">
         {/* The table cannot be read: the window's body is the error page. */}
         {error && (
           <TabError
@@ -204,7 +204,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
                 {page.columns.map((col) => (
                   <th
                     key={col}
-                    className="text-left font-medium px-3 py-2 whitespace-nowrap theme-text-muted"
+                    className="text-center font-medium px-3 py-2 whitespace-nowrap theme-text-muted"
                   >
                     {col}
                   </th>
@@ -224,7 +224,7 @@ export function StoreBrowser({ store, table }: { store: string; table: string })
                       <td
                         key={col}
                         title={text}
-                        className={`px-3 py-1.5 align-top max-w-[22rem] truncate font-mono ${
+                        className={`px-3 py-1.5 align-top text-center max-w-[22rem] truncate font-mono ${
                           row[col] === null ? 'opacity-30' : ''
                         }`}
                       >

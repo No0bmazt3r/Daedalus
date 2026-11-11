@@ -188,7 +188,7 @@ def _message_row(row: sqlite3.Row) -> dict[str, Any]:
 def create_session(
     *,
     title: str | None = None,
-    device_id: str = "co2_reactor",
+    device_id: str = "mini-co2-rig-01",
     ephemeral: bool = False,
 ) -> dict[str, Any]:
     """Open a new session. `title` is usually left to the first message."""

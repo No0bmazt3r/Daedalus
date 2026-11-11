@@ -35,9 +35,9 @@ def build() -> None:
             ts = (START + timedelta(minutes=i)).isoformat()
             conn.execute(
                 "INSERT INTO sensor_readings (timestamp, device_id, mode, temp_c, pressure_barg, ph, "
-                "level_pct, co2_ppm) VALUES (?,?,?,?,?,?,?,?)",
-                (ts, "co2_reactor_01", "Absorption" if i < 60 else "Desorption", temperature(i),
-                 1.5, 7.0, 60.0, co2(i)),
+                "co2_ppm) VALUES (?,?,?,?,?,?,?)",
+                (ts, "mini-co2-rig-01", "Absorption" if i < 60 else "Desorption", temperature(i),
+                 1.5, 7.0, co2(i)),
             )
 
 

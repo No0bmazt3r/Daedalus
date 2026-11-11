@@ -12,6 +12,7 @@ never called from the query path.
 
 from __future__ import annotations
 
+import os
 import random
 import sqlite3
 from contextlib import contextmanager
@@ -20,13 +21,21 @@ from typing import Any, Iterator
 
 from .paths import SENSOR_DB, ensure_dirs
 
+# The rig this database describes. CO2SorptionDT logs no device column, so the
+# writer stamps this id; a row (or a whole file) without one is read as this rig.
+DEFAULT_DEVICE_ID = "mini-co2-rig-01"
+
+
+def device_id() -> str:
+    return os.environ.get("DAEDALUS_DEVICE_ID", "").strip() or DEFAULT_DEVICE_ID
+
+
 # Friendly tool-facing names → real columns. The tool layer only ever accepts
 # a key from this map, so no caller-supplied string reaches SQL.
 SENSOR_COLUMNS = {
     "temperature": "temp_c",
     "pressure": "pressure_barg",
     "ph": "ph",
-    "level": "level_pct",
     "co2_ppm": "co2_ppm",
     "mode": "mode",
 }
@@ -35,7 +44,6 @@ SENSOR_UNITS = {
     "temperature": "°C",
     "pressure": "barg",
     "ph": "",
-    "level": "%",
     "co2_ppm": "ppm",
 }
 
@@ -46,16 +54,21 @@ AGGREGATIONS = {
     "count": "COUNT",
 }
 
+# Mirrors the rig HMI's Data tab, logged once a second: Date + Time (merged
+# into `timestamp`, UTC), T-101 [C], P-101 [barg], pH-101 [-], CO2 [ppm], Mode.
+# The rig logs no level, so there is no level column.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sensor_readings (
-    timestamp      TEXT PRIMARY KEY,
-    device_id      TEXT NOT NULL DEFAULT 'co2_reactor_01',
-    mode           TEXT CHECK(mode IN ('Manual','Absorption','Desorption')),
+    timestamp      TEXT NOT NULL,
+    device_id      TEXT NOT NULL DEFAULT 'mini-co2-rig-01',
+    -- No CHECK: a mode the rig adds later is stored, not a dropped row.
+    mode           TEXT,
     temp_c         REAL,
     pressure_barg  REAL,
     ph             REAL,
-    level_pct      REAL,
-    co2_ppm        REAL
+    co2_ppm        REAL,
+    -- Per rig: two rigs logging the same second are two rows.
+    PRIMARY KEY (device_id, timestamp)
 );
 
 CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON sensor_readings(timestamp);
@@ -100,7 +113,7 @@ def init_schema() -> None:
         conn.executescript(_SCHEMA)
 
 
-def seed_demo(hours: int = 6, interval_s: int = 5) -> int:
+def seed_demo(hours: int = 6, interval_s: int = 1) -> int:
     """Generate a plausible run so the UI has something to query offline.
 
     Not a simulator — just enough shape (a diurnal drift plus one injected CO₂
@@ -115,6 +128,7 @@ def seed_demo(hours: int = 6, interval_s: int = 5) -> int:
         now = datetime.now(timezone.utc).replace(microsecond=0)
         start = now - timedelta(hours=hours)
         rows: list[tuple[Any, ...]] = []
+        device = device_id()
         steps = int(hours * 3600 / interval_s)
         # One CO₂ excursion, roughly two-thirds of the way through.
         excursion_at = int(steps * 0.66)
@@ -132,19 +146,18 @@ def seed_demo(hours: int = 6, interval_s: int = 5) -> int:
 
             rows.append((
                 ts.isoformat(),
-                "co2_reactor_01",
+                device,
                 mode,
                 round(28 + 4 * phase + random.uniform(-0.4, 0.4), 2),
                 round(1.5 + 0.3 * phase + random.uniform(-0.03, 0.03), 3),
                 round(7.0 - 0.35 * phase + random.uniform(-0.05, 0.05), 2),
-                round(62 - 9 * phase + random.uniform(-0.6, 0.6), 1),
                 round(co2, 1),
             ))
 
         conn.executemany(
             "INSERT OR IGNORE INTO sensor_readings "
-            "(timestamp, device_id, mode, temp_c, pressure_barg, ph, level_pct, co2_ppm) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "(timestamp, device_id, mode, temp_c, pressure_barg, ph, co2_ppm) "
+            "VALUES (?,?,?,?,?,?,?)",
             rows,
         )
         return len(rows)

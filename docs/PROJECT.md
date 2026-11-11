@@ -471,19 +471,19 @@ results invalidates the comparison.
 
 ```sql
 CREATE TABLE sensor_readings (
-    timestamp      TEXT PRIMARY KEY,   -- ISO-8601: 2026-01-07T10:00:05
-    device_id      TEXT NOT NULL DEFAULT 'co2_reactor_01',  -- Phase-2 forward-compat
-    mode           TEXT CHECK(mode IN ('Manual','Absorption','Desorption')),
+    timestamp      TEXT NOT NULL,      -- ISO-8601 UTC: 2026-01-07T10:00:05+00:00
+    device_id      TEXT NOT NULL DEFAULT 'mini-co2-rig-01',  -- the physical rig; .env DAEDALUS_DEVICE_ID
+    mode           TEXT,               -- Manual / Absorption / Desorption; unchecked, so a new mode is kept
     temp_c         REAL,   -- T-101
     pressure_barg  REAL,   -- P-101
     ph             REAL,   -- pH-101
-    level_pct      REAL,   -- LV-101/102
-    co2_ppm        REAL    -- NDIR
+    co2_ppm        REAL,   -- NDIR
+    PRIMARY KEY (device_id, timestamp)
 );
 CREATE INDEX idx_readings_timestamp ON sensor_readings(timestamp);
 ```
 
-**Volume:** ~17,000 rows/day at 5s sampling — comfortably within SQLite's range
+**Volume:** ~86,400 rows/day at the rig's 1 s logging — comfortably within SQLite's range
 for hourly-mean trend queries with no rollup tables.
 
 ### 6.2 Access & concurrency

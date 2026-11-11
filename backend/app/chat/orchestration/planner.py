@@ -52,7 +52,6 @@ _SENSOR_KEYS = {
     "temperature": "temperature",
     "pressure": "pressure",
     "ph": "ph",
-    "level": "level",
     "co2": "co2_ppm",
     "mode": "mode",
 }

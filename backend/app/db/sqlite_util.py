@@ -60,12 +60,15 @@ class DatabaseUnavailableError(RuntimeError):
     """
 
 
-def _apply_pragmas(conn: sqlite3.Connection, *, foreign_keys: bool) -> None:
+def _apply_pragmas(conn: sqlite3.Connection, *, foreign_keys: bool, read_only: bool = False) -> None:
     # Order matters: these must run outside a transaction. `foreign_keys` is a
     # silent no-op inside one, which is the classic way cascades stop working.
     conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    if not read_only:
+        # Switching to WAL writes the file header, so a `mode=ro` reader of a
+        # file someone else wrote (the rig's, not in WAL) would fail here.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute(f"PRAGMA foreign_keys={'ON' if foreign_keys else 'OFF'}")
 
 
@@ -103,7 +106,7 @@ def connect(
 
     try:
         conn.row_factory = sqlite3.Row
-        _apply_pragmas(conn, foreign_keys=foreign_keys)
+        _apply_pragmas(conn, foreign_keys=foreign_keys, read_only=read_only)
         yield conn
     finally:
         conn.close()
