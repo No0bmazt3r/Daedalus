@@ -699,6 +699,23 @@ function deriveStatusColors(colors: ThemeColors): StatusColors {
       };
 }
 
+/**
+ * A second line colour that cannot be mistaken for the accent: its complement,
+ * or amber when the accent is a grey (whose complement is the same grey).
+ * Held to 3:1 against the background, the WCAG minimum for graphics.
+ */
+function deriveSecondSeries(colors: ThemeColors): string {
+  const [h, s, l] = hexToHSL(deriveReadableAccent(colors));
+  const hue = s < 15 ? 38 : (h + 180) % 360;
+  const step = relativeLuminance(colors.bg) < 0.5 ? 2 : -2;
+  let best = hslToHex(hue, Math.max(s, 60), l);
+  for (let light = l; light >= 0 && light <= 100; light += step) {
+    best = hslToHex(hue, Math.max(s, 60), light);
+    if (contrastRatio(best, colors.bg) >= 3) return best;
+  }
+  return best;
+}
+
 /** WCAG AA for normal text. Everything derived here is held to it. */
 const AA_CONTRAST = 4.5;
 
@@ -866,6 +883,14 @@ function applyColors(colors: ThemeColors, advanced?: AdvancedColors) {
   s.setProperty('--status-warn', status.warn);
   s.setProperty('--status-bad', status.bad);
   s.setProperty('--status-info', status.info);
+  // Observability's time-breakdown bars (retrieval, re-rank, model load,
+  // prefill, generation): distinct hues at similar weight. Generation is
+  // usually most of the bar, so it gets the strongest hue, never the grey.
+  const chart = relativeLuminance(colors.bg) < 0.5
+    ? ['#3cc4b0', '#d983c9', '#a3a9b5', '#e9b04f', '#6ea2f5']
+    : ['#0e8a7b', '#a64d99', '#6b7280', '#b7791f', '#2f6fd6'];
+  chart.forEach((c, i) => s.setProperty(`--chart-${i + 1}`, c));
+  s.setProperty('--chart-p95', deriveSecondSeries(colors));
 
   // Keep the mobile browser chrome matched to the background.
   const meta = document.querySelector('meta[name="theme-color"]');

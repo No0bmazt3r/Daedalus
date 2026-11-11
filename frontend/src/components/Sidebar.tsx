@@ -3,7 +3,8 @@ import { LabyrinthIcon } from "./LabyrinthIcon";
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { Collapse } from './ui/collapse'
-import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map as MapIcon, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2 } from 'lucide-react'
+import { Plus, PanelLeftClose, Search, Circle, Settings, Network, Hammer, Map as MapIcon, Palette, MoreHorizontal, Pencil, Trash2, Sparkles, Ghost, Database, HardDrive, ChevronRight, Table2, Activity } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import { Skeleton } from './ui/skeleton'
 import {
   DropdownMenu,
@@ -305,6 +306,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
   const { sessions, activeSessionId, status, sending, newChat, selectSession, rename, retitle, remove } = useSessions()
   const [confirm, confirmDialog] = useConfirm()
   const { isIncognito } = useSettings()
+  const navigate = useNavigate()
   const { show } = useUiPrefs()
   const [filter, setFilter] = useState('')
   const [searching, setSearching] = useState(false)
@@ -366,6 +368,7 @@ export function Sidebar({ onClose, onOpenTheme, onOpenSettings, onOpenForge, onO
             { title: "Ariadne's Thread", icon: Network, onClick: onOpenThread },
             { title: 'The Forge', icon: Hammer, onClick: onOpenForge },
             { title: 'Labyrinth Blueprints', icon: MapIcon, onClick: onOpenBlueprints },
+            { title: 'Observability', icon: Activity, onClick: () => void navigate({ to: '/observability' }) },
           ].map((item) => (
             <Button
               key={item.title}

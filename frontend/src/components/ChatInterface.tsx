@@ -1,7 +1,7 @@
 import { LabyrinthIcon } from "./LabyrinthIcon";
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from './ui/button'
-import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
+import { MINIMIZED_DOCK_SLOT, dockSlotRef } from './ui/floating-window'
 import { RigChip } from './RigChip'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
@@ -711,11 +711,12 @@ export function ChatInterface() {
           titles rather than wrapping onto a second row. */}
       <div className="relative z-50 shrink-0 flex items-start justify-end gap-3 px-6 pt-4">
         {/* Minimized windows land here, to the left of the incognito toggle.
-            `FloatingWindow` portals into this node by id; see `getDock` there.
+            `FloatingWindow` portals into whichever slot is mounted; see `dockSlotRef`.
             An existing, always-visible control cluster beats a floating bar:
             bottom-centre sat directly under the composer, which is the one
             place guaranteed to compete for attention while you are typing. */}
         <div
+          ref={dockSlotRef}
           id={MINIMIZED_DOCK_SLOT}
           className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2"
         />

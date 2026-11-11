@@ -266,6 +266,13 @@ export function openStore(store: string, table: string) {
   window.dispatchEvent(new CustomEvent(OPEN_STORE_EVENT, { detail: { store, table } }));
 }
 
+/** Open Settings at one panel, from a page the shell's callbacks cannot reach. */
+export const OPEN_SETTINGS_EVENT = 'daedalus:open-settings';
+
+export function openSettingsPanel(panel: string) {
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { panel } }));
+}
+
 export function openThread(queryId?: string) {
   window.dispatchEvent(new CustomEvent(OPEN_THREAD_EVENT, { detail: { queryId } }));
 }

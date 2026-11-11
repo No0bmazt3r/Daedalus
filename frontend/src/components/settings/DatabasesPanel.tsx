@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TabError } from '../errors/TabError'
 import { toFailure, type LoadFailure } from '../errors/ErrorPage'
-import { Database, HardDrive, Lock, RefreshCw, Sprout, Check, ExternalLink, Activity } from 'lucide-react'
-import { observability, type Observability } from '../../lib/systemClient'
+import { Link } from '@tanstack/react-router'
+import { Database, HardDrive, Lock, RefreshCw, Sprout, Check, ArrowRight, Activity } from 'lucide-react'
 import { SkeletonCard } from '../ui/skeleton'
 
 /**
@@ -61,7 +61,6 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   // there would be a synchronous re-render. Later reloads set it themselves.
   const [busy, setBusy] = useState(true)
   const [seedResult, setSeedResult] = useState<string | null>(null)
-  const [obs, setObs] = useState<Observability | null>(null)
 
   const load = useCallback(() => fetch('/api/system/databases')
     .then(async (res) => {
@@ -81,24 +80,6 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
   useEffect(() => {
     void load()
   }, [load])
-
-  // Independent of the store health call: whether the metrics stack is
-  // configured has nothing to do with whether the databases are up, and a
-  // failure to answer should not blank the panel.
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const found = await observability()
-        if (!cancelled) setObs(found)
-      } catch {
-        if (!cancelled) setObs({ url: '', configured: false })
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const seed = useCallback(async () => {
     setBusy(true)
@@ -284,29 +265,18 @@ export function DatabasesPanel({ isPeek }: { isPeek: boolean }) {
             <Activity size={18} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="font-medium">Metrics &amp; container logs</div>
+            <div className="font-medium">Metrics &amp; logs</div>
             <p className="text-xs theme-text-muted mt-1">
-              This panel says <em>whether</em> a store is healthy. The metrics
-              stack (Prometheus, Grafana and the container logs) is where you
-              find out <em>why</em> it isn't.
+              This panel says <em>whether</em> a store is healthy. Observability shows how the
+              assistant has been doing: response times, tool failures, refusals and errors.
             </p>
-            {obs?.configured ? (
-              <a
-                href={obs.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
-              >
-                <ExternalLink size={12} />
-                Open metrics &amp; logs
-              </a>
-            ) : (
-              <p className="text-xs theme-text-muted mt-3">
-                Not configured. Set <code className="theme-text">DAEDALUS_OBSERVABILITY_URL</code>{' '}
-                in <code className="theme-text">.env</code> once the stack is running. See
-                M7 in <code className="theme-text">TODO.md</code>.
-              </p>
-            )}
+            <Link
+              to="/observability"
+              className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs rounded-lg border theme-border theme-text-muted hover:theme-text hover:bg-[color-mix(in_srgb,var(--text-main)_9%,transparent)] transition-colors"
+            >
+              Open Observability
+              <ArrowRight size={12} />
+            </Link>
           </div>
         </div>
       </div>

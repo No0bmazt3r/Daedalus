@@ -757,13 +757,12 @@ are `chat/inference.py`. Verified end to end on qwen3:1.7b.
       Malaysian IC numbers. Phone numbers are deliberately not matched — the
       pattern would eat sensor readings. 3 tests
 - [-] Streamlit log viewer: history, filters, per-query trace, error dashboard, evaluation view *(cut from FYP2, 2026-10-01)*
-- [-] Metrics + container logs on their own port — Prometheus scraping the app,
-      Grafana over it, and the compose logs for each service in one place. The
-      dashboard says *whether* a store is healthy; this is where you go to find
-      out *why* it isn't, without dropping to `docker compose logs` *(cut from FYP2, 2026-10-01)*
-- [-] Wire it to the Databases panel — the standing link described in M10, plus
-      per-store deep links so an unhealthy row lands on *that* service's logs
-      rather than on the Grafana home page *(cut from FYP2, 2026-10-01)*
+- [x] **Observability page** *(2026-11-11, replaces the cut Prometheus/Grafana
+      stack and its per-store deep links)* — `/observability`, built into the
+      app over `ai_logs.db`: headline numbers, p50/p95 response time, time
+      breakdown by phase, tools, models, recent errors and slowest turns opening
+      the Thread. Range and source (chat · eval · benchmark) filters.
+      `DAEDALUS_OBSERVABILITY_URL` removed. 4 tests in `tests/test_observability.py`
 
 ## M8 — Evaluation
 
@@ -1514,10 +1513,8 @@ Layer 9 below for the per-step detail.
       everyday one. Nothing lives in both:
   - [x] Settings → Databases is health-only — per store: Healthy or Not healthy,
         schema version, size, last error. No row browsing, no tables, no modal
-  - [x] A permanent link out of that panel to the metrics/logs service (below),
-        present whether or not anything is failing. Reads
-        `DAEDALUS_OBSERVABILITY_URL` via `GET /api/system/observability`; says
-        the stack is not configured rather than offering a dead link
+  - [x] A permanent link out of that panel to the Observability page (M7),
+        present whether or not anything is failing
   - [x] The store browser is in the sidebar under the chat history — expand a
         store, click a table, rows render in the main pane at
         `/stores/$store/$table`. A route, not a modal: deep-linkable, Back

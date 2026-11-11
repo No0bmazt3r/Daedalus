@@ -20,6 +20,10 @@ _ROOT = tempfile.mkdtemp(prefix="daedalus-tests-")
 os.environ["DAEDALUS_DATA_DIR"] = _ROOT
 os.environ["DAEDALUS_LOG_DIR"] = os.path.join(_ROOT, "logs")
 os.environ["DAEDALUS_PREFS_DB"] = os.path.join(_ROOT, "prefs.db")
+# Set outright, not left to follow DATA_DIR: `host_py` exports the real chat DB's
+# path, and a run through it wrote test chats into data/sqlite/chat.db.
+os.environ["DAEDALUS_CHAT_DB"] = os.path.join(_ROOT, "sqlite", "chat.db")
+os.environ["DAEDALUS_CORPUS_DB"] = os.path.join(_ROOT, "sqlite", "corpus.db")
 os.environ["DAEDALUS_CONFIG_DIR"] = os.path.join(_ROOT, "config")
 os.environ["DAEDALUS_TZ"] = "UTC"
 os.makedirs(os.environ["DAEDALUS_CONFIG_DIR"], exist_ok=True)

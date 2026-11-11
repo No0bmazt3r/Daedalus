@@ -20,6 +20,7 @@ import {
   type ChatMessage,
   type ChatSession,
 } from '../lib/sessionsClient';
+import { useNavigate } from '@tanstack/react-router';
 import { useSettings } from './SettingsContext';
 import {
   sendChat, checkChatStatus, asEvidence, fetchRatings, rateAnswer,
@@ -182,7 +183,14 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   // says when one changes.
   useLiveRefresh(['sessions'], () => void refresh());
 
+  // Starting or opening a chat from another page (Observability) goes to the
+  // chat. Here rather than at each caller: the sidebar, the shortcuts and the
+  // command palette all come through these two.
+  const navigate = useNavigate();
+  const toChat = useCallback(() => { void navigate({ to: '/' }); }, [navigate]);
+
   const newChat = useCallback(() => {
+    toChat();
     loadToken.current += 1;
     stopPolling();
     setSending(false);
@@ -191,7 +199,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setRatings({});
     setError(null);
-  }, [stopPolling]);
+  }, [stopPolling, toChat]);
 
   // Toggling incognito hides the open chat rather than resetting state in an
   // effect: continuing to append to a persisted session while the UI says
@@ -202,6 +210,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const visibleMessages = modeMismatch ? NO_MESSAGES : messages;
 
   const selectSession = useCallback((id: string) => {
+    toChat();
     const token = ++loadToken.current;
     stopPolling();
     setSending(false);
@@ -285,7 +294,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         setError(err instanceof Error ? err.message : 'could not open that chat');
       }
     })();
-  }, [stopPolling]);
+  }, [stopPolling, toChat]);
 
   // `history` is what stays on screen above the new turn: the whole transcript
   // for a normal send, the part before the re-asked message for retry/edit.

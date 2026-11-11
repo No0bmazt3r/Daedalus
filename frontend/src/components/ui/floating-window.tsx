@@ -146,18 +146,28 @@ export function useTiledInset() {
 
 let fallbackDock: HTMLDivElement | null = null
 
-function getDock(): HTMLElement | null {
-  if (typeof document === 'undefined') return null
+// Pages that host the dock register their slot here; the newest mounted wins.
+// Resolved on every render rather than once at minimize: a chip has to follow
+// you from the chat to Observability and back, or it is portalled into a node
+// that is no longer on screen and the window becomes unreachable.
+let slots: HTMLElement[] = []
+const slotListeners = new Set<() => void>()
 
-  const slot = document.getElementById(MINIMIZED_DOCK_SLOT)
-  if (slot) {
-    // Drop any fallback that is on screen, so chips do not end up split
-    // between two docks when the slot mounts after the first minimize.
-    fallbackDock?.remove()
-    fallbackDock = null
-    return slot
+/** Ref callback for a page's dock slot: `<div ref={dockSlotRef} id={MINIMIZED_DOCK_SLOT} />`. */
+export function dockSlotRef(el: HTMLElement | null) {
+  if (!el) return
+  slots = [...slots, el]
+  // Chips move into the slot, so the floating fallback is no longer needed.
+  fallbackDock?.remove()
+  fallbackDock = null
+  slotListeners.forEach((l) => l())
+  return () => {
+    slots = slots.filter((s) => s !== el)
+    slotListeners.forEach((l) => l())
   }
+}
 
+function fallback(): HTMLElement {
   if (fallbackDock?.isConnected) return fallbackDock
   fallbackDock = document.createElement('div')
   fallbackDock.id = 'minimized-dock-fallback'
@@ -167,6 +177,16 @@ function getDock(): HTMLElement | null {
     'fixed top-4 right-6 z-[110] flex items-center gap-2 pointer-events-none'
   document.body.appendChild(fallbackDock)
   return fallbackDock
+}
+
+/** Where this window's chip goes: the mounted slot, else the floating fallback. */
+function useDock(minimized: boolean): HTMLElement | null {
+  const slot = useSyncExternalStore(
+    (l) => { slotListeners.add(l); return () => { slotListeners.delete(l) } },
+    () => slots.at(-1) ?? null,
+  )
+  if (!minimized || typeof document === 'undefined') return null
+  return slot ?? fallback()
 }
 
 /**
@@ -217,7 +237,7 @@ export function useMinimizeToDock({
   icon?: ReactNode
 }) {
   const [minimized, setMinimized] = useState(false)
-  const [dock, setDock] = useState<HTMLElement | null>(null)
+  const dock = useDock(minimized)
 
   // Adjusted during render rather than in an effect, so a reopened window never
   // paints one frame as a chip.
@@ -227,15 +247,10 @@ export function useMinimizeToDock({
     if (!open) setMinimized(false)
   }
 
-  // The dock node is created here rather than in an effect: this is the first
-  // moment it is needed, a click handler is where a DOM side effect belongs,
-  // and a page where nobody minimizes anything never grows the node at all.
-  //
   // Memoised because `useMinimizeOnOutsideClick` takes it as a dependency; a
   // fresh function each render would tear down and re-add the document
   // listener on every keystroke in the window.
   const minimize = useCallback(() => {
-    setDock(getDock())
     setMinimized(true)
   }, [])
 
@@ -327,7 +342,7 @@ export function FloatingWindow({
 }) {
   const [isPeek, setIsPeek] = useState(false)
   const [minimized, setMinimized] = useState(false)
-  const [dock, setDock] = useState<HTMLElement | null>(null)
+  const dock = useDock(minimized)
   const { position, onMouseDown, handleRef, windowRef, preview, snapRect, settling, toggleMaximize } =
     useDraggable()
 
@@ -343,7 +358,6 @@ export function FloatingWindow({
 
   // Declared here, above the Escape handler that uses `restore`.
   const minimize = useCallback(() => {
-    setDock(getDock())
     setMinimized(true)
   }, [])
 

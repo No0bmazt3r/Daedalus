@@ -25,7 +25,7 @@ from ...db import (
 )
 from ...blueprints import graph_seed
 from ...forge import model_config, model_endpoints, ollama_client
-from .. import rig_link
+from .. import observability as observability_report, rig_link
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -51,20 +51,10 @@ def _schema(store: str) -> dict[str, Any]:
 
 
 @router.get("/observability")
-def observability() -> dict[str, Any]:
-    """Where to go when a store is reported unhealthy.
-
-    The dashboard answers *whether* something is wrong; the metrics stack —
-    Prometheus scraping this app, Grafana over it, container logs alongside —
-    answers *why*. That runs as its own service on its own port, so the only
-    thing this app can usefully say is where it is.
-
-    Unset is a normal state, not an error: the stack is optional and is not
-    running in most development setups. The UI says so rather than offering a
-    link into nothing. See TODO.md, M7.
-    """
-    url = (os.environ.get("DAEDALUS_OBSERVABILITY_URL") or "").strip()
-    return {"url": url, "configured": bool(url)}
+def observability(range: observability_report.Range = "all",  # noqa: A002 — the query parameter's name
+                  source: observability_report.Source = "chat") -> dict[str, Any]:
+    """The Observability page's figures over `ai_logs.db` (TODO.md, M7)."""
+    return observability_report.report(range, source)
 
 
 def _ago(iso: str | None) -> str:

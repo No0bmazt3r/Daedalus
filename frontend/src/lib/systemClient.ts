@@ -59,14 +59,56 @@ export function readLogTable(
 
 // ── observability ────────────────────────────────────────────────────────────
 
+export type ObsRange = '24h' | '7d' | '30d' | 'all';
+export type ObsSource = 'chat' | 'eval' | 'benchmark';
+export const OBS_PHASES = ['retrieval', 'rerank', 'load', 'prefill', 'generation'] as const;
+export type ObsPhase = (typeof OBS_PHASES)[number];
+
+export type ObsPoint = {
+  start: string;
+  turns: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+} & Record<ObsPhase, number | null>;
+
 export interface Observability {
-  url: string;
-  configured: boolean;
+  range: ObsRange;
+  source: ObsSource;
+  unit: 'hour' | 'day' | 'week';
+  timezone: string;
+  generated_at: string;
+  headline: {
+    turns: number;
+    p50_ms: number | null;
+    p95_ms: number | null;
+    errors: number;
+    error_rate: number | null;
+    refused: number;
+    refusal_rate: number | null;
+    grounded: number;
+    checked: number;
+    grounded_rate: number | null;
+    labelled: number;
+    hallucinated: number;
+    hallucination_rate: number | null;
+  };
+  series: ObsPoint[];
+  tools: { name: string; calls: number; failed: number; p50_ms: number | null; p95_ms: number | null }[];
+  models: {
+    name: string;
+    calls: number;
+    failed: number;
+    ttft_p50_ms: number | null;
+    tokens_per_s_p50: number | null;
+    total_p50_ms: number | null;
+  }[];
+  errors: { timestamp: string; component: string | null; error_type: string | null; message: string; query_id: string | null }[];
+  slowest: { query_id: string; timestamp: string; question: string; latency_ms: number; status: string; model: string | null }[];
 }
 
-/** Where the metrics/logs stack lives, if one is configured. See TODO.md, M7. */
-export function observability(): Promise<Observability> {
-  return request<Observability>('/api/system/observability');
+/** The Observability page's figures over the audit log. See TODO.md, M7. */
+export function observability(range: ObsRange, source: ObsSource): Promise<Observability> {
+  return request<Observability>(`/api/system/observability?range=${range}&source=${source}`, { cache: 'no-store' });
 }
 
 // ── the Forge — hardware detection ───────────────────────────────────────────

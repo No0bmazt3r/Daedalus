@@ -75,7 +75,7 @@ Vite proxies `/api` to it.
 | `PATCH`/`DELETE` | `/api/providers/{id}` | Edit or remove one |
 | `POST` | `/api/providers/{id}/test` | Connection test — the only outbound call |
 | `GET` | `/api/system/databases` | Health, size, schema version and metrics for all five stores |
-| `GET` | `/api/system/observability` | Where the metrics/logs stack lives, or that none is configured |
+| `GET` | `/api/system/observability` | The Observability page's figures over `ai_logs.db`: headline numbers, p50/p95 and time breakdown per hour/day/week, tools, models, recent errors, slowest turns. `range` = `24h`·`7d`·`30d`·`all`, `source` = `chat`·`eval`·`benchmark` |
 | `GET` | `/api/forge/hardware` | RAM, CPU, GPU/VRAM, disk and Ollama. Always 200; unknowns come back null |
 | `POST` | `/api/forge/hardware/refresh` | Force a full re-probe, ignoring the schedule |
 | `GET` | `/api/forge/models` | The ranked table: catalogue, library and installed, estimated and scored |
@@ -1937,11 +1937,42 @@ Three consequences worth keeping:
   offer. The
   route is gone; the deep-linkability it bought was not worth the workflow it
   cost.
-- **The metrics link is always present**, not conditional on a failure. A link
-  that only appears during an outage is a link nobody knows exists. When
-  `DAEDALUS_OBSERVABILITY_URL` is unset the panel says the stack is not
-  configured rather than offering a dead link — the stack itself is still
-  unbuilt (TODO.md, M7).
+- **The Observability link is always present**, not conditional on a failure.
+  A link that only appears during an outage is a link nobody knows exists. It
+  opens the `/observability` page (below).
+
+### Observability (`/observability`)
+
+How the assistant has been doing, read from `ai_logs.db`. Built in rather than a
+Prometheus/Grafana stack: the numbers already live in the audit log, and
+Daedalus runs on one machine with nothing beside it (decided 2026-11-11).
+
+- **Opens from** the sidebar (under the three modules) and Settings → Databases.
+  A page in the main pane, not a window: it is read on its own rather than
+  checked against a chat.
+- **Filters:** range 24 h · 7 d · 30 d · All (default All), source Chat · Eval ·
+  Benchmark (default Chat). A turn is Eval when any of its model calls was
+  `source='eval'`; refused turns never reach a model and count as Chat.
+  Benchmarks have no turns, so only the Models table fills.
+- **Headline:** turns, p50/p95 response time, error and refusal rates, grounded
+  (of turns checked) and hallucinated (of turns you labelled). Turns are
+  classified by the Thread's own `listing.summary`, so the two never disagree.
+  No period-on-period deltas and no thresholds; only errors and hallucinations
+  above zero turn amber.
+- **Charts** (Recharts, lazy-loaded with the page): p50 solid in the accent, p95
+  dashed in `--chart-p95` (the accent's complement, amber for a grey accent,
+  held to 3:1 per theme); an info icon explains p50/p95; average time per turn stacked as retrieval · re-rank · model load
+  · prefill · generation in `--chart-1..5` (set per theme in `applyColors`).
+  Hourly for 24 h, daily otherwise, weekly for All past 60 days, in the site
+  time zone. Only buckets with turns are drawn (on a sparse log the empty ones
+  were most of the axis); under four, the numbers are listed instead.
+- **Layout:** full pane width. Tools and Models stack beside Errors / Slowest
+  on a wide pane, so the three end level; it opens on whichever of those two
+  tabs has rows.
+- **Tables:** tools (calls, failed, p50, p95) and models (calls, first token,
+  tokens/s, failed). **Recent errors / Slowest turns** rows open the trace in
+  the Thread; a link opens Settings → Process Log.
+- Loads on open and on Refresh; no polling.
 
 ### The settings shell resizes on its *container*, not the viewport
 

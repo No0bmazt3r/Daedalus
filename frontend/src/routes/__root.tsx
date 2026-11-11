@@ -23,7 +23,7 @@ import { TitleTooltips } from '../components/ui/title-tooltips'
 import { ErrorPage, statusOf } from '../components/errors/ErrorPage'
 import { useBackendDown } from '../hooks/useBackendDown'
 import { focusComposer, useGlobalShortcuts } from '../hooks/useGlobalShortcuts'
-import { OPEN_STORE_EVENT, OPEN_THREAD_EVENT } from '../lib/threadClient'
+import { OPEN_SETTINGS_EVENT, OPEN_STORE_EVENT, OPEN_THREAD_EVENT } from '../lib/threadClient'
 import { OPEN_FORGE_EVENT } from '../components/Onboarding'
 import { ToastHost } from '../components/ui/toast'
 
@@ -191,7 +191,14 @@ function AppShell() {
     // The first-run screen's "Open The Forge".
     const onForge = () => openForge()
     window.addEventListener(OPEN_FORGE_EVENT, onForge)
+    // Observability's "Process log" link.
+    const onSettings = (e: Event) => openWindow('settings', () => {
+      setSettingsPanel((e as CustomEvent<{ panel: string }>).detail.panel)
+      setSettingsModalOpen(true)
+    })
+    window.addEventListener(OPEN_SETTINGS_EVENT, onSettings)
     return () => {
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onSettings)
       window.removeEventListener(OPEN_THREAD_EVENT, onOpen)
       window.removeEventListener(OPEN_STORE_EVENT, onStore)
       window.removeEventListener(OPEN_FORGE_EVENT, onForge)

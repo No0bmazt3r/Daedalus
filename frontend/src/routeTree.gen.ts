@@ -8,15 +8,24 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
+import { createFileRoute } from '@tanstack/react-router'
+
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ErrorCodeRouteImport } from './routes/error.$code'
+
+const ObservabilityLazyRouteImport = createFileRoute('/observability')()
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ObservabilityLazyRoute = ObservabilityLazyRouteImport.update({
+  id: '/observability',
+  path: '/observability',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/observability.lazy').then((d) => d.Route))
 const ErrorCodeRoute = ErrorCodeRouteImport.update({
   id: '/error/$code',
   path: '/error/$code',
@@ -25,27 +34,31 @@ const ErrorCodeRoute = ErrorCodeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/observability': typeof ObservabilityLazyRoute
   '/error/$code': typeof ErrorCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/observability': typeof ObservabilityLazyRoute
   '/error/$code': typeof ErrorCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/observability': typeof ObservabilityLazyRoute
   '/error/$code': typeof ErrorCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/error/$code'
+  fullPaths: '/' | '/observability' | '/error/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/error/$code'
-  id: '__root__' | '/' | '/error/$code'
+  to: '/' | '/observability' | '/error/$code'
+  id: '__root__' | '/' | '/observability' | '/error/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ObservabilityLazyRoute: typeof ObservabilityLazyRoute
   ErrorCodeRoute: typeof ErrorCodeRoute
 }
 
@@ -56,6 +69,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/observability': {
+      id: '/observability'
+      path: '/observability'
+      fullPath: '/observability'
+      preLoaderRoute: typeof ObservabilityLazyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/error/$code': {
@@ -70,6 +90,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ObservabilityLazyRoute: ObservabilityLazyRoute,
   ErrorCodeRoute: ErrorCodeRoute,
 }
 export const routeTree = rootRouteImport
