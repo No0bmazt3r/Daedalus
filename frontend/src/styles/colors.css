@@ -113,6 +113,7 @@
 .status-ok-bg { background-color: color-mix(in srgb, var(--status-ok) 12%, transparent) !important; }
 .status-warn-bg { background-color: color-mix(in srgb, var(--status-warn) 12%, transparent) !important; }
 .status-bad-bg { background-color: color-mix(in srgb, var(--status-bad) 12%, transparent) !important; }
+.status-info-bg { background-color: color-mix(in srgb, var(--status-info) 12%, transparent) !important; }
 .status-ok-border { border-color: color-mix(in srgb, var(--status-ok) 38%, transparent) !important; }
 .status-warn-border { border-color: color-mix(in srgb, var(--status-warn) 38%, transparent) !important; }
 .status-bad-border { border-color: color-mix(in srgb, var(--status-bad) 38%, transparent) !important; }

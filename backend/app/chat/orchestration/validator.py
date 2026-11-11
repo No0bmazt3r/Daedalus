@@ -9,6 +9,7 @@
 | citations | a label like `[S7]` that the pack never issued | `unknown_citation` |
 | control language | "I have opened ABV-1", "I'll set the temperature" | `control_claim` |
 | reading citations | a sentence cites `[S1]` but states nothing on S1's line | `citation_mismatch` |
+| document numbers | a sentence cites `[D1]`/`[G1]` for a number that line does not state | `document_citation_mismatch` |
 | times and dates | a clock time or date nowhere in the evidence, question or history | `unsupported_time` |
 | causes | "because…", "caused by…" with no cited source that itself states a cause | `uncited_cause` |
 | rule 9 | a rig-specific sentence cited only to `[REFERENCE]` evidence, with no caveat | `uncaveated_reference` |
@@ -39,6 +40,22 @@ that line's numbers, its mode *as a mode*, or its staleness.
 Naming the sensor is not enough, because that is exactly the failure. `D` and
 `G` lines are prose, where a fair check needs meaning rather than tokens,
 so they are not checked this way.
+
+## A number cited to a document must be in that document
+
+Prose needs meaning, but a number does not: 45 °C is on the cited line or it
+is not. Seen on qwen3:1.7b (2026-11-11): "Ensure the temperature is ≤ 45°C
+… [D1]", when 45 °C was on D2 and D1 was a pipeline-inspection table. The
+number was in the evidence, so the numbers check passed it; only the source
+was wrong, which is the one thing an operator cannot spot. So a sentence citing
+a `D` or `G` line must find each of its measurements on one of the lines it
+cites (a sensor line cited alongside counts). Small counts and the question's
+own numbers are exempt, as above, and a number in no evidence at all is
+already `unsupported_number`, so it is not counted twice. A label written after
+the full stop belongs to the sentence before it. Its own reason,
+`document_citation_mismatch`, so the evaluation counts it apart from a
+mis-cited reading. A sentence with no number that cites the wrong document
+still passes: that needs meaning.
 
 ## Times are moments, checked like numbers
 
@@ -154,6 +171,8 @@ class Validation:
     stale: list[str] = field(default_factory=list)
     unknown_citations: list[str] = field(default_factory=list)
     mismatched_citations: list[str] = field(default_factory=list)
+    # [{"label": "D1", "number": "45°C", "sentence": "…"}] — the sentence keyed as salvage cuts it.
+    mismatched_document_citations: list[dict[str, str]] = field(default_factory=list)
     cited: list[str] = field(default_factory=list)
     control_claim: str | None = None
     unsupported_times: list[str] = field(default_factory=list)
@@ -165,7 +184,7 @@ class Validation:
         """A number, moment, cause or source the evidence cannot account for."""
         return bool(
             self.unsupported or self.stale or self.unknown_citations or self.mismatched_citations
-            or self.unsupported_times or self.uncited_causes
+            or self.mismatched_document_citations or self.unsupported_times or self.uncited_causes
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -176,6 +195,7 @@ class Validation:
             "stale_numbers": self.stale,
             "unknown_citations": self.unknown_citations,
             "mismatched_citations": self.mismatched_citations,
+            "mismatched_document_citations": self.mismatched_document_citations,
             "cited": self.cited,
             "control_claim": self.control_claim,
             "unsupported_times": self.unsupported_times,
@@ -231,6 +251,10 @@ def validate(
     v.mismatched_citations = _mismatched_reading_citations(text, pack)
     if v.mismatched_citations:
         v.reasons.append("citation_mismatch")
+
+    v.mismatched_document_citations = _mismatched_document_citations(text, pack, asked)
+    if v.mismatched_document_citations:
+        v.reasons.append("document_citation_mismatch")
 
     v.unsupported_times = _unsupported_moments(text, pack, question + "\n" + history_text)
     if v.unsupported_times:
@@ -411,6 +435,41 @@ def _mismatched_reading_citations(text: str, pack: EvidencePack) -> list[str]:
     return bad
 
 
+def _key(sentence: str) -> str:
+    """A sentence as salvage matches it: whitespace collapsed, first 160 characters."""
+    return " ".join(sentence.split())[:160]
+
+
+def _mismatched_document_citations(text: str, pack: EvidencePack, asked: set[float]) -> list[dict[str, str]]:
+    lines = {i.label: i.line for i in pack.items}
+    prose = {i.label for i in pack.items if i.kind in ("document", "graph")}
+    if not prose:
+        return []
+    sentences = [s for s in _SENTENCE_RE.split(text) if s.strip()]
+    bad: list[dict[str, str]] = []
+    for index, sentence in enumerate(sentences):
+        labels = sorted({
+            label.strip() for group in _CITATION_RE.findall(sentence)
+            for label in re.split(r"[,;]", group)
+        } & lines.keys())
+        if not set(labels) & prose:
+            continue
+        claim = sentence
+        # "… drained. [D3]": the label stands alone, so its claim is the sentence before.
+        if not numbers.extract(sentence) and index and not _CITATION_RE.search(sentences[index - 1]):
+            claim = sentences[index - 1]
+        cited_values = numbers.values(" ".join(lines[label] for label in labels))
+        for n in numbers.extract(claim):
+            if n.decimals == 0 and n.value <= _SMALL_INT and n.unit is None:
+                continue
+            if n.value in asked or not numbers.supported(n, pack.numbers):
+                continue  # exempt, or already an unsupported/stale number
+            if not numbers.supported(n, cited_values):
+                bad.append({"label": ", ".join(lb for lb in labels if lb in prose),
+                            "number": n.text, "sentence": _key(claim)})
+    return bad
+
+
 TRIMMED_NOTE = "\n\n_Part of this answer was removed: it was not supported by the evidence._"
 
 
@@ -432,16 +491,17 @@ def salvage(
     A bad value inside brackets loses the brackets ("31.74 °C (about 88.1 °F)"),
     otherwise its sentence goes; an uncited cause loses its sentence; an unknown
     label is dropped. The remainder is validated again, so nothing here can let
-    a failure through. A control claim is never trimmed: an answer that says it
+    a failure through, and a cited answer left with no citation is not kept.
+    A control claim is never trimmed: an answer that says it
     acted on the rig is not trusted for the rest either.
     """
     if v.control_claim:
         return None
     bad = v.unsupported + v.stale + v.unsupported_times
-    causes = set(v.uncited_causes)
+    causes = set(v.uncited_causes) | {m["sentence"] for m in v.mismatched_document_citations}
 
     def dirty(sentence: str) -> bool:
-        return any(b in sentence for b in bad) or " ".join(sentence.split())[:160] in causes
+        return any(b in sentence for b in bad) or _key(sentence) in causes
 
     text = re.sub(r"\s*\([^()]*\)", lambda m: "" if dirty(m.group()) else m.group(), answer)
     text = _CITATION_RE.sub(
@@ -464,6 +524,11 @@ def salvage(
             lines.append(" ".join(kept))
     text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
     if not text or text == answer.strip():
+        return None
+    # A cited answer cut down to no citations is the connective tissue around
+    # claims that are gone ("These conditions ensure the reactor is safely
+    # drained", 2026-11-11). The fallback says that more honestly.
+    if v.cited and not _CITATION_RE.search(text):
         return None
     if not validate(text, pack, question=question, history=history).passed:
         return None

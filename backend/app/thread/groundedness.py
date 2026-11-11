@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ..db import audit_store, chat_store
 from . import thread_settings
 from ..chat.orchestration import numbers
+from ..chat.orchestration.validator import FALLBACK, TRIMMED_NOTE
 from .common import counts as turn_counts
 from .common import parse_json
 from .listing import status
@@ -15,11 +17,31 @@ from .listing import status
 _SMALL_INT = 10
 
 
+def _removed(answer: str, delivered: str) -> list[str]:
+    """What the validator cut from the model's text, as the operator would have read it.
+
+    The same split `validator.salvage` cuts by (sentences, per line). A sentence
+    that only lost a bracketed aside is reported as that aside, not the whole
+    sentence, because that is all that went.
+    """
+    kept = " ".join(delivered.replace(TRIMMED_NOTE, "").split())
+    out: list[str] = []
+    for line in answer.split("\n"):
+        for sentence in re.split(r"(?<=[.!?])\s+", line):
+            core = " ".join(sentence.split())
+            if not re.search(r"[^\W\d_]{3}", core) or core in kept:
+                continue
+            asides = [a for a in re.findall(r"\s*\([^()]*\)", core) if " ".join(core.replace(a, "").split()) in kept]
+            out.append(asides[0].strip() if asides else core)
+    return out
+
+
 def groundedness(query_id: str) -> dict[str, Any] | None:
     """Every quantity in the answer the model wrote, marked. None for an unknown id.
 
     Verdicts: `supported` (green), `unsupported` (red, a Rule 3 violation),
-    `stale` (amber — found only in replayed history), `not_a_claim` (grey — a
+    `stale` (amber — found only in replayed history), `miscited` (in the
+    evidence, cited to a document that does not state it), `not_a_claim` (grey — a
     small count or the question's own number), `unchecked` (no validation ran:
     no model, or the call failed).
     """
@@ -40,6 +62,11 @@ def groundedness(query_id: str) -> dict[str, Any] | None:
     asked = numbers.values(convo.get("standalone_query") or convo.get("user_query") or "")
     unsupported = set((validation or {}).get("unsupported_numbers") or [])
     stale = set((validation or {}).get("stale_numbers") or [])
+    # Numbers in the evidence but cited to a document that does not state them,
+    # located by the sentence the validator recorded them in.
+    miscited = []
+    for m in (validation or {}).get("mismatched_document_citations") or []:
+        miscited.append((m.get("number"), m.get("label"), m.get("sentence") or ""))
 
     marks: list[dict[str, Any]] = []
     for n, start, end in numbers.spans(answer):
@@ -50,9 +77,12 @@ def groundedness(query_id: str) -> dict[str, Any] | None:
         if validation is None:
             verdict, reason = "unchecked", "no validation ran for this turn"
         elif n.text in stale:
-            verdict, reason = "stale", "found only in the replayed history, not this turn's evidence"
+            verdict, reason = "stale", "not in this turn's evidence; it came from earlier messages in this chat"
+        elif hit := next((lb for num, lb, sent in miscited
+                          if num == n.text and sent and sent in " ".join(answer[max(0, start - 200):end + 200].split())), None):
+            verdict, reason = "miscited", f"in the evidence, but not in {hit}, the source it was cited to"
         elif n.text in unsupported:
-            verdict, reason = "unsupported", "in no tool output or retrieved passage"
+            verdict, reason = "unsupported", "in no tool output, retrieved passage or earlier message: made up"
         elif n.decimals == 0 and n.value <= _SMALL_INT and n.unit is None:
             verdict, reason = "not_a_claim", "a small count, not a measurement"
         elif n.value in asked:
@@ -66,6 +96,7 @@ def groundedness(query_id: str) -> dict[str, Any] | None:
             "verdict": verdict, "reason": reason, "sources": sources,
         })
 
+    trimmed = bool(convo.get("model_response_text")) and (convo.get("response_text") or "").strip() != FALLBACK
     counts: dict[str, int] = {}
     for m in marks:
         counts[m["verdict"]] = counts.get(m["verdict"], 0) + 1
@@ -75,6 +106,10 @@ def groundedness(query_id: str) -> dict[str, Any] | None:
         "answer": answer,
         "delivered": convo.get("response_text"),
         "replaced": bool(convo.get("model_response_text")),
+        # Replaced by the fixed fallback, or only had its unsupported parts cut
+        # (`validator.salvage`), in which case `removed` lists what went.
+        "trimmed": trimmed,
+        "removed": _removed(answer, convo.get("response_text") or "") if trimmed else [],
         "status": status({**convo, **turn_counts(trace_rows)}, thread_settings.read()),
         # An incognito turn kept no text, so there is nothing to mark.
         "redacted": answer == audit_store.REDACTED,

@@ -169,6 +169,36 @@ class ThreadTest(unittest.TestCase):
         failed = self.rerank_trace(rerank_reason="model not downloaded")
         self.assertEqual((failed["title"], failed["status"]), ("Re-rank: failed (model not downloaded)", "warning"))
 
+    def test_trimmed_answer_says_what_was_cut(self) -> None:
+        from app.chat.orchestration.validator import FALLBACK, TRIMMED_NOTE  # noqa: PLC0415
+
+        model = "1. Keep it at 20% [D2].\n2. **Gas**: Keep CO2 below 600 ppm to be safe. [D3]\nIt is 45 °C (about 113 °F) now."
+        qid = audit_store.new_query_id()
+        audit_store.log("conversation_logs", query_id=qid, user_query="why?", model_response_text=model,
+                        response_text="1. Keep it at 20% [D2].\nIt is 45 °C now." + TRIMMED_NOTE,
+                        validation_json='{"passed": false, "stale_numbers": ["600"]}')
+        check = thread.groundedness(qid)
+        self.assertTrue(check["trimmed"])
+        self.assertEqual(check["removed"], ["**Gas**: Keep CO2 below 600 ppm to be safe.", "(about 113 °F)"])
+
+        whole = audit_store.new_query_id()
+        audit_store.log("conversation_logs", query_id=whole, user_query="why?", model_response_text=model,
+                        response_text=FALLBACK, validation_json='{"passed": false}')
+        self.assertEqual((thread.groundedness(whole)["trimmed"], thread.groundedness(whole)["removed"]), (False, []))
+
+    def test_miscited_number_is_marked_wrong_source(self) -> None:
+        import json  # noqa: PLC0415
+
+        answer = "Keep it below 45 °C. [D1]\nHold 1.5 barg [D2]."
+        qid = audit_store.new_query_id()
+        audit_store.log("conversation_logs", query_id=qid, user_query="why?", response_text=answer,
+                        validation_json=json.dumps({"passed": False, "mismatched_document_citations": [
+                            {"label": "D1", "number": "45", "sentence": "Keep it below 45 °C."}]}))
+        marks = {m["text"]: m for m in thread.groundedness(qid)["numbers"]}
+        self.assertEqual(marks["45"]["verdict"], "miscited")
+        self.assertIn("not in D1", marks["45"]["reason"])
+        self.assertNotEqual(marks["1.5"]["verdict"], "miscited")
+
     def test_graph_retrieval_has_no_rerank_step(self) -> None:
         qid = audit_store.new_query_id()
         audit_store.log("conversation_logs", query_id=qid, user_query="why?", intent="document_query")

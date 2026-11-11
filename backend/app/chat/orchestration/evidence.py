@@ -307,9 +307,13 @@ def build(envelopes: list[dict[str, Any]], *, notes: list[str] | None = None) ->
         shaped = dict(env, data="\n".join(lines))
         pack.blocks.append(agent_tools.render_for_prompt(shaped))
         # Lines without a label (a series sample) and the block header were
-        # shown too, so they count.
+        # shown too, so they count. A retrieval tool's header is not: it is
+        # pipeline bookkeeping ("5 passages from …_qwen3-embedding-0-6b,
+        # re-ranked from 20"), and on 2026-11-11 its 20 let "solvent at 20% [D2]"
+        # pass when no passage said 20%. The model still reads it.
         shown.extend(lines)
-        shown.append(env.get("detail") or "")
+        if tool not in RETRIEVAL_TOOLS:
+            shown.append(env.get("detail") or "")
 
     retrieved = any(t in RETRIEVAL_TOOLS for t in pack.tools_used)
     pack.no_documents = retrieved and not any(i.kind in ("document", "graph") for i in pack.items)

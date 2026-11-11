@@ -31,6 +31,8 @@ export function AnswerMarkdown({
     p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{enrich(children)}</p>,
     strong: ({ children }) => <strong className="font-semibold theme-text">{enrich(children)}</strong>,
     em: ({ children }) => <em>{enrich(children)}</em>,
+    // The Thread strikes what the validator cut; muted so it reads as gone.
+    del: ({ children }) => <del className="line-through decoration-2 decoration-[var(--status-warn)] opacity-60">{enrich(children)}</del>,
     ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>,
     ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>,
     li: ({ children }) => <li className="pl-1">{enrich(children)}</li>,

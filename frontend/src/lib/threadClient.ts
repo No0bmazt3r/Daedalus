@@ -94,7 +94,7 @@ export interface Trace {
   evidence_available: boolean;
 }
 
-export type NumberVerdict = 'supported' | 'unsupported' | 'stale' | 'not_a_claim' | 'unchecked';
+export type NumberVerdict = 'supported' | 'unsupported' | 'stale' | 'miscited' | 'not_a_claim' | 'unchecked';
 
 export interface NumberMark {
   text: string;
@@ -114,6 +114,9 @@ export interface Groundedness {
   /** What the operator was shown, which is the fallback when `replaced`. */
   delivered: string | null;
   replaced: boolean;
+  /** Only parts were cut (the rest was delivered); `removed` lists them. False when the whole answer was replaced. */
+  trimmed: boolean;
+  removed: string[];
   status: TraceStatus;
   grounded: boolean | null;
   validation: Record<string, unknown> | null;

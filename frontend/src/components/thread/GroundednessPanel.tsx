@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
-import { AlertTriangle, Check, EyeOff } from 'lucide-react'
+import { AlertTriangle, Check, EyeOff, Info, Scissors } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { parseEvidenceLine, stripLabel, type Moment } from '../../lib/threadLogic'
 import { type Groundedness, type NumberMark } from '../../lib/threadClient'
 import { withEvidenceHighlights } from '../Citations'
@@ -46,7 +47,25 @@ const SLOT = /\uE000(\d+)\uE001/g
  * offsets. So each marked span is swapped for a placeholder first, the text is
  * rendered, and the placeholders are turned back into marks in the text nodes.
  */
-function MarkedAnswer({ text, marks }: { text: string; marks: NumberMark[] }) {
+function MarkedAnswer({ text, marks, cut = [] }: { text: string; marks: NumberMark[]; cut?: string[] }) {
+  // What the validator cut is struck through (`~~`, GFM), so the draft matches
+  // what was delivered at a glance. Inserted by offset, like the marks.
+  const strikes = cut
+    .flatMap((part) => {
+      const at = text.indexOf(part)
+      return at < 0 ? [] : [at, at + part.length]
+    })
+    .sort((a, b) => a - b)
+  const copy = (from: number, to: number) => {
+    let out = ''
+    let at = from
+    while (strikes.length && strikes[0] <= to) {
+      const pos = Math.max(strikes.shift()!, from)
+      out += text.slice(at, pos) + '~~'
+      at = pos
+    }
+    return out + text.slice(at, to)
+  }
   const kept: { mark: NumberMark; shown: string }[] = []
   let source = ''
   let last = 0
@@ -54,11 +73,11 @@ function MarkedAnswer({ text, marks }: { text: string; marks: NumberMark[] }) {
     if (m.start < last) continue
     // `450 ppm` reads as one value, so the mark covers the unit too.
     const end = m.unit ? m.end + (UNIT_AFTER.exec(text.slice(m.end))?.[0].length ?? 0) : m.end
-    source += text.slice(last, m.start) + OPEN + kept.length + CLOSE
+    source += copy(last, m.start) + OPEN + kept.length + CLOSE
     kept.push({ mark: m, shown: text.slice(m.start, end) })
     last = end
   }
-  source += text.slice(last)
+  source += copy(last, text.length)
 
   const renderText = (fragment: string): ReactNode[] => {
     const out: ReactNode[] = []
@@ -71,7 +90,7 @@ function MarkedAnswer({ text, marks }: { text: string; marks: NumberMark[] }) {
         <mark
           key={`m${m.start}`}
           className={`rounded px-0.5 ${VERDICT[m.verdict].tone}`}
-          title={[`${m.text}: ${m.reason}`, src ? `[${src.label}] ${src.line}` : ''].filter(Boolean).join('\n')}
+          title={[`${m.text}: ${VERDICT[m.verdict].label}. ${m.reason}`, src ? `[${src.label}] ${src.line}` : ''].filter(Boolean).join('\n')}
         >
           {shown}
         </mark>,
@@ -195,15 +214,49 @@ function SourceCard({ label, line, used }: { label: string; line: string; used: 
   )
 }
 
+/** The panel in plain words, on hover or keyboard focus. */
+function GroundednessInfo() {
+  // Swatches, not the marks themselves: the tooltip's background is the
+  // inverse of the theme's, so the marks' tinted text would be unreadable on it.
+  const swatch = (colour: string) => (
+    <span aria-hidden className="mr-1 inline-block h-2.5 w-2.5 shrink-0 translate-y-px rounded-sm" style={{ background: colour }} />
+  )
+  const key = (colour: string, label: string, text: string) => (
+    <span>{swatch(colour)}<b>{label}</b>: {text}</span>
+  )
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<button aria-label="What this panel means" className="inline-flex rounded theme-text-muted hover:theme-text focus-visible:outline-2 focus-visible:outline-[var(--primary-readable)]" />}
+      >
+        <Info size={12} />
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-80 flex-col items-start gap-1.5 text-left font-normal">
+        <span>Every number in the AI&apos;s answer, checked against the evidence it was given for this question.</span>
+        {key('var(--status-ok)', 'Green', 'found in the evidence. Good.')}
+        {key('var(--status-warn)', 'Yellow', 'not in the evidence; reused from earlier in the chat.')}
+        {key('var(--status-bad)', 'Red', 'in no evidence at all; the AI invented it.')}
+        {key('var(--status-info)', 'Blue', 'a real number, but cited to a document that does not say it.')}
+        {key('var(--text-muted)', 'Grey', "a small count or the question's own number, not checked.")}
+        <span><b>Blocked</b> means the checker caught something the AI could not back up and stopped it.
+          A {swatch('var(--status-warn)')}<b>yellow box</b> lists what was cut (struck through in the answer); you got the rest.
+          A {swatch('var(--status-bad)')}<b>red box</b> means the whole answer was replaced.</span>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function GroundednessPanel({ check }: { check: Groundedness }) {
   const supported = check.numbers.filter((m) => m.verdict === 'supported')
   return (
     <section className="space-y-2.5 rounded-lg border theme-border theme-card p-3">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 className="text-xs font-medium theme-text">Groundedness</h3>
-        {(['supported', 'unsupported', 'stale', 'not_a_claim', 'unchecked'] as const).map((v) =>
+        <h3 className="flex items-center gap-1.5 text-xs font-medium theme-text">
+          Groundedness <GroundednessInfo />
+        </h3>
+        {(['supported', 'unsupported', 'stale', 'miscited', 'not_a_claim', 'unchecked'] as const).map((v) =>
           check.counts[v] ? (
-            <span key={v} className={`rounded px-1.5 py-0.5 text-[10px] ${VERDICT[v].tone}`}>
+            <span key={v} title={VERDICT[v].hint} className={`cursor-help rounded px-1.5 py-0.5 text-[10px] ${VERDICT[v].tone}`}>
               {check.counts[v]} {VERDICT[v].label}
             </span>
           ) : null,
@@ -219,15 +272,38 @@ export function GroundednessPanel({ check }: { check: Groundedness }) {
         </p>
       )}
 
-      {check.replaced && (
+      {check.replaced && check.trimmed && (
+        <div className="space-y-1.5 rounded-md status-warn-bg p-2 text-[11px] leading-relaxed theme-text">
+          <p className="flex items-start gap-1.5">
+            <Scissors size={12} className="mt-0.5 shrink-0 status-warn" />
+            Cut before the operator saw it. The rest of the answer below was delivered.
+          </p>
+          <ul className="space-y-1.5 pl-5">
+            {check.removed.map((part) => {
+              const why = check.numbers.filter((m) => m.verdict !== 'supported' && m.verdict !== 'not_a_claim' && part.includes(m.text))
+              return (
+                <li key={part}>
+                  <span className="line-through decoration-[var(--status-warn)]">{part.replace(/\*\*|__|`/g, "")}</span>
+                  {why.map((m) => (
+                    <span key={m.start} className="block theme-text-muted">
+                      <mark className={`rounded px-0.5 ${VERDICT[m.verdict].tone}`}>{m.text}</mark> {m.reason}.
+                    </span>
+                  ))}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+      {check.replaced && !check.trimmed && (
         <p className="flex items-start gap-1.5 rounded-md status-bad-bg p-2 text-[11px] leading-relaxed theme-text">
           <AlertTriangle size={12} className="mt-0.5 shrink-0 status-bad" />
-          The operator never saw this text. The validator replaced it with: “{check.delivered}”
+          The operator never saw this text. The validator replaced all of it with: “{check.delivered}”
         </p>
       )}
 
       {check.answer ? (
-        <MarkedAnswer text={check.answer} marks={check.numbers} />
+        <MarkedAnswer text={check.answer} marks={check.numbers} cut={check.trimmed ? check.removed : []} />
       ) : (
         <p className="text-[11px] theme-text-muted">No answer was produced.</p>
       )}

@@ -1089,8 +1089,14 @@ Every quantity in the answer must match a number in the rendered evidence at
 the precision written (rounding is allowed; arithmetic is not). A number found
 only in replayed history fails separately, as `stale_history_number` — §7.4's
 hazard. First-person action claims ("I have opened ABV-1") fail as
-`control_claim`. A failed answer becomes *"I could not generate a grounded
-answer from the available data."* Its known blind spots — clock times, integers
+`control_claim`. A number cited to a `D` or `G` line must be on *that* line,
+not merely somewhere in the evidence, or it fails as
+`document_citation_mismatch` (2026-11-11; the Thread marks it blue, "wrong
+source"). A failed answer has its failing sentences cut (`salvage`), or
+becomes *"I could not generate a grounded answer from the available data."*
+when nothing sound is left, including when no cited sentence survives the
+cut. A retrieval tool's status header ("re-ranked from 20") is shown to the
+model but its numbers are not evidence. Its known blind spots — clock times, integers
 0–10, causal claims — are listed in `validator.py` and TODO M5.
 
 **Citations are shown, not just stored.** The pack is saved with the assistant

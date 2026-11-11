@@ -249,6 +249,62 @@ class EvidenceAndValidatorTest(unittest.TestCase):
     def test_reading_citation_after_the_full_stop_is_attached_to_its_sentence(self) -> None:
         self.assertTrue(self.validate(f"CO2 peaked at {fixtures.co2(34)} ppm. [S1]").passed)
 
+    def two_documents(self):  # noqa: ANN201
+        """D1 an inspection table with no limits; D2 the cooldown SOP that states them."""
+        return orchestration.evidence.build([{
+            "tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus", "citable": True,
+            "data": {"track": "vector", "chunks": [
+                {"chunk_id": "a", "source_file": "Inspection.pdf", "origin": "rig",
+                 "text": "Pipelines are monitored by periodic pigging and flyover inspection."},
+                {"chunk_id": "b", "source_file": "SOP_Cooldown.md", "origin": "rig",
+                 "text": "Trigger: reactor temperature above 45 °C. Hold pressure at or below 1 barg."},
+            ]},
+        }])
+
+    def test_document_citation_must_state_the_number(self) -> None:
+        # The answer seen live on 2026-11-11: right numbers, cited to the wrong document.
+        pack = self.two_documents()
+        v = validator.validate(
+            "1. **Temperature**: Ensure it is ≤ 45°C to avoid thermal runaway. [D1]\n"
+            "2. **Pressure**: Keep it at 1 barg [D2].", pack)
+        self.assertFalse(v.passed)
+        self.assertEqual(v.reasons, ["document_citation_mismatch"])
+        self.assertEqual([(m["label"], m["number"]) for m in v.mismatched_document_citations], [("D1", "45")])
+        self.assertTrue(v.hallucination)
+        # Cut, not thrown away: the correctly cited line survives.
+        trimmed = validator.salvage(
+            "1. **Temperature**: Ensure it is ≤ 45°C to avoid thermal runaway. [D1]\n"
+            "2. **Pressure**: Keep it at 1 barg [D2].", v, pack)
+        self.assertIsNotNone(trimmed)
+        self.assertNotIn("45", trimmed)
+        self.assertIn("1 barg [D2]", trimmed)
+
+    def test_document_citation_passes_when_its_line_states_the_number(self) -> None:
+        pack = self.two_documents()
+        self.assertTrue(validator.validate("Cool down above 45 °C. [D2]", pack).passed)
+        self.assertTrue(validator.validate("Hold 1 barg [D1, D2].", pack).passed)  # one cited line is enough
+        # No number, wrong document: needs meaning, so it is not this check's to catch.
+        self.assertTrue(validator.validate("Inspect the cooling valves [D1].", pack).passed)
+
+    def test_retrieval_header_numbers_are_not_evidence(self) -> None:
+        # "re-ranked from 20" once let "solvent at 20% [D2]" pass.
+        pack = orchestration.evidence.build([{
+            "tool": "search_corpus", "ok": True, "status": "ok", "integrity": "corpus", "citable": True,
+            "detail": "5 passages from knowledge_qwen3-embedding-0-6b, re-ranked from 20 by ms-marco",
+            "data": {"track": "vector", "chunks": [{"chunk_id": "a", "source_file": "SOP.md", "origin": "rig",
+                                                    "text": "Hold pressure at or below 1.5 barg."}]},
+        }])
+        self.assertNotIn(20, pack.numbers)
+        self.assertIn(1.5, pack.numbers)
+        self.assertIn("re-ranked from 20", pack.render())  # the model still reads it
+        self.assertIn("20", validator.validate("Keep solvent at 20% [D1].", pack).unsupported)
+
+    def test_salvage_falls_back_when_no_citation_survives(self) -> None:
+        pack = self.two_documents()
+        answer = ("1. Ensure it is ≤ 45°C to avoid runaway. [D1]\n"
+                  "These conditions ensure the reactor is safely shut down.")
+        self.assertIsNone(validator.salvage(answer, validator.validate(answer, pack), pack))
+
     def test_mode_word_counts_only_as_a_mode(self) -> None:
         live = orchestration.evidence.build(orchestration.executor.execute(
             orchestration.planner.plan(

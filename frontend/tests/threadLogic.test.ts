@@ -49,7 +49,7 @@ test('the Markdown export carries the question, every step and every number verd
     ],
   };
   const check: Groundedness = {
-    query_id: 'q_1', answer: 'CO2 is 488.5 ppm [S1].', delivered: 'CO2 is 488.5 ppm [S1].', replaced: false,
+    query_id: 'q_1', answer: 'CO2 is 488.5 ppm [S1].', delivered: 'CO2 is 488.5 ppm [S1].', replaced: false, trimmed: false, removed: [],
     status: 'grounded', grounded: true, validation: {}, counts: { supported: 1 }, citations: [],
     evidence_available: true, redacted: false,
     numbers: [{
@@ -69,7 +69,7 @@ test('the Markdown export carries the question, every step and every number verd
 test('the Markdown export lists each retrieved chunk with its chunking and whether it was cited', () => {
   const trace: Trace = { query_id: 'q_2', summary: null, total_ms: null, evidence_available: true, steps: [] };
   const check: Groundedness = {
-    query_id: 'q_2', answer: 'x', delivered: 'x', replaced: false, status: 'grounded', grounded: true,
+    query_id: 'q_2', answer: 'x', delivered: 'x', replaced: false, trimmed: false, removed: [], status: 'grounded', grounded: true,
     validation: {}, counts: {}, citations: [], evidence_available: true, redacted: false, numbers: [],
   };
   const md = traceMarkdown(trace, check, [{

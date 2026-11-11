@@ -74,12 +74,31 @@ export const BUCKET_FILL: Record<TraceBucket, string> = {
   unchecked: 'bg-[var(--text-muted)]',
 }
 
-export const VERDICT: Record<NumberVerdict, { label: string; tone: string }> = {
-  supported: { label: 'in the evidence', tone: 'status-ok status-ok-bg' },
-  unsupported: { label: 'in no evidence (Rule 3)', tone: 'status-bad status-bad-bg' },
-  stale: { label: 'only in replayed history', tone: 'status-warn status-warn-bg' },
-  not_a_claim: { label: 'not a measurement', tone: 'theme-text-muted theme-surface' },
-  unchecked: { label: 'not checked', tone: 'theme-accent theme-surface' },
+export const VERDICT: Record<NumberVerdict, { label: string; tone: string; hint: string }> = {
+  supported: {
+    label: 'in the evidence', tone: 'status-ok status-ok-bg',
+    hint: "Found in this turn's evidence: a tool reading or a retrieved passage.",
+  },
+  unsupported: {
+    label: 'made up', tone: 'status-bad status-bad-bg',
+    hint: 'In no tool output, retrieved passage or earlier message. The model invented it (Rule 3).',
+  },
+  stale: {
+    label: 'from earlier in the chat', tone: 'status-warn status-warn-bg',
+    hint: "Not in this turn's evidence. It appears in earlier messages of this chat, so the model recycled it instead of using fresh evidence.",
+  },
+  miscited: {
+    label: 'wrong source', tone: 'status-info status-info-bg',
+    hint: 'The number is in the evidence, but the document it was cited to does not say it. The source is wrong, so the line was cut.',
+  },
+  not_a_claim: {
+    label: 'not a measurement', tone: 'theme-text-muted theme-surface',
+    hint: "A small count or the question's own number, so not checked against the evidence.",
+  },
+  unchecked: {
+    label: 'not checked', tone: 'theme-accent theme-surface',
+    hint: 'No validation ran for this turn: no model answered, or the call failed.',
+  },
 }
 
 /** A chat's name as the Thread shows it, and what to add when it cannot be opened. */
