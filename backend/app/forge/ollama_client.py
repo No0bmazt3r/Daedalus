@@ -279,6 +279,22 @@ def available() -> bool:
         return False
 
 
+def loaded() -> list[dict[str, Any]]:
+    """Models Ollama holds in memory right now (`/api/ps`), with the bytes each takes.
+
+    `[]` when Ollama cannot say. That only makes the fit verdict cautious again,
+    which is what it was before this existed.
+    """
+    try:
+        data = _request("GET", "/api/ps", timeout=2.0)
+    except Exception:  # noqa: BLE001 — a fit verdict must not fail on this
+        return []
+    return [
+        {"name": m.get("name"), "size": int(m.get("size") or 0), "size_vram": int(m.get("size_vram") or 0)}
+        for m in data.get("models") or []
+    ]
+
+
 def list_models() -> list[dict[str, Any]]:
     """Everything pulled locally, with the size and details Ollama reports.
 

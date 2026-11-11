@@ -196,7 +196,7 @@ def ollama_client_answers(row: dict[str, Any]) -> bool:
     return ollama_client.answers_questions(row.get("capabilities"))
 
 
-def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
+def resolve(*, context_tokens: int | None = None, mode: str | None = None) -> dict[str, Any]:
     """What to actually run right now, and why.
 
     The one function the orchestrator needs. Always answers, including when
@@ -208,7 +208,9 @@ def resolve(*, context_tokens: int | None = None) -> dict[str, Any]:
     not pay to import one, nor fail to start if the catalogue is missing.
     """
     config = read()
-    mode = config["mode"]
+    # `mode="auto"` ranks what is installed whatever is committed: a background
+    # job's fallback when the chat is pinned to something it cannot use.
+    mode = mode or config["mode"]
 
     try:
         from . import forge as forge_service

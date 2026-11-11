@@ -529,7 +529,7 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
-def memory_budget(hardware: dict[str, Any]) -> dict[str, Any]:
+def memory_budget(hardware: dict[str, Any], held: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """How much memory a model may actually use on this machine, and which pool.
 
     VRAM when there is a GPU with a usable amount of it, system RAM otherwise.
@@ -567,6 +567,22 @@ def memory_budget(hardware: dict[str, Any]) -> dict[str, Any]:
             vram_available = max(0, int(total) - int(used))
             vram_total = int(total)
             device_name = device.get("name")
+
+    # Memory a model Ollama has loaded is Ollama's to reuse, so it counts as
+    # available. Without this, the model that just answered "did not fit" in the
+    # space it was sitting in: on a 4 GB GPU with qwen3:1.7b resident, the title
+    # job saw 1.8 GB free and found only an embedding model (2026-11-11).
+    # ponytail: VRAM can come from the slow tier (nvidia-smi, minutes old), so a
+    # model loaded since then is counted twice; capped at the total, which bounds
+    # it. Read VRAM and /api/ps together if a verdict ever proves too generous.
+    held = held or []
+    vram_held = sum(m["size_vram"] for m in held)
+    ram_held = sum(max(0, m["size"] - m["size_vram"]) for m in held)
+    if vram_available is not None and vram_held:
+        vram_available = min(vram_total or vram_available + vram_held, vram_available + vram_held)
+    ram_total = memory.get("total_bytes")
+    if ram_available is not None and ram_held:
+        ram_available = min(ram_total or ram_available + ram_held, ram_available + ram_held)
 
     return {
         # `primary` names the pool a model would prefer, for display. The

@@ -296,7 +296,7 @@ def _row(
 def _build(context_tokens: int | None = None) -> dict[str, Any]:
     context_tokens = context_tokens or model_fit.DEFAULT_WORKING_CONTEXT
     hardware_profile = hardware.profile()
-    budget = model_fit.memory_budget(hardware_profile)
+    budget = model_fit.memory_budget(hardware_profile, held=ollama_client.loaded())
     installed, ollama_error = _installed_index()
     benchmarks = _last_benchmarks()
 
@@ -555,7 +555,7 @@ def huggingface_rows(
         return {"rows": [], "error": found["error"], "cached": found["cached"]}
 
     hardware_profile = hardware.profile()
-    budget = model_fit.memory_budget(hardware_profile)
+    budget = model_fit.memory_budget(hardware_profile, held=ollama_client.loaded())
     installed, _ = _installed_index()
     benchmarks = _last_benchmarks()
 
@@ -662,7 +662,7 @@ def inspect_tag(tag: str, *, context_tokens: int | None = None) -> dict[str, Any
 
     context_tokens = context_tokens or model_fit.DEFAULT_WORKING_CONTEXT
     hardware_profile = hardware.profile()
-    budget = model_fit.memory_budget(hardware_profile)
+    budget = model_fit.memory_budget(hardware_profile, held=ollama_client.loaded())
     installed, _ = _installed_index()
     benchmarks = _last_benchmarks()
 

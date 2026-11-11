@@ -124,11 +124,12 @@ class BackgroundModelsConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 background_models.write({"title": {"mode": "poem"}})
 
-    def test_uninstalled_model_falls_back_to_the_chat_model(self) -> None:
+    def test_uninstalled_model_falls_back_to_auto(self) -> None:
         background_models.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         background_models.CONFIG_PATH.write_text(json.dumps({"summary": {"model": "gone:3b"}}))
-        with mock.patch.object(background_models, "local_models", return_value=LOCAL):
-            self.assertIsNone(background_models.configured_tag("summary"))
+        with mock.patch.object(background_models, "local_models", return_value=LOCAL), \
+             mock.patch.object(background_models, "_auto", return_value={"tag": "chat:1b"}):
+            self.assertEqual(background_models.configured_tag("summary"), "chat:1b")
 
 
 class TokenCalibrationTest(unittest.TestCase):

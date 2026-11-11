@@ -115,7 +115,8 @@ export function BackgroundJobsPanel(_props: { isPeek?: boolean }) {
 
   const { config, models, resolved } = status
   const modelOptions = [
-    { value: AUTO, label: 'Same as the chat model' },
+    // Like the chat's own Auto: the chat model when it can run here, else the best local fit.
+    { value: AUTO, label: `Auto${resolved.title.tag ? ` · ${resolved.title.tag}` : ''}` },
     ...models.map((m) => ({
       value: m.name,
       label: m.parameter_size ? `${m.name} · ${m.parameter_size}` : m.name,

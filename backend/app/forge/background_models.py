@@ -11,7 +11,8 @@ Both used whatever model answered chat. That is the wrong default in two
 directions at once: a 1.7B model that answers acceptably writes a mediocre
 title, and a 14B model that answers well spends seconds of GPU on a five-word
 label while the operator's next question queues behind it. So each job names
-its own model here, or says `auto` to follow the committed chat model.
+its own model here, or says `auto`: the committed chat model when it is local
+and fits now, otherwise the best local model that does (`_auto`).
 
 ## Local only, stated rather than assumed
 
@@ -187,39 +188,41 @@ def resolve(job: str, *, installed: set[str] | None = None) -> dict[str, Any]:
         return {
             **fallback,
             "source": "fallback",
-            "reason": f"{chosen} is not installed on this machine, so the chat model is used: "
+            "reason": f"{chosen} is not installed on this machine, so one is chosen automatically: "
                       f"{fallback['reason']}",
         }
     return _auto()
 
 
 def configured_tag(job: str) -> str | None:
-    """The job's own model when one is set and installed; None means "the chat model".
-
-    What the jobs themselves call. Unlike `resolve`, it never scores models for
-    `auto` — `local_model.ask_json` already resolves the chat model when handed
-    None, and doing it twice would cost the job a second fit-scoring pass.
-    """
+    """The tag the job runs on: its own model when set and installed, else `auto`'s pick."""
     chosen = read()[job]["model"]
-    if chosen == AUTO:
-        return None
-    if chosen in {m["name"] for m in local_models()}:
-        return chosen
-    log.info("%s job: %s is not installed locally; using the chat model", job, chosen)
-    return None
+    if chosen != AUTO:
+        if chosen in {m["name"] for m in local_models()}:
+            return chosen
+        log.info("%s job: %s is not installed locally; choosing automatically", job, chosen)
+    return _auto().get("tag")
 
 
 def _auto() -> dict[str, Any]:
+    """The chat model when it can run here now; otherwise the best local model that fits.
+
+    The chat can be pinned to something a background job may not use: a cloud
+    model (jobs are local only) or one no longer installed. Rather than fail the
+    job, `auto` then ranks the local models itself.
+    """
     try:
         resolved = model_config.resolve()
+        tag = resolved.get("tag")
+        if tag and resolved.get("resolved") and not (resolved.get("row") or {}).get("remote"):
+            return {"tag": tag, "source": "auto", "reason": f"the chat model ({tag}): local, and fits now"}
+        best = model_config.resolve(mode="auto")
     except Exception as exc:  # noqa: BLE001
-        return {"tag": None, "source": "auto", "reason": f"the chat model could not be resolved ({exc})"}
-    tag = resolved.get("tag")
-    return {
-        "tag": tag,
-        "source": "auto",
-        "reason": f"follows the chat model ({tag})" if tag else resolved.get("reason", "no local model"),
-    }
+        return {"tag": None, "source": "auto", "reason": f"no model could be chosen ({exc})"}
+    if best.get("tag"):
+        return {"tag": best["tag"], "source": "auto",
+                "reason": f"{best['tag']}: the chat model can't run this job here, so the best local fit"}
+    return {"tag": None, "source": "auto", "reason": best.get("reason", "no local model")}
 
 
 def status() -> dict[str, Any]:

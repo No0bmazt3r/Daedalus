@@ -189,8 +189,8 @@ def retitle(session_id: str, *, force: bool = False) -> dict[str, Any] | None:
     if not _due(session, user_turns, answers, config["refresh_every"], force):
         return job_runs.skip(_why_not(session, user_turns, answers, config["refresh_every"]))
 
-    # None means the chat model, resolved inside `ask_json`; with no model at
-    # all the call returns nothing and the first-message title stands.
+    # `auto` resolves to the chat model when it can run here, else the best
+    # local fit; with no model at all the first-message title stands.
     chosen = background_models.configured_tag("title")
     parts = []
     if session.get("summary"):
