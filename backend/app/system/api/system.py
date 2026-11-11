@@ -25,6 +25,7 @@ from ...db import (
 )
 from ...blueprints import graph_seed
 from ...forge import model_config, model_endpoints, ollama_client
+from .. import rig_link
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -112,7 +113,7 @@ def databases() -> dict[str, Any]:
                 "available": sensor["exists"],
                 "metrics": {
                     "device": sensor_store.device_id(),
-                    "link": "on" if os.environ.get("DAEDALUS_INGEST_TOKEN", "").strip() else "off (no token)",
+                    "link": "paired" if rig_link.pairing() else "off (not paired)",
                     "last_row": _ago(sensor["latest"]),
                     "rows_today": sensor.get("rows_today", 0),
                     "rows": sensor["rows"],

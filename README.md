@@ -294,7 +294,6 @@ you add a cloud endpoint in The Forge. The only secret you might add is
 | `SEARXNG_URL` | `http://127.0.0.1:8081` |
 | `DAEDALUS_ALLOW_DEMO_SEED` | `0` — set `1` to let Settings → Databases and Blueprints seed demo data over HTTP. Those endpoints write and take no login, so keep it `0` on any shared machine. `reset.sh` seeds without it |
 | `DAEDALUS_DEVICE_ID` | `mini-co2-rig-01` — the rig the sensor data comes from; rows without an id are read as this rig |
-| `DAEDALUS_INGEST_TOKEN` | empty (link off) — turns on the rig link; MainUI sends rows with this token |
 | `DAEDALUS_RIG_TZ` | empty (this PC's zone) — the rig PC's time zone, for the CSV import |
 | `HF_TOKEN` | empty — only needed for gated Hugging Face models |
 
@@ -324,12 +323,16 @@ anywhere else.
 CO2SorptionDT's `MainUI_v3.py` sends its Data-tab rows to Daedalus, once a
 second, through `daedalus_link.py`. Both must run on the same PC.
 
-1. Put a long random string in `.env` as `DAEDALUS_INGEST_TOKEN` and restart
-   Daedalus. Settings → Databases then shows **Link: on**.
+1. Click the **Rig** chip at the top of Daedalus, then **Connect rig**. Copy
+   the token it shows; it is shown once and only its hash is kept.
 2. In MainUI's Data tab, enter the address (`http://localhost:8000`) and the
-   same token, then click **Test connection**.
+   token, then click **Test connection**.
 3. Connect COM4 and COM6. Rows are only sent while both are connected;
-   all-zero rows from before connecting are skipped.
+   all-zero rows from before connecting are skipped. The chip turns **live**,
+   or amber **frozen** when a reading stops changing.
+
+**Disconnect** in the same panel revokes the token. The link only ever brings
+readings in: the assistant cannot control the rig (Rule 2).
 
 If the link was down for a run, import that run's saved CSV instead:
 

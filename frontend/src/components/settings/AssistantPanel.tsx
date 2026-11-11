@@ -313,8 +313,10 @@ function SafetySection({ status, saving, save, confirm }: SectionProps) {
       <div className="space-y-2">
         <p className="text-xs theme-text">Built-in rules</p>
         <p className="text-[11px] leading-relaxed theme-text-muted">
-          On by default. Asking <em>how</em> to do any of these is always fine; only asking the
-          assistant to <em>do</em> it is refused. Turning one off asks you to type DISABLE.
+          ON means the request is <strong>refused</strong>, not allowed. The assistant is read-only
+          either way: it has no tool that can control the reactor or change data. Asking{' '}
+          <em>how</em> to do any of these is always fine; only asking the assistant to <em>do</em> it
+          is refused. On by default; turning one off asks you to type DISABLE.
         </p>
         {off.length > 0 && (
           <p className="flex items-start gap-1.5 rounded-lg border status-warn-border status-warn-bg px-3 py-2 text-[11px] leading-relaxed status-warn">

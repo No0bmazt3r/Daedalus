@@ -2,6 +2,7 @@ import { LabyrinthIcon } from "./LabyrinthIcon";
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from './ui/button'
 import { MINIMIZED_DOCK_SLOT } from './ui/floating-window'
+import { RigChip } from './RigChip'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
 import { Plus, Mic, ArrowUp, ArrowDown, Zap, Ghost, ChevronDown, Copy, GitFork, RefreshCw, Check, Cloud, ThumbsUp, ThumbsDown, Pencil, Info, ChevronRight, Lightbulb } from 'lucide-react'
@@ -718,6 +719,7 @@ export function ChatInterface() {
           id={MINIMIZED_DOCK_SLOT}
           className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2"
         />
+        <RigChip />
         {/* Hideable, but the mode is not: the shortcut and Settings → Shortcuts
             both still toggle it, and the composer still says so in its
             placeholder. A hidden control is one click fewer, never a silently

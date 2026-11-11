@@ -1,8 +1,12 @@
 """The rig link: CO2SorptionDT's MainUI posts its Data-tab rows here.
 
-Off until `.env` sets `DAEDALUS_INGEST_TOKEN`; every request must carry it as
-`Authorization: Bearer <token>`. The backend listens on 127.0.0.1 only, so the
-link works from the same PC and nowhere else.
+Off until the Rig chip's Connect rig makes a token (`system/rig_link`); every
+MainUI request must carry it as `Authorization: Bearer <token>`. The backend
+listens on 127.0.0.1 only, so the link works from the same PC and nowhere else.
+
+Pair and Disconnect are called by the Daedalus UI. Pair takes a JSON body so a
+page on another site cannot trigger it: a cross-origin JSON POST needs a CORS
+preflight, which only Daedalus' own origins pass.
 
 MainUI decides *when* to send (only while COM4 and COM6 are both connected);
 this side only checks what arrives and stores it via `sensor_store.ingest`,
@@ -11,8 +15,6 @@ which keeps the AI query path read-only.
 
 from __future__ import annotations
 
-import hmac
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -20,6 +22,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from ...db import sensor_store
+from .. import rig_link
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
@@ -53,12 +56,34 @@ class Batch(BaseModel):
 
 
 def _authorise(authorization: str | None) -> None:
-    token = os.environ.get("DAEDALUS_INGEST_TOKEN", "").strip()
-    if not token:
-        raise HTTPException(status_code=403, detail="The rig link is off. Set DAEDALUS_INGEST_TOKEN in .env and restart.")
-    sent = (authorization or "").removeprefix("Bearer ").strip()
-    if not hmac.compare_digest(sent, token):
-        raise HTTPException(status_code=401, detail="Wrong or missing token.")
+    if not rig_link.pairing():
+        raise HTTPException(status_code=403, detail="The rig link is off. Press Connect rig in Daedalus.")
+    if not rig_link.accepts((authorization or "").removeprefix("Bearer ").strip()):
+        raise HTTPException(status_code=401, detail="Wrong or revoked token. Pair again from Daedalus.")
+
+
+class PairBody(BaseModel):
+    confirm: bool
+
+
+@router.get("/status")
+def status() -> dict[str, Any]:
+    """The Rig chip: off, waiting, live or frozen."""
+    return rig_link.status()
+
+
+@router.post("/pair")
+def pair(body: PairBody) -> dict[str, Any]:
+    """A new token, shown once. Replaces any earlier pairing."""
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm must be true")
+    return {"token": rig_link.pair(), **rig_link.status()}
+
+
+@router.delete("/pair")
+def unpair() -> dict[str, Any]:
+    rig_link.unpair()
+    return rig_link.status()
 
 
 @router.get("/ping")
