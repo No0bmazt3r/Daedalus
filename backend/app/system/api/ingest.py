@@ -53,14 +53,14 @@ class Batch(BaseModel):
     rows: list[Reading] = Field(max_length=MAX_BATCH)
 
 
-def authorise(authorization: str | None) -> None:
+def authorise(authorization: str | None) -> dict[str, Any]:
     """The rig token check: 403 while no token is active, 401 for a wrong, revoked or expired one.
 
     Shared by every endpoint MainUI calls (the data link and `rig_chat`), so
     revoking a token in Daedalus cuts both.
     """
     try:
-        rig_link.check((authorization or "").removeprefix("Bearer ").strip())
+        return rig_link.check((authorization or "").removeprefix("Bearer ").strip())
     except rig_link.Refused as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
 

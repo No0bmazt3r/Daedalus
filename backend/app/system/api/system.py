@@ -52,9 +52,10 @@ def _schema(store: str) -> dict[str, Any]:
 
 @router.get("/observability")
 def observability(range: observability_report.Range = "all",  # noqa: A002 — the query parameter's name
-                  source: observability_report.Source = "chat") -> dict[str, Any]:
+                  source: observability_report.Source = "chat",
+                  origin: observability_report.Origin = "all") -> dict[str, Any]:
     """The Observability page's figures over `ai_logs.db` (TODO.md, M7)."""
-    return observability_report.report(range, source)
+    return observability_report.report(range, source, origin)
 
 
 def _ago(iso: str | None) -> str:

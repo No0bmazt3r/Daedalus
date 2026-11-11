@@ -365,8 +365,14 @@ def answer_stream(
     *,
     model: str | None = None,
     evaluation: bool = False,
+    origin: str = "web",
+    origin_label: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Answer one message, yielding progress events as the model produces them.
+
+    `origin` is where it was asked from: 'web' (`/api/chat`) or 'mainui'
+    (`/api/rig-chat`, with the rig token's name as `origin_label`). The route
+    sets it, never the client; evaluation turns are logged as 'eval'.
 
     `evaluation=True` is the evaluation harness (`evaluation/evaluation`): the
     turn runs the identical pipeline, but its `model_logs` row says
@@ -454,6 +460,8 @@ def answer_stream(
                 "rewrite_method": understood.rewrite_method,
                 "intent_method": understood.intent_method,
                 "guard_reason": understood.guard_reason,
+                "origin": "eval" if evaluation else origin,
+                "origin_label": None if evaluation else origin_label,
             }
 
             if understood.reply is not None:

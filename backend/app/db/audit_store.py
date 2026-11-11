@@ -267,6 +267,7 @@ def recent_queries(
     since: str | None = None,
     until: str | None = None,
     search: str | None = None,
+    origin: str | None = None,
 ) -> list[dict[str, Any]]:
     """Every chat turn the filters match, newest first, with its tool, retrieval and error counts.
 
@@ -298,6 +299,11 @@ def recent_queries(
     if until:
         where.append("c.timestamp < ?")
         params.append(until)
+    if origin:
+        # 'web' or 'mainui'. Rows from before origins were logged are NULL and
+        # match neither: unknown, not guessed.
+        where.append("c.origin = ?")
+        params.append(origin)
     if search:
         where.append("(c.user_query LIKE ? ESCAPE '\\' OR c.query_id LIKE ? ESCAPE '\\')")
         like = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"

@@ -144,10 +144,11 @@ def _stamp(created_at: str) -> str:
 
 
 def create_session(
-    *, title: str | None = None, device_id: str = "mini-co2-rig-01", ephemeral: bool = False
+    *, title: str | None = None, device_id: str = "mini-co2-rig-01", ephemeral: bool = False,
+    origin: str | None = None,
 ) -> dict[str, Any]:
     return chat_store.create_session(
-        title=title, device_id=device_id, ephemeral=ephemeral
+        title=title, device_id=device_id, ephemeral=ephemeral, origin=origin
     )
 
 

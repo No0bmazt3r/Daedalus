@@ -36,7 +36,7 @@ class ThreadTest(unittest.TestCase):
     def tearDown(self) -> None:
         thread_settings.write({"reset": True})
 
-    def turn(self, question: str, answer: str, *, incognito: bool = False) -> tuple[str, str]:
+    def turn(self, question: str, answer: str, *, incognito: bool = False, **origin: str) -> tuple[str, str]:
         """Run one chat turn; returns (query_id, session_id)."""
         session = chat_service.create_session(ephemeral=incognito)
         choice = {"tag": "fake:1b", "source": "pinned", "remote": False, "reason": "test"}
@@ -45,7 +45,7 @@ class ThreadTest(unittest.TestCase):
              mock.patch.object(ollama_client, "serving_host", return_value="test"), \
              mock.patch.object(inference, "choose_model", return_value=choice), \
              mock.patch.object(inference.session_titles, "schedule"):
-            events = list(inference.answer_stream(session["session_id"], question))
+            events = list(inference.answer_stream(session["session_id"], question, **origin))
         self.assertEqual(events[-1]["phase"], "done", events[-1])
         return events[-1]["result"]["query_id"], session["session_id"]
 
@@ -124,6 +124,18 @@ class ThreadTest(unittest.TestCase):
         found = self.client.get("/api/trace", params={"q": bad}).json()["items"]
         self.assertEqual([i["query_id"] for i in found], [bad])
         self.assertEqual(self.client.get("/api/trace", params={"bucket": "maybe"}).status_code, 422)
+
+    def test_origin_is_logged_and_filterable(self) -> None:
+        reading = fixtures.co2(119)
+        web, _ = self.turn("What is the CO2 level now?", f"CO2 is {reading} ppm [S1].")
+        rig, _ = self.turn("What is the CO2 level now?", f"CO2 is {reading} ppm [S1].",
+                           origin="mainui", origin_label="Lab PC MainUI")
+        trace = self.client.get(f"/api/trace/{rig}").json()
+        self.assertEqual((trace["summary"]["origin"], trace["summary"]["origin_label"]), ("mainui", "Lab PC MainUI"))
+        self.assertEqual(self.client.get(f"/api/trace/{web}").json()["summary"]["origin"], "web")
+        only_rig = [t["query_id"] for t in self.client.get("/api/trace?origin=mainui&limit=500").json()["items"]]
+        self.assertIn(rig, only_rig)
+        self.assertNotIn(web, only_rig)
 
     def test_unknown_query_is_404(self) -> None:
         self.assertEqual(self.client.get("/api/trace/q_nope").status_code, 404)

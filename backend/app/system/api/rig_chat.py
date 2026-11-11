@@ -61,7 +61,7 @@ def sessions(limit: int = Query(default=20, ge=1, le=200),
 @router.post("/sessions", status_code=201)
 def create(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     authorise(authorization)
-    return chat_service.create_session(device_id=sensor_store.device_id())
+    return chat_service.create_session(device_id=sensor_store.device_id(), origin="mainui")
 
 
 @router.get("/sessions/{session_id}/messages")
@@ -74,7 +74,11 @@ def messages(session_id: str, authorization: str | None = Header(default=None)) 
 @router.post("")
 def ask(session_id: str = Body(..., embed=True), message: str = Body(..., embed=True),
         authorization: str | None = Header(default=None)) -> StreamingResponse:
-    """One question, answered as server-sent events: the web UI's own stream, unchanged."""
-    authorise(authorization)
+    """One question, answered as server-sent events: the web UI's own stream, unchanged.
+
+    Logged as asked from 'mainui', labelled with the token's name, so the Thread,
+    Observability and the sidebar can tell it from a question typed in the web app.
+    """
+    token = authorise(authorization)
     _visible(session_id)
-    return chat_api.chat(session_id=session_id, message=message, model=None)
+    return chat_api.stream_answer(session_id, message, origin="mainui", origin_label=token["name"])

@@ -76,6 +76,16 @@ class ObservabilityTest(unittest.TestCase):
         self.assertEqual((bench["headline"]["turns"], bench["series"]), (0, []))
         self.assertEqual([m["name"] for m in bench["models"]], ["b"])
 
+    def test_origin_filter(self) -> None:
+        turn("from-web", ago(hours=1), 1000, origin="web")
+        turn("from-rig", ago(hours=1), 2000, origin="mainui", origin_label="Lab PC")
+        audit_store.log("model_logs", query_id="from-rig", timestamp=ago(hours=1), model_name="m", source="chat")
+        audit_store.log("model_logs", query_id="from-web", timestamp=ago(hours=1), model_name="w", source="chat")
+        rig = observability.report("all", "chat", "mainui")
+        self.assertEqual((rig["headline"]["turns"], rig["headline"]["p50_ms"]), (1, 2000))
+        self.assertEqual([m["name"] for m in rig["models"]], ["m"])
+        self.assertEqual(observability.report("all", "chat", "all")["headline"]["turns"], 2)
+
     def test_empty_log(self) -> None:
         d = observability.report("all", "chat")
         self.assertEqual((d["headline"]["turns"], d["headline"]["p50_ms"], d["series"]), (0, None, []))

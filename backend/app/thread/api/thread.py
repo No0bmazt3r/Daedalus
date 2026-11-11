@@ -37,6 +37,7 @@ def recent(
     bucket: Literal["grounded", "ungrounded", "unchecked"] | None = None,
     status: Literal["grounded", "ungrounded", "blocked", "refused", "no_model", "error"] | None = None,
     labelled: Literal["yes", "no"] | None = None,
+    origin: Literal["web", "mainui"] | None = None,
     q: str | None = Query(default=None, max_length=200),
 ) -> dict:
     """Recent chat turns, newest first, with figures over everything the filters match."""
@@ -44,7 +45,7 @@ def recent(
         return thread.recent(
             limit=limit, offset=offset, bucket=bucket, status=status, labelled=labelled,
             session_id=session_id, intent=intent, model=model, track=track,
-            since=since, until=until, search=q.strip() if q else None,
+            since=since, until=until, search=q.strip() if q else None, origin=origin,
         )
     except sqlite_util.DatabaseUnavailableError as exc:
         raise HTTPException(status_code=503, detail=f"store unavailable: {exc}") from exc

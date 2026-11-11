@@ -99,6 +99,8 @@ class SessionOut(BaseModel):
     title_source: str | None = None
     #: The chat this one was forked from (chat migration 007), or None.
     forked_from: str | None = None
+    # 'mainui' for a chat started in CO2SorptionDT's Daedalus tab; None for the web app.
+    origin: str | None = None
 
 
 class SessionDetail(SessionOut):

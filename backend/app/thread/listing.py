@@ -90,6 +90,10 @@ def summary(
         "error_count": row.get("error_count", 0),
         "tracks": [t for t in (row.get("tracks") or "").split(",") if t],
         "label": label,
+        # Where it was asked: 'web', 'mainui' (with the rig token's name) or 'eval';
+        # None for turns logged before this was recorded.
+        "origin": row.get("origin"),
+        "origin_label": row.get("origin_label"),
     }
 
 

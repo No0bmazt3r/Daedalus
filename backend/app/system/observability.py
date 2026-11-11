@@ -23,6 +23,9 @@ from ..thread.listing import _percentile, summary
 
 Range = Literal["24h", "7d", "30d", "all"]
 Source = Literal["chat", "eval", "benchmark"]
+# Where a turn was asked (`conversation_logs.origin`): the web app, MainUI's tab, or both.
+# Turns logged before origins were recorded count under "all" only.
+Origin = Literal["all", "web", "mainui"]
 
 RANGES: dict[str, timedelta | None] = {
     "24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30), "all": None,
@@ -71,7 +74,7 @@ def _rate(part: int, whole: int) -> float | None:
     return round(part / whole, 4) if whole else None
 
 
-def report(range_: str = "all", source: str = "chat") -> dict[str, Any]:
+def report(range_: str = "all", source: str = "chat", origin: str = "all") -> dict[str, Any]:
     zone = assistant_settings.site_tz()
     now = datetime.now(timezone.utc)
     span = RANGES[range_]
@@ -96,7 +99,7 @@ def report(range_: str = "all", source: str = "chat") -> dict[str, Any]:
         tool_rows = rows(f"SELECT query_id, tool_name, status, latency_ms FROM tool_logs WHERE {after}", *window)
         marks = ",".join("?" * len(model_sources))
         model_rows = rows(
-            f"SELECT model_name, status, time_to_first_token_ms, completion_token_count, generation_ms,"
+            f"SELECT query_id, model_name, status, time_to_first_token_ms, completion_token_count, generation_ms,"
             f" total_inference_ms FROM model_logs WHERE {after} AND source IN ({marks})", *window, *model_sources)
         error_rows = rows(
             f"SELECT timestamp, component, error_type, message, query_id FROM error_logs WHERE {after}"
@@ -108,7 +111,7 @@ def report(range_: str = "all", source: str = "chat") -> dict[str, Any]:
     turns = []
     if source != "benchmark":
         for row in audit_store.recent_queries(since=since):
-            if (row["query_id"] in eval_ids) == (source == "eval"):
+            if (row["query_id"] in eval_ids) == (source == "eval") and origin in ("all", row.get("origin")):
                 turns.append(summary(row, None, settings, labels.get(row["query_id"])))
     ids = {t["query_id"] for t in turns}
 
@@ -167,6 +170,8 @@ def report(range_: str = "all", source: str = "chat") -> dict[str, Any]:
     # ── models ───────────────────────────────────────────────────────────────
     by_model: dict[str, list[dict[str, Any]]] = {}
     for r in model_rows:
+        if origin != "all" and r["query_id"] not in ids:
+            continue  # a model call from a turn asked elsewhere
         by_model.setdefault(r["model_name"] or "unknown", []).append(r)
     models = []
     for name, calls in by_model.items():
@@ -188,14 +193,14 @@ def report(range_: str = "all", source: str = "chat") -> dict[str, Any]:
     errors = [
         {**e, "message": (e["message"] or "")[:300]}
         for e in error_rows
-        if ((e["query_id"] in ids) if e["query_id"] else source == "chat")
+        if ((e["query_id"] in ids) if e["query_id"] else source == "chat" and origin == "all")
     ][:ERRORS_SHOWN]
     slowest = sorted((t for t in turns if t["latency_ms"] is not None), key=lambda t: -t["latency_ms"])
     slowest_rows = [{k: t[k] for k in ("query_id", "timestamp", "question", "latency_ms", "status", "model")}
                     for t in slowest[:SLOWEST_SHOWN]]
 
     return {
-        "range": range_, "source": source, "unit": unit, "timezone": str(zone),
+        "range": range_, "source": source, "origin": origin, "unit": unit, "timezone": str(zone),
         "generated_at": _iso(now), "headline": headline, "series": series,
         "tools": tools, "models": models, "errors": errors, "slowest": slowest_rows,
     }

@@ -80,6 +80,17 @@ class RigChatTest(unittest.TestCase):
         got = [json.loads(line[6:]) for line in res.text.splitlines() if line.startswith("data: ")]
         self.assertEqual(got, events)
         self.assertEqual(stream.call_args.args[:2], (sid, "What is the CO2 now?"))
+        # Logged as MainUI's, with the token's name: set by the route, not the client.
+        self.assertEqual((stream.call_args.kwargs["origin"], stream.call_args.kwargs["origin_label"]),
+                         ("mainui", "MainUI"))
+        self.assertEqual(chat_service.get_session(sid)["origin"], "mainui")
+
+    def test_web_chat_is_logged_as_web(self) -> None:
+        sid = self.client.post("/api/sessions", json={}).json()["session_id"]
+        self.assertIsNone(chat_service.get_session(sid)["origin"])
+        with mock.patch.object(inference, "answer_stream", return_value=iter([])) as stream:
+            self.client.post("/api/chat", json={"session_id": sid, "message": "hi"})
+        self.assertEqual(stream.call_args.kwargs["origin"], "web")
 
 
 if __name__ == "__main__":

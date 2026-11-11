@@ -72,12 +72,19 @@ def chat(
     a terminal `error` event: once the first byte is out the status line is
     already sent, and a 503 has nowhere left to go.
     """
+    return stream_answer(session_id, message, model=model, origin="web")
+
+
+def stream_answer(session_id: str, message: str, *, model: str | None = None,
+                  origin: str, origin_label: str | None = None) -> StreamingResponse:
+    """The answer as server-sent events. Shared with `/api/rig-chat`, which sets `origin='mainui'`."""
     if not message.strip():
         raise HTTPException(status_code=400, detail="message is empty")
 
     def events() -> Iterator[str]:
         try:
-            for event in inference.answer_stream(session_id, message.strip(), model=model):
+            for event in inference.answer_stream(session_id, message.strip(), model=model,
+                                                 origin=origin, origin_label=origin_label):
                 yield _sse(event)
         except KeyError as exc:
             # `chat_service` raises this for an unknown session id.
@@ -93,42 +100,6 @@ def chat(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-@router.post("/feedback")
-def feedback(
-    query_id: str = Body(..., embed=True),
-    rating: int = Body(..., embed=True),
-    session_id: str | None = Body(default=None, embed=True),
-    comment: str | None = Body(default=None, embed=True, max_length=2000),
-) -> dict[str, Any]:
-    """Rate an answer up (+1) or down (-1), or withdraw a rating (0).
-
-    Appended to `feedback_logs`, never updated: the audit store is append-only,
-    and a changed mind is itself a data point. The newest row is the rating.
-    The answer must be a logged turn — a rating that points at nothing would
-    land in the evaluation set as though it were about something.
-    """
-    if rating not in (-1, 0, 1):
-        raise HTTPException(status_code=400, detail="rating must be -1, 0 or 1")
-    if not audit_store.has_query(query_id):
-        raise HTTPException(status_code=404, detail=f"no logged answer '{query_id}'")
-    audit_store.log(
-        "feedback_logs",
-        query_id=query_id,
-        session_id=session_id,
-        rating=rating,
-        evaluator_role="operator",
-        comment=(comment or "").strip() or None,
-    )
-    return {"ok": True, "query_id": query_id, "rating": rating}
-
-
-@router.get("/feedback")
-def feedback_for_session(session_id: str = Query(...)) -> dict[str, Any]:
-    """The current rating of each rated answer in a chat, for redrawing the thumbs."""
-    ratings = audit_store.latest_ratings(session_id, chat_store.query_ids(session_id))
-    return {"session_id": session_id, "ratings": ratings}
 
 
 @router.get("/{session_id}/status")

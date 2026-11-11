@@ -150,6 +150,7 @@ def _session_row(row: sqlite3.Row) -> dict[str, Any]:
         "title_source": row["title_source"] if "title_source" in row.keys() else None,
         "title_turns": row["title_turns"] if "title_turns" in row.keys() else 0,
         "forked_from": row["forked_from"] if "forked_from" in row.keys() else None,
+        "origin": row["origin"] if "origin" in row.keys() else None,
         # Present only on list queries, which join the count in.
         "message_count": row["message_count"] if "message_count" in row.keys() else None,
     }
@@ -190,8 +191,12 @@ def create_session(
     title: str | None = None,
     device_id: str = "mini-co2-rig-01",
     ephemeral: bool = False,
+    origin: str | None = None,
 ) -> dict[str, Any]:
-    """Open a new session. `title` is usually left to the first message."""
+    """Open a new session. `title` is usually left to the first message.
+
+    `origin` is 'mainui' for a chat opened from CO2SorptionDT; None for the web app.
+    """
     init_db()
     session_id = new_session_id()
     now = _now()
@@ -201,10 +206,10 @@ def create_session(
         with sqlite_util.transaction(DB_PATH) as conn:
             conn.execute(
                 "INSERT INTO chat_sessions "
-                "(session_id, created_at, updated_at, title, device_id, ephemeral, title_source) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(session_id, created_at, updated_at, title, device_id, ephemeral, title_source, origin) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (session_id, now, now, clean_title, device_id, int(ephemeral),
-                 "user" if clean_title else None),
+                 "user" if clean_title else None, origin),
             )
 
     sqlite_util.with_retry(_write, what="create_session")
