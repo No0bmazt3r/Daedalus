@@ -71,6 +71,12 @@ class SensorToolTest(unittest.TestCase):
 
     # ── behaviour ───────────────────────────────────────────────────────────
 
+    def test_a_value_that_stopped_moving_is_marked_frozen(self) -> None:
+        # The fixture holds pressure at 1.5 for all two hours: past the lookback.
+        # CO2 changes every minute, so it has held its value for 60 s.
+        env = self.call("get_live_reading", sensor="all")
+        self.assertEqual(env["data"]["frozen_seconds"], {"temperature": 60, "pressure": 3600, "ph": 3600, "co2_ppm": 60})
+
     def test_latest_reading_is_marked_stale(self) -> None:
         env = self.call("get_live_reading", sensor="co2_ppm")
         self.assertTrue(env["ok"])

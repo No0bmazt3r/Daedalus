@@ -56,6 +56,24 @@ def supports_thinking(tag: str) -> bool:
     return capable
 
 
+THINKING_PREF = "thinking-off"
+
+
+def thinking_on(tag: str) -> bool | None:
+    """The Forge's thinking switch for `tag`: None when the model cannot think,
+    else on unless switched off. Every model call that can think asks this, so
+    chat, evaluation and benchmarks run under the same setting."""
+    if not supports_thinking(tag):
+        return None
+    try:
+        from ...db import prefs_store  # noqa: PLC0415
+
+        off = (prefs_store.get_pref(THINKING_PREF) or {}).get("tags") or []
+    except Exception:  # noqa: BLE001
+        off = []
+    return tag not in off
+
+
 def local_tag() -> str | None:
     """The committed local model, or None when there is none to call."""
     try:

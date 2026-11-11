@@ -173,14 +173,22 @@ class _Builder:
             head += f". STALE: this is the newest reading and it is {_age(int(data.get('age_seconds') or 0))} old"
         if data.get("offset_seconds") is not None:
             head += f" (nearest row to the time asked, {abs(int(data['offset_seconds']))} s away)"
+        frozen = data.get("frozen_seconds") or {}
+
+        def held(name: str) -> str:
+            if name not in frozen:
+                return ""
+            return (f" FROZEN: unchanged for {_age(frozen[name])}, so the sensor or its link"
+                    " may have stopped; do not report it as a live value.")
+
         lines = []
         if data.get("sensor") == "all":
             for name, r in (data.get("readings") or {}).items():
-                lines.append(self.add("S", "sensor", "get_live_reading", f"{name} = {_fmt(r['value'], r['unit'])}. {head}.",
+                lines.append(self.add("S", "sensor", "get_live_reading", f"{name} = {_fmt(r['value'], r['unit'])}. {head}.{held(name)}",
                                       {"type": "sqlite", "sensor": name, "timestamp": ts, "value": r["value"], "unit": r["unit"]}))
         else:
             lines.append(self.add("S", "sensor", "get_live_reading",
-                                  f"{data.get('sensor')} = {_fmt(data.get('value'), data.get('unit', ''))}. {head}.",
+                                  f"{data.get('sensor')} = {_fmt(data.get('value'), data.get('unit', ''))}. {head}.{held(str(data.get('sensor')))}",
                                   {"type": "sqlite", "sensor": data.get("sensor"), "timestamp": ts,
                                    "value": data.get("value"), "unit": data.get("unit")}))
         return lines

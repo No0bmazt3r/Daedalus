@@ -431,6 +431,13 @@ def run_stream(
             "num_ctx": ollama_client.ANSWER_OPTIONS["num_ctx"],
         },
     }
+    # The same per-model switch the chat path obeys, so a benchmark measures
+    # the model as it actually answers.
+    from ..chat.query_pipeline import local_model  # noqa: PLC0415
+
+    think = local_model.thinking_on(tag)
+    if think is not None:
+        payload["think"] = think
 
     try:
         for base in ollama_client.candidate_base_urls():
@@ -539,6 +546,7 @@ def run_stream(
         # Which machine produced these milliseconds. NULL for local runs; see
         # migration 004 for why that is not 'localhost'.
         host=ollama_client.serving_host(tag),
+        thinking=None if think is None else int(think),
         status=status,
         error_message=error,
     )
@@ -573,6 +581,8 @@ def run_stream(
                 # False means the figures include loading the weights from disk,
                 # which is a different measurement and a much worse-looking one.
                 "warmed_up": warmed_up,
+                # Forge's thinking switch: True/False, None for a model that cannot think.
+                "thinking": think,
                 # So a reader can tell a production-trace number from a fixture one.
                 "prompt": provenance,
                 "sample": "".join(pieces)[:400],

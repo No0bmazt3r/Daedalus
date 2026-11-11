@@ -71,7 +71,7 @@ export interface TracePage {
 
 export type StepKind =
   | 'query' | 'understanding' | 'tool' | 'retrieval' | 'evidence'
-  | 'context' | 'model' | 'validation' | 'answer' | 'error' | 'feedback' | 'label';
+  | 'context' | 'model' | 'thinking' | 'validation' | 'answer' | 'error' | 'feedback' | 'label';
 
 export interface TraceStep {
   kind: StepKind;

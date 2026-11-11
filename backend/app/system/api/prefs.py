@@ -30,9 +30,11 @@ router = APIRouter(prefix="/api/prefs", tags=["prefs"])
 # (`model_config.cloud_allowed`), so turning it off is enforced, not just hidden.
 # `profile` is `{"name": str | null, "onboarded": bool}` from the first-run screen.
 # The name is for the greeting only and never reaches a prompt.
+# `thinking-off` is `{"tags": [...]}`: models whose thinking the Forge switched
+# off, read by the backend (`local_model.thinking_on`). Absent means on.
 ALLOWED_KEYS = {
     "theme", "custom-themes", "ui-scale", "settings-ui", "keybinds", "ui-chrome",
-    "forge-shortlist", "cloud-models", "profile",
+    "forge-shortlist", "cloud-models", "profile", "thinking-off",
 }
 
 

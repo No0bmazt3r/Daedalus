@@ -8,6 +8,7 @@ as a confusing query failure.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -65,6 +66,21 @@ def observability() -> dict[str, Any]:
     return {"url": url, "configured": bool(url)}
 
 
+def _ago(iso: str | None) -> str:
+    """'3 s ago' for the newest sensor row, or 'no rows received'."""
+    if not iso:
+        return "no rows received"
+    try:
+        then = datetime.fromisoformat(iso)
+    except ValueError:
+        return iso
+    seconds = int((datetime.now(timezone.utc) - then).total_seconds())
+    for size, unit in ((86400, "d"), (3600, "h"), (60, "min")):
+        if seconds >= size:
+            return f"{seconds // size} {unit} ago"
+    return f"{max(seconds, 0)} s ago"
+
+
 @router.get("/databases")
 def databases() -> dict[str, Any]:
     """Status of every store Daedalus owns.
@@ -89,12 +105,16 @@ def databases() -> dict[str, Any]:
                 # one container for five databases otherwise looks like four
                 # are missing.
                 "deployment": "embedded file",
-                "access": "read-only",
-                "purpose": "IoT device readings written by the SCADA ingestion subsystem.",
+                "access": "read-only (rig link writes)",
+                "purpose": "Rig readings, sent once a second by CO2SorptionDT's Daedalus link.",
                 "path": str(paths.SENSOR_DB),
                 "size_bytes": _file_size(paths.SENSOR_DB),
                 "available": sensor["exists"],
                 "metrics": {
+                    "device": sensor_store.device_id(),
+                    "link": "on" if os.environ.get("DAEDALUS_INGEST_TOKEN", "").strip() else "off (no token)",
+                    "last_row": _ago(sensor["latest"]),
+                    "rows_today": sensor.get("rows_today", 0),
                     "rows": sensor["rows"],
                     "earliest": sensor["earliest"],
                     "latest": sensor["latest"],

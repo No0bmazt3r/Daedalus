@@ -8,6 +8,10 @@ injection or a coding mistake cannot reach it.
 `init_schema()` and `seed_demo()` exist for development only, when no real
 SCADA writer is running. They open a separate read-write connection and are
 never called from the query path.
+
+`ingest()` is the one production write: rows CO2SorptionDT's Daedalus link
+posts to `/api/ingest/readings`. It also opens its own read-write connection,
+so the query path stays `mode=ro` however the rows arrive.
 """
 
 from __future__ import annotations
@@ -163,6 +167,30 @@ def seed_demo(hours: int = 6, interval_s: int = 1) -> int:
         return len(rows)
 
 
+_READINGS = ("temp_c", "pressure_barg", "ph", "co2_ppm")
+
+
+def ingest(rows: list[dict[str, Any]], device: str) -> dict[str, int]:
+    """Store rows from the rig link. Returns how many were new, already
+    stored (same device and second, e.g. a resent batch) and skipped as all-zero.
+
+    All four readings at exactly 0 is MainUI logging before a port was
+    connected (its buffers start as zeros), not a measurement.
+    """
+    real = [r for r in rows if any(r.get(k) for k in _READINGS)]
+    init_schema()
+    with _connect_rw() as conn:
+        before = conn.total_changes
+        conn.executemany(
+            "INSERT OR IGNORE INTO sensor_readings "
+            "(timestamp, device_id, mode, temp_c, pressure_barg, ph, co2_ppm) "
+            "VALUES (?,?,?,?,?,?,?)",
+            [(r["timestamp"], device, r.get("mode"), *(r.get(k) for k in _READINGS)) for r in real],
+        )
+        inserted = conn.total_changes - before
+    return {"inserted": inserted, "duplicates": len(real) - inserted, "skipped_zero": len(rows) - len(real)}
+
+
 def stats() -> dict[str, Any]:
     """Row counts and coverage window — for Settings → System → Storage health."""
     if not SENSOR_DB.exists():
@@ -172,9 +200,14 @@ def stats() -> dict[str, Any]:
             "SELECT COUNT(*) AS n, MIN(timestamp) AS earliest, MAX(timestamp) AS latest "
             "FROM sensor_readings"
         ).fetchone()
+        today = datetime.now(timezone.utc).date().isoformat()
+        rows_today = conn.execute(
+            "SELECT COUNT(*) AS n FROM sensor_readings WHERE timestamp >= ?", (today,)
+        ).fetchone()["n"]
         return {
             "exists": True,
             "rows": row["n"],
             "earliest": row["earliest"],
             "latest": row["latest"],
+            "rows_today": rows_today,
         }

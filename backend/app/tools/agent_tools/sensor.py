@@ -63,6 +63,13 @@ _MAX_SERIES = 100
 _NEAREST_TOLERANCE = timedelta(minutes=5)
 # How old the newest row may be before a "live" reading is reported as stale.
 STALE_AFTER = timedelta(minutes=2)
+# How long a reading may sit at exactly the same value before it is reported as
+# possibly frozen. MainUI logs a row every second whether or not new data came
+# in, so a dead reader thread or a stopped sensor shows up as a repeated value,
+# while real sensors jitter in the last decimal. Tune here.
+FROZEN_AFTER = timedelta(seconds=30)
+# How far back the frozen check looks; longer is reported as "at least" this.
+_FROZEN_LOOKBACK = timedelta(hours=1)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -109,6 +116,25 @@ def _latest_timestamp() -> datetime | None:
     rows = _run("SELECT MAX(timestamp) AS ts FROM sensor_readings", ())
     ts = rows[0]["ts"] if rows else None
     return parse_ts(ts, "timestamp") if ts else None
+
+
+def _frozen(row: sqlite3.Row, sensor: str) -> dict[str, int]:
+    """Seconds each numeric sensor in `row` has held exactly its value, for
+    those at or past FROZEN_AFTER. Measured back to the last row that differed."""
+    latest = parse_ts(row["timestamp"], "timestamp")
+    out: dict[str, int] = {}
+    for name in NUMERIC_SENSORS if sensor == "all" else (sensor,):
+        if name not in NUMERIC_SENSORS or row[sensor_store.SENSOR_COLUMNS[name]] is None:
+            continue
+        column = sensor_store.SENSOR_COLUMNS[name]  # whitelisted, never caller text
+        changed = _run(
+            f"SELECT MAX(timestamp) AS ts FROM sensor_readings WHERE timestamp >= ? AND {column} IS NOT ?",
+            (fmt_ts(latest - _FROZEN_LOOKBACK), row[column]),
+        )[0]["ts"]
+        held = latest - parse_ts(changed, "timestamp") if changed else _FROZEN_LOOKBACK
+        if held >= FROZEN_AFTER:
+            out[name] = int(held.total_seconds())
+    return out
 
 
 def _reading(row: sqlite3.Row, sensor: str) -> dict[str, Any]:
@@ -187,9 +213,15 @@ def get_live_reading(sensor: str, timestamp: str | None) -> dict[str, Any]:
     # Stale is a fact about the feed, and the answer must carry it. "CO₂ is 488
     # ppm" said about a row from two weeks ago is a wrong answer that looks right.
     reading.update(found=True, age_seconds=int(age.total_seconds()), stale=age > STALE_AFTER)
+    # Same reason for a value that has stopped moving: a frozen reading is
+    # reported as live otherwise.
+    frozen = _frozen(rows[0], sensor)
+    if frozen:
+        reading["frozen_seconds"] = frozen
     return {
         "data": reading,
-        "detail": f"latest {sensor} at {reading['timestamp']}" + (" (STALE)" if reading["stale"] else ""),
+        "detail": f"latest {sensor} at {reading['timestamp']}" + (" (STALE)" if reading["stale"] else "")
+        + (f" (FROZEN: {', '.join(frozen)})" if frozen else ""),
     }
 
 

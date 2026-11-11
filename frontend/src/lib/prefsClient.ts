@@ -18,6 +18,8 @@ export const PREF_FORGE_SHORTLIST = 'forge-shortlist';
 export const PREF_CLOUD_MODELS = 'cloud-models';
 /** `{ name, onboarded }` from the first-run screen. The name is for the greeting only. */
 export const PREF_PROFILE = 'profile';
+/** `{ tags: string[] }`: models whose thinking the Forge switched off. The backend reads it. */
+export const PREF_THINKING_OFF = 'thinking-off';
 
 type PrefKey =
   | typeof PREF_THEME
@@ -28,7 +30,8 @@ type PrefKey =
   | typeof PREF_UI_CHROME
   | typeof PREF_FORGE_SHORTLIST
   | typeof PREF_CLOUD_MODELS
-  | typeof PREF_PROFILE;
+  | typeof PREF_PROFILE
+  | typeof PREF_THINKING_OFF;
 
 export type SyncStatus = 'loading' | 'ready' | 'offline';
 

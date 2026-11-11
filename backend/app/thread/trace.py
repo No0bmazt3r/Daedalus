@@ -140,8 +140,21 @@ def trace(query_id: str) -> dict[str, Any] | None:
                 "prompt_sha256": model.get("prompt_sha256"),
                 "source": model.get("source"),
                 "host": model.get("host"),
+                "thinking": {1: "on", 0: "off"}.get(model.get("thinking")),
                 "error": model.get("error_message"),
             },
+        ))
+
+    # The thought is kept with the chat answer, not in the audit log, so it is
+    # read from there. A model that did not think gets a step saying so.
+    if rows.get("model_logs"):
+        thought = (message or {}).get("thinking")
+        switch = (rows["model_logs"][-1]).get("thinking")
+        steps.append(_step(
+            "thinking",
+            f"Thinking: {len(thought.split())} words" if thought
+            else "Thinking: off" if switch == 0 else "Thinking: none",
+            detail={"thought": thought},
         ))
 
     validation = parse_json(convo.get("validation_json"))

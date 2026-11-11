@@ -55,7 +55,7 @@ class ThreadTest(unittest.TestCase):
         body = self.client.get(f"/api/trace/{qid}").json()
         kinds = [s["kind"] for s in body["steps"]]
         self.assertEqual(
-            kinds, ["query", "understanding", "tool", "evidence", "context", "model", "validation", "answer"],
+            kinds, ["query", "understanding", "tool", "evidence", "context", "model", "thinking", "validation", "answer"],
         )
         self.assertEqual(body["summary"]["status"], "grounded")
         self.assertTrue(body["evidence_available"])

@@ -637,7 +637,13 @@ def snapshot() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         snap["embedding"] = {"error": str(exc)}
     choice = inference.choose_model(None)
-    snap["chat_model"] = {"tag": choice.get("tag"), "reason": choice.get("reason")}
+    from ..chat.query_pipeline import local_model  # noqa: PLC0415
+
+    tag = choice.get("tag")
+    # Inside `chat_model`, so it is part of the fingerprint: a run with thinking
+    # off is not comparable with one that had it on.
+    snap["chat_model"] = {"tag": tag, "reason": choice.get("reason"),
+                          "thinking": local_model.thinking_on(tag) if tag else None}
     from ..forge import ollama_client  # noqa: PLC0415
 
     # Temperature, seed and num_ctx: part of what makes two runs comparable.

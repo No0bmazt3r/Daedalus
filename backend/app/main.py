@@ -28,7 +28,7 @@ from .db import corpus_store, migrations, paths, sqlite_util
 from .forge import hardware
 from .forge.api import background_jobs, embeddings, forge, providers
 from .system import app_logs, live_events
-from .system.api import events, health, logs, maintenance, prefs, system
+from .system.api import events, health, ingest, logs, maintenance, prefs, system
 from .thread.api import thread
 from .tools.api import mcp, search, tools
 
@@ -187,6 +187,7 @@ app.include_router(logs.router)
 app.include_router(thread.router)
 app.include_router(providers.router)
 app.include_router(system.router)
+app.include_router(ingest.router)
 app.include_router(forge.router)
 app.include_router(graph.router)
 app.include_router(corpus.router)

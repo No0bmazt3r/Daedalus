@@ -516,12 +516,13 @@ def answer_stream(
                 window, pack, understood, persona=None if evaluation else persona.prompt_block())
             payload = {"model": tag, "messages": messages, "stream": True,
                        "options": dict(ollama_client.ANSWER_OPTIONS)}
-            # A reasoning model thinks either way; asking Ollama to say so
-            # explicitly makes it hand the thought back apart from the answer
-            # (`message.thinking`) instead of inline. Only for a model that
-            # declares the capability: Ollama rejects the field otherwise.
-            if local_model.supports_thinking(tag):
-                payload["think"] = True
+            # The Forge's per-model switch. On, Ollama hands the thought back
+            # apart from the answer (`message.thinking`) instead of inline; off,
+            # the model skips it. Only for a model that declares the
+            # capability: Ollama rejects the field otherwise.
+            think = local_model.thinking_on(tag)
+            if think is not None:
+                payload["think"] = think
             # Beside Ollama's token count, this is what calibrates the history
             # budget's characters-per-token (`token_calibration`).
             prompt_chars = sum(len(m["content"]) for m in messages)
@@ -609,6 +610,7 @@ def answer_stream(
                 # Migration 012: the rest of what decoding ran under.
                 seed=payload["options"]["seed"],
                 num_ctx=payload["options"]["num_ctx"],
+                thinking=None if "think" not in payload else int(payload["think"]),
                 prompt_token_count=final.get("prompt_eval_count"),
                 prompt_chars=prompt_chars,
                 prompt_sha256=prompt_sha256,

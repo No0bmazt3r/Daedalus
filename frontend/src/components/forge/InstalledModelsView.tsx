@@ -22,6 +22,8 @@ import { Collapse } from '../ui/collapse'
 import { PaneIntro, BrowseLink, EmptyNote } from './paneParts'
 import { useLiveRefresh } from '../../hooks/useLiveRefresh'
 import { useSettings } from '../../contexts/SettingsContext'
+import { Switch } from '../ui/switch'
+import { loadOnePref, savePref, PREF_THINKING_OFF } from '../../lib/prefsClient'
 
 /**
  * Forge → Installed: what this machine has, and what it has been doing.
@@ -119,7 +121,7 @@ function Stat({ label, value, title }: { label: string; value: string; title?: s
 }
 
 function LocalModel({
-  row, usage, busy, benchProgress, onBenchmark, onDelete,
+  row, usage, busy, benchProgress, onBenchmark, onDelete, thinking, onThinking,
 }: {
   row: ModelRow
   usage: ModelUsage | undefined
@@ -127,6 +129,9 @@ function LocalModel({
   benchProgress?: BenchmarkProgress | null
   onBenchmark: (row: ModelRow) => void
   onDelete: (row: ModelRow) => void
+  /** null: the model cannot think, so there is no switch. */
+  thinking: boolean | null
+  onThinking: (tag: string, on: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
   const verdict = VERDICT[row.verdict.fit] ?? VERDICT.unknown
@@ -166,6 +171,15 @@ function LocalModel({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {thinking !== null && (
+            <span
+              className="flex items-center gap-1.5 mr-1 text-[10px] uppercase tracking-widest theme-text-muted"
+              title="Whether this model reasons before answering. Off is faster; chat, benchmarks and evaluation all follow this, and each run records it."
+            >
+              Thinking
+              <Switch checked={thinking} onChange={(on) => onThinking(row.tag, on)} label={`Thinking for ${row.label}`} />
+            </span>
+          )}
           {hasArch && (
             <button
               onClick={() => setOpen((v) => !v)}
@@ -321,6 +335,18 @@ export function InstalledModelsView({
   const [notice, setNotice] = useState<string | null>(null)
   const [result, setResult] = useState<BenchmarkResult | null>(null)
   const [benchProgress, setBenchProgress] = useState<BenchmarkProgress | null>(null)
+  // Models whose thinking is switched off; absent means on.
+  const [thinkingOff, setThinkingOff] = useState<string[]>([])
+  useEffect(() => {
+    loadOnePref(PREF_THINKING_OFF)
+      .then((v) => setThinkingOff(((v as { tags?: string[] } | null)?.tags) ?? []))
+      .catch(() => {})
+  }, [])
+  const setThinking = (tag: string, on: boolean) => {
+    const next = on ? thinkingOff.filter((t) => t !== tag) : [...new Set([...thinkingOff, tag])]
+    setThinkingOff(next)
+    savePref(PREF_THINKING_OFF, { tags: next })
+  }
   // Bumped by Refresh. The embedding and cloud panes fetch their own data, so
   // remounting them is what makes the one Refresh button refresh every pane.
   const [refreshKey, setRefreshKey] = useState(0)
@@ -584,6 +610,8 @@ export function InstalledModelsView({
                         benchProgress={busy === row.tag ? benchProgress : null}
                         onBenchmark={handleBenchmark}
                         onDelete={handleDelete}
+                        thinking={row.capabilities?.includes('thinking') ? !thinkingOff.includes(row.tag) : null}
+                        onThinking={setThinking}
                       />
                     ))
                   ) : (

@@ -388,6 +388,8 @@ def _supports(sentence: str, line: str) -> bool:
         return True
     if "stale" in shown and ("stale" in said or " old" in said or "days ago" in said):
         return True
+    if "frozen" in shown and any(w in said for w in ("frozen", "stopped", "unchanged", "not changed", "stuck")):
+        return True
     return False
 
 

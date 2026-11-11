@@ -10,7 +10,7 @@ import { formatMs } from './status'
 
 const KIND_LABEL: Record<TraceStep['kind'], string> = {
   query: 'QUERY', understanding: 'INTENT', tool: 'TOOL', retrieval: 'RETRIEVAL',
-  evidence: 'EVIDENCE', context: 'CONTEXT', model: 'MODEL', validation: 'CHECK',
+  evidence: 'EVIDENCE', context: 'CONTEXT', model: 'MODEL', thinking: 'THINKING', validation: 'CHECK',
   answer: 'ANSWER', error: 'ERROR', feedback: 'FEEDBACK', label: 'LABEL',
 }
 
