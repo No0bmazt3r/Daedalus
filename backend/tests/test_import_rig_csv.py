@@ -14,6 +14,7 @@ CSV = (
     "﻿Date,Time,T-101[C],P-101[barg],pH-101[-],CO2[ppm],Mode\n"
     "2026-11-11,08:05:49,0.00,0.00,0.00,0.00,Manual\n"
     "2026-11-11,08:05:50,31.52,1.79,6.69,490.20,Absorption\n"
+    "11/11/2026,08:05:51,31.53,1.79,6.69,490.40,Absorption\n"   # Excel re-save: day-first
 )
 
 
@@ -29,8 +30,9 @@ class ImportRigCsvTest(unittest.TestCase):
             first = sensor_store.ingest(found, "rig-a")
             again = sensor_store.ingest(found, "rig-a")
         self.assertEqual(found[1]["timestamp"], "2026-11-11T00:05:50+00:00")
-        self.assertEqual((first["inserted"], first["skipped_zero"]), (1, 1))
-        self.assertEqual(again["duplicates"], 1)
+        self.assertEqual(found[2]["timestamp"], "2026-11-11T00:05:51+00:00")
+        self.assertEqual((first["inserted"], first["skipped_zero"]), (2, 1))
+        self.assertEqual(again["duplicates"], 2)
 
 
 if __name__ == "__main__":

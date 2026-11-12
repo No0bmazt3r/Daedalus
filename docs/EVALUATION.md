@@ -133,6 +133,28 @@ or warm cache does not affect another arm's timings halfway through.
 
 ---
 
+## 3a. Running the evaluation on another machine
+
+```
+python3 scripts/transfer.py pack                         # old machine → ../daedalus-transfer.tgz
+python3 scripts/transfer.py restore daedalus-transfer.tgz  # new machine
+```
+
+`pack` carries the code, `config/` (graph, eval set), the Chroma index, corpus,
+sensor readings and `.env`, copying every SQLite file with `VACUUM INTO`.
+`restore` re-counts every table against the manifest, then runs
+`./daedalus.sh setup`, pulls the same Ollama tags and runs `validate`. The index
+travels as built, never re-ingested, so a `run --retrieval-only` on both machines
+should give the same retrieval numbers. Pin the chat model first: `auto` picks
+by hardware, so two machines can answer with different models.
+
+**The whole model comparison, unattended:** `python -m app.cli_eval batch --background`
+pulls any missing model (default: FYP1's SLM tier, `qwen3:1.7b`, `phi3:mini`,
+`gemma3:1b`; override with `--models`), pins each in turn, runs the full query set
+on every arm, restores the original pin, and writes `data/eval/batch_<stamp>.md`
+comparing them. Progress is in `data/eval/batch_<stamp>.log`. A model that fails is
+logged and skipped. Runs are practice unless `--official` (needs the config frozen).
+
 ## 4. When a question or a run goes wrong
 
 | What happens | What the harness does |

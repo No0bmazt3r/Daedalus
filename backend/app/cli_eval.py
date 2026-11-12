@@ -12,6 +12,7 @@
     python -m app.cli_eval judge  eval_… [--model gpt-oss:120b-cloud]   # AI judge, docs/EVAL_SHEETS.md
     python -m app.cli_eval sheets eval_… [--raters data/eval/raters.yaml] [--no-share]
     python -m app.cli_eval pull   eval_…              # ratings back to ratings.csv
+    python -m app.cli_eval batch --background         # pull + run the three FYP1 SLMs, then compare
 
 A terminal rather than a button because an official run is long — every
 question once per arm, through the real model — and is run once, deliberately.
@@ -21,7 +22,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .db import migrations
@@ -37,6 +40,79 @@ def _load_env() -> None:
         key, sep, value = line.strip().partition("=")
         if sep and key and not key.startswith("#"):
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+# FYP1 Table 5's local SLM tier — the three models the interim report benchmarks.
+BENCHMARK_MODELS = ("qwen3:1.7b", "phi3:mini", "gemma3:1b")
+
+
+def _batch(args: argparse.Namespace) -> int:
+    """Pull each model, pin it, run the full eval, restore the pin, compare.
+
+    One model's failure is recorded and the batch moves on to the next, so an
+    overnight run is never lost to one bad model.
+    """
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.background:
+        evaluation.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        log = evaluation.RUNS_DIR / f"batch_{stamp}.log"
+        argv = [a for a in sys.argv[1:] if a != "--background"]
+        with log.open("w") as out:
+            proc = subprocess.Popen([sys.executable, "-m", "app.cli_eval", *argv], stdout=out,
+                                    stderr=subprocess.STDOUT, start_new_session=True,
+                                    cwd=Path(__file__).resolve().parents[1])
+        print(f"Running in the background (pid {proc.pid}); safe to close this terminal.\n"
+              f"Progress:  tail -f {log}\nStop:      kill {proc.pid}")
+        return 0
+
+    from .forge import model_config, ollama_client  # noqa: PLC0415
+
+    models = args.models.split(",") if args.models else list(BENCHMARK_MODELS)
+    have = {m["name"] for m in ollama_client.list_models()}
+    for tag in models:
+        if tag in have:
+            continue
+        print(f"pulling {tag} …", flush=True)
+        last = ""
+        for event in ollama_client.pull(tag):
+            if event["status"] != last:
+                print(f"  {tag}: {event['status']}", flush=True)
+                last = event["status"]
+
+    def show(p: evaluation.Progress) -> None:
+        if not sys.stdout.isatty():  # a log file: one line per answer, not a redrawn counter
+            if p.current and p.done < p.total:
+                print(f"[{p.done}/{p.total}] {p.current}", flush=True)
+            return
+        print(f"\r[{p.done}/{p.total}] {p.current or ''}".ljust(60), end="", flush=True)
+
+    before = model_config.read()
+    done: list[str] = []
+    try:
+        for tag in models:
+            print(f"\n=== {tag} ===", flush=True)
+            model_config.write(mode="pinned", tag=tag, note=f"eval batch {stamp}", updated_by="cli_eval batch")
+            try:
+                record = evaluation.run(practice=not args.official, on_progress=show,
+                                        rerun_reason=args.rerun_reason)
+            except evaluation.EvalError as exc:
+                print(f"\n{tag} failed: {exc}", flush=True)
+                continue
+            done.append(record["run_id"])
+            print(f"\n{tag} → data/eval/{record['run_id']}/report.md", flush=True)
+    finally:
+        pinned = before.get("pinned") or {}
+        model_config.write(mode=before["mode"], tag=pinned.get("tag"), quantization=pinned.get("quantization"),
+                           note=before.get("note"), updated_by="cli_eval batch (restored)")
+
+    if not done:
+        print("No model finished a run.")
+        return 1
+    evaluation.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    summary = evaluation.RUNS_DIR / f"batch_{stamp}.md"
+    summary.write_text(evaluation.compare_markdown([evaluation.get_run(r) for r in done]), encoding="utf-8")
+    print(f"\nComparison of {len(done)} model(s): {summary}")
+    return 0
 
 
 def _judge(args: argparse.Namespace) -> int:
@@ -140,6 +216,11 @@ def main(argv: list[str] | None = None) -> int:
     pl = sub.add_parser("pull", help="read the ratings back into ratings.csv")
     pl.add_argument("run_id")
     pl.add_argument("--raters", help="raters file (default data/eval/raters.yaml)")
+    b = sub.add_parser("batch", help="pull + run every benchmark model, then one comparison")
+    b.add_argument("--models", help=f"comma-separated Ollama tags (default {','.join(BENCHMARK_MODELS)})")
+    b.add_argument("--official", action="store_true", help="official runs (needs the config frozen)")
+    b.add_argument("--rerun-reason", help="passed to each run, when repeating official runs")
+    b.add_argument("--background", action="store_true", help="detach, log to data/eval/batch_<stamp>.log")
     args = parser.parse_args(argv)
     _load_env()
 
@@ -150,6 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run(args)
     if args.command == "judge":
         return _judge(args)
+    if args.command == "batch":
+        return _batch(args)
     if args.command in ("sheets", "pull"):
         return _sheets(args, pull=args.command == "pull")
     if args.command == "list":

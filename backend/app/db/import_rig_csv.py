@@ -39,11 +39,26 @@ def _number(text: str) -> float | None:
         return None
 
 
+# MainUI writes ISO dates; a CSV re-saved in Excel comes back day-first (25/7/2025).
+DATE_FORMATS = ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S")
+
+
+def _local(text: str) -> datetime:
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            pass
+    raise ValueError(f"unrecognised date/time {text!r}")
+
+
 def rows(path: Path, zone) -> list[dict]:  # noqa: ANN001
     out = []
     with path.open(newline="", encoding="utf-8-sig") as f:
         for line in csv.DictReader(f):
-            local = datetime.strptime(f"{line['Date']} {line['Time']}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=zone)
+            if not (line.get("Date") or "").strip():  # Excel leaves blank trailing rows
+                continue
+            local = _local(f"{line['Date'].strip()} {line['Time'].strip()}").replace(tzinfo=zone)
             out.append({
                 "timestamp": local.astimezone(timezone.utc).isoformat(),
                 "mode": (line.get("Mode") or "").strip() or None,
