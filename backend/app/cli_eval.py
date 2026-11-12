@@ -61,7 +61,12 @@ def _batch(args: argparse.Namespace) -> int:
             proc = subprocess.Popen([sys.executable, "-m", "app.cli_eval", *argv], stdout=out,
                                     stderr=subprocess.STDOUT, start_new_session=True,
                                     cwd=Path(__file__).resolve().parents[1])
-        print(f"Running in the background (pid {proc.pid}); safe to close this terminal.\n"
+        # WSL shuts the distro down once its last terminal closes, background jobs included.
+        version = Path("/proc/version")
+        wsl = version.exists() and "microsoft" in version.read_text(errors="ignore").lower()
+        keep = ("On WSL: keep this Ubuntu window OPEN (minimise it). Closing it can stop the run."
+                if wsl else "Safe to close this terminal.")
+        print(f"Running in the background (pid {proc.pid}). {keep}\n"
               f"Progress:  tail -f {log}\nStop:      kill {proc.pid}")
         return 0
 
@@ -79,9 +84,12 @@ def _batch(args: argparse.Namespace) -> int:
                 print(f"  {tag}: {event['status']}", flush=True)
                 last = event["status"]
 
+    logged = {"done": 0}
+
     def show(p: evaluation.Progress) -> None:
-        if not sys.stdout.isatty():  # a log file: one line per answer, not a redrawn counter
-            if p.current and p.done < p.total:
+        if not sys.stdout.isatty():  # a log file: one line per finished answer, not a redrawn counter
+            if p.done != logged["done"] and p.current:
+                logged["done"] = p.done
                 print(f"[{p.done}/{p.total}] {p.current}", flush=True)
             return
         print(f"\r[{p.done}/{p.total}] {p.current or ''}".ljust(60), end="", flush=True)
@@ -91,6 +99,7 @@ def _batch(args: argparse.Namespace) -> int:
     try:
         for tag in models:
             print(f"\n=== {tag} ===", flush=True)
+            logged["done"] = 0
             model_config.write(mode="pinned", tag=tag, note=f"eval batch {stamp}", updated_by="cli_eval batch")
             try:
                 record = evaluation.run(practice=not args.official, on_progress=show,
@@ -99,7 +108,7 @@ def _batch(args: argparse.Namespace) -> int:
                 print(f"\n{tag} failed: {exc}", flush=True)
                 continue
             done.append(record["run_id"])
-            print(f"\n{tag} → data/eval/{record['run_id']}/report.md", flush=True)
+            print(f"\n{tag} -> data/eval/{record['run_id']}/report.md", flush=True)
     finally:
         pinned = before.get("pinned") or {}
         model_config.write(mode=before["mode"], tag=pinned.get("tag"), quantization=pinned.get("quantization"),
