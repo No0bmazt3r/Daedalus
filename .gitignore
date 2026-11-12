@@ -64,3 +64,6 @@ fix_*.py
 # Playwright output
 test-results
 playwright-report
+
+# Dissertation write-up: local only, not part of the code repo
+docs/Dissertation/
