@@ -388,6 +388,7 @@ def score(query: dict[str, Any], asked: dict[str, Any], trace: dict[str, list[di
     model = (trace.get("model_logs") or [{}])[-1]
     rag = (trace.get("rag_logs") or [None])[-1]
 
+    evidence = (result.get("message") or {}).get("evidence") or {}
     out: dict[str, Any] = {
         "id": query["id"],
         "category": query["category"],
@@ -397,6 +398,13 @@ def score(query: dict[str, Any], asked: dict[str, Any], trace: dict[str, list[di
         "answer": answer,
         "intent": convo.get("intent"),
         "model": result.get("model"),
+        # What the answer rested on, for the judge and the human panel
+        # (docs/EVAL_SHEETS.md): the cited labels and the evidence lines the model saw.
+        "standalone_query": convo.get("standalone_query"),
+        "tools_used": result.get("tools_used") or [],
+        "citations": result.get("citations") or [],
+        "evidence_lines": evidence.get("lines") or {},
+        "validation": result.get("validation"),
     }
     if asked.get("error") and not answer:
         out.update(correct=False, declined=None, refusal_correct=False)

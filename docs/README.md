@@ -19,6 +19,7 @@ over anything else here.
 | Understand the three sidebar modules | [`MODULES.md`](MODULES.md) — Ariadne's Thread, The Forge, Labyrinth Blueprints, all built |
 | Know how a model is judged against this machine, or add one | [`MODEL_FIT.md`](MODEL_FIT.md) — the fit contract for chat, embedding and re-ranker models |
 | Run the dual-track evaluation | [`EVALUATION.md`](EVALUATION.md) — query set, freeze-then-run, metrics, what a run writes |
+| Judge, human panel and Google Sheets export | [`EVAL_SHEETS.md`](EVAL_SHEETS.md) — `cli_eval judge` / `sheets` / `pull`, Settings → Google, the master workbook |
 | Defend the latency measurements | [`BENCHMARK.md`](BENCHMARK.md) — methodology, and what it does *not* claim |
 | Run it | [`../README.md`](../README.md) |
 | Know what every script does | [`SCRIPTS.md`](SCRIPTS.md) |

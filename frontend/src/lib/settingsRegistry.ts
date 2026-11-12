@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   Orbit,
   Radio,
+  FileSpreadsheet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -176,6 +177,13 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = Object.freeze([
     keywords: [
       'rig', 'mainui', 'co2sorptiondt', 'token', 'api key', 'key', 'pair', 'pairing', 'connect',
       'dashboard', 'pyqt', 'expiry', 'revoke', 'sensor', 'link',
+    ],
+  }),
+  panel({
+    id: 'google', label: 'Google', group: 'connections', icon: FileSpreadsheet, implemented: true, advancedOnly: true,
+    keywords: [
+      'google', 'sheets', 'spreadsheet', 'drive', 'export', 'evaluation', 'eval', 'panel', 'raters',
+      'judge', 'oauth', 'account', 'connect', 'disconnect',
     ],
   }),
   panel({

@@ -810,7 +810,8 @@ query_id q_20260107_0001 · tool get_live_reading · SQLite 470.2 ppm
   *(The Streamlit viewer the FYP1 spec planned was cut — the Thread replaces it.)*
 - **Method B — distributed (n8n + Google Sheets + LLM-as-a-judge).** Exported
   logs only — the harness writes `judge.jsonl` for it — processed
-  asynchronously for statistical scale. Not built.
+  asynchronously for statistical scale. Built as terminal commands rather than
+  n8n: `cli_eval judge` / `sheets` / `pull` ([`EVAL_SHEETS.md`](EVAL_SHEETS.md)).
 
 > Method B never touches the live reactor, never runs during operator chat, and
 > has no SCADA access. It processes exported logs after the fact. This is the

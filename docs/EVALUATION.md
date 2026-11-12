@@ -193,6 +193,7 @@ methods cover what lexical scoring cannot.
 | `report.md` | The comparison table (with a 95 % interval on correctness), the pairwise significance table, correctness by category, agent stop reasons, and every wrong answer with what was missing. The qualitative failure analysis starts from this. |
 | `results.csv` | One row per question per arm, with empty `human_score` / `human_notes` columns for the human panel. |
 | `judge.jsonl` | Input for Method B (§9.3): question, labels and answer per arm, for an **offline** LLM judge over exported results. Nothing in the harness calls a model to judge. |
+| `judgments.json`, `panel.json`, `sheets.json`, `ratings.csv`, `adjudication.csv` | Written by `judge`, `sheets` and `pull`: the AI judge, the human panel and the Google Sheets. See [`EVAL_SHEETS.md`](EVAL_SHEETS.md). |
 
 Every row carries its `query_id`, so any answer can be opened in Replay or traced
 across the audit tables.

@@ -1,0 +1,16 @@
+# The human panel for `cli_eval sheets` (docs/EVAL_SHEETS.md).
+# Copy to data/eval/raters.yaml (git-ignored: it holds names and emails) and fill in.
+# ids are what the report shows; names and emails stay in the private master sheet.
+raters:
+  - id: R1
+    name: Example Student
+    email: student1@example.com
+    role: student            # student | lecturer
+    co2_experience: "1 year of CO2 sorption lab work"
+    reads_malay: true        # Malay questions only go to raters with true
+  - id: R2
+    name: Example Lecturer
+    email: lecturer@example.com
+    role: lecturer
+    co2_experience: "supervises the rig"
+    reads_malay: false

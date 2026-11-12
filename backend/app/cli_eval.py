@@ -9,6 +9,9 @@
     python -m app.cli_eval report eval_20261001_120000
     python -m app.cli_eval run --retrieval-only     # retrieval metrics only, no chat model
     python -m app.cli_eval compare eval_A eval_B     # e.g. the chunking ablation
+    python -m app.cli_eval judge  eval_… [--model gpt-oss:120b-cloud]   # AI judge, docs/EVAL_SHEETS.md
+    python -m app.cli_eval sheets eval_… [--raters data/eval/raters.yaml] [--no-share]
+    python -m app.cli_eval pull   eval_…              # ratings back to ratings.csv
 
 A terminal rather than a button because an official run is long — every
 question once per arm, through the real model — and is run once, deliberately.
@@ -17,10 +20,59 @@ question once per arm, through the real model — and is run once, deliberately.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from pathlib import Path
 
 from .db import migrations
 from .evaluation import evaluation
+
+
+def _load_env() -> None:
+    """The repo's .env, as daedalus.sh exports it for the server; set variables win."""
+    path = Path(__file__).resolve().parents[2] / ".env"
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key and not key.startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def _judge(args: argparse.Namespace) -> int:
+    from .evaluation import judge  # noqa: PLC0415
+
+    model = args.model or os.environ.get("DAEDALUS_JUDGE_MODEL", "")
+    try:
+        out = judge.run(args.run_id, model, allow_self=args.allow_self,
+                        on_progress=lambda n, t, what: print(f"\r[{n}/{t}] {what}".ljust(50), end="", flush=True))
+    except (judge.JudgeError, evaluation.EvalError) as exc:
+        print(f"\n{exc}")
+        return 1
+    failed = sorted(a for a, v in out["items"].items() if "judge_failed" in v)
+    print(f"\n{len(out['items'])} judged, {len(out['repeats'])} judged twice, {len(failed)} failed"
+          f"{' (' + ', '.join(failed[:10]) + ')' if failed else ''}. Re-run to retry the failed ones.")
+    return 0
+
+
+def _sheets(args: argparse.Namespace, pull: bool) -> int:
+    from .evaluation import sheets  # noqa: PLC0415
+    from .system import google_link  # noqa: PLC0415
+
+    raters = Path(args.raters) if args.raters else sheets.RATERS_DEFAULT
+    try:
+        if pull:
+            out = sheets.pull(args.run_id, raters, on_progress=print)
+            print(f"{out['ratings']} ratings saved to data/eval/{args.run_id}/ratings.csv\nMaster: {out['master']}")
+        else:
+            out = sheets.export(args.run_id, raters, share=not args.no_share, on_progress=print)
+            print(f"Master: {out['master']}")
+            for rid, link in out["raters"].items():
+                print(f"  {rid}: {link}")
+    except (google_link.GoogleError, evaluation.EvalError) as exc:
+        print(exc)
+        return 1
+    return 0
 
 
 def _validate() -> int:
@@ -77,13 +129,29 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("run_id")
     compare = sub.add_parser("compare", help="saved runs side by side, per arm — e.g. a chunking ablation")
     compare.add_argument("run_ids", nargs="+")
+    j = sub.add_parser("judge", help="AI judge over a saved run (offline, after the run)")
+    j.add_argument("run_id")
+    j.add_argument("--model", help="Ollama tag; default DAEDALUS_JUDGE_MODEL")
+    j.add_argument("--allow-self", action="store_true", help="let the model that answered judge itself")
+    sh = sub.add_parser("sheets", help="create or refresh the Google Sheets for a run")
+    sh.add_argument("run_id")
+    sh.add_argument("--raters", help="raters file (default data/eval/raters.yaml)")
+    sh.add_argument("--no-share", action="store_true", help="make the sheets but do not share them yet")
+    pl = sub.add_parser("pull", help="read the ratings back into ratings.csv")
+    pl.add_argument("run_id")
+    pl.add_argument("--raters", help="raters file (default data/eval/raters.yaml)")
     args = parser.parse_args(argv)
+    _load_env()
 
     migrations.migrate_all()
     if args.command == "validate":
         return _validate()
     if args.command == "run":
         return _run(args)
+    if args.command == "judge":
+        return _judge(args)
+    if args.command in ("sheets", "pull"):
+        return _sheets(args, pull=args.command == "pull")
     if args.command == "list":
         for r in evaluation.list_runs():
             kind = "official" if r["official"] else "practice" if r["practice"] else "partial"
