@@ -15,6 +15,8 @@
     python -m app.cli_eval batch --background         # pull + run the three FYP1 SLMs, then compare
     python -m app.cli_eval judge-export               # blind CSV parts for judging in a chat app
     python -m app.cli_eval rescore eval_…             # a finished run against the current labels
+    python -m app.cli_eval panel-export eval_… [--raters 6]   # offline .xlsx rating sheets
+    python -m app.cli_eval panel-import eval_… filled/*.xlsx   # their ratings into ratings.csv
     python -m app.cli_eval judge-import replies/*.csv --model "…"   # the chat's scores back in
 
 A terminal rather than a button because an official run is long — every
@@ -124,6 +126,26 @@ def _batch(args: argparse.Namespace) -> int:
     summary = evaluation.RUNS_DIR / f"batch_{stamp}.md"
     summary.write_text(evaluation.compare_markdown([evaluation.get_run(r) for r in done]), encoding="utf-8")
     print(f"\nComparison of {len(done)} model(s): {summary}")
+    return 0
+
+
+def _panel(args: argparse.Namespace) -> int:
+    from .evaluation import panel_offline as po  # noqa: PLC0415
+
+    try:
+        if args.command == "panel-export":
+            out = po.export(args.run_id, args.raters, Path(args.out) if args.out else None)
+            for rid, n, path in out["files"]:
+                print(f"  {rid}: {n} answers -> {path}")
+            print(f"{out['answers']} answers, {out['calibration']} rated by everyone, the rest by at least two raters.")
+            return 0
+        out = po.import_(args.run_id, [Path(f) for f in args.files])
+    except (po.PanelError, evaluation.EvalError) as exc:
+        print(exc)
+        return 1
+    for problem in out["problems"]:
+        print(f"  ! {problem}")
+    print(f"{out['ratings']} ratings from {', '.join(out['raters']) or 'nobody'} -> {out['file']}")
     return 0
 
 
@@ -275,6 +297,13 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--official", action="store_true", help="official runs (needs the config frozen)")
     b.add_argument("--rerun-reason", help="passed to each run, when repeating official runs")
     b.add_argument("--background", action="store_true", help="detach, log to data/eval/batch_<stamp>.log")
+    pe = sub.add_parser("panel-export", help="offline .xlsx rating workbooks, one per rater")
+    pe.add_argument("run_id")
+    pe.add_argument("--raters", type=int, default=6, help="number of raters (default 6)")
+    pe.add_argument("--out", help="default data/eval/<run>/panel_offline")
+    pi = sub.add_parser("panel-import", help="read filled rating workbooks into ratings.csv")
+    pi.add_argument("run_id")
+    pi.add_argument("files", nargs="+")
     rs = sub.add_parser("rescore", help="score finished runs against the current labels (run.json untouched)")
     rs.add_argument("run_ids", nargs="+")
     je = sub.add_parser("judge-export", help="blind CSV parts of every answer, for judging in a chat app")
@@ -297,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
         return _judge(args)
     if args.command == "batch":
         return _batch(args)
+    if args.command in ("panel-export", "panel-import"):
+        return _panel(args)
     if args.command == "rescore":
         return _rescore(args)
     if args.command in ("judge-export", "judge-import"):

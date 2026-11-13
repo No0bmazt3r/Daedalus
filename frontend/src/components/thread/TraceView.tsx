@@ -15,6 +15,7 @@ import { RetrievalPanel } from './RetrievalPanel'
 import { StepRow } from './TraceSteps'
 import { GroundednessPanel } from './GroundednessPanel'
 import { LabelPanel } from './LabelPanel'
+import { TraversalView } from '../blueprints/TraversalView'
 
 /**
  * One answer's thread: the chain that produced it, then the answer with every
@@ -165,6 +166,14 @@ export function TraceView({ queryId, compact = false, onDismiss }: {
       </ol>
 
       <RetrievalPanel retrievals={shown.retrievals} />
+      {/* A graph answer also shows the walk that found its evidence: the same
+          recording Blueprints replays (rag_logs.traversal_path), never a re-run. */}
+      {s?.tracks.includes('graph') && (
+        <details open className="rounded-lg border theme-border theme-card p-3">
+          <summary className="cursor-pointer text-[11px] font-medium theme-text">How the graph found this</summary>
+          <div className="mt-3"><TraversalView queryId={trace.query_id} /></div>
+        </details>
+      )}
       <GroundednessPanel check={check} />
       {s && <LabelPanel key={trace.query_id} queryId={trace.query_id} initial={s.label} />}
     </div>

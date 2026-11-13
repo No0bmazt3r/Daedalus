@@ -9,9 +9,9 @@ import { FlaskConical, Globe, Monitor } from 'lucide-react'
  * from the web side. Turns logged before origins were recorded have none.
  */
 const LOOK = {
-  web: { icon: Globe, text: 'Web', tone: 'theme-text-muted', why: 'Asked in the Daedalus web app' },
-  mainui: { icon: Monitor, text: 'MainUI', tone: 'status-info', why: 'Asked from CO2SorptionDT MainUI' },
-  eval: { icon: FlaskConical, text: 'Eval', tone: 'theme-text-muted', why: 'Asked by the evaluation harness' },
+  web: { icon: Globe, text: 'Web', tone: 'theme-accent theme-accent-border font-medium', why: 'Asked in the Daedalus web app' },
+  mainui: { icon: Monitor, text: 'MainUI', tone: 'status-info status-info-bg theme-border font-medium', why: 'Asked from CO2SorptionDT MainUI' },
+  eval: { icon: FlaskConical, text: 'Eval', tone: 'theme-text-muted theme-border border-dashed', why: 'Asked by the evaluation harness' },
 } as const
 
 export function OriginBadge({ origin, label, full = false }: {
@@ -32,7 +32,7 @@ export function OriginBadge({ origin, label, full = false }: {
   const named = origin === 'mainui' && label
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded border theme-border px-1 ${look.tone}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-px ${look.tone}`}
       title={named ? `${look.why}, token "${label}"` : look.why}
     >
       <Icon size={10} aria-hidden />

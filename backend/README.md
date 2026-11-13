@@ -43,6 +43,7 @@ reports itself unavailable, naming the package.
 | `pypdf[crypto]` | PDF text (`blueprints/extraction.py`) | Pure Python. `[crypto]` brings `cryptography`, needed for the AES-locked manufacturer manuals. No OCR on purpose: a scanned PDF is refused with that reason |
 | `cryptography` | Credentials in `prefs.db` encrypted at rest (`db/secret_box.py`, Fernet) | Already installed by `pypdf[crypto]`; listed because the backend now imports it directly |
 | `pdfplumber` | PDF tables kept as Markdown rows (`extraction._tables`) | MIT, no model weights (unlike Docling), no network. Without it tables are simply not added |
+| `openpyxl` | Offline rating workbooks for the human panel (`evaluation/panel_offline.py`) | MIT, pure Python; only the `panel-export` / `panel-import` commands import it |
 | `onnxruntime`, `tokenizers` | Track 1's cross-encoder re-ranking (`forge/reranker.py`) | ~80 MB, CPU only, instead of sentence-transformers and its gigabyte of PyTorch for the same model. Weights are downloaded on request, pinned to a commit; without these two, Track 1 keeps Chroma's order |
 
 ## Layout
