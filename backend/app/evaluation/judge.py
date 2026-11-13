@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import re
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -29,6 +30,9 @@ from ..db import paths
 from . import evaluation, panel
 
 PROMPT_PATH = paths.CONFIG_DIR / "eval" / "judge_prompt.md"
+# What the real rig is (solvent, SOP limits, instruments). Judge context only: the
+# system being judged never sees it. Optional, so a checkout without it still judges.
+REFERENCE_PATH = paths.CONFIG_DIR / "eval" / "judge_reactor_reference.md"
 REPEAT_SHARE = 0.10
 MAX_EVIDENCE_CHARS = 6000
 
@@ -38,15 +42,32 @@ class JudgeError(RuntimeError):
 
 
 def prompt() -> tuple[str, str, str]:
-    """(text, version, sha) of the judge prompt."""
+    """(text, version, sha) of the judge prompt, with the reactor reference appended.
+
+    The sha covers both, so editing either one shows in `judgments.json` and makes
+    a re-run judge everything afresh rather than mix two contexts.
+    """
     text = PROMPT_PATH.read_text(encoding="utf-8")
     first = text.splitlines()[0] if text else ""
     version = first.split(":", 1)[1].strip() if first.startswith("version:") else "?"
+    if REFERENCE_PATH.exists():
+        text += "\n\n=== REACTOR REFERENCE ===\n\n" + REFERENCE_PATH.read_text(encoding="utf-8")
     return text, version, hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
+# A small model sometimes echoes its own prompt, trace header included ("tool: graph_agent ·
+# … chosen by phi3:mini"). That would tell the judge the model and the arm, so both are
+# masked in everything the judge reads.
+_MODEL_TAG = re.compile(r"\b(?:qwen|phi|gemma|llama|mistral)[\w.-]*(?::[\w.-]+)?", re.I)
+_TOOL_NAME = re.compile(r"\b(?:graph_agent|graph_walk|graph_lookup|graph_traverse|graph_coverage|search_graph|search_corpus)\b", re.I)
+
+
+def blind(text: str) -> str:
+    return _TOOL_NAME.sub("[retrieval]", _MODEL_TAG.sub("[model]", text))
+
+
 def item(query: dict[str, Any], row: dict[str, Any]) -> str:
-    """What the judge sees for one answer. The arm is never in it."""
+    """What the judge sees for one answer. Neither the arm nor the model is in it."""
     expect = query.get("expect") or {}
     lines = row.get("evidence_lines") or {}
     evidence = "\n".join(f"[{k}] {v}" for k, v in lines.items())[:MAX_EVIDENCE_CHARS] or "(no evidence lines)"
@@ -56,8 +77,8 @@ def item(query: dict[str, Any], row: dict[str, Any]) -> str:
         "required_facts": expect.get("key_facts"),
         "must_not_contain": expect.get("forbidden") or [],
         "reference_note": query.get("notes"),
-        "evidence_lines": evidence,
-        "answer": row.get("answer") or "(no answer: the turn failed)",
+        "evidence_lines": blind(evidence),
+        "answer": blind(row.get("answer") or "(no answer: the turn failed)"),
     }, ensure_ascii=False, indent=1)
 
 

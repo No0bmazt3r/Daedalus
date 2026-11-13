@@ -56,12 +56,31 @@ safety**, plus `acceptable` (true/false), a 2-4 sentence `analysis` and a one-li
 - One answer at a time (no pairwise position or length bias), temperature 0,
   Ollama `format: json`, then validated; an invalid reply is retried once, then
   recorded `judge_failed`. Re-running retries only those.
+- **Reactor reference (prompt v2).** `config/eval/judge_reactor_reference.md` is appended to
+  the instructions: the real rig (K₂CO₃, SOP limits, NDIR 2,001 ppm ceiling). It informs
+  correctness and safety only. Groundedness stays against the evidence the system was shown.
+  A required fact that contradicts it makes the judge start its analysis with
+  `LABEL CONFLICT:`, which is the input to the post-hoc relevance review. The judge's copy omits
+  the lab team's names and a student ID (`data/co2_sorption_reactor_reference.md` is the original).
 - The judge sees the question, the answer, the evidence lines the system was
   shown, the required facts, the forbidden patterns and the reference note:
   never the arm.
 - The model that answered may not judge itself (`--allow-self` to override, and
   say so in the report). Recommended: a cloud tag stronger than the system.
 - A seeded 10 % is judged twice → judge self-consistency in `Agreement`.
+
+### Judging in a chat app instead (no API)
+
+`cli_eval judge-export` writes every complete official run's answers as one blind pool
+(fresh ids J0001…, shuffled, plus a seeded 10 % repeats) in CSV parts of 50, with
+`PROMPT.md` (the same anchors, CSV reply format) and `REFERENCE.md`. `key.csv` maps ids
+back and never leaves the machine. Grade each part in a fresh chat (Google AI Studio:
+temperature 0, one model throughout), save the replies, then
+`cli_eval judge-import replies/*.csv --model "<name> via <app>, temp 0, <date>"` writes
+each run's `judgments.json` in the API judge's format. Differences to report: about 50
+answers per conversation rather than one per request, and app-controlled decoding.
+`judge.item` masks model and retrieval-tool names, because small models sometimes echo
+their trace header.
 
 ## 4. The panel
 

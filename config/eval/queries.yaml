@@ -41,11 +41,11 @@
   language: en
   rig_specific: true
   expect:
-    answerable: true
-    key_facts: ["600", "ppm"]
-    relevant_documents: ["Rig_Operating_Limits.md"]
-    relevant_nodes: ["Threshold:co2_high_absorption", "Sensor:co2_ppm"]
-  notes: "DRAFT — verify. Rig_Operating_Limits.md — Alarm limits"
+    answerable: false
+    key_facts: []
+    relevant_documents: ["Rig_SOP_06_Operating_Limits_and_Corrective_Action.md"]
+    relevant_nodes: ["Sensor:co2_ppm"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §8, which sets limits only for P-101, T-101 and pH-101; the iteration-1 label came from the retired amine drafts. No CO2 alarm limit is defined for this rig, so the correct answer says so."
 
 - id: Q02
   category: single_hop_factual
@@ -54,10 +54,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["2\\.5", "barg"]
-    relevant_documents: ["Rig_Operating_Limits.md", "SOP_Pressure_Relief.md"]
-    relevant_nodes: ["Threshold:pressure_high", "Sensor:pressure_barg"]
-  notes: "DRAFT — verify. Rig_Operating_Limits.md — Alarm limits"
+    key_facts: ["5(\\.0)? ?bar"]
+    relevant_documents: ["Rig_SOP_06_Operating_Limits_and_Corrective_Action.md", "Rig_SOP_04_Emergency_Shutdown_and_Operation.md", "Rig_Design_01_Overview_and_History.md", "Rig_Design_02_K2CO3_Operating_Conditions.md"]
+    relevant_nodes: ["Threshold:pressure_trip", "Sensor:pressure_barg"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §4, §8 (trip > 5.0 barg) and design deck p4, p6 (operate 1 bar, max 5 bar); the iteration-1 label came from the retired amine drafts."
 
 - id: Q03
   category: single_hop_factual
@@ -66,10 +66,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["headspace|gauge"]
-    relevant_documents: ["Rig_Operating_Limits.md"]
+    key_facts: ["column|P-101|gauge"]
+    relevant_documents: ["Rig_SOP_06_Operating_Limits_and_Corrective_Action.md"]
     relevant_nodes: ["Sensor:pressure_barg"]
-  notes: "DRAFT — verify. Rig_Operating_Limits.md — Instruments. An exact tag: the hybrid ablation's test case"
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §8 (P-101, column pressure, barg); the iteration-1 label came from the retired amine drafts."
 
 - id: Q04
   category: single_hop_factual
@@ -137,11 +137,11 @@
   language: ms
   rig_specific: true
   expect:
-    answerable: true
-    key_facts: ["20"]
-    relevant_documents: ["Rig_Operating_Limits.md"]
-    relevant_nodes: ["Threshold:level_low", "Sensor:level_pct"]
-  notes: "DRAFT — verify. Rig_Operating_Limits.md — Alarm limits: level < 20 %"
+    answerable: false
+    key_facts: []
+    relevant_documents: ["Rig_SOP_05_Normal_Shutdown_and_Restart.md", "Rig_SOP_07_Safety_and_Safety_Systems.md"]
+    relevant_nodes: []
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §6, §11; the iteration-1 label came from the retired amine drafts. The rig has binary level indicators LV-101/LV-102 and no minimum level, so the correct answer says none is specified."
 
 - id: Q10
   category: single_hop_procedural
@@ -150,10 +150,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["manual", "cooling water", "steam|reboiler|heating", "40"]
-    relevant_documents: ["SOP_Emergency_Cooldown.md"]
-    relevant_nodes: ["SOPDocument:Emergency_Cooldown", "SOPStep:cooldown_1", "SOPStep:cooldown_2", "SOPStep:cooldown_3", "SOPStep:cooldown_4"]
-  notes: "DRAFT — verify. SOP_Emergency_Cooldown.md — Steps 1–4"
+    key_facts: ["heater|power", "BV-1", "ABV-4|vent"]
+    relevant_documents: ["Rig_SOP_04_Emergency_Shutdown_and_Operation.md"]
+    relevant_nodes: ["SOPDocument:SOP_ESD", "SOPStep:sop_esd_1", "SOPStep:sop_esd_2", "SOPStep:sop_esd_3"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §4; the iteration-1 label came from the retired amine drafts. The rig has no separate cooldown SOP; its emergency procedure is the ESD."
 
 - id: Q11
   category: single_hop_procedural
@@ -161,11 +161,11 @@
   language: en
   rig_specific: true
   expect:
-    answerable: true
-    key_facts: ["nitrogen|N2|N₂", "1000 ?ppm"]
-    relevant_documents: ["SOP_NDIR_Calibration.md"]
-    relevant_nodes: ["SOPDocument:NDIR_Calibration", "SOPStep:ndir_1", "SOPStep:ndir_2", "SOPStep:ndir_3"]
-  notes: "DRAFT — verify. SOP_NDIR_Calibration.md — Steps 1–3"
+    answerable: false
+    key_facts: []
+    relevant_documents: []
+    relevant_nodes: []
+  notes: "Relabelled 2026-11-13 (iteration 2) from the rig documents, none of which gives an NDIR calibration procedure; the iteration-1 label came from the retired amine drafts. The correct answer says the rig documents do not cover it."
 
 - id: Q12
   category: single_hop_procedural
@@ -174,10 +174,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["250 ?mL", "titrat"]
-    relevant_documents: ["SOP_Solvent_Management.md"]
-    relevant_nodes: ["SOPDocument:Solvent_Management", "SOPStep:solvent_1", "SOPStep:solvent_2"]
-  notes: "DRAFT — verify. SOP_Solvent_Management.md — Steps 1–2"
+    key_facts: ["pH", "\\b8\\b|11"]
+    relevant_documents: ["Rig_Design_03_Absorption_Desorption_and_pH_Checks.md"]
+    relevant_nodes: ["Sensor:ph", "Threshold:ph_low"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from design deck p4, p7-9 (the pH meter checks solvent efficiency: ideal 11-12, below 8 not efficient); the iteration-1 label came from the retired amine drafts. No sampling procedure exists."
 
 - id: Q13
   category: single_hop_procedural
@@ -246,10 +246,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["cool", "relief|vent"]
-    relevant_documents: ["SOP_Emergency_Cooldown.md", "SOP_Pressure_Relief.md"]
-    relevant_nodes: ["AnomalyType:thermal_runaway_risk", "SOPDocument:Emergency_Cooldown", "SOPDocument:Pressure_Relief"]
-  notes: "DRAFT — verify. Rig_Operating_Limits.md — Anomalies: cooldown first, then relief"
+    key_facts: ["heater|power", "ABV-4|vent"]
+    relevant_documents: ["Rig_SOP_04_Emergency_Shutdown_and_Operation.md", "Rig_SOP_06_Operating_Limits_and_Corrective_Action.md"]
+    relevant_nodes: ["AnomalyType:thermal_runaway_risk", "AnomalyType:overpressure", "SOPDocument:SOP_ESD", "SOPDocument:SOP_Corrective_Action"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §4 (ESD: trip pump and heater power, close BV-1, open ABV-4) and §9; the iteration-1 label came from the retired amine drafts."
 
 - id: Q19
   category: multi_hop_causal
@@ -258,10 +258,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["degrad", "heat[- ]stable|HSS", "15"]
-    relevant_documents: ["Rig_Operating_Limits.md", "SOP_Solvent_Management.md"]
-    relevant_nodes: ["Threshold:ph_low", "AnomalyType:solvent_degradation", "SOPDocument:Solvent_Management"]
-  notes: "DRAFT — verify. Rig limits pH < 6.0 → solvent degradation → replace if HSS > 15 %"
+    key_facts: ["deactivat|critical|not efficient", "desorp|regenerat"]
+    relevant_documents: ["Rig_SOP_06_Operating_Limits_and_Corrective_Action.md", "Rig_Design_03_Absorption_Desorption_and_pH_Checks.md"]
+    relevant_nodes: ["Threshold:ph_critical", "AnomalyType:solvent_deactivation", "Threshold:ph_low", "AnomalyType:solvent_loaded", "SOPDocument:SOP_Desorption"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §8 (pH < 7.0 catalyst deactivation) and design deck p4, p8 (pH < 8 not efficient, go to desorption); the iteration-1 label came from the retired amine drafts."
 
 - id: Q20
   category: multi_hop_causal
@@ -270,10 +270,10 @@
   rig_specific: true
   expect:
     answerable: true
-    key_facts: ["breakthrough|capacity", "sampl|titrat"]
-    relevant_documents: ["Rig_Operating_Limits.md", "SOP_Solvent_Management.md"]
-    relevant_nodes: ["Threshold:co2_high_absorption", "AnomalyType:co2_breakthrough", "SOPDocument:Solvent_Management"]
-  notes: "DRAFT — verify. Rig limits CO2 > 600 ppm → breakthrough → Solvent_Management"
+    key_facts: ["pH", "desorp|regenerat|not efficient|loaded|capacity"]
+    relevant_documents: ["Rig_Design_03_Absorption_Desorption_and_pH_Checks.md", "Rig_SOP_02_Normal_Operation.md"]
+    relevant_nodes: ["AnomalyType:solvent_loaded", "Threshold:ph_low", "SOPDocument:Deck_Desorption_Check", "SOPDocument:SOP_Desorption"]
+  notes: "Relabelled 2026-11-13 (iteration 2) from design deck p4, p8-9 (falling capture shows as pH; below 8 switch to desorption); the iteration-1 label came from the retired amine drafts."
 
 - id: Q21
   category: multi_hop_causal
@@ -281,11 +281,11 @@
   language: en
   rig_specific: true
   expect:
-    answerable: true
-    key_facts: ["cavitat", "top up|top-up|refill"]
-    relevant_documents: ["Rig_Operating_Limits.md", "SOP_Solvent_Management.md"]
-    relevant_nodes: ["Threshold:level_low", "AnomalyType:low_solvent_inventory"]
-  notes: "DRAFT — verify. Rig limits level < 20 % → pump cavitation → top up"
+    answerable: false
+    key_facts: []
+    relevant_documents: ["Rig_SOP_07_Safety_and_Safety_Systems.md", "Rig_SOP_05_Normal_Shutdown_and_Restart.md"]
+    relevant_nodes: []
+  notes: "Relabelled 2026-11-13 (iteration 2) from SOP-CO2-SR-01 §6, §11; the iteration-1 label came from the retired amine drafts. The rig measures level only with binary switches and defines no low-level response, so the correct answer says so."
 
 - id: Q22
   category: multi_hop_causal

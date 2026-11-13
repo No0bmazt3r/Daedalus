@@ -13,6 +13,9 @@
     python -m app.cli_eval sheets eval_… [--raters data/eval/raters.yaml] [--no-share]
     python -m app.cli_eval pull   eval_…              # ratings back to ratings.csv
     python -m app.cli_eval batch --background         # pull + run the three FYP1 SLMs, then compare
+    python -m app.cli_eval judge-export               # blind CSV parts for judging in a chat app
+    python -m app.cli_eval rescore eval_…             # a finished run against the current labels
+    python -m app.cli_eval judge-import replies/*.csv --model "…"   # the chat's scores back in
 
 A terminal rather than a button because an official run is long — every
 question once per arm, through the real model — and is run once, deliberately.
@@ -124,6 +127,48 @@ def _batch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _rescore(args: argparse.Namespace) -> int:
+    import json  # noqa: PLC0415
+
+    for run_id in args.run_ids:
+        try:
+            record = evaluation.get_run(run_id)
+        except evaluation.EvalError as exc:
+            print(exc)
+            return 1
+        out = evaluation.rescore(record)
+        path = evaluation.RUNS_DIR / run_id / f"rescored_{out['rescored']['query_sha']}.json"
+        path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        before, after = record.get("summary") or evaluation.summary_of(record), out["summary"]
+        print(f"{run_id}  ({len(out['rescored']['changed'])} questions relabelled) -> {path.name}")
+        for arm in after:
+            b, a = before[arm]["overall"]["correct"], after[arm]["overall"]["correct"]
+            print(f"  {arm:12} correct {b:.0%} -> {a:.0%}")
+    return 0
+
+
+def _offline(args: argparse.Namespace) -> int:
+    from .evaluation import judge_offline as jo  # noqa: PLC0415
+
+    try:
+        if args.command == "judge-export":
+            out = jo.export(args.run_ids or None, Path(args.out) if args.out else None, args.chunk)
+            print(f"{out['answers']} answers + {out['repeats']} repeats from {len(out['runs'])} run(s) "
+                  f"-> {len(out['parts'])} parts in {out['dir']}\n"
+                  "Upload PROMPT.md + REFERENCE.md + one part per new chat; save each reply as a .csv.\n"
+                  "key.csv maps the ids back: keep it here, never upload it.")
+            return 0
+        out = jo.import_([Path(f) for f in args.files], args.model, Path(args.dir) if args.dir else None)
+    except (jo.OfflineJudgeError, evaluation.EvalError) as exc:
+        print(exc)
+        return 1
+    for problem in out["problems"]:
+        print(f"  ! {problem}")
+    print(f"{out['imported']} scores imported; {len(out['missing'])} of {out['total']} still missing"
+          + (f" (e.g. {', '.join(out['missing'][:8])})" if out["missing"] else " — all judged."))
+    return 0
+
+
 def _judge(args: argparse.Namespace) -> int:
     from .evaluation import judge  # noqa: PLC0415
 
@@ -230,6 +275,16 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--official", action="store_true", help="official runs (needs the config frozen)")
     b.add_argument("--rerun-reason", help="passed to each run, when repeating official runs")
     b.add_argument("--background", action="store_true", help="detach, log to data/eval/batch_<stamp>.log")
+    rs = sub.add_parser("rescore", help="score finished runs against the current labels (run.json untouched)")
+    rs.add_argument("run_ids", nargs="+")
+    je = sub.add_parser("judge-export", help="blind CSV parts of every answer, for judging in a chat app")
+    je.add_argument("run_ids", nargs="*", help="default: every complete official run")
+    je.add_argument("--out", help="default data/eval/judge_export")
+    je.add_argument("--chunk", type=int, default=50, help="answers per part (one chat each)")
+    ji = sub.add_parser("judge-import", help="read the chat's CSV replies into each run's judgments.json")
+    ji.add_argument("files", nargs="+")
+    ji.add_argument("--model", required=True, help='e.g. "Gemini X via AI Studio, temp 0, 2026-11-13"')
+    ji.add_argument("--dir", help="the export folder (default data/eval/judge_export)")
     args = parser.parse_args(argv)
     _load_env()
 
@@ -242,6 +297,10 @@ def main(argv: list[str] | None = None) -> int:
         return _judge(args)
     if args.command == "batch":
         return _batch(args)
+    if args.command == "rescore":
+        return _rescore(args)
+    if args.command in ("judge-export", "judge-import"):
+        return _offline(args)
     if args.command in ("sheets", "pull"):
         return _sheets(args, pull=args.command == "pull")
     if args.command == "list":

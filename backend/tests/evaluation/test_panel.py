@@ -82,5 +82,21 @@ class JudgeReplyTest(unittest.TestCase):
         self.assertIn("[D1] text", text)
 
 
+class JudgeContextTest(unittest.TestCase):
+    def test_reference_is_appended_and_fingerprinted(self):
+        judge.PROMPT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        judge.PROMPT_PATH.write_text("version: 9\nGrade it.", encoding="utf-8")
+        judge.REFERENCE_PATH.unlink(missing_ok=True)
+        _, version, bare = judge.prompt()
+        judge.REFERENCE_PATH.write_text("Solvent: K2CO3", encoding="utf-8")
+        try:
+            text, _, with_ref = judge.prompt()
+        finally:
+            judge.REFERENCE_PATH.unlink()
+        self.assertEqual(version, "9")
+        self.assertIn("Solvent: K2CO3", text)
+        self.assertNotEqual(bare, with_ref)  # a context change is visible in judgments.json
+
+
 if __name__ == "__main__":
     unittest.main()
