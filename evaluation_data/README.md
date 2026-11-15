@@ -12,7 +12,7 @@ Nothing was edited by hand after it was collected. The files are copies of the o
 
 | I want to... | Open |
 |---|---|
-| See the questions | [`questions/queries.yaml`](questions/queries.yaml) |
+| See the questions | [`questions/questions.csv`](questions/questions.csv) (readable) or [`questions/queries.yaml`](questions/queries.yaml) (full labels) |
 | Compare the three models quickly | [`2_iteration2_lab_docs/model_comparison.md`](2_iteration2_lab_docs/model_comparison.md) |
 | Read every answer with its score | `2_iteration2_lab_docs/<model>/results.csv` |
 | See what the LLM judge said | `2_iteration2_lab_docs/<model>/judge_scores.csv` |
@@ -106,7 +106,8 @@ evaluation_data/
 ├── README.md
 ├── figures/                          the charts used above
 ├── questions/
-│   └── queries.yaml                  the 49 questions and their required facts
+│   ├── questions.csv                 the 49 questions as a simple table
+│   └── queries.yaml                  the same, with required facts and relevant documents
 ├── 1_iteration1_reference_docs/      official runs, 12 Nov 2026
 │   ├── model_comparison.md
 │   ├── qwen3-1.7b/
