@@ -1,0 +1,7 @@
+rater_id,year,specialisation,internship,rating_sheet
+R1,4,Process control,"8 months, gas plant",rating_sheets/R1_intern_rating_sheet.csv
+R2,4,Separation processes,"6 months, petrochemical",rating_sheets/R2_intern_rating_sheet.csv
+R3,3,Unit-operations laboratory,None,rating_sheets/R3_no-internship_rating_sheet.csv
+R4,3,Reaction engineering,None,rating_sheets/R4_no-internship_rating_sheet.csv
+R5,3,Carbon capture,None,rating_sheets/R5_no-internship_rating_sheet.csv
+R6,3,Process design,None,rating_sheets/R6_no-internship_rating_sheet.csv

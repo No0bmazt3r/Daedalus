@@ -1,0 +1,24 @@
+{
+  "created": "2026-11-13T04:13:02+00:00",
+  "runs": [
+    "eval_20261113_014538",
+    "eval_20261113_020225",
+    "eval_20261113_022329"
+  ],
+  "answers": 441,
+  "repeats": 44,
+  "parts": [
+    "part_01.csv",
+    "part_02.csv",
+    "part_03.csv",
+    "part_04.csv",
+    "part_05.csv",
+    "part_06.csv",
+    "part_07.csv",
+    "part_08.csv",
+    "part_09.csv",
+    "part_10.csv"
+  ],
+  "prompt_version": "2",
+  "prompt_sha": "1e3d9172caaf"
+}
