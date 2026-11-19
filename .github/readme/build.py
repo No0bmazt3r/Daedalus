@@ -403,8 +403,8 @@ def zones():
     for i, t in enumerate(["link.py", "→ /api/ingest", "bearer token"]):
         s.append(f'<text x="{lane + 14}" y="{160 + i * 14}" {PF} font-size="9" fill="{INK if i == 1 else INK2}">{esc(t)}</text>')
     # the boundary
-    s.append(f'<line x1="{x0}" y1="172" x2="{W - 24}" y2="172" stroke="{DUST_ON}" stroke-width="2" stroke-dasharray="6 4"/>')
-    s.append(f'<rect x="{x0 + 10}" y="163" width="470" height="18" fill="#111114"/>')
+    s.append(f'<line x1="{x0}" y1="172" x2="{lane + 10}" y2="172" stroke="{DUST_ON}" stroke-width="2" stroke-dasharray="6 4"/>')
+    s.append(f'<rect x="{x0 + 10}" y="163" width="540" height="18" fill="#111114"/>')
     s.append(lamp(x0 + 14, 164, bad=True))
     s.append(f'<text x="{x0 + 38}" y="176" {PF} font-size="10" fill="#ffb4ab">safety boundary · sensor db mode=ro · '
              f'control refused · no write path</text>')
@@ -724,6 +724,7 @@ def getstarted():
 if __name__ == "__main__":
     build()
     architecture()
+    zones()
     retrieval()
     forge()
     ingest()

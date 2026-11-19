@@ -368,13 +368,7 @@ To point Daedalus at a **real reactor database**, put it (or a symlink) at
 The system splits into four zones. Daedalus only ever **reads** from the
 zones below the safety boundary; nothing it does can reach the plant.
 
-| Zone | Layer | What runs there | Built by |
-|:--:|:--|:--|:--|
-| **4** | Presentation | React dashboard: Chat, Ariadne's Thread, The Forge, Blueprints | this project |
-| **3** | Daedalus | FastAPI · 33 tools · Track 1 / Track 2 RAG · local Ollama model | this project |
-| | 🔒 **safety boundary** | sensor DB opened `mode=ro` · control requests refused · no write path to the rig | |
-| **2** | SCADA acquisition | CO2SorptionDT (PyQt5) logs readings to SQLite every 5 s | pre-existing |
-| **1** | Physical reactor | temperature, pressure, pH, level and NDIR CO₂ sensors · ABV valves | pre-existing |
+<p align="center"><img src=".github/readme/zones.svg" width="860" alt="Four zones stacked. 4 presentation (React dashboard: Chat, Ariadne's Thread, The Forge, Blueprints) and 3 Daedalus (FastAPI, 33 tools, Track 1 / Track 2 RAG, local Ollama) are built by this project. A safety boundary sits below them: sensor DB opened mode=ro, control requests refused, no write path. Below it, 2 SCADA acquisition (CO2SorptionDT PyQt5 logging to SQLite every 5 s) and 1 the physical reactor (temperature, pressure, pH, level, NDIR CO2 sensors, ABV valves) are pre-existing. The only crossing is a pulse going up from zone 2 to zone 3: daedalus/link.py posts to /api/ingest with a bearer token."></p>
 
 The only thing that crosses the boundary is new readings coming **up**: the
 rig's `daedalus/link.py` posts rows to `/api/ingest` with a token.
