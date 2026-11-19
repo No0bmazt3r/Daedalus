@@ -321,7 +321,7 @@ anywhere else.
 ### Connecting the rig
 
 CO2SorptionDT's `MainUI_v3.py` sends its Data-tab rows to Daedalus, once a
-second, through `daedalus_link.py`. Both must run on the same PC.
+second, through `daedalus/link.py`. Both must run on the same PC.
 
 1. Click the **Rig** chip at the top of Daedalus, then **Connect rig**. Copy
    the token it shows; it is shown once and only its hash is kept.
@@ -357,13 +357,27 @@ To point Daedalus at a **real reactor database**, put it (or a symlink) at
 
 ## Architecture
 
-```text
-Zone 1  physical reactor    sensors, ABV valves                 pre-existing
-Zone 2  SCADA acquisition   CO2SorptionDT → SQLite              pre-existing
-          │ read-only  ◄── the safety boundary
-Zone 3  Daedalus            FastAPI · tools · RAG · Ollama      this project
-Zone 4  presentation        React dashboard                     this project
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/readme/stack-dark.png">
+  <img src=".github/readme/stack.png" width="100%" alt="Daedalus stack diagram. Operator and browser call the React 19 / TypeScript / Vite 8 / TanStack Router / Tailwind v4 dashboard (Chat, Ariadne's Thread, The Forge, Blueprints), which sends POST /api/chat over SSE to FastAPI on Uvicorn with Pydantic. In backend/app the chat pipeline runs query pipeline, safety guard, planner, tool registry (33 gated tools), evidence pack, inference and validator; the registry reads the sensor DB read-only and calls Track 1 vector search (ChromaDB, BM25, RRF, re-rank) and Track 2 agentic graph search (NetworkX); inference streams from local Ollama (qwen3:1.7b) with ONNX re-rankers; the validator logs every turn to ai_logs.db. Services thread/, forge/, blueprints/, evaluation/ and live events (SSE) sit beside it. Stores: chat.db, prefs.db, corpus.db, config/, sensor_readings.db, ChromaDB, NetworkX, ai_logs.db. The rig PC (reactor, CO2SorptionDT PyQt5 SCADA, daedalus/link.py) is the only writer of sensor rows, through /api/ingest with a bearer token. Advanced mode adds MCP servers, SearXNG, cloud endpoints and Hugging Face gated pulls.">
+</picture>
+
+<sub>Made with [stack-diagram](https://github.com/caru-ini/stack-diagram). Interactive version:
+[`.github/readme/stack.html`](.github/readme/stack.html) (self-contained, light/dark).</sub>
+
+The system splits into four zones. Daedalus only ever **reads** from the
+zones below the safety boundary; nothing it does can reach the plant.
+
+| Zone | Layer | What runs there | Built by |
+|:--:|:--|:--|:--|
+| **4** | Presentation | React dashboard: Chat, Ariadne's Thread, The Forge, Blueprints | this project |
+| **3** | Daedalus | FastAPI · 33 tools · Track 1 / Track 2 RAG · local Ollama model | this project |
+| | 🔒 **safety boundary** | sensor DB opened `mode=ro` · control requests refused · no write path to the rig | |
+| **2** | SCADA acquisition | CO2SorptionDT (PyQt5) logs readings to SQLite every 5 s | pre-existing |
+| **1** | Physical reactor | temperature, pressure, pH, level and NDIR CO₂ sensors · ABV valves | pre-existing |
+
+The only thing that crosses the boundary is new readings coming **up**: the
+rig's `daedalus/link.py` posts rows to `/api/ingest` with a token.
 
 Five separate stores, so a fault in ingestion or logging physically cannot
 reach the sensor data of record:

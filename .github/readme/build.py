@@ -383,6 +383,40 @@ def architecture():
         cap_y=346, who="you"))
 
 
+def zones():
+    """Four zones stacked; the safety boundary between 3 and 2; only readings cross, upward."""
+    H, bw, x0, lane = 300, 600, 24, 744
+    s = card(W, H, "Daedalus zones. 4 presentation and 3 Daedalus are built by this project; below the safety "
+                   "boundary sit 2 SCADA acquisition and 1 the physical reactor, both pre-existing. The sensor "
+                   "database is opened read-only and control requests are refused, so nothing crosses down. "
+                   "The only crossing is new readings going up: the rig's daedalus/link.py posts rows to "
+                   "/api/ingest with a token.", "daedalus · four zones, one boundary")
+    rows = [(52, "4 · presentation", "react dashboard: chat · ariadne's thread · the forge · blueprints", "this project"),
+            (104, "3 · daedalus", "fastapi · 33 tools · track 1 / track 2 rag · local ollama", "this project"),
+            (196, "2 · scada acquisition", "CO2SorptionDT (PyQt5) logs to sqlite every 5 s", "pre-existing"),
+            (248, "1 · physical reactor", "temp · pressure · pH · level · NDIR co2 · ABV valves", "pre-existing")]
+    # ingest lane: dust from zone 2 up to zone 3, a pulse riding it
+    s.append(f'<polyline points="{x0 + bw},{218} {lane},{218} {lane},{126} {x0 + bw},{126}" fill="none" '
+             f'stroke="{DUST_ON}" stroke-width="4" filter="url(#glow)"/>')
+    s.append(f'<g filter="url(#glow)"><rect x="{lane - 5}" y="0" width="10" height="10" fill="{SIGNAL}">'
+             f'<animate attributeName="y" values="213;121" dur="1.6s" repeatCount="indefinite"/></rect></g>')
+    for i, t in enumerate(["link.py", "→ /api/ingest", "bearer token"]):
+        s.append(f'<text x="{lane + 14}" y="{160 + i * 14}" {PF} font-size="9" fill="{INK if i == 1 else INK2}">{esc(t)}</text>')
+    # the boundary
+    s.append(f'<line x1="{x0}" y1="172" x2="{W - 24}" y2="172" stroke="{DUST_ON}" stroke-width="2" stroke-dasharray="6 4"/>')
+    s.append(f'<rect x="{x0 + 10}" y="163" width="470" height="18" fill="#111114"/>')
+    s.append(lamp(x0 + 14, 164, bad=True))
+    s.append(f'<text x="{x0 + 38}" y="176" {PF} font-size="10" fill="#ffb4ab">safety boundary · sensor db mode=ro · '
+             f'control refused · no write path</text>')
+    for y, name, sub, who in rows:
+        s.append(block(x0, y, bw, 44))
+        s.append(f'<text x="{x0 + 12}" y="{y + 19}" {PF} font-size="12" fill="{INK}">{esc(name)}</text>')
+        s.append(f'<text x="{x0 + 12}" y="{y + 34}" {PF} font-size="9" fill="{INK2}">{esc(sub)}</text>')
+        s.append(f'<text x="{x0 + bw - 12}" y="{y + 19}" {PF} font-size="9" fill="{INK2}" text-anchor="end">{who}</text>')
+    s.append('</svg>')
+    write("zones.svg", "\n".join(s) + "\n")
+
+
 def strip(name, heading, title, stages, captions, who):
     n, bw, gap = len(stages), 124, 14
     x0 = (W - (n * bw + (n - 1) * gap)) // 2
